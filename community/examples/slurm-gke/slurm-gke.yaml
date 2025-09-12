@@ -127,7 +127,7 @@ deployment_groups:
     source: modules/file-system/gke-persistent-volume
     use: [homefs, gke_cluster]
     settings:
-      capacity_gb: 1024
+      capacity_gib: 1024
       namespace: $(vars.slurm_namespace)
       pv_name: home-pv
       pvc_name: home-pvc
