@@ -54,6 +54,7 @@ vars:
   health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
 
   permissions_file_staged_path: $(ghpc_stage("./chs-permissions.yaml.tftpl"))
+  system_node_pool_disk_size_gb: 200
   chs_output_bucket_name: chs-result
   chs_pvc_claim_name: chs-output-pvc
   chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
@@ -114,6 +115,9 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets, workload_service_account]
     settings:
+      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       configure_workload_identity_sa: true

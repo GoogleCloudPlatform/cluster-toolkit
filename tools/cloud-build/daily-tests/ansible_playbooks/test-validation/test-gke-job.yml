@@ -16,6 +16,7 @@
   ansible.builtin.assert:
     that:
     - region is defined
+    - deployment_name is defined
     - custom_vars.project is defined
 
 - name: Get cluster credentials for kubectl
@@ -48,3 +49,7 @@
   delegate_to: localhost
   ansible.builtin.shell: |
     kubectl delete job --all -v=9
+
+- name: Pause to allow cluster to settle
+  ansible.builtin.pause:
+    seconds: 30
