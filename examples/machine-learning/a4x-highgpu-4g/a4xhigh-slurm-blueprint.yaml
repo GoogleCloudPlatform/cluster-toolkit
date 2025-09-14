@@ -17,10 +17,10 @@
 blueprint_name: a4xhigh-slurm
 
 vars:
-  deployment_name: ## Deployment name ##
-  project_id: ## Project name ##
-  region: ## A4X Reservation Region ##
-  zone: ## A4X Reservation Zone ##
+  deployment_name: ## Deployment name ##                                                                                                        │
+  project_id: ## Project name ##                                                                                                                │
+  region: ## A4X Reservation Region ##                                                                                                          │
+  zone: ## A4X Reservation Zone ##                                                                                                              │
   a4x_cluster_size: # supply cluster size
   # Image settings
   build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-570
@@ -44,7 +44,7 @@ vars:
     project: $(vars.project_id)
     family: slurm-ubuntu2404-accelerator-arm64-64k
   accelerator_topology: # supply accelerator topology
-  a4x_dws_flex_max_run_duration: 7 # Maximum number of days for which DWS Flex is needed, cannot exceed 7
+  a4x_dws_flex_max_run_duration: 604800 # Maximum duration (in seconds) for which DWS Flex is needed. Should be b/w 600(10 minutes) and 604800(7 days)
   #Provisioning model, select one (only one selection is valid), lack of selection will rely on on-demand capacity
   a4x_dws_flex_enabled: false
   a4x_enable_spot_vm: false
@@ -595,7 +595,7 @@ deployment_groups:
       node_count_static: $(vars.a4x_cluster_size)
       node_count_dynamic_max: 0
       enable_placement: true
-      accelerator_topology: 1x72
+      accelerator_topology: $(vars.accelerator_topology)
       disk_type: hyperdisk-balanced
       instance_image_custom: true
       on_host_maintenance: TERMINATE

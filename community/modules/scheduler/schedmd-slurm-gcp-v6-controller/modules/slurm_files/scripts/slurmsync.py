@@ -338,6 +338,8 @@ def get_node_action(nodename: str) -> NodeAction:
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
             return NodeActionUnchanged()
+        if mig_a4.is_slice_node(nodename):
+            return NodeActionDown(reason="Orphaned slice node, awaiting group action")
         return NodeActionDelete()
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm
@@ -460,16 +462,6 @@ def sync_migs():
         if all(lkp.node_index(node) > max_index for node in mig_nodes):
             migs_to_delete.append(mig_obj)
             continue
-
-        # Before deleting the MIG, check the state of all nodes
-        all_nodes_down_or_drain = True
-        for node in mig_nodes:
-            state = lkp.node_state(node)
-            if state is not None and state.base not in ("DOWN", "DRAIN"):
-                all_nodes_down_or_drain = False
-                break
-        else:
-            migs_to_delete.append(mig_obj)
     
     if len(migs_to_delete) > 0:
         mig_a4.delete_migs(lkp, migs_to_delete)

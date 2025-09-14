@@ -68,11 +68,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !var.dws_flex.enabled || var.dws_flex.max_run_duration <= 7
-    error_message = "Cannot use DWS Flex with max_run_duration greater than 7."
-  }
-
-  precondition {
     condition     = length(var.zones) == 0 || !var.dws_flex.enabled
     error_message = <<-EOD
       If a DWS Flex is enabled, `var.zones` should be empty.

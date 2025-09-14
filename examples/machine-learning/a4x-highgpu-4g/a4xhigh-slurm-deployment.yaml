@@ -29,4 +29,4 @@ vars:
   a4x_enable_spot_vm: false
   a4x_reservation_name: # supply a4x-highgpu-4g reservation name
   accelerator_topology: # supply accelerator topology
-  a4x_dws_flex_max_run_duration: 7 # Maximum number of days for which DWS Flex is needed, cannot exceed 7
+  a4x_dws_flex_max_run_duration: 604800 # Maximum duration (in seconds) for which DWS Flex is needed, Should be b/w 600s (10 minutes) and 604800s (7 days)
