@@ -291,8 +291,6 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     ]
     return {chunk.name: chunk for chunk in chunks}
 
-import mig_a4
-
 def _filter_out_and_handle_slice_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> List[str]:
     rest, slice_nodes = util.separate(mig_a4.is_slice_node, nodes)
     mig_a4.resume_slice_nodes(lookup(), slice_nodes, resume_data)

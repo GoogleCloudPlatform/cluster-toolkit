@@ -17,10 +17,10 @@
 blueprint_name: a4xhigh-slurm
 
 vars:
-  deployment_name: ## Deployment name ##                                                                                                        │
-  project_id: ## Project name ##                                                                                                                │
-  region: ## A4X Reservation Region ##                                                                                                          │
-  zone: ## A4X Reservation Zone ##                                                                                                              │
+  deployment_name: ## Deployment name ##
+  project_id: ## Project name ##
+  region: ## A4X Reservation Region ##
+  zone: ## A4X Reservation Zone ##
   a4x_cluster_size: # supply cluster size
   # Image settings
   build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-570
