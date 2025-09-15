@@ -12,22 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: gke-h4d
+blueprint_name: gke-g4
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
   # Your GCP Project ID
   project_id:
 
-  # This should be unique across all of your Cluster
-  # Toolkit Deployments.
-  deployment_name: gke-h4d
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: gke-g4
 
   # The GCP Region used for this deployment.
   region:
 
   # The GCP Zone used for this deployment.
   zone:
+
+  # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  machine_type:
+
+  # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  num_gpus:
 
   # The number of nodes to be created.
   static_node_count:
@@ -37,30 +42,28 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
-  h4d_node_pool_disk_size_gb: 100
-
 
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-h4d-net
+  - id: gke-g4-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net
+      network_name: $(vars.deployment_name)-net-0
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub
+      - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
-        subnet_ip: 192.168.0.0/24
+        subnet_ip: 192.168.0.0/18
       secondary_ranges_list:
-      - subnetwork_name: $(vars.deployment_name)-sub
+      - subnetwork_name: $(vars.deployment_name)-sub-0
         ranges:
         - range_name: pods
-          ip_cidr_range: 10.64.0.0/19
+          ip_cidr_range: 10.4.0.0/14
         - range_name: services
-          ip_cidr_range: 10.65.0.0/19
+          ip_cidr_range: 10.0.32.0/20
       firewall_rules:
-      - name: $(vars.deployment_name)-internal
-        ranges: [192.168.0.0/24]
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
         allow:
         - protocol: tcp
           ports: ["0-65535"]
@@ -68,19 +71,23 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-h4d-rdma-net
+  - id: gke-g4-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
-      network_routing_mode: REGIONAL
-      enable_cloud_router: false
-      enable_cloud_nat: false
+      network_name: $(vars.deployment_name)-net-1
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-rdma-sub
+      - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
-        subnet_ip: 192.168.1.0/24
-        region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
 
   - id: node_pool_service_account
     source: community/modules/project/service-account
@@ -106,17 +113,14 @@ deployment_groups:
       - storage.objectAdmin
       - artifactregistry.reader
 
-  - id: h4d-cluster
+  - id: g4-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-h4d-net, workload_service_account]
+    use: [gke-g4-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
-      enable_multi_networking: true
       enable_dcgm_monitoring: true
-      enable_gcsfuse_csi: true
-      cluster_availability_type: "ZONAL"
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -125,10 +129,10 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-h4d-rdma-net.network_name,
-            subnetwork=gke-h4d-rdma-net.subnetwork_name,
+            network=gke-g4-net-1.network_name,
+            subnetwork=gke-g4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
+            nic_type="GVNIC",
             queue_count=null,
             network_ip=null,
             stack_type=null,
@@ -143,44 +147,31 @@ deployment_groups:
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2024-12-01T00:00:00Z"
-        end_time: "2025-12-22T00:00:00Z"
+        start_time: "2025-08-01T00:00:00Z"
+        end_time: "2026-04-10T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
 
-  - id: h4d-pool
+  - id: g4-pool
     source: modules/compute/gke-node-pool
-    use: [h4d-cluster, node_pool_service_account]
+    use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: h4d-highmem-192-lssd
+      machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
-      disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
-      taints:
-      # (Optional, but suggested)
-      # In order prevent scheduling of generic workloads onto the H4D nodepool,
-      # we suggest a Kubernetes taint. In order to schedule workloads, add the following
-      # tolerance to a PodSpec that you want to allow to use the H4D nodes. See
-      # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ for
-      # details
-      # tolerations:
-      # - key: "node-type"
-      #   operator: "Equal"
-      #   value: "h4d"
-      #   effect: "NoSchedule"
-      - key: node-type
-        value: h4d
-        effect: NoSchedule
-      placement_policy:
-        type: COMPACT
+      guest_accelerator:
+      - type: nvidia-rtx-pro-6000
+        count: $(vars.num_gpus)
+        gpu_driver_installation_config:
+          gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
       additional_networks:
         $(concat(
           [{
-            network=gke-h4d-rdma-net.network_name,
-            subnetwork=gke-h4d-rdma-net.subnetwork_name,
+            network=gke-g4-net-1.network_name,
+            subnetwork=gke-g4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
+            nic_type="GVNIC",
             queue_count=null,
             network_ip=null,
             stack_type=null,
@@ -194,9 +185,21 @@ deployment_groups:
   # Install Kueue and Jobset
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [h4d-cluster]
+    use: [g4-cluster]
     settings:
       kueue:
         install: true
       jobset:
         install: true
+
+  - id: nvidia_smi_job_template
+    source: modules/compute/gke-job-template
+    use: [g4-pool]
+    settings:
+      image: nvidia/cuda:13.0.0-base-ubuntu24.04
+      command:
+      - nvidia-smi
+      node_count: $(vars.static_node_count)
+      name: run-nvidia-smi
+      k8s_service_account_name: workload-identity-k8s-sa
+    outputs: [instructions]
