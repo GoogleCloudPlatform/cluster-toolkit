@@ -21,8 +21,8 @@ WORKDIR /app
 # Copy the local directory to the container
 COPY app/* /app/
 
-ENV PATH $PATH:/var/lib/nvidia/bin:/var/lib/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64/
-ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/var/lib/nvidia/bin:/var/lib/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64
+ENV PATH=$PATH:/var/lib/nvidia/bin:/var/lib/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64/
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/var/lib/nvidia/bin:/var/lib/nvidia/lib64:/usr/local/nvidia/bin:/usr/local/nvidia/lib64
 
 
 # Install system dependencies
