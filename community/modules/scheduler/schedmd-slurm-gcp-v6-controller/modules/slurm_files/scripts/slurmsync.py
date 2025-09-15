@@ -421,7 +421,7 @@ def sync_migs():
 
     migs_to_delete = []
     for mig_name, mig_obj in all_migs.items():
-        if not mig_obj.name.startswith(lkp.cfg.slurm_cluster_name):
+        if not lkp.is_a4_dws_flex_mig(mig_obj):
             continue
 
         cluster, nodeset, mig_index = mig_obj.name.split('-')
