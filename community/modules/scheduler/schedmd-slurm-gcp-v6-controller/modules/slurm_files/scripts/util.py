@@ -1690,7 +1690,7 @@ class Lookup:
                 if  res.delete_at_time is not None and res.assured_count <= 0:
                     log.debug(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
                     return True
-                
+
         return False    
 
     def node_is_dyn(self, node_name=None) -> bool:
@@ -1700,6 +1700,37 @@ class Lookup:
     def node_is_gke(self, node_name=None) -> bool:
         template_info = self.node_template_info(node_name)
         return self.template_is_gke(template_info)
+
+    def is_a4_dws_flex_mig(self, mig_obj: Any) -> bool:
+        """
+        Checks if a given MIG object is for an A4 slice AND was provisioned
+        for DWS Flex.
+        """
+        # mig_obj could be a dict from the API or the MIG dataclass from mig_a4.py
+        versions = getattr(mig_obj, 'versions', mig_obj.get('versions'))
+        mig_name = getattr(mig_obj, 'name', mig_obj.get('name'))
+        if not versions or not mig_name:
+            return False
+        try:
+            # Check 1: Verify it's an A4 MIG by checking the instance template's machine type.
+            template_url = versions[0] if isinstance(versions[0], str) else versions[0].get('instanceTemplate')
+            if not template_url:
+                return False
+            template_details = self.template_info(template_url)
+            machine_type = template_details.machineType
+            if not machine_type.startswith("a4x-"):
+                return False
+            # Check 2: Find the source nodeset by its name and check its DWS Flex flag.
+            for ns_name, nodeset in self.cfg.nodeset.items():
+                mig_prefix = f"{self.cfg.slurm_cluster_name}-{ns_name}-"
+                if mig_name.startswith(mig_prefix):
+                    # Found the matching nodeset. Check its DWS flag.
+                    return nodeset.dws_flex.enabled
+            # If no matching nodeset was found in the loop.
+            return False
+        except Exception as e:
+            log.error(f"Could not determine DWS Flex status for MIG '{mig_name}': {e}")
+            return False
 
     def nodeset_is_gke(self, nodeset=None) -> bool:
         template_info = self.template_info(nodeset.instance_template)
