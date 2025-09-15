@@ -20,9 +20,8 @@ vars:
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
 
-  #Provisioning model, select one (only one selection is valid), lack of selection will rely on on-demand capacity
+  #Provisioning model, select one, lack of selection will rely on on-demand capacity
   h4d_dws_flex_enabled: false
-  h4d_enable_spot_vm: false
   h4d_reservation_name: ""
 
 # Documentation for each of the modules used below can be found at
@@ -92,7 +91,6 @@ deployment_groups:
 
       #Provisioning models
       reservation_name: $(vars.h4d_reservation_name)
-      enable_spot_vm: $(vars.h4d_enable_spot_vm)
       dws_flex:
         enabled: $(vars.h4d_dws_flex_enabled)
 
