@@ -110,7 +110,6 @@ deployment_groups:
             "install_gcsfuse": true,
             "install_lustre": false,
             "install_managed_lustre": false,
-            "install_nvidia_repo": true,
             "install_ompi": true,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
@@ -135,31 +134,25 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+          add-nvidia-repositories -y
+          apt update -y
+          apt install -y cuda-toolkit-12-8
+          apt install -y datacenter-gpu-manager-4-cuda12
       - type: ansible-local
-        destination: install_cuda_dcgm.yml
+        destination: configure_cuda_dcgm.yml
         content: |
           ---
-          - name: Install CUDA & DCGM
+          - name: CUDA and DGMA settings
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               enable_nvidia_dcgm: false
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -167,22 +160,9 @@ deployment_groups:
                 owner: root
                 group: root
                 content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -210,7 +190,7 @@ deployment_groups:
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
-                enabled: false
+                enabled: "{{ enable_nvidia_dcgm }}"
             - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-persistenced.service
