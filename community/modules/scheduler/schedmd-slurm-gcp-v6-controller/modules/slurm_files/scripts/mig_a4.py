@@ -145,26 +145,21 @@ def submit_batch_request(requests, resume_data):
 def resume_slice_nodes(lkp: util.Lookup, nodes: List[str], resume_data):
   mig_requests = {}
   workload_requests = {} # type: ignore
-  instance_requests = {}
   
   for mig_name, nodes in _allocate_node_to_mig(lkp, nodes).items():
-    mig_req, workload_req, instance_req = _resume_slice_nodes_requests(lkp, mig_name, nodes)
+    mig_req, workload_req = _resume_slice_nodes_requests(lkp, mig_name, nodes)
 
     if mig_req:
       mig_requests[mig_name] = mig_req
       if workload_req not in workload_requests.values(): # type: ignore
         workload_requests[mig_name] = workload_req
 
-    instance_requests[mig_name] = instance_req
-  
   if workload_requests:
     submit_batch_request(workload_requests, resume_data)
   
   if mig_requests:
     submit_batch_request(mig_requests, resume_data)
    
-  submit_batch_request(instance_requests, resume_data)    
-
 def _resume_slice_nodes_requests(lkp: util.Lookup, mig_name: str, nodes: List[str]):
   assert nodes
   model = nodes[0]
@@ -177,19 +172,13 @@ def _resume_slice_nodes_requests(lkp: util.Lookup, mig_name: str, nodes: List[st
   if not mig:
     mig = MIG(
       name=mig_name,
-      target_size=0,
+      target_size=len(nodes),
       zone=zone,
       versions=[ns.instance_template])
     mig_req = create_mig_request(lkp, mig)
     workload_req = create_workload_policy_request(lkp, ns, ns["accelerator_topology"])
 
-  instance_req = lkp.compute.instanceGroupManagers().createInstances(
-    project=lkp.project, zone=mig.zone, instanceGroupManager=mig.name,
-    body=dict(
-      instances=[{"name": node} for node in nodes]
-  ))
-
-  return mig_req, workload_req, instance_req
+  return mig_req, workload_req
 
 
 def suspend_slice_nodes(lkp: util.Lookup, nodes: List[str]):
