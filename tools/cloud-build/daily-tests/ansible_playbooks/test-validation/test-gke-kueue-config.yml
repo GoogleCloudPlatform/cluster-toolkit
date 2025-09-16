@@ -234,3 +234,7 @@
     ansible.builtin.file:
       path: "/tmp/tas-queues-rendered-{{ accelerator_type }}.yaml"
       state: absent
+
+  - name: Pause to allow cluster to settle
+    ansible.builtin.pause:
+      seconds: 30
