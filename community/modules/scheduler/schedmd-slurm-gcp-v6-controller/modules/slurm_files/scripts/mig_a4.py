@@ -207,22 +207,23 @@ def _suspend_slice_nodes_request(lkp: util.Lookup, mig_name: str, nodes: List[st
     log.info(f"MIG {mig_name} not found (likely already deleted). Skipping suspend.")
     return None
 
-  links = []
-  instance_names = list_instances_in_mig(lkp.project, mig_obj.zone, mig_obj.name)
-  for node in nodes:
-    if node in instance_names:
-      links.append(f"zones/{mig_obj.zone}/instances/{node}")
-    else:
-      log.info(f"Instance {node} is not part of MIG {mig_name}. Skipping.")
+  # Check if the suspend request is for all nodes defined in the MIG's size.
+  if mig_obj.target_size != len(nodes):
+      log.warning(
+          f"Holding off suspension for MIG '{mig_name}'. "
+          f"Suspend request for {len(nodes)} nodes does not match the "
+          f"MIG target size of {mig_obj.target_size}. "
+          f"Waiting for all nodes in the slice to be idle."
+      )
+      return None
 
-  op = lkp.compute.instanceGroupManagers().deleteInstances(
-    project=lkp.project, zone=mig_obj.zone, instanceGroupManager=mig_obj.name,
-    body=dict(
-      instances=links,
-      skipInstancesOnValidationError=True,
-    )
+  # If we are here, we are deleting the entire MIG atomically.
+  log.info(f"Deleting entire MIG '{mig_name}' with {mig_obj.target_size} nodes.")
+  op = lkp.compute.instanceGroupManagers().delete(
+      project=lkp.project,
+      zone=mig_obj.zone,
+      instanceGroupManager=mig_obj.name
   )
-
   return op
 
 

@@ -85,17 +85,15 @@ def delete_instances(instances):
 
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
+
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
-    other_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
-    bulk_nodes, mig_nodes = util.separate(mig_a4.is_slice_node, other_nodes)
+    bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
+    a4x_flex_nodes, other_flex_nodes = util.separate(util.is_a4x_node, flex_nodes)
 
-    mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    a4x_nodes, other_nodes = util.separate(util.is_a4x_node, nodes)
-    if a4x_nodes:
-        mig_a4.suspend_slice_nodes(lkp, a4x_nodes)
-
+    mig_flex.suspend_flex_nodes(other_flex_nodes, lkp)
     delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
+    mig_a4.suspend_slice_nodes(lkp, a4x_flex_nodes)
 
 
 def main(nodelist):
