@@ -1,0 +1,461 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: a3high-slurm
+
+vars:
+  # --- Required User-Supplied Variables ---
+  deployment_name: slurm-a3-cluster
+  project_id: ## Set GCP Project ID Here ##
+  region: customer-region
+  zone: customer-zone
+  a3_static_cluster_size: 32
+  # a3_reservation_name must be specified; if Google staff have provided you
+  # with a reservation name, use it. Otherwise supply user-created reservation.
+  a3_reservation_name: a3-reservation-0 # MUST VERIFY/UPDATE
+  # a3_maintenance_interval should be empty string by default; if Google staff
+  # have created a reservation, they will also provide a3_maintenance_interval
+  a3_maintenance_interval: ""
+
+  # --- Image Settings (Using Ubuntu 20.04) ---
+  source_image_project_id: deeplearning-platform
+  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310  
+  image_family: $(vars.deployment_name)-slurm-u20
+  image_build_machine_type: c2d-standard-32
+  # --- Instance Image (used by the cluster) ---
+  instance_image:
+    project: $(vars.project_id)
+    family: $(vars.image_family)
+
+  # --- Slurm and Cluster Settings ---
+  slurm_cluster_name: slurm0
+  image_disk_size: 200
+  localssd_mountpoint: /mnt/localssd
+  a3_partition_name: a3
+  enable_ops_agent: true
+  enable_nvidia_dcgm: true
+
+  # --- Network Settings ---
+  sys_net_range: 172.16.0.0/16
+  filestore_ip_range: 192.168.0.0/29
+
+deployment_groups:
+# STAGE 1: Prepare the environment and scripts to build the Ubuntu 22.04 image.
+- group: image-env
+  modules:
+  - id: image-build-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-img-net
+
+  - id: image_build_script
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    settings:
+      install_ansible: true
+      docker:
+        enabled: true
+        world_writable: true
+      configure_ssh_host_patterns:
+      - 10.0.0.*
+      - 10.1.0.*
+      - 10.2.0.*
+      - 10.3.0.*
+      - $(vars.slurm_cluster_name)*
+      runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
+
+      - type: shell
+        destination: workaround_apt_change.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          rm -f /etc/apt/sources.list.d/kubernetes.list
+          apt-get update --allow-releaseinfo-change
+
+      # ADDED: This disables other services that might be on the base image.
+      - type: shell
+        destination: disable_dlvm_builtin_services.sh
+        content: |
+          #!/bin/bash
+          echo -e '#!/bin/bash\n/usr/bin/nvidia-persistenced --user root\nexit 0' > /etc/rc.local
+          systemctl stop jupyter.service notebooks-collection-agent.service || true
+          systemctl disable jupyter.service notebooks-collection-agent.service || true
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "install_gcsfuse": true,
+            "install_lustre": false,
+            "install_ompi": true,
+            "monitoring_agent": "cloud-ops",
+            "nvidia_version": "latest",
+            "install_nvidia_repo": false
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: data
+        destination: /etc/systemd/system/delay-a3.service
+        content: |
+          [Unit]
+          Description=Delay A3 boot until all network interfaces are routable
+          Wants=network-online.target
+          Before=google-startup-scripts.service
+          [Service]
+          Type=oneshot
+          ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
+          ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp6s0 -i enp12s0 -i enp134s0 -i enp140s0 -o routable --timeout=120
+          ExecStartPost=/bin/sleep 10
+          [Install]
+          WantedBy=multi-user.target
+      - type: shell
+        destination: enable_delay_a3.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          systemctl daemon-reload
+          systemctl enable delay-a3.service
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: ansible-local
+        destination: configure_gpu_monitoring.yml
+        content: |
+          ---
+          - name: Install NVIDIA DCGM and Configure Ops Agent
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+              enable_ops_agent: true
+              enable_nvidia_dcgm: false
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+            - name: Install NVIDIA DCGM
+              ansible.builtin.apt:
+                name:
+                - datacenter-gpu-manager-4-cuda12
+                - libnvidia-nscq-550
+                update_cache: true
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+      - type: shell
+        destination: install_mdadm.sh
+        content: |
+          #!/bin/bash
+          apt-get update
+          apt-get install mdadm --no-install-recommends --assume-yes
+      - type: shell
+        destination: remove_snap_gcloud.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          snap remove google-cloud-cli lxd || true
+          GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
+          if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
+              cat <<EOT > "${GCLOUD_APT_SOURCE}"
+          deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt cloud-sdk main
+          EOT
+          fi
+          curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          apt-get update
+          apt-get install --assume-yes google-cloud-cli
+          hash -r
+
+# STAGE 2: Build the image using the environment from STAGE 1.
+- group: image
+  modules:
+  - id: slurm-a3-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image-build-net
+    - image_build_script
+    settings:
+      machine_type: $(vars.image_build_machine_type)
+      source_image_project_id: [$(vars.source_image_project_id)]
+      source_image: $(vars.source_image)
+      image_family: $(vars.image_family)
+      disk_size: $(vars.image_disk_size)
+      omit_external_ip: false
+
+# STAGE 3: Build the permanent infrastructure for the cluster.
+- group: cluster-env
+  modules:
+  - id: sysnet
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-sysnet
+      network_address_range: $(vars.sys_net_range)
+      mtu: 8244
+      # using explicit var.subnetworks to allow for easier addition
+      # of multiple system subnetworks in other regions
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sysnet-subnet
+        subnet_region: $(vars.region)
+        new_bits: 4
+        subnet_private_access: true
+        description: primary subnetwork in $(vars.deployment_name)-sysnet
+
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      global_ip_address_range: 10.0.0.0/9
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      network_count: 4
+      subnetwork_cidr_suffix: 20
+    outputs: [additional_networks]
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [sysnet]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+
+  - id: compute_sa
+    source: community/modules/project/service-account
+    settings:
+      name: compute
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectAdmin
+
+# STAGE 4: Deploy the Slurm cluster itself.
+- group: cluster
+  modules:
+  - id: a3_startup
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    settings:
+      local_ssd_filesystem:
+        mountpoint: $(vars.localssd_mountpoint)
+        permissions: "1777"
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          { "data-root": "$(vars.localssd_mountpoint)/docker" }
+      runners:
+      - type: ansible-local
+        destination: enable_nvidia_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: $(vars.enable_ops_agent)
+              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers: {dcgm: {type: dcgm}}
+                    service:
+                      pipelines: {dcgm: {receivers: [dcgm]}}
+              notify: [Restart Google Cloud Ops Agent]
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+    outputs: [startup_script]
+
+  - id: a3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    # This use block is corrected to match File 3
+    - sysnet
+    - compute_sa
+    settings:
+      # These two lines are the required links for the monolithic refactor
+      startup_script: $(a3_startup.startup_script)
+      additional_networks: $(gpunets.additional_networks)
+      
+      # These settings below are the complete set from File 3 that you pasted
+      reservation_name: $(vars.a3_reservation_name)
+      # You must also merge a3_maintenance_interval: "" into your global vars block
+      maintenance_interval: $(vars.a3_maintenance_interval)
+      node_count_static: $(vars.a3_static_cluster_size)
+      node_count_dynamic_max: 0
+      disk_type: pd-ssd
+      disk_size_gb: $(vars.image_disk_size)
+      machine_type: a3-highgpu-8g
+      enable_public_ips: false
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 52
+        ThreadsPerCore: 2
+      on_host_maintenance: TERMINATE
+      bandwidth_tier: gvnic_enabled
+
+  - id: a3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [a3_nodeset]
+    settings:
+      partition_name: $(vars.a3_partition_name)
+      exclusive: false
+      is_default: true
+      partition_conf:
+        OverSubscribe: EXCLUSIVE
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [sysnet, compute_sa]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      disk_size_gb: $(vars.image_disk_size)
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset]
+    settings:
+      partition_name: debug
+
+  - id: controller_startup
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/receive-data-path-manager" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager
+          chmod 0755 "${SLURM_ROOT}/scripts/receive-data-path-manager"
+          ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d/start-rxdm.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/stop-rxdm.epilog_slurmd"
+          # enable a GPU health check that runs at the completion of all jobs on A3high nodes
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
+
+      - type: shell
+        destination: reset_enroot.sh
+        content: |
+          #!/bin/bash
+          rm -f /etc/enroot/enroot.conf
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [sysnet]
+    settings:
+      name_prefix: login
+      disk_type: pd-balanced
+      machine_type: c2-standard-4
+      enable_login_public_ips: true
+      disk_size_gb: $(vars.image_disk_size)
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - sysnet
+    - a3_partition
+    - debug_partition
+    - slurm_login
+    - homefs
+    settings:
+      slurm_cluster_name: $(vars.slurm_cluster_name)
+      instance_image: $(vars.instance_image)
+      machine_type: c2-standard-8
+      disk_type: pd-balanced
+      disk_size_gb: $(vars.image_disk_size)
+      enable_controller_public_ips: true
+      enable_external_prolog_epilog: true
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 900
+        suspend_rate: 0
+        suspend_timeout: 600
+        no_comma_params: false
+        tree_width: $(vars.a3_static_cluster_size)
+      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      controller_startup_script: $(controller_startup.startup_script)
+      login_startup_script: |
+        #!/bin/bash
+        rm -f /etc/enroot/enroot.conf
