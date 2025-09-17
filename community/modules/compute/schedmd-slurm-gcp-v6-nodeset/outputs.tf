@@ -85,13 +85,8 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = startswith(var.machine_type, "a4x-") && (!var.dws_flex.enabled || var.node_count_static == 16)
-    error_message = "For A4X,if DWS Flex is enabled, `node_count_static` should be set to 16."
-  }
-
-  precondition {
-    condition     = startswith(var.machine_type, "a4x-") && (!var.dws_flex.enabled || var.node_count_dynamic_max == 0)
-    error_message = "For A4X, if DWS Flex is enabled, `node_count_dynamic_max` should be set to 0."
+    condition     = startswith(var.machine_type, "a4x-") && (!var.dws_flex.enabled || (var.node_count_dynamic_max + var.node_count_static) % 16 == 0)
+    error_message = "For A4X, if DWS Flex is enabled, sum of `node_count_dynamic_max` and `node_count_static` should be a multiple of 16."
   }
 
   precondition {
