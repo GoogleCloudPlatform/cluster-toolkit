@@ -48,6 +48,7 @@ data "google_storage_bucket" "this" {
 ### Slurm NodeSet
 locals {
   nodeset = {
+    gke_nodepool      = var.node_pool_names[0]
     nodeset_name      = var.nodeset_name
     node_count_static = var.node_count_static
     subnetwork        = "https://www.googleapis.com/compute/v1/projects/${var.project_id}/regions/${var.subnetwork.region}/subnetworks/${var.subnetwork.name}"
