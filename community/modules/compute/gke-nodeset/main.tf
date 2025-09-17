@@ -15,11 +15,7 @@
 
 ### GKE NodeSet
 locals {
-  machine_type_templates = ["a3-megagpu-8g", "a3-ultragpu-8g", "a4-highgpu-8g"]
-
-  gpu_type      = var.has_gpu ? var.guest_accelerator[0].type : ""
-  template_type = contains(local.machine_type_templates, var.machine_type) ? var.machine_type : (var.has_gpu ? "gpu-general" : var.has_tpu ? "tpu-general" : "general")
-  manifest_path = "${path.module}/templates/nodeset-${local.template_type}.yaml.tftpl"
+  manifest_path = "${path.module}/templates/nodeset-general.yaml.tftpl"
 }
 
 module "kubectl_apply" {
@@ -31,19 +27,14 @@ module "kubectl_apply" {
   apply_manifests = [{
     source = local.manifest_path,
     template_vars = {
-      slurm_namespace    = var.slurm_namespace,
-      nodeset_name       = "${var.slurm_cluster_name}-${var.nodeset_name}",
-      nodeset_cr_name    = "${var.slurm_cluster_name}-${var.nodeset_name}",
-      controller_name    = "${var.slurm_cluster_name}-controller",
-      node_pool_name     = var.node_pool_names[0],
-      node_count         = var.node_count_static,
-      image              = var.image,
-      gpu_per_node       = var.allocatable_gpu_per_node,
-      home_pvc           = var.pvc_name,
-      gpu_type           = local.gpu_type,
-      tpu_chips_per_node = var.tpu_chips_per_node,
-      tpu_accelerator    = var.tpu_accelerator,
-      tpu_topology       = var.tpu_topology,
+      slurm_namespace = var.slurm_namespace,
+      nodeset_name    = "${var.slurm_cluster_name}-${var.nodeset_name}",
+      nodeset_cr_name = "${var.slurm_cluster_name}-${var.nodeset_name}",
+      controller_name = "${var.slurm_cluster_name}-controller",
+      node_pool_name  = var.node_pool_names[0],
+      node_count      = var.node_count_static,
+      image           = var.image,
+      home_pvc        = var.pvc_name,
     }
   }]
 }
