@@ -59,42 +59,6 @@ variable "subnetwork" {
   type        = any
 }
 
-variable "has_gpu" {
-  description = "If set to true, the nodeset template's Pod spec will contain request/limit for gpu resource."
-  type        = bool
-  default     = false
-}
-
-variable "has_tpu" {
-  description = "If set to true, the nodeset template's Pod spec will contain request/limit for TPU resource, open port 8740 for TPU communication and add toleration for google.com/tpu."
-  type        = bool
-  default     = false
-}
-
-variable "tpu_chips_per_node" {
-  description = "Number of TPU chips per node. Required when has_tpu=true"
-  type        = number
-  default     = 0
-}
-
-variable "tpu_accelerator" {
-  description = "Name of the TPU accelerator (cloud.google.com/gke-tpu-accelerator annotation). Required when has_tpu=true"
-  type        = string
-  default     = null
-}
-
-variable "tpu_topology" {
-  description = "TPU topology. Required when has_tpu=true"
-  type        = string
-  default     = null
-}
-
-variable "allocatable_gpu_per_node" {
-  description = "Number of GPUs available for scheduling pods on each node."
-  type        = number
-  default     = 0
-}
-
 variable "slurm_namespace" {
   description = "slurm namespace for charts"
   type        = string
@@ -105,19 +69,6 @@ variable "nodeset_name" {
   description = "The nodeset name"
   type        = string
   default     = "gkenodeset"
-}
-
-variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the nodes."
-  type        = list(any)
-  default     = []
-  nullable    = false
-}
-
-variable "machine_type" {
-  description = "The name of a Google Compute Engine machine type."
-  type        = string
-  default     = "c2-standard-60"
 }
 
 variable "pvc_name" {
