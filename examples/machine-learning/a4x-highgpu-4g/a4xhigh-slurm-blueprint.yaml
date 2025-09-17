@@ -29,7 +29,7 @@ vars:
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-accelerator-arm64-64k
-  build_from_git_ref: 6.10.5
+  build_slurm_from_git_ref: 6.10.6
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
@@ -55,6 +55,7 @@ deployment_groups:
   - id: slurm-build-script
     source: modules/scripts/startup-script
     settings:
+      enable_gpu_network_wait_online: true
       runners:
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
@@ -142,7 +143,7 @@ deployment_groups:
           #!/bin/bash
           set -e -o pipefail
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_from_git_ref) \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

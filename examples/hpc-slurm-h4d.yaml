@@ -20,6 +20,10 @@ vars:
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
 
+  #Provisioning model, select one, lack of selection will rely on on-demand capacity
+  h4d_dws_flex_enabled: false
+  h4d_reservation_name: ""
+
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 deployment_groups:
@@ -91,6 +95,12 @@ deployment_groups:
       node_count_static: 2
       node_count_dynamic_max: 0
       enable_placement: false
+
+      #Provisioning models
+      reservation_name: $(vars.h4d_reservation_name)
+      dws_flex:
+        enabled: $(vars.h4d_dws_flex_enabled)
+
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
       additional_networks:
@@ -134,4 +144,4 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
-        slurmd_timeout: 900
+        unkillable_step_timeout: 900

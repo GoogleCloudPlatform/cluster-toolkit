@@ -64,7 +64,7 @@ variable "gcs_bucket_name" {
   default     = null
 }
 
-variable "capacity_gb" {
+variable "capacity_gib" {
   description = "The storage capacity with which to create the persistent volume."
   type        = number
 }
