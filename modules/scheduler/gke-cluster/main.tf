@@ -1,18 +1,18 @@
 /**
-  * Copyright 2022 Google LLC
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-  *
-  *      http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+ * Copyright 2022 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 locals {
   # This label allows for billing report tracking based on module.
@@ -28,10 +28,10 @@ locals {
 }
 
 locals {
-  dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
-  prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
-  name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
-  name             = local.name_maybe_empty != "" ? local.name_maybe_empty : "NO-NAME-GIVEN"
+  dash              = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
+  prefix            = var.prefix_with_deployment_name ? var.deployment_name : ""
+  name_maybe_empty  = "${local.prefix}${local.dash}${var.name_suffix}"
+  name              = local.name_maybe_empty != "" ? local.name_maybe_empty : "NO-NAME-GIVEN"
 
   cluster_authenticator_security_group = var.authenticator_security_group == null ? [] : [{
     security_group = var.authenticator_security_group
@@ -69,8 +69,8 @@ data "google_project" "project" {
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
-  provider       = google-beta
-  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  provider        = google-beta
+  location        = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   version_prefix = var.version_prefix
 }
 
@@ -81,11 +81,11 @@ locals {
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
-  project         = var.project_id
-  name            = local.name
-  location        = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  resource_labels = local.labels
-  networking_mode = var.networking_mode
+  project          = var.project_id
+  name             = local.name
+  location         = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  resource_labels  = local.labels
+  networking_mode  = var.networking_mode
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
@@ -100,7 +100,7 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  network    = var.network_id
+  network     = var.network_id
   subnetwork = var.subnetwork_self_link
 
   # Note: the existence of the "master_authorized_networks_config" block enables
@@ -109,7 +109,7 @@ resource "google_container_cluster" "gke_cluster" {
     dynamic "cidr_blocks" {
       for_each = var.master_authorized_networks
       content {
-        cidr_block   = cidr_blocks.value.cidr_block
+        cidr_block  = cidr_blocks.value.cidr_block
         display_name = cidr_blocks.value.display_name
       }
     }
@@ -238,7 +238,7 @@ resource "google_container_cluster" "gke_cluster" {
 
   node_config {
     shielded_instance_config {
-      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_secure_boot            = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
     }
   }
@@ -339,7 +339,7 @@ resource "google_container_node_pool" "system_node_pools" {
     image_type = var.system_node_pool_image_type
 
     shielded_instance_config {
-      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_secure_boot            = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
     }
 
@@ -380,6 +380,11 @@ resource "google_container_node_pool" "system_node_pools" {
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
   }
+
+  # THIS IS THE ADDED DEPENDENCY TO FIX THE DELETION ISSUE
+  depends_on = [
+    module.kubectl_apply,
+  ]
 }
 
 data "google_client_config" "default" {}
