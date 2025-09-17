@@ -124,7 +124,7 @@ EOF
 	# pass the hostname into slurmd container, so the work distribution frameworks will be able to correctly
 	# identify local address and hostname and coordinate the work
 	# shellcheck disable=SC2086
-	docker run -d $CGROUP_FLAGS $TPU_FLAGS --net=host --name=slurmd --hostname="$(hostname -s)" --domainname="$(hostname -d)" --entrypoint=/usr/bin/systemd --restart unless-stopped "$docker_image"
+	docker run --env OS_ENV=slurm_container -d $CGROUP_FLAGS $TPU_FLAGS --net=host --name=slurmd --hostname="$(hostname -s)" --domainname="$(hostname -d)" --entrypoint=/usr/bin/systemd --restart unless-stopped "$docker_image"
 	exit 0
 }
 
