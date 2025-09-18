@@ -171,18 +171,15 @@ deployment_groups:
                 deb: "{{ package_filename }}"
                 state: present
       - type: shell
-        destination: install-nvidia.sh
+        destination: install-cuda-toolkit.sh
         content: |
           #!/bin/bash
           set -ex -o pipefail
-          # Install nvidia container toolkit
-          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
-            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-          apt-get update -y
-          apt-get install -y nvidia-container-toolkit
+          add-nvidia-repositories -y
+          apt update -y
+          apt install -y cuda-toolkit-12-8
+          apt install -y nvidia-container-toolkit
+          apt install -y datacenter-gpu-manager-4-cuda12
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
@@ -211,15 +208,7 @@ deployment_groups:
             vars:
               enable_ops_agent: $(vars.enable_ops_agent)
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -252,7 +241,7 @@ deployment_groups:
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
-                enabled: false
+                enabled: "{{ enable_nvidia_dcgm }}"
             - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-persistenced.service
