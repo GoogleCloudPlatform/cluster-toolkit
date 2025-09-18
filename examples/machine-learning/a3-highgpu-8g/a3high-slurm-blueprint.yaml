@@ -23,14 +23,14 @@ vars:
   a3_static_cluster_size: 32
   # a3_reservation_name must be specified; if Google staff have provided you
   # with a reservation name, use it. Otherwise supply user-created reservation.
-  a3_reservation_name: a3-reservation-0 # MUST VERIFY/UPDATE
+  a3_reservation_name: ""
   # a3_maintenance_interval should be empty string by default; if Google staff
   # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
 
   # --- Image Settings (Using Ubuntu 20.04) ---
-  source_image_project_id: deeplearning-platform
-  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310
+  source_image_project_id: source-image-project-id       # use value supplied by Google Cloud staff
+  source_image: source-image-name                        # use value supplied by Google Cloud staff
   image_family: $(vars.deployment_name)-slurm-u20
   image_build_machine_type: c2d-standard-32
   # --- Instance Image (used by the cluster) ---
