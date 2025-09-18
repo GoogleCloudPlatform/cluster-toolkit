@@ -123,18 +123,9 @@ deployment_groups:
       install_slurm_chart: false
     outputs: [instructions]
 
-  - id: homefs-pv
-    source: modules/file-system/gke-persistent-volume
-    use: [homefs, gke_cluster]
-    settings:
-      capacity_gib: 1024
-      namespace: $(vars.slurm_namespace)
-      pv_name: home-pv
-      pvc_name: home-pvc
-
   - id: gke_compute_nodeset
     source: community/modules/compute/gke-nodeset
-    use: [gke_compute_pool, slinky, homefs-pv, slurm_controller, network]
+    use: [gke_compute_pool, slinky, homefs, slurm_controller, network]
     settings:
       slurm_cluster_name: $(vars.deployment_name)
       image: $(vars.slinky_image)
