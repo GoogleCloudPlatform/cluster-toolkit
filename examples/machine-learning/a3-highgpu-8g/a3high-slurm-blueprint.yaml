@@ -30,7 +30,7 @@ vars:
 
   # --- Image Settings (Using Ubuntu 20.04) ---
   source_image_project_id: deeplearning-platform
-  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310  
+  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310
   image_family: $(vars.deployment_name)-slurm-u20
   image_build_machine_type: c2d-standard-32
   # --- Instance Image (used by the cluster) ---
@@ -341,7 +341,7 @@ deployment_groups:
       # These two lines are the required links for the monolithic refactor
       startup_script: $(a3_startup.startup_script)
       additional_networks: $(gpunets.additional_networks)
-      
+
       # These settings below are the complete set from File 3 that you pasted
       reservation_name: $(vars.a3_reservation_name)
       # You must also merge a3_maintenance_interval: "" into your global vars block
