@@ -34,7 +34,8 @@ module "kubectl_apply" {
       node_pool_name  = var.node_pool_names[0],
       node_count      = var.node_count_static,
       image           = var.image,
-      home_pvc        = var.pvc_name,
+      home_pvc        = module.home_pv.pvc_name
+      slurm_key_pvc   = module.slurm_key_pv.pvc_name
     }
   }]
 }

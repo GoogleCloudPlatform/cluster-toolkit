@@ -71,11 +71,6 @@ variable "nodeset_name" {
   default     = "gkenodeset"
 }
 
-variable "pvc_name" {
-  description = "An object that describes a k8s PVC created by this module."
-  type        = string
-}
-
 variable "slurm_bucket_dir" {
   description = "Path directory within `bucket_name` for Slurm cluster file storage."
   type        = string
@@ -92,4 +87,22 @@ variable "instance_templates" {
   description = "The URLs of Instance Templates"
   type        = list(string)
   nullable    = false
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on nodes."
+  type = object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
+  })
+}
+
+variable "filestore_id" {
+  description = "An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
+  type        = string
 }
