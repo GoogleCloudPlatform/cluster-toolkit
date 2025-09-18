@@ -1,0 +1,54 @@
+Creating deployment folder "kh-a2h" ...
+Initializing deployment group kh-a2h/primary
+Error: exit status 1
+
+Error: Module is incompatible with count, for_each, and depends_on
+
+  on modules/embedded/modules/management/kubectl-apply/main.tf line 74, in module "kubectl_apply_manifests":
+  74:   for_each   = local.processed_apply_manifests_map
+
+The module at
+module.workload_component_install.module.kubectl_apply_manifests is a legacy
+module which contains its own local provider configurations, and so calls to
+it may not use the count, for_each, or depends_on arguments.
+
+If you also control the module "../kubernetes", consider updating this module
+to instead expect provider configurations to be passed by its caller.
+
+Error: Module is incompatible with count, for_each, and depends_on
+
+  on modules/embedded/modules/management/kubectl-apply/main.tf line 94, in module "install_kueue":
+  94:   depends_on = [var.gke_cluster_exists]
+
+The module at module.workload_component_install.module.install_kueue is a
+legacy module which contains its own local provider configurations, and so
+calls to it may not use the count, for_each, or depends_on arguments.
+
+If you also control the module "../kubernetes", consider updating this module
+to instead expect provider configurations to be passed by its caller.
+
+Error: Module is incompatible with count, for_each, and depends_on
+
+  on modules/embedded/modules/management/kubectl-apply/main.tf line 105, in module "configure_kueue":
+ 105:   depends_on    = [module.install_kueue]
+
+The module at module.workload_component_install.module.configure_kueue is a
+legacy module which contains its own local provider configurations, and so
+calls to it may not use the count, for_each, or depends_on arguments.
+
+If you also control the module "../kubernetes", consider updating this module
+to instead expect provider configurations to be passed by its caller.
+
+Error: Module is incompatible with count, for_each, and depends_on
+
+  on modules/embedded/modules/management/kubectl-apply/main.tf line 120, in module "install_jobset":
+ 120:   depends_on = [var.gke_cluster_exists, module.configure_kueue]
+
+The module at module.workload_component_install.module.install_jobset is a
+legacy module which contains its own local provider configurations, and so
+calls to it may not use the count, for_each, or depends_on arguments.
+
+If you also control the module "../kubernetes", consider updating this module
+to instead expect provider configurations to be passed by its caller.
+
+Hint: initialization of deployment group kh-a2h/primary failed; manually resolve errors

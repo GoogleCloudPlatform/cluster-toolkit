@@ -1,0 +1,14 @@
+Creating deployment folder "gke-a2-highgpu" ...
+Initializing deployment group gke-a2-highgpu/primary
+Testing if deployment group gke-a2-highgpu/primary requires adding or changing cloud infrastructure
+Error: exit status 1
+
+Error: Failed to construct REST client
+
+  with module.gke_cluster.module.kubectl_apply.module.kubectl_apply_manifests["5"].kubernetes_manifest.this["0"],
+  on modules/embedded/modules/management/kubectl-apply/kubernetes/main.tf line 73, in resource "kubernetes_manifest" "this":
+  73: resource "kubernetes_manifest" "this" {
+
+cannot create REST client: no client config
+
+Hint: terraform plan for deployment group gke-a2-highgpu/primary failed
