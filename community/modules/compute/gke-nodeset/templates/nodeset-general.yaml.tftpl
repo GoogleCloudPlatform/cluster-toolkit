@@ -187,7 +187,7 @@ spec:
         name: run
       - name: slurm-config
         persistentVolumeClaim:
-          claimName: slurm-key-pvc
+          claimName: ${slurm_key_pvc}
       - emptyDir:
           medium: Memory
         name: slurm-spool
