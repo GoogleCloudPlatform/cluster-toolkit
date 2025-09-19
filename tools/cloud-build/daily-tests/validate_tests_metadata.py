@@ -76,6 +76,7 @@ def get_blueprint(build_path: str) -> Optional[str]:
         f"{BUILDS_DIR}/slurm-gcp-v6-simple-job-completion.yaml": "tools/python-integration-tests/blueprints/slurm-simple.yaml",
         f"{BUILDS_DIR}/slurm-flex.yaml": "tools/python-integration-tests/blueprints/slurm-flex.yaml",
         f"{BUILDS_DIR}/slurm-gcp-v6-topology.yaml": "tools/python-integration-tests/blueprints/topology-test.yaml",
+        f"{BUILDS_DIR}/ml-a3-highgpu-slurm.yaml": "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml",
     }
     if build_path in SPECIAL_CASES:
         return SPECIAL_CASES[build_path]
