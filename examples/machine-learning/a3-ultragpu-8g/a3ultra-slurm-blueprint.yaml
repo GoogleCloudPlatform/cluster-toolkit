@@ -39,7 +39,7 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 100
-  nccl_plugin_version: v1.1.0
+  nccl_gib_version: 1.1.0
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -134,31 +134,22 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          add-nvidia-repositories -y
+          apt install -y cuda-toolkit-12-8
+          apt install -y datacenter-gpu-manager-4-cuda12
       - type: ansible-local
-        destination: install_cuda_dcgm.yml
+        destination: settings_nvidia_dcgm.yml
         content: |
           ---
-          - name: Install CUDA & DCGM
+          - name: Nvidia and DGMA settings
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              enable_nvidia_dcgm: false
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -166,22 +157,9 @@ deployment_groups:
                 owner: root
                 group: root
                 content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -232,8 +210,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
-          ENROOT_CONFIG_PATH     ${HOME}/.enroot
-
+          ENROOT_CONFIG_PATH ${HOME}/.enroot
 
 - group: image
   modules:
@@ -479,47 +456,74 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # Install NCCL-GIB Plugin
       - type: ansible-local
-        destination: nccl_plugin.yml
+        destination: install_nccl_gib.yml
         content: |
           ---
-          - name: Install NCCL plugin for A3 Ultra series
+          - name: Install Google NCCL-GIB Plugin
             hosts: all
             become: true
             tasks:
-            - name: Add SystemD unit for NCCL plugin installation
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
+                state: present
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+                state: present
+            - name: Install Apt Transport AR Apt Repo
+              apt_repository:
+                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
+                state: present
+            - name: Install AR transport
+              ansible.builtin.apt:
+                name: "apt-transport-artifact-registry"
+                update_cache: true
+            - name: Install Google NCCL-GIB Plugin
+              apt_repository:
+                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
+                state: present
+            - name: Install NCCL-GIB Plugin
+              ansible.builtin.apt:
+                name: "nccl-gib=$(vars.nccl_gib_version)"
+                update_cache: true
+            - name: Freeze NCCL GIB Plugin
+              ansible.builtin.dpkg_selections:
+                name: "nccl-gib"
+                selection: hold
+      # --------------------------------------------------------------------------
+      # Environment Configuration
+      # --------------------------------------------------------------------------
+      - type: ansible-local
+        destination: configure_nccl_env.yml
+        name: Ensure NCCL/gIB environment script is sourced for all users
+        content: |
+          ---
+          - name: Configure NCCL/gIB environment
+            hosts: all
+            become: true
+            tasks:
+            - name: Deploy /etc/profile.d/nccl-gib.sh
               ansible.builtin.copy:
-                dest: /etc/systemd/system/nccl-plugin@.service
-                mode: 0o0644
+                dest: /etc/profile.d/nccl-gib.sh
                 content: |
-                  [Unit]
-                  After=network-online.target docker.service
-                  Before=slurmd.service
-                  Requires=docker.service
+                  # Load NCCL/gIB environment
+                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                    source /usr/local/gib/scripts/set_nccl_env.sh
+                  fi
 
-                  [Service]
-                  Type=oneshot
-                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
-                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
-                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
-                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
-                      us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
-                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
-
-                  [Install]
-                  WantedBy=slurmd.service
-              notify:
-              - Reload SystemD
+                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                  if [ -d "/usr/local/gib/lib64" ]; then
+                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                  fi
+                mode: '0644'
             handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
-            post_tasks:
-            - name: Enable NCCL plugin SystemD unit
-              ansible.builtin.service:
-                name: nccl-plugin@$(vars.nccl_plugin_version).service
-                state: started
-                enabled: true
+              - name: Reload SystemD
+                ansible.builtin.systemd:
+                  daemon_reload: true
+
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
