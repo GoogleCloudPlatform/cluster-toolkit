@@ -41,7 +41,7 @@ spec:
               cloud.google.com/gke-tpu-topology: 4x4
             containers:
             - name: jax-tpu
-              image: python:3.10
+              image: us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest
               ports:
               - containerPort: 8471
               - containerPort: 8080
@@ -52,7 +52,6 @@ spec:
               - bash
               - -c
               - |
-                pip install "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
                 python -c 'import jax; print("Global device count:", jax.device_count())'
                 sleep 60
               resources:
