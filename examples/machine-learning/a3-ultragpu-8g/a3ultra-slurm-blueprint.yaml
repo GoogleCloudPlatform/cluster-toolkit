@@ -327,7 +327,7 @@ deployment_groups:
   #   - a3ultra-slurm-net-0
   #   - private_service_access
   #   settings:
-  #     size_gib: 18000
+  #     size_gib: 36000
   #     name: lustre-instance
   #     local_mount: /home
   #     remote_mount: lustrefs

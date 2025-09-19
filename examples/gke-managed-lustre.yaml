@@ -32,9 +32,9 @@ vars:
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
   # Storage capacity of the lustre instance in GiB
-  size_gib: 18000
+  size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
-  per_unit_storage_throughput: 1000
+  per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: primary

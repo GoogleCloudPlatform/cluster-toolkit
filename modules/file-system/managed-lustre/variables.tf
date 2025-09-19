@@ -74,13 +74,13 @@ variable "local_mount" {
 variable "size_gib" {
   description = "Storage size of the Managed Lustre instance in GB. See https://cloud.google.com/managed-lustre/docs/create-instance for limitations"
   type        = number
-  default     = 18000
+  default     = 36000
 }
 
 variable "per_unit_storage_throughput" {
   description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000."
   type        = number
-  default     = 1000
+  default     = 500
 }
 
 variable "labels" {

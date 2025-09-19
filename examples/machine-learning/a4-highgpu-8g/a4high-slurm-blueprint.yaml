@@ -350,7 +350,7 @@ deployment_groups:
   #   - a4high-slurm-net-0
   #   - private_service_access
   #   settings:
-  #     size_gib: 18000
+  #     size_gib: 36000
   #     name: lustre-instance1
   #     local_mount: /home
   #     remote_mount: lustrefs
