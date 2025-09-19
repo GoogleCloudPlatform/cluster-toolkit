@@ -66,6 +66,7 @@ locals {
     : ""
   )
 
+  effective_termination_action = (var.spot || var.preemptible) && var.termination_action == null ? "STOP" : var.termination_action
 
   name_prefix = "${var.slurm_cluster_name}-${var.slurm_instance_role}-${var.name_prefix}"
 
@@ -131,7 +132,7 @@ module "instance_template" {
   spot                        = var.spot
   on_host_maintenance         = var.on_host_maintenance
   labels                      = local.labels
-  instance_termination_action = var.termination_action
+  instance_termination_action = local.effective_termination_action
   resource_manager_tags       = var.resource_manager_tags
 
   # Metadata

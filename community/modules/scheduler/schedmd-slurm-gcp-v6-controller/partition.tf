@@ -159,15 +159,23 @@ module "nodeset_cleanup_tpu" {
   ]
 }
 
-resource "google_storage_bucket_object" "parition_config" {
+resource "local_file" "partition_config" {
   for_each = { for p in var.partitions : p.partition_name => p }
 
-  bucket  = module.slurm_files.bucket_name
-  name    = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  content  = yamlencode(each.value)
+  filename = "${path.module}/build/partition_configs/${each.key}.yaml"
+}
+
+resource "google_storage_bucket_object" "partition_config" {
+  for_each = { for p in var.partitions : p.partition_name => p }
+
+  bucket         = module.slurm_files.bucket_name
+  name           = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
+  source         = local_file.partition_config[each.key].filename
+  source_md5hash = local_file.partition_config[each.key].content_md5
 }
 
 moved {
-  from = module.slurm_files.google_storage_bucket_object.parition_config
-  to   = google_storage_bucket_object.parition_config
+  from = google_storage_bucket_object.parition_config
+  to   = google_storage_bucket_object.partition_config
 }
