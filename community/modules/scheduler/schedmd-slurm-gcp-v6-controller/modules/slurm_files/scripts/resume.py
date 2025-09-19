@@ -44,6 +44,7 @@ from util import (
 from util import lookup, ReservationDetails
 import tpu
 import mig_flex
+import mig_a4
 
 log = logging.getLogger()
 
@@ -283,12 +284,35 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
             excl_job_id = job_id,
             placement_group=pn.placement,
             chunk_idx=i)
-
         for job_id, placements in groups.items()
         for pn in placements if pn.nodes
         for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
     ]
     return {chunk.name: chunk for chunk in chunks}
+
+def _filter_out_and_handle_slice_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> List[str]:
+    """
+    Separates slice nodes from the list of nodes to be resumed.
+
+    - Slice nodes with DWS Flex enabled are resumed via MIGs.
+    - All other nodes (non-slice, and slice without DWS Flex) are returned
+      to be resumed via bulk instance creation.
+    """
+    lkp = lookup()
+    other_nodes, slice_nodes = util.separate(mig_a4.is_slice_node, nodes)
+
+    if not slice_nodes:
+        return other_nodes
+
+    a4x_dws_nodes, a4x_bulk_nodes = util.separate(
+        lambda node: lkp.node_nodeset(node).dws_flex.enabled, slice_nodes
+    )
+
+    if a4x_dws_nodes:
+        log.info(f"Resuming A4X DWS Flex nodes via MIGs: {to_hostlist(a4x_dws_nodes)}")
+        mig_a4.resume_slice_nodes(lkp, a4x_dws_nodes, resume_data)
+
+    return other_nodes + a4x_bulk_nodes
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
@@ -296,11 +320,13 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     lkp = lookup()
     # Prevent dormant nodes associated with a reservation from being resumed
     nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
+    nodes = _filter_out_and_handle_slice_nodes(nodes, resume_data)
     
     if dormant_res_nodes:
         log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
         down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
+    
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
         log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")

@@ -33,11 +33,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.accelerator_topology == null || var.enable_placement
-    error_message = "accelerator_topology requires enable_placement to be set to true."
-  }
-
-  precondition {
     condition     = (var.accelerator_topology == null) || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
     error_message = "accelerator_topology must be divisible by number of gpus in machine."
   }
@@ -63,6 +58,16 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = var.accelerator_topology == null || (var.enable_placement || var.dws_flex.enabled)
+    error_message = "accelerator_topology requires either enable_placement to be set to true or DWS Flex to be enabled."
+  }
+
+  precondition {
+    condition     = startswith(var.machine_type, "a4x-") && (!var.dws_flex.enabled || var.accelerator_topology == "1x64")
+    error_message = "For A4X, cannot use DWS Flex with accelerator_topology other than 1x64."
+  }
+
+  precondition {
     condition     = length(var.zones) == 0 || !var.dws_flex.enabled
     error_message = <<-EOD
       If a DWS Flex is enabled, `var.zones` should be empty.
@@ -76,7 +81,12 @@ output "nodeset" {
 
   precondition {
     condition     = !var.enable_spot_vm || !var.dws_flex.enabled
-    error_message = "Cannot use both Flex-Start and Spot VMs for provisioning."
+    error_message = "Cannot use both DWS Flex and Spot VMs for provisioning."
+  }
+
+  precondition {
+    condition     = startswith(var.machine_type, "a4x-") && (!var.dws_flex.enabled || (var.node_count_dynamic_max + var.node_count_static) % 16 == 0)
+    error_message = "For A4X, if DWS Flex is enabled, sum of `node_count_dynamic_max` and `node_count_static` should be a multiple of 16."
   }
 
   precondition {

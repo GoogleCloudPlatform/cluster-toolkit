@@ -43,6 +43,11 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: slurm-ubuntu2404-accelerator-arm64-64k
+  accelerator_topology: # supply accelerator topology
+  a4x_dws_flex_max_run_duration: 604800 # Maximum duration (in seconds) for which DWS Flex is needed. Should be b/w 600(10 minutes) and 604800(7 days)
+  #Provisioning model, select one (only one selection is valid), lack of selection will rely on on-demand capacity
+  a4x_dws_flex_enabled: false
+  a4x_enable_spot_vm: false
   a4x_reservation_name: "" # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
@@ -590,11 +595,15 @@ deployment_groups:
       node_count_static: $(vars.a4x_cluster_size)
       node_count_dynamic_max: 0
       enable_placement: true
-      accelerator_topology: 1x72
+      accelerator_topology: $(vars.accelerator_topology)
       disk_type: hyperdisk-balanced
       instance_image_custom: true
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4x_reservation_name)
+      enable_spot_vm: $(vars.a4x_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a4x_dws_flex_enabled)
+        max_run_duration: $(vars.a4x_dws_flex_max_run_duration)
       additional_networks:
         $(concat(
           [{
