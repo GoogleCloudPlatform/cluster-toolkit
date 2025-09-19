@@ -15,17 +15,17 @@
   */
 
 output "persistent_volume_claims" {
-  description = "An object that describes a k8s PVC created by this module."
+  description = "An object describing the Kubernetes PersistentVolumeClaim created by this module."
   value = {
     name          = local.pvc_name
+    namespace     = var.namespace
     mount_path    = var.network_storage.local_mount
     mount_options = var.network_storage.mount_options
-    is_gcs        = local.is_gcs
+    storage_type  = local.storage_type
   }
-  depends_on = [kubectl_manifest.pvc]
 }
 
 output "pvc_name" {
-  description = "The name for k8s PVC created by this module."
+  description = "The name of the Kubernetes PVC created by this module."
   value       = local.pvc_name
 }
