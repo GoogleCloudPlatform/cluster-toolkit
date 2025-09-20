@@ -144,6 +144,7 @@ deployment_groups:
           apt update -y
           apt install -y cuda-toolkit-12-8
           apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       - type: ansible-local
         destination: configure_cuda_dcgm.yml
         content: |
@@ -153,6 +154,7 @@ deployment_groups:
             become: true
             vars:
               enable_nvidia_dcgm: false
+
             tasks:
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
