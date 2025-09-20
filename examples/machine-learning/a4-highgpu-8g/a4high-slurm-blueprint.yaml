@@ -40,6 +40,7 @@ vars:
     family: $(vars.deployment_name)-u22
   disk_size_gb: 100
   nccl_gib_version: 1.1.0
+  libnccl_version: 2.27.5-1+cuda12.9
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 
@@ -460,6 +461,24 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # Install NCCL
+      - type: ansible-local
+        destination: install_nccl.yml
+        content: |
+          ---
+          - name: Install nccl
+            hosts: all
+            become: true
+            tasks:
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: yes
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - "libnccl2=$(vars.libnccl_version)"
+                - "libnccl-dev=$(vars.libnccl_version)"
+                state: present
       # Install NCCL-GIB Plugin
       - type: ansible-local
         destination: install_nccl_gib.yml
