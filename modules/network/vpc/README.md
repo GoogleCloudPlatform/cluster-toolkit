@@ -162,11 +162,13 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.15.0 |
+| <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
+| <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -181,6 +183,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [null_resource.delete_auto_firewalls](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [terraform_data.cloud_nat_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.network_profile_firewall_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.secondary_ranges_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -191,6 +194,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_additional_subnetworks"></a> [additional\_subnetworks](#input\_additional\_subnetworks) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `list(map(string))` | `null` | no |
 | <a name="input_allowed_ssh_ip_ranges"></a> [allowed\_ssh\_ip\_ranges](#input\_allowed\_ssh\_ip\_ranges) | A list of CIDR IP ranges from which to allow ssh access | `list(string)` | `[]` | no |
+| <a name="input_auto_delete_hierarchical_firewall_policies"></a> [auto\_delete\_hierarchical\_firewall\_policies](#input\_auto\_delete\_hierarchical\_firewall\_policies) | If true, automatically delete auto-generated firewall rules at deletion time. | `bool` | `true` | no |
 | <a name="input_default_primary_subnetwork_size"></a> [default\_primary\_subnetwork\_size](#input\_default\_primary\_subnetwork\_size) | The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks | `number` | `15` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |

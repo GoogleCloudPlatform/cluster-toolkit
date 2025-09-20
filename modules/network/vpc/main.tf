@@ -254,3 +254,50 @@ module "cloud_router" {
     },
   ]
 }
+
+resource "null_resource" "delete_auto_firewalls" {
+  count = var.auto_delete_hierarchical_firewall_policies ? 1 : 0
+
+  triggers = {
+    network_name = module.vpc.network_name
+    project_id   = var.project_id
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    command     = <<EOT
+set -e
+PROJECT_ID="${self.triggers.project_id}"
+
+# Use self.triggers.network_name to reference the VPC being destroyed.
+VPC_NAME="${self.triggers.network_name}"
+
+echo "Searching for firewall rules in project '$PROJECT_ID' for network '$VPC_NAME'..."
+FW_RULES=$(gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network.scope() = '$VPC_NAME'" --format="value(name)")
+
+if [ -z "$FW_RULES" ]; then
+  echo "No automatically-generated firewall rules found to delete."
+  exit 0
+fi
+
+echo "Found firewall rules to delete:"
+echo "$FW_RULES"
+echo "$FW_RULES" | xargs -r gcloud compute firewall-rules delete --project="$PROJECT_ID" --quiet
+
+echo "Waiting for firewall rules to be deleted..."
+for i in {1..12}; do
+  REMAINING_RULES=$(gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network.scope() = '$VPC_NAME'" --format="value(name)")
+  if [ -z "$REMAINING_RULES" ]; then
+    echo "All firewall rules successfully deleted."
+    exit 0
+  fi
+  echo "Still waiting for deletion of: $REMAINING_RULES"
+  sleep 5
+done
+
+echo "Error: Timed out waiting for firewall rules to be deleted." >&2
+exit 1
+EOT
+    interpreter = ["/bin/bash", "-c"]
+  }
+}
