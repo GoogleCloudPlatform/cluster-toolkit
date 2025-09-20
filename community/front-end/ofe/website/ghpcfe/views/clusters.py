@@ -109,7 +109,7 @@ class ClusterListView(LoginRequiredMixin, generic.ListView):
     def get_context_data(self, *args, **kwargs):
         loading = 0
         for cluster in self.get_queryset():
-            if cluster.status in ["c", "i", "t"]:
+            if cluster.status in ["c", "i", "t", "r"]:
                 loading = 1
                 break
         admin_view = 0
@@ -119,6 +119,16 @@ class ClusterListView(LoginRequiredMixin, generic.ListView):
         context["loading"] = loading
         context["admin_view"] = admin_view
         context["navtab"] = "cluster"
+
+        # Add SLURM job counts for each cluster
+        clusters_with_slurm_data = []
+        for cluster in context['cluster_list']:
+            cluster.slurm_summary = cluster.get_slurm_status_summary()
+            cluster.active_jobs = cluster.active_job_count()
+            cluster.has_active_jobs = cluster.has_active_jobs()
+            clusters_with_slurm_data.append(cluster)
+
+        context['cluster_list'] = clusters_with_slurm_data
         return context
 
 
@@ -135,6 +145,13 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "cluster"
         context["admin_view"] = admin_view
+
+        # Add active job information for deletion warnings
+        cluster = self.get_object()
+        context["active_jobs"] = cluster.active_job_count()
+        context["has_active_jobs"] = cluster.has_active_jobs()
+        context["slurm_summary"] = cluster.get_slurm_status_summary()
+
         # Perform extra query to populate instance types data
         # context['cluster_instance_types'] = \
         #     ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
@@ -629,6 +646,13 @@ class ClusterDeleteView(LoginRequiredMixin, DeleteView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "cluster"
+
+        # Add active job information for deletion warning
+        cluster = self.get_object()
+        context["active_jobs"] = cluster.active_job_count()
+        context["has_active_jobs"] = cluster.has_active_jobs()
+        context["slurm_summary"] = cluster.get_slurm_status_summary()
+
         return context
 
     def get_success_url(self):
