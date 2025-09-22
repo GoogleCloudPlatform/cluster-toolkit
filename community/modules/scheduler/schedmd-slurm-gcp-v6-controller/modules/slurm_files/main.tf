@@ -256,9 +256,10 @@ resource "google_storage_bucket_object" "devel" {
 }
 
 resource "google_storage_bucket_object" "devel_compute" {
-  bucket = var.bucket_name
-  name   = local.slurm_gcp_devel_compute_zip_bucket
-  source = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  bucket         = var.bucket_name
+  name           = local.slurm_gcp_devel_compute_zip_bucket
+  source         = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  source_md5hash = data.archive_file.slurm_gcp_devel_compute_zip.output_md5
 }
 
 ###########
