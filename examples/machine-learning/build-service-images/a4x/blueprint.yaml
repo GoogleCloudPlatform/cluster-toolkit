@@ -57,6 +57,7 @@ deployment_groups:
               - nvidia-compute-utils-*-server
               - nvidia-fabricmanager-*
               - nvidia-utils-*-server
+              - nvidia-imex-*
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
