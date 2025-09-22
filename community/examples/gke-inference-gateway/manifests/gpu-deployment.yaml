@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama3-8b-instruct
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-llama3-8b-instruct
+  template:
+    metadata:
+      labels:
+        app: vllm-llama3-8b-instruct
+    spec:
+      containers:
+        - name: vllm
+          image: "vllm/vllm-openai:v0.8.5"
+          imagePullPolicy: Always
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+          - "--model"
+          - "meta-llama/Llama-3.1-8B-Instruct"
+          - "--tensor-parallel-size"
+          - "1"
+          - "--port"
+          - "8000"
+          - "--max-num-seq"
+          - "1024"
+          - "--compilation-config"
+          - "3"
+          - "--enable-lora"
+          - "--max-loras"
+          - "2"
+          - "--max-lora-rank"
+          - "8"
+          - "--max-cpu-loras"
+          - "12"
+          env:
+            # Enabling LoRA support temporarily disables automatic v1, we want to force it on
+            # until 0.8.3 vLLM is released.
+            - name: VLLM_USE_V1
+              value: "1"
+            - name: PORT
+              value: "8000"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
+              value: "true"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          lifecycle:
+            preStop:
+              # vLLM stops accepting connections when it receives SIGTERM, so we need to sleep
+              # to give upstream gateways a chance to take us out of rotation.
+              sleep:
+                seconds: 30
+              #
+              # IMPORTANT: preStop.sleep is beta as of Kubernetes 1.30 - for older versions
+              # replace with this exec action.
+              #exec:
+              #  command:
+              #  - /usr/bin/sleep
+              #  - "30"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 5
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 1
+            timeoutSeconds: 1
+          # We set a startup probe so that we don't begin directing traffic or checking
+          # liveness to this instance until the model is loaded.
+          startupProbe:
+            # IMPORTANT: If the core model takes more than 10 minutes to load, pods will crash
+            # loop forever. Be sure to set this appropriately.
+            failureThreshold: 600
+            initialDelaySeconds: 2
+            periodSeconds: 1
+            httpGet:
+              # vLLM does not start the OpenAI server (and hence make /health available)
+              # until models are loaded. This may not be true for all model servers.
+              path: /health
+              port: http
+              scheme: HTTP
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+            - name: adapters
+              mountPath: "/adapters"
+      initContainers:
+        - name: lora-adapter-syncer
+          tty: true
+          stdin: true
+          image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lora-syncer:main
+          restartPolicy: Always
+          imagePullPolicy: Always
+          env:
+            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
+              value: "/config/configmap.yaml"
+          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
+          - name: config-volume
+            mountPath:  /config
+      restartPolicy: Always
+
+      # Set service environment injection off by default to avoid conflicts.
+      enableServiceLinks: false
+
+      # terminationGracePeriodSeconds should be configured to be longer than the slowest
+      # request we expect to serve plus any extra time spent waiting for load balancers
+      # to take the model server out of rotation.
+      terminationGracePeriodSeconds: 130
+
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+        - name: adapters
+          emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: vllm-llama3-8b-instruct-adapters
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-llama3-8b-instruct-adapters
+data:
+  configmap.yaml: |
+      vLLMLoRAConfig:
+        name: vllm-llama3-8b-instruct-adapters
+        port: 8000
+        defaultBaseModel: meta-llama/Llama-3.1-8B-Instruct
+        ensureExist:
+          models:
+          - id: food-review-1
+            source: Kawon/llama3.1-food-finetune_v14_r8

@@ -1,0 +1,117 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law_ or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-inference-gateway
+
+vars:
+  project_id: YOUR_PROJECT_ID # Update with your project ID
+  deployment_name: inference-gateway
+  region: us-central1
+  zone: us-central1-a
+  authorized_cidr: 0.0.0.0/0 # Update with your IP address range
+  hf_token: YOUR_HF_TOKEN # Update with your Hugging Face token
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetworks:
+      - subnet_name: primary
+        subnet_ip: 10.0.0.0/24
+        subnet_region: $(vars.region)
+      - subnet_name: proxy-only
+        subnet_ip: 10.0.1.0/24
+        subnet_region: $(vars.region)
+        purpose: REGIONAL_MANAGED_PROXY
+        role: ACTIVE
+      secondary_ranges_list:
+      - subnetwork_name: primary
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.1.0.0/16
+        - range_name: services
+          ip_cidr_range: 10.2.0.0/16
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+    settings:
+      enable_private_endpoint: false
+      release_channel: RAPID
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+
+  - id: gpu_nodepool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      machine_type: a3-highgpu-2g
+      auto_upgrade: true
+      spot: true
+      zones: ["$(vars.zone)"]
+      guest_accelerator:
+      - type: nvidia-h100-80gb
+        count: 2
+      static_node_count: 2
+
+  - id: apply_crds
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      cluster_id: $(gke_cluster.cluster_id)
+      apply_manifests:
+      - source: $(ghpc_stage("../manifests/manifests.yaml"))
+
+  - id: create_hf_secret
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      cluster_id: $(gke_cluster.cluster_id)
+      apply_manifests:
+      - source: $(ghpc_stage("../manifests/hf-secret.yaml.tftpl"))
+        template_vars:
+          hf_token: $(vars.hf_token)
+
+  - id: apply_model_server
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      cluster_id: $(gke_cluster.cluster_id)
+      apply_manifests:
+      - source: $(ghpc_stage("../manifests/gpu-deployment.yaml"))
+
+  - id: helm_install_inference_pool
+    source: modules/management/kubectl-apply/helm_install
+    settings:
+      release_name: vllm-llama3-8b-instruct
+      chart_name: oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
+      chart_version: v1.0.0
+      set_values:
+      - name: inferencePool.modelServers.matchLabels.app
+        value: vllm-llama3-8b-instruct
+      - name: provider.name
+        value: gke
+
+  - id: apply_gateway
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      cluster_id: $(gke_cluster.cluster_id)
+      apply_manifests:
+      - source: $(ghpc_stage("../manifests/gateway.yaml"))
+      - source: $(ghpc_stage("../manifests/httproute.yaml"))
+      - source: $(ghpc_stage("../manifests/inferenceobjective.yaml"))
