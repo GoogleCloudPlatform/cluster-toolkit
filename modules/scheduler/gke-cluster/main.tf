@@ -319,6 +319,17 @@ resource "google_container_node_pool" "system_node_pools" {
     disk_size_gb    = var.system_node_pool_disk_size_gb
     disk_type       = var.system_node_pool_disk_type
 
+    kubelet_config {
+      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
+
+      # topology_manager = {
+      #   policy = var.enable_numa_aware_scheduling ? "restricted" : null
+      # }
+      # memory_manager = {
+      #   policy = var.enable_numa_aware_scheduling ? "Static" : null
+      # }
+    }
+  
     dynamic "taint" {
       for_each = var.system_node_pool_taints
       content {
