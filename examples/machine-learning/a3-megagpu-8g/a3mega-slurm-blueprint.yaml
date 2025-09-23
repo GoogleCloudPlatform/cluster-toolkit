@@ -214,7 +214,6 @@ deployment_groups:
             vars:
               enable_ops_agent: $(vars.enable_ops_agent)
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
-
             tasks:
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:

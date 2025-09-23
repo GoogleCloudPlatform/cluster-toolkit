@@ -154,7 +154,6 @@ deployment_groups:
             become: true
             vars:
               enable_nvidia_dcgm: false
-
             tasks:
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
