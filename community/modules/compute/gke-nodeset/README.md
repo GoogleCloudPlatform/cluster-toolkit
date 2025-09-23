@@ -32,10 +32,10 @@
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
-| <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | n/a | yes |
+| <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `list(string)` | n/a | yes |
 | <a name="input_image"></a> [image](#input\_image) | The image for slurm daemon | `string` | n/a | yes |
 | <a name="input_instance_templates"></a> [instance\_templates](#input\_instance\_templates) | The URLs of Instance Templates | `list(string)` | n/a | yes |
-| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on nodes. | <pre>object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  })</pre> | n/a | yes |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on nodes. | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | n/a | yes |
 | <a name="input_node_count_static"></a> [node\_count\_static](#input\_node\_count\_static) | The number of static nodes in node-pool | `number` | n/a | yes |
 | <a name="input_node_pool_names"></a> [node\_pool\_names](#input\_node\_pool\_names) | If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access\_config is set. | `list(string)` | n/a | yes |
 | <a name="input_nodeset_name"></a> [nodeset\_name](#input\_nodeset\_name) | The nodeset name | `string` | `"gkenodeset"` | no |
