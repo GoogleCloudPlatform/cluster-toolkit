@@ -91,7 +91,7 @@ variable "instance_templates" {
 
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on nodes."
-  type = object({
+  type = list(object({
     server_ip             = string,
     remote_mount          = string,
     local_mount           = string,
@@ -99,10 +99,20 @@ variable "network_storage" {
     mount_options         = string,
     client_install_runner = map(string)
     mount_runner          = map(string)
-  })
+  }))
+
+  validation {
+    condition     = length(var.network_storage) == 1 && var.network_storage[0].local_mount == "/home"
+    error_message = "The 'network_storage' variable must contain exactly one element, and that element's 'local_mount' attribute must be \"/home\"."
+  }
 }
 
 variable "filestore_id" {
   description = "An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
-  type        = string
+  type        = list(string)
+
+  validation {
+    condition     = length(var.filestore_id) == 1
+    error_message = "The 'filestore_id' variable must contain exactly one element."
+  }
 }

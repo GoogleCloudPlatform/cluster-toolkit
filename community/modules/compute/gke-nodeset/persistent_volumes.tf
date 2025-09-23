@@ -42,8 +42,8 @@ module "home_pv" {
   labels          = {}
   capacity_gib    = 1024
   cluster_id      = var.cluster_id
-  filestore_id    = var.filestore_id
-  network_storage = var.network_storage
+  filestore_id    = var.filestore_id[0]
+  network_storage = var.network_storage[0]
   namespace       = var.slurm_namespace
   pv_name         = "home-pv"
   pvc_name        = "home-pvc"
