@@ -189,6 +189,8 @@
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
   ignore_unreachable: true  # ensure always block will run even if SSH fails
+  vars:
+    key_type: "munge"
   tasks:
   - name: Slurm Test Block
     vars:
@@ -202,6 +204,13 @@
       ansible.builtin.wait_for:
         path: /var/run/munge/munge.socket.2
         timeout: 600
+      when: key_type == 'munge'
+
+    - name: Wait until Slurm key exists
+      ansible.builtin.wait_for:
+        path: /etc/slurm/slurm.key
+        timeout: 600 # Waits for up to 10 minutes for the file to appear
+      when: key_type == 'slurm'
 
     - name: Count Slurm nodes
       ansible.builtin.shell:
