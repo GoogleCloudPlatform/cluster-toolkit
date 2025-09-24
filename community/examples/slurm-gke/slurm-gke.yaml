@@ -121,7 +121,6 @@ deployment_groups:
       slurm_operator_namespace: $(vars.slurm_namespace)
       install_slurm_operator_chart: true
       install_slurm_chart: false
-    outputs: [instructions]
 
   - id: gke_compute_nodeset
     source: community/modules/compute/gke-nodeset
