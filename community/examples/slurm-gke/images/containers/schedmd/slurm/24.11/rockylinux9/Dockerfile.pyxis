@@ -1,0 +1,116 @@
+# syntax=docker/dockerfile:1
+# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.
+# SPDX-FileCopyrightText: Copyright (C) 2025 Google LLC.
+# SPDX-License-Identifier: Apache-2.0
+
+################################################################################
+
+ARG ENROOT_VERSION=3.5.0
+ARG PYXIS_VERSION=0.20.0
+# ARG BASE_CONTAINER_PATH=ghcr.io/slinkyproject/slurmd:24.11-rockylinux9
+ARG BASE_CONTAINER_PATH
+
+################################################################################
+FROM ${BASE_CONTAINER_PATH} AS download
+
+SHELL ["bash", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+USER root
+WORKDIR /tmp/
+
+ARG ENROOT_VERSION
+ENV ENROOT_VERSION="${ENROOT_VERSION}"
+
+ADD https://github.com/NVIDIA/enroot/releases/download/v${ENROOT_VERSION}/enroot-${ENROOT_VERSION}-1.el8.x86_64.rpm enroot-${ENROOT_VERSION}-1.el8.x86_64.rpm
+ADD https://github.com/NVIDIA/enroot/releases/download/v${ENROOT_VERSION}/enroot+caps-${ENROOT_VERSION}-1.el8.x86_64.rpm enroot+caps-${ENROOT_VERSION}-1.el8.x86_64.rpm
+
+ARG PYXIS_VERSION
+ENV PYXIS_VERSION="${PYXIS_VERSION}"
+
+ADD https://github.com/NVIDIA/pyxis/archive/refs/tags/v${PYXIS_VERSION}.tar.gz pyxis-v${PYXIS_VERSION}.tar.gz
+
+# Ref: https://github.com/NVIDIA/pyxis?tab=readme-ov-file#with-a-rpm-package
+# Ref: https://github.com/NVIDIA/enroot/blob/master/doc/installation.md
+RUN <<EOR
+# Generate Pyxis RPM
+set -xeuo pipefail
+dnf -q -y update
+dnf -q -y install --setopt='install_weak_deps=False' \
+  '@Development' \
+  git gcc make libcap libtool automake libmd-devel \
+  rpm-build 'dnf-command(builddep)' \
+  tar
+tar -zxvf pyxis-v${PYXIS_VERSION}.tar.gz
+cd pyxis-${PYXIS_VERSION}
+make rpm
+dnf clean all
+EOR
+
+################################################################################
+# SLURM: slurmd-pyxis
+# BUILD: `docker build --target=slurmd-pyxis -t [<registry>/]slurmd-pyxis:<tag> .`
+################################################################################
+FROM ${BASE_CONTAINER_PATH} AS slurmd-pyxis
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ARG ENROOT_VERSION
+ENV ENROOT_VERSION="${ENROOT_VERSION}"
+
+ARG PYXIS_VERSION
+ENV PYXIS_VERSION="${PYXIS_VERSION}"
+
+COPY --from=download /tmp/*.rpm ./
+COPY --from=download /tmp/**/*.rpm ./
+
+# Ref: https://github.com/NVIDIA/pyxis?tab=readme-ov-file#with-a-rpm-package
+# Ref: https://github.com/NVIDIA/enroot/blob/master/doc/installation.md
+RUN <<EOR
+# Install Pyxis+Enroot
+set -xeuo pipefail
+rm -f *.src.rpm
+dnf -q -y update
+dnf -q -y install --setopt='install_weak_deps=False' \
+  ca-certificates \
+  bash-completion \
+  fuse-overlayfs pigz squashfuse \
+  ./*.rpm
+rm *.rpm && dnf clean all
+# Configure
+mkdir -m 777 -p /usr/share/enroot/enroot-data/
+mkdir -m 755 -p /run/enroot/
+mkdir -m 644 -p /etc/slurm/plugstack.conf.d/
+ln -s /usr/share/pyxis/pyxis.conf /etc/slurm/plugstack.conf.d/pyxis.conf
+EOR
+
+ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/bash_completion /usr/share/bash-completion/completions/enroot
+ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/hooks/extra/50-mig-config.sh /etc/enroot/hooks.d/50-mig-config.sh
+ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/hooks/extra/50-sharp.sh /etc/enroot/hooks.d/50-sharp.sh
+ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/hooks/extra/50-slurm-pmi.sh /etc/enroot/hooks.d/50-slurm-pmi.sh
+ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/hooks/extra/50-slurm-pytorch.sh /etc/enroot/hooks.d/50-slurm-pytorch.sh
+
+RUN chmod 755 -R /etc/enroot/hooks.d/
+
+ADD https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo /etc/yum.repos.d/nvidia-container-toolkit.repo
+
+# Ref: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-dnf-rhel-centos-fedora-amazon-linux
+RUN <<EOR
+# Install Nvidia Container Toolkit
+set -xeuo pipefail
+dnf -q -y install --setopt='install_weak_deps=False' \
+  nvidia-container-toolkit
+dnf clean all
+EOR
+
+RUN <<EOR
+# Make Nvidia Container Toolkit SPANK plugin spank_pyxis visible in expected location, same as in controller
+ln -s $(dirname $(find / -name "*spank_pyxis*")) /usr/local/lib/slurm
+EOR
+
+RUN chmod +r+x /usr/local/bin/entrypoint.sh
+RUN chmod +r+x / && chmod +r+x /usr/ && chmod +r+x /usr/bin/ &&  chmod +r+x /etc/ && chmod +r+x /usr/local/
+
+EXPOSE 6818/tcp
+ENTRYPOINT ["entrypoint.sh"]
