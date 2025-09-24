@@ -186,6 +186,7 @@ deployment_groups:
           apt install -y cuda-toolkit-12-8
           apt install -y nvidia-container-toolkit
           apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
