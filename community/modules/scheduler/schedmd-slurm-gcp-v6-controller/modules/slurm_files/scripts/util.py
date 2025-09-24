@@ -1695,8 +1695,7 @@ class Lookup:
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
     def node_is_gke(self, node_name=None) -> bool:
-        nodeset = self.node_nodeset_name(node_name)
-        return self.nodeset_is_gke(nodeset)
+        return self.nodeset_is_gke(self.node_nodeset(node_name))
 
     def nodeset_is_gke(self, nodeset=None) -> bool:
         return "gke_nodepool" in nodeset
