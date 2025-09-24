@@ -116,7 +116,6 @@ deployment_groups:
       enable_multi_networking: true
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
-      cluster_availability_type: "ZONAL"
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -168,10 +167,10 @@ deployment_groups:
       # - key: "node-type"
       #   operator: "Equal"
       #   value: "h4d"
-      #   effect: "NoSchedule"
-      - key: node-type
-        value: h4d
-        effect: NoSchedule
+      #   effect: "NO_SCHEDULE"
+      - key: "node-type"
+        value: "h4d"
+        effect: "NO_SCHEDULE"
       placement_policy:
         type: COMPACT
       additional_networks:
