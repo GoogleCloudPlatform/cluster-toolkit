@@ -63,7 +63,7 @@ repos:
     language: system
     entry: addlicense
     args: ['-c', '"Google LLC"', '-l', 'apache']
-    exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
+    exclude: "docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh|community/examples/slurm-gke/images/containers/.*"
     pass_filenames: true
   - id: tests-metadata
     name: tests-metadata
@@ -111,6 +111,7 @@ repos:
   hooks:
   - id: yamllint
     args: [-c=.yamllint, --no-warnings]
+    exclude: community/examples/slurm-gke/images/containers/.*
 - repo: https://github.com/jackdewinter/pymarkdown
   rev: v0.9.17
   hooks:
@@ -129,7 +130,7 @@ repos:
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
-    exclude: ".*unlinted"
+    exclude: ".*unlinted|community/examples/slurm-gke/images/containers/.*"
   - id: shfmt
     exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -140,5 +141,5 @@ repos:
   rev: v2.2.6
   hooks:
   - id: codespell
-    exclude: requirements.txt$|/js/|go.sum$|cluster-toolkit-writers.json$
+    exclude: requirements.txt$|/js/|go.sum$|cluster-toolkit-writers.json$|community/examples/slurm-gke/images/containers/.*
 exclude: tools/validate_configs/golden_copies/.*

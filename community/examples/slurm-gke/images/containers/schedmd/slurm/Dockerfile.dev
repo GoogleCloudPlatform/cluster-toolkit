@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.
+# SPDX-License-Identifier: Apache-2.0
+
+################################################################################
+
+FROM alpine:latest AS slurm-src
+
+ARG SLURM_VERSION=master
+ARG SLURM_DIR=slurm
+ARG GIT_REPO=git@gitlab.com:SchedMD/dev/slurm.git
+ARG GIT_BRANCH=master
+
+WORKDIR /workspace/
+
+RUN <<EOR
+# Download Required Software
+set -xeuo pipefail
+apk add --no-cache git openssh-client
+install -m 0600 -d ~/.ssh
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+EOR
+
+# NOTE:
+# - if `Permission denied (publickey)`, ssh-agent may lack an identity.
+# - Add identity to ssh-agent with `ssh-add ~/.ssh/id_ed25519`.
+ADD ${GIT_REPO}#${GIT_BRANCH} ${SLURM_DIR}
