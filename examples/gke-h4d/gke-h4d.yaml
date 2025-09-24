@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-h4d
+  deployment_name:
 
   # The GCP Region used for this deployment.
   region:
