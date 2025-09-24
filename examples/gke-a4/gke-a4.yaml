@@ -48,7 +48,7 @@ vars:
   system_node_pool_disk_size_gb: 200
   a4_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-b200
-  version_prefix: "1.32."
+  version_prefix: "1.33."
 
   enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
   health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
@@ -58,6 +58,22 @@ vars:
   chs_pvc_claim_name: chs-output-pvc
   chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
   chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
+
+  # # To enable Managed-Lustre please uncomment this section and fill out the settings.
+  # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
+  # # Managed Lustre is only supported in specific regions and zones
+  # # Please refer https://cloud.google.com/managed-lustre/docs/locations
+
+  # # Managed-Lustre instance name. This should be unique for each deployment.
+  # lustre_instance_id: gke-lustre-instance
+
+  # # The values of size_gib and per_unit_storage_throughput are co-related
+  # # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # # Storage capacity of the lustre instance in GiB
+  # lustre_size_gib: 36000
+
+  # # Maximum throughput of the lustre instance in MBps per TiB
+  # per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: primary
@@ -171,6 +187,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -202,6 +219,48 @@ deployment_groups:
         end_time: "2025-12-22T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
+
+  # # --- MANAGED LUSTRE ADDITIONS ---
+  # # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # # included in the Owner role, but not Editor.
+  # # PSA is required for all Managed Lustre functionality.
+  # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [gke-a4-net-0]
+  #   settings:
+  #     prefix_length: 24
+
+  # # Firewall to allow Managed Lustre connection
+  # - id: lustre_firewall_rule
+  #   source: modules/network/firewall-rules
+  #   use: [gke-a4-net-0]
+  #   settings:
+  #     ingress_rules:
+  #     - name: $(vars.deployment_name)-allow-lustre-traffic
+  #       description: Allow Managed Lustre traffic
+  #       source_ranges:
+  #       - $(private_service_access.cidr_range)
+  #       allow:
+  #       - protocol: tcp
+  #       ports:
+  #       - "988"
+
+  # - id: managed-lustre
+  #   source: modules/file-system/managed-lustre
+  #   use: [gke-a4-net-0, private_service_access]
+  #   settings:
+  #     name: $(vars.lustre_instance_id)
+  #     local_mount: /lustre
+  #     remote_mount: lustrefs
+  #     size_gib: $(vars.lustre_size_gib)
+  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+
+  # - id: lustre-pv
+  #   source: modules/file-system/gke-persistent-volume
+  #   use: [managed-lustre, a4-cluster]
+  #   settings:
+  #     capacity_gib: $(vars.lustre_size_gib)
 
   - id: a4-pool
     source: modules/compute/gke-node-pool
