@@ -32,6 +32,7 @@ RUN apt-get update && \
     libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev \
     acpica-tools kmod usbutils procps nano python3-pip python3.11-venv
 
+RUN apt-get install -y mesa-utils dmidecode vulkan-tools ibutils x11-xserver-utils
 RUN wget https://www.python.org/ftp/python/3.13.1/Python-3.13.1.tgz
 
 RUN tar -xvf Python-3.13.1.tgz

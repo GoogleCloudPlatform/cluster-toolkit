@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gce-cos-bug-report
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: <gke-node-name> # TODO: Replace with your GKE node name
+  tolerations:
+  - effect: NoSchedule
+    key: nvidia.com/gpu
+    operator: Exists
+  containers:
+  - name: bug-reporter-container
+    resources:
+      limits:
+        nvidia.com/gpu: "8"
+      requests:
+        nvidia.com/gpu: "8"
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    image: us-central1-docker.pkg.dev/gce-ai-infra/gce-cos-nvidia-bug-report-repo/gce-cos-nvidia-bug-report:latest
+    imagePullPolicy: Always
+    args:
+    - --gcs_bucket=${GCS_BUCKET}
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: host-etc
+      mountPath: /etc_host
+      readOnly: true
+    - name: host-tmp
+      mountPath: /tmp
+      readOnly: false
+    - mountPath: /usr/local/nvidia
+      name: nvidia
+      readOnly: true
+  hostNetwork: true
+  volumes:
+  - name: host-etc
+    hostPath:
+      path: /etc
+      type: Directory
+  - name: host-tmp
+    hostPath:
+      path: /tmp
+      type: Directory
+  - hostPath:
+      path: /home/kubernetes/bin/nvidia
+      type: Directory
+    name: nvidia

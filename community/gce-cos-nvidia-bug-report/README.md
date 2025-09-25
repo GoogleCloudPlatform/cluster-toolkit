@@ -176,6 +176,16 @@ docker run \
 us-central1-docker.pkg.dev/gce-ai-infra/gce-cos-nvidia-bug-report-repo/gce-cos-nvidia-bug-report:latest \
 --gcs_bucket=${GCS_BUCKET}
 ```
+### To run in a GKE cluster
+Note: Update the <gke-node-name> with the GKE node which we want to target
+
+Note: Exporting the final bug reports to a GCS bucket is optional. If you do not
+intend to export it elsewhere, you may remove the `--gcs_bucket=${GCS_BUCKET}`
+at the end.
+
+```bash
+kubectl apply -f cluster-toolkit/community/gce-cos-nvidia-bug-report/bug-report-pod.yaml
+```
 
 ### 📝 Example Output
 
@@ -294,3 +304,11 @@ bash build-and-push-gce-cos-nvidia-bug-report.sh \
     -i "custom-bug-report-collector" \
     -l "us-east1"
 ```
+
+bash build-and-push-gce-cos-nvidia-bug-report.sh -p supercomputer-testing -r raushankr -i gce-cos-nvidia-bug-report -l 	us-central1
+
+
+docker push asia-east1-docker.pkg.dev/raushankr-gke-dev/raushankr/gce-cos-nvidia-bug-report:2025-09-24
+
+docker tag asia-east1-docker.pkg.dev/raushankr-gke-dev/raushankr/gce-cos-nvidia-bug-report:2025-09-24 us-central1-docker.pkg.dev/supercomputer-testing/raushankr/gce-cos-nvidia-bug-report:2025-09-24
+docker push us-central1-docker.pkg.dev/supercomputer-testing/raushankr/gce-cos-nvidia-bug-report:2025-09-24
