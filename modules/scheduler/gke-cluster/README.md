@@ -81,6 +81,13 @@ The current implementations has the following limitations:
 - General addon configuration is not supported
 - Only regional cluster is supported
 
+### GKE Inference Gateway
+
+Setting `enable_inference_gateway` to `true` will enable the `HttpLoadBalancing`
+addon and deploy the Inference Gateway CRDs. This feature requires a subnet with
+`purpose` set to `REGIONAL_MANAGED_PROXY` in the VPC. For more information, see
+the [GKE Inference Gateway documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/serve-with-gke-inference-gateway).
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -150,6 +157,7 @@ limitations under the License.
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
+| <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
 | <a name="input_enable_managed_lustre_csi"></a> [enable\_managed\_lustre\_csi](#input\_enable\_managed\_lustre\_csi) | The status of the Google Compute Engine Managed Lustre Container Storage Interface (CSI) driver addon, which allows the usage of a lustre as volumes. | `bool` | `false` | no |
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
