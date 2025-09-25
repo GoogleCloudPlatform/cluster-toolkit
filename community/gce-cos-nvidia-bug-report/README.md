@@ -304,11 +304,3 @@ bash build-and-push-gce-cos-nvidia-bug-report.sh \
     -i "custom-bug-report-collector" \
     -l "us-east1"
 ```
-
-bash build-and-push-gce-cos-nvidia-bug-report.sh -p supercomputer-testing -r raushankr -i gce-cos-nvidia-bug-report -l 	us-central1
-
-
-docker push asia-east1-docker.pkg.dev/raushankr-gke-dev/raushankr/gce-cos-nvidia-bug-report:2025-09-24
-
-docker tag asia-east1-docker.pkg.dev/raushankr-gke-dev/raushankr/gce-cos-nvidia-bug-report:2025-09-24 us-central1-docker.pkg.dev/supercomputer-testing/raushankr/gce-cos-nvidia-bug-report:2025-09-24
-docker push us-central1-docker.pkg.dev/supercomputer-testing/raushankr/gce-cos-nvidia-bug-report:2025-09-24
