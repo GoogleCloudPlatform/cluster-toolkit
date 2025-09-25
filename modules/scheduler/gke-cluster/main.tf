@@ -244,11 +244,17 @@ resource "google_container_cluster" "gke_cluster" {
 
     kubelet_config {
       cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
-      topology_manager = {
-        policy = var.enable_numa_aware_scheduling ? "restricted" : null
+      dynamic "topology_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "restricted"
+        }
       }
-      memory_manager = {
-        policy = var.enable_numa_aware_scheduling ? "Static" : null
+      dynamic "memory_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "Static"
+        }
       }
     }
   }
