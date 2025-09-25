@@ -74,7 +74,7 @@ variable "instance_termination_action" {
     See https://cloud.google.com/compute/docs/instances/spot for more details.
   EOD
   type        = string
-  default     = null
+  default     = "STOP"
 }
 
 variable "automatic_restart" {
