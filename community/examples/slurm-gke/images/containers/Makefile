@@ -5,8 +5,20 @@ OS ?= ubuntu24.04
 SLURM_VERSION ?= 24.11
 
 # Container registry and repository
-REGISTRY ?= us-west1-docker.pkg.dev/kevinmcw-gke-dev # Add your Google Artifact Registry here like `us-east1-docker.pkg.dev/my-repo`
-REPO ?= kevinmcw
+REGISTRY ?=
+REPO ?=
+
+# --- Validation ---
+# Ensure required variables are set before proceeding.
+ifeq ($(strip $(REGISTRY)),)
+    $(error REGISTRY is not set. Please provide your container registry. \
+            Example: make REGISTRY=gcr.io/my-project ...)
+endif
+
+ifeq ($(strip $(REPO)),)
+    $(error REPO is not set. Please provide your repository name. \
+            Example: make REPO=my-image-repo ...)
+endif
 
 # Build arguments for Pyxis
 ENROOT_VERSION ?= 3.5.0
@@ -15,7 +27,7 @@ PYXIS_VERSION ?= 0.20.0
 
 # --- Path and Image Naming ---
 # Path to the build context directories
-BUILD_PATH := slurm/$(SLURM_VERSION)
+BUILD_PATH := schedmd/slurm/$(SLURM_VERSION)
 
 # Image tag
 TAG ?= $(SLURM_VERSION)-$(OS)
