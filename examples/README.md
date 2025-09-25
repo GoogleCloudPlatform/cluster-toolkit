@@ -50,6 +50,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
+  * [gke-a3-highgpu-inference-gateway.yaml](#gke-a3-highgpu-inference-gatewayyaml--) ![core-badge]
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -1446,6 +1447,16 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 ```
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+
+### [gke-a3-highgpu-inference-gateway.yaml] ![core-badge]
+
+This blueprint provisions a GKE cluster with A3 High machines, pre-configured to support the GKE Inference Gateway. It automates the setup of necessary networking components, such as a proxy-only subnet, and installs the required Custom Resource Definitions (CRDs) on the cluster.
+
+After successfully deploying this blueprint, you can proceed with deploying a sample workload with vLLM inferencing by following the official guide at [Serve a model with GKE Inference Gateway](https://cloud.google.com/kubernetes-engine/docs/tutorials/serve-with-gke-inference-gateway).
+
+This blueprint takes care of the initial infrastructure setup (e.g., network creation and CRD installation). You will need to follow the guide to install specific instances of `InferencePool`, `HTTPRoute`, and the `Model Server` deployment itself.
+
+[gke-a3-highgpu-inference-gateway.yaml]: ../examples/gke-a3-highgpu-inference-gateway.yaml
 
 ### [gke-consumption-options] ![core-badge]
 
