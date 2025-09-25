@@ -610,7 +610,6 @@ variable "dws_flex" {
  Limitations:
   - CAN NOT be used with reservations;
   - CAN NOT be used with placement groups;
-  - If `use_job_duration` is enabled nodeset can be used in "exclusive" partitions only
 
  EOD
 
