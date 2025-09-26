@@ -85,10 +85,9 @@ resource "google_storage_bucket_object" "startup_scripts" {
     ) => s.content
   }
 
-  bucket         = var.slurm_bucket_name
-  name           = "${var.slurm_bucket_dir}/${each.key}"
-  content        = each.value
-  source_md5hash = md5(each.value)
+  bucket  = var.slurm_bucket_name
+  name    = "${var.slurm_bucket_dir}/${each.key}"
+  content = each.value
 }
 
 locals {
@@ -102,10 +101,9 @@ locals {
 }
 
 resource "google_storage_bucket_object" "config" {
-  bucket         = var.slurm_bucket_name
-  name           = "${var.slurm_bucket_dir}/login_group_configs/${local.name}.yaml"
-  content        = yamlencode(local.config)
-  source_md5hash = md5(yamlencode(local.config))
+  bucket  = var.slurm_bucket_name
+  name    = "${var.slurm_bucket_dir}/login_group_configs/${local.name}.yaml"
+  content = yamlencode(local.config)
 
   # To ensure that login group "is not ready" until all startup scripts are written down
   depends_on = [google_storage_bucket_object.startup_scripts]
