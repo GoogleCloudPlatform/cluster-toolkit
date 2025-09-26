@@ -2,7 +2,7 @@
 # OS variant (e.g., ubuntu24.04, rockylinux9)
 OS ?= ubuntu24.04
 # Slurm version, also used for the directory path
-SLURM_VERSION ?= 24.11
+SLURM_VERSION ?= 25.05
 
 # Container registry and repository
 REGISTRY ?=

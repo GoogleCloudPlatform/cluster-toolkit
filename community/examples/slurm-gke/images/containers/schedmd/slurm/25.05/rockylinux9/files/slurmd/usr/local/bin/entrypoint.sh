@@ -111,15 +111,13 @@ function main() {
 	if ((memSpecLimit > 0)); then
 		addConfItem "MemSpecLimit=${memSpecLimit}"
 	fi
-
-	cat > /etc/enroot/enroot.conf << 'EOF'
+	cat >/etc/enroot/enroot.conf <<'EOF'
 		ENROOT_RUNTIME_PATH         /run/enroot/${UID}/run
 		ENROOT_CONFIG_PATH          /run/enroot/${UID}/config
 		ENROOT_CACHE_PATH           /run/enroot/${UID}/cache
 		ENROOT_DATA_PATH            /run/enroot/${UID}/data
 		ENROOT_TEMP_PATH            /run/${UID}/tmp
 EOF
-	RUN chmod +r+x / && chmod +r+x /usr/ && chmod +r+x /usr/bin/ &&  chmod +r+x /etc/ && chmod +r+x /usr/local/
 	exec supervisord -c /etc/supervisor/supervisord.conf
 }
 main
