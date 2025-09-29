@@ -17,13 +17,14 @@ from typing import List, Optional
 import util
 import uuid
 from addict import Dict as NSDict # type: ignore
-from datetime import timedelta
+from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 from time import sleep
 
 log = logging.getLogger()
 
+DWS_EOL_RESERVATION_DURATION = 10 # minutes
 
 def _duration(flex_options: NSDict, job_id: Optional[int], lkp: util.Lookup) -> int:
     dur = flex_options.max_run_duration
@@ -40,6 +41,29 @@ def _duration(flex_options: NSDict, job_id: Optional[int], lkp: util.Lookup) -> 
     log.info("Job TimeLimit cannot be less than 10 minutes or exceed one week")
     return dur
 
+def _create_slurm_reservation(node_name: str, boot_time: datetime, run_duration: int, lkp: util.Lookup):
+    """
+    Create a Slurm reservation starting at EOL - buffer time.
+    """
+    eol = boot_time + timedelta(seconds=run_duration)
+    start_str = eol.strftime("%Y-%m-%dT%H:%M:%S")
+    reservation_name = f"dws-eol-{node_name}"
+    log.debug(f"creating slurm reservation for {node_name}")
+    try:
+        util.run(f"{lkp.scontrol} create reservation user=slurm starttime={start_str} duration={DWS_EOL_RESERVATION_DURATION} nodes={node_name} reservationname={reservation_name} flags=maint,ignore_jobs")
+    except Exception as e:
+        log.error(f"Failed to create reservation for {node_name}: {e}")
+
+def _delete_slurm_reservation(node_name: str, lkp: util.Lookup):
+    """
+    Delete the Slurm reservation for the given node.
+    """
+    reservation_name = f"dws-eol-{node_name}"
+    try:
+        util.run(f"{lkp.scontrol} delete reservation {reservation_name}")
+        log.debug(f"Deleted Slurm reservation {reservation_name} for {node_name}")
+    except Exception as e:
+        log.error(f"Failed to delete reservation for {node_name}: {e}")
 
 def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup) -> None:
   assert nodes
@@ -77,8 +101,9 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   op = req.execute()
   res = util.wait_for_operation(op)
   assert "error" not in res, f"{res}"
-  
+
   # Create resize request
+  duration_seconds = _duration(nodeset.dws_flex, job_id, lkp)
   req = lkp.compute.regionInstanceGroupManagerResizeRequests().insert(
     project=lkp.project,
     region=region,
@@ -87,13 +112,29 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
       name="initial-resize",
       instances=[dict(name=n) for n in nodes],
       requested_run_duration=dict(
-        seconds=_duration(nodeset.dws_flex, job_id, lkp)
+        seconds=duration_seconds
       )
     )
   )
   util.log_api_request(req)
   op = req.execute()
   res = util.wait_for_operation(op)
+
+  # Create Slurm reservations if use_job_duration is set
+  if nodeset.dws_flex.use_job_duration:
+      # Get run duration (seconds)
+      run_duration = duration_seconds
+      for node_name in nodes:
+          # Fetch instance creation time from GCP instance (via util.py)
+          instance = lkp.instance(node_name)
+          if(instance and instance.creation_timestamp):
+            log.debug("creating with creation_timestamp")
+            boot_time = instance.creation_timestamp  # Already a datetime object
+          else:
+            boot_time = datetime.utcnow()
+            log.debug("creating with utcnow time: {boot_time}")
+          _create_slurm_reservation(node_name, boot_time, run_duration, lkp)
+
   assert "error" not in res, f"{res}"
 
 def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) -> None:
@@ -144,6 +185,12 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   op = req.execute()
    
   res = util.wait_for_operation(op)
+
+  # Delete Slurm reservations for nodes being deprovisioned
+  for node_name in nodes:
+      log.info("delete dws reservation")
+      _delete_slurm_reservation(node_name, lkp)
+
   assert "error" not in res, f"{res}"
 
 def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Lookup) -> None:
