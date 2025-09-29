@@ -17,13 +17,14 @@ from typing import List, Optional
 import util
 import uuid
 from addict import Dict as NSDict # type: ignore
-from datetime import timedelta
+from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 from time import sleep
 
 log = logging.getLogger()
 
+DWS_EOL_RESERVATION_DURATION = 10 # minutes
 
 def _duration(flex_options: NSDict, job_id: Optional[int], lkp: util.Lookup) -> int:
     dur = flex_options.max_run_duration
@@ -40,14 +41,36 @@ def _duration(flex_options: NSDict, job_id: Optional[int], lkp: util.Lookup) -> 
     log.info("Job TimeLimit cannot be less than 10 minutes or exceed one week")
     return dur
 
+def _create_slurm_reservation(node_name: str, boot_time: datetime, run_duration: int, lkp: util.Lookup):
+    """
+    Create a Slurm reservation starting at EOL - buffer time.
+    """
+    eol = boot_time + timedelta(seconds=run_duration)
+    start_str = eol.strftime("%Y-%m-%dT%H:%M:%S")
+    reservation_name = f"dws-eol-{node_name}"
+    log.debug(f"creating slurm reservation for {node_name}")
+    try:
+        util.run(f"{lkp.scontrol} create reservation user=slurm starttime={start_str} duration={DWS_EOL_RESERVATION_DURATION} nodes={node_name} reservationname={reservation_name} flags=maint,ignore_jobs")
+    except Exception as e:
+        log.error(f"Failed to create reservation for {node_name}: {e}")
+
+def _delete_slurm_reservation(node_name: str, lkp: util.Lookup):
+    """
+    Delete the Slurm reservation for the given node.
+    """
+    reservation_name = f"dws-eol-{node_name}"
+    try:
+        util.run(f"{lkp.scontrol} delete reservation {reservation_name}")
+        log.debug(f"Deleted Slurm reservation {reservation_name} for {node_name}")
+    except Exception as e:
+        log.error(f"Failed to delete reservation for {node_name}: {e}")
 
 def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
 
   assert nodeset.dws_flex.enabled
 
@@ -58,42 +81,20 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
 
   # Create MIG
-  req = lkp.compute.instanceGroupManagers().insert(
+  req = lkp.compute.regionInstanceGroupManagers().insert(
     project=lkp.project,
-    zone=zone,
+    region=region,
     body=dict(
       name=mig_name,
-      versions=[dict(
-        instanceTemplate=nodeset.instance_template)],
+      versions=[dict(instanceTemplate=nodeset.instance_template)],
       targetSize=0,
-      # TODO(FLEX): uncomment once moved to RMIG
-      # distributionPolicy=dict(
-      #   zones=[
-      #      dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
-      #   ],
-      #   targetShape="ANY_SINGLE_ZONE" ),
-      #updatePolicy = dict(
-      #  instanceRedistributionType = "NONE" ),
-      instanceLifecyclePolicy=dict(
-          defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
-    )
-  )
-  util.log_api_request(req)
-  op = req.execute()
-  res = util.wait_for_operation(op)
-  assert "error" not in res, f"{res}"
-  
-  # Create resize request
-  req = lkp.compute.instanceGroupManagerResizeRequests().insert(
-    project=lkp.project,
-    zone=zone,
-    instanceGroupManager=mig_name,
-    body=dict(
-      name="initial-resize",
-      instances=[dict(name=n) for n in nodes],
-      requested_run_duration=dict(
-        seconds=_duration(nodeset.dws_flex, job_id, lkp)
-      )
+      distributionPolicy=dict(
+        zones=[
+           dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
+        ],
+        targetShape="ANY_SINGLE_ZONE" ),
+      updatePolicy = dict(instanceRedistributionType = "NONE" ),
+      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
     )
   )
   util.log_api_request(req)
@@ -101,13 +102,47 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   res = util.wait_for_operation(op)
   assert "error" not in res, f"{res}"
 
+  # Create resize request
+  duration_seconds = _duration(nodeset.dws_flex, job_id, lkp)
+  req = lkp.compute.regionInstanceGroupManagerResizeRequests().insert(
+    project=lkp.project,
+    region=region,
+    instanceGroupManager=mig_name,
+    body=dict(
+      name="initial-resize",
+      instances=[dict(name=n) for n in nodes],
+      requested_run_duration=dict(
+        seconds=duration_seconds
+      )
+    )
+  )
+  util.log_api_request(req)
+  op = req.execute()
+  res = util.wait_for_operation(op)
+
+  # Create Slurm reservations if use_job_duration is set
+  if nodeset.dws_flex.use_job_duration:
+      # Get run duration (seconds)
+      run_duration = duration_seconds
+      for node_name in nodes:
+          # Fetch instance creation time from GCP instance (via util.py)
+          instance = lkp.instance(node_name)
+          if(instance and instance.creation_timestamp):
+            log.debug("creating with creation_timestamp")
+            boot_time = instance.creation_timestamp  # Already a datetime object
+          else:
+            boot_time = datetime.utcnow()
+            log.debug("creating with utcnow time: {boot_time}")
+          _create_slurm_reservation(node_name, boot_time, run_duration, lkp)
+
+  assert "error" not in res, f"{res}"
+
 def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
   project=lkp.project
   instanceGroupManager=util.trim_self_link(mig_self_link)
 
@@ -118,7 +153,7 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
     ] if inst
   ]
 
-  target_mig=lkp.get_mig(lkp.project, zone, instanceGroupManager)
+  target_mig=lkp.get_mig(lkp.project, region, instanceGroupManager)
   assert target_mig
 
   # TODO(FLEX): This will not work if MIG didn't obtain capacity yet.
@@ -130,15 +165,15 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   # - Need to `down_nodes_notify_jobs` for all nodes in MIG, make sure that it doesn't interfere with Slurm suspend-flow. 
   
   if target_mig["targetSize"] == len(nodes): #We can just delete the whole MIG in this case
-    req = lkp.compute.instanceGroupManagers().delete(
+    req = lkp.compute.regionInstanceGroupManagers().delete(
     project=project,
-    zone=zone,
+    region=region,
     instanceGroupManager=instanceGroupManager,
     )
   else:
-    req = lkp.compute.instanceGroupManagers().deleteInstances(
+    req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
       project=project,
-      zone=zone,
+      region=region,
       instanceGroupManager=instanceGroupManager,
       body=dict(
         instances=links,
@@ -150,17 +185,22 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   op = req.execute()
    
   res = util.wait_for_operation(op)
+
+  # Delete Slurm reservations for nodes being deprovisioned
+  for node_name in nodes:
+      log.info("delete dws reservation")
+      _delete_slurm_reservation(node_name, lkp)
+
   assert "error" not in res, f"{res}"
 
 def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Lookup) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
 
-  mig_list=lkp.get_mig_list(lkp.project, zone) #Validated via terraform that this is one
+  mig_list=lkp.get_mig_list(lkp.project, region)
 
   # FLEX (#TODO): If we enter this conditional it's likely this was called so early that MIG creation hasn't started
   # Consider potentially retrying? No natural mechanism for retry currently but we could
@@ -169,18 +209,18 @@ def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Loo
   # so until we do this is slurmsync this is a temporary workaround.
 
   if not mig_list or not mig_list.get("items"):
-    log.info("No matching MIG found to delete!")
+    log.info("No matching MIG found to delete! Retrying...")
     sleep(5)
-    mig_list=lkp.get_mig_list(lkp.project, zone)
+    mig_list=lkp.get_mig_list(lkp.project, region)
     if not mig_list or not mig_list.get("items"):
       return
 
   for mig in mig_list["items"]:
     if mig["instanceTemplate"] == node_template:
       if mig["currentActions"]["creating"] > 0 and mig["targetSize"] == mig["currentActions"]["creating"]:
-        req = lkp.compute.instanceGroupManagers().delete(
+        req = lkp.compute.regionInstanceGroupManagers().delete(
           project=lkp.project,
-          zone=zone,
+          region=region,
           instanceGroupManager=util.trim_self_link(mig["selfLink"]),
         )
 

@@ -110,6 +110,7 @@ locals {
     zone_policy_deny                 = ns.zone_policy_deny
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
+    accelerator_topology             = ns.accelerator_topology
   }]
 }
 
@@ -161,9 +162,10 @@ module "nodeset_cleanup_tpu" {
 resource "google_storage_bucket_object" "parition_config" {
   for_each = { for p in var.partitions : p.partition_name => p }
 
-  bucket  = module.slurm_files.bucket_name
-  name    = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = module.slurm_files.bucket_name
+  name           = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
+  content        = yamlencode(each.value)
+  source_md5hash = md5(yamlencode(each.value))
 }
 
 moved {

@@ -20,7 +20,7 @@ trap "printf '\nCaught Ctrl+c. Exiting...\n'; exit" INT
 # for jobs submitted
 TAG=$(date +%s)
 TEST_DIR=${PWD}/nccl-tests-"${TAG}"
-SOFTWARE_INSTALL=/opt/apps
+SOFTWARE_INSTALL=${1:-/opt/apps}
 
 cat <<EOF
 This script will install the following packages using on this VM:
@@ -67,7 +67,7 @@ source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate
 pip install -q -r "${SOFTWARE_INSTALL}"/ramble/requirements.txt
 
 # Activate ramble
-. ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh
+. "${SOFTWARE_INSTALL}"/ramble/share/ramble/setup-env.sh
 
 # Create a new workspace for this work
 ramble workspace create -a -d "${TEST_DIR}"
@@ -96,9 +96,9 @@ ramble:
 
     hostlist: \${SLURM_JOB_NODELIST}
 
-    container_dir: "/opt/apps/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic-v1.0.6
-    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
+    container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
+    container_name: nccl-plugin-gib-diagnostic-v1.1.0
+    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
     processes_per_node: 8
     processes_per_node: '{gpus_per_node}'
     gpus_per_node: '8'

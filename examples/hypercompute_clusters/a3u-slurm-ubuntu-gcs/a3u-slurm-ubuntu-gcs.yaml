@@ -48,7 +48,7 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
-  nccl_plugin_version: v1.0.6
+  nccl_plugin_version: v1.1.0
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # Here we define a set of startup script runners that are used to configure
@@ -474,6 +474,7 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager
+              - datacenter-gpu-manager-4-dev
               - libnvidia-cfg1-570-server
               - libnvidia-nscq-570
               - nvidia-compute-utils-570-server
@@ -651,7 +652,6 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: a3-ultragpu-8g
-      instance_image_custom: true
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
       node_count_dynamic_max: 0
@@ -708,7 +708,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      instance_image_custom: true
       disk_size_gb: 300
       enable_login_public_ips: true
       machine_type: n2-standard-8
@@ -722,7 +721,6 @@ deployment_groups:
     - homefs
     settings:
       enable_controller_public_ips: true
-      instance_image_custom: true
       disk_type: pd-extreme
       disk_size_gb: 300
       machine_type: n2-standard-80

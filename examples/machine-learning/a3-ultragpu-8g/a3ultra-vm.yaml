@@ -28,7 +28,7 @@ vars:
     family: ubuntu-accelerator-2204-amd64-with-nvidia-550
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/18
-  filestore_ip_range: 192.168.32.0/24
+  filestore_ip_range: 192.168.32.0/29
   rdma_net_range: 192.168.128.0/18
   hostname_prefix: $(vars.deployment_name)-beowulf
   base_network_name: $(vars.deployment_name)
@@ -87,8 +87,8 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [a3ultra-net-0]
     settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
       local_mount: /home
       reserved_ip_range: $(vars.filestore_ip_range)
     outputs:

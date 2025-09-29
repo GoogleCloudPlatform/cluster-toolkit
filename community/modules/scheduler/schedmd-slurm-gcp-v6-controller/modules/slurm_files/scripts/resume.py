@@ -294,12 +294,12 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
-    # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_fr_node, nodes)
+    # Prevent dormant nodes associated with a reservation from being resumed
+    nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
     
-    if dormant_fr_nodes:
-        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
-        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+    if dormant_res_nodes:
+        log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
+        down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
@@ -475,13 +475,14 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
     
 
 
-def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
-            "maxDistance": max_distance
+            "maxDistance": max_distance,
+            "gpuTopology": accelerator_topology,
         },
     }
     
@@ -506,12 +507,16 @@ def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Loo
 def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
     # canned result for no placement policies created
     no_pp = [PlacementAndNodes(placement=None, nodes=nodes)]
-    
-    if excl_job_id and len(nodes) < 2:
-        return no_pp # don't create placement_policy for just one node
-    
+
     model = nodes[0]
     nodeset = lkp.node_nodeset(model)
+
+    is_slice = bool(getattr(nodeset, 'accelerator_topology', None))
+
+    excl_job_placement = (excl_job_id is not None) and (not is_slice)
+    
+    if excl_job_placement and len(nodes) < 2:
+        return no_pp # don't create placement_policy for just one node
 
     if lkp.is_flex_node(model):
         return no_pp # TODO(FLEX): Add support for workload policies 
@@ -523,7 +528,8 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     max_count = calculate_chunk_size(nodeset, lkp)
 
     name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
-    if excl_job_id: # simply chunk given nodes by max size of placement
+   
+    if excl_job_placement: # simply chunk given nodes by max size of placement
         return [
             PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
             for i, chunk in enumerate(chunked(nodes, n=max_count))
@@ -553,14 +559,46 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     return placements
 
+def calculate_hosts_per_topo(accelerator_topology: str, machine_type: NSDict) -> int:
+    # Calculate total number of hosts per topology (Assumes format: '1x72')
+    try:
+        top_split = [int(x) for x in accelerator_topology.split("x")]
+    except Exception as e:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+        raise e
+
+    if len(machine_type.accelerators) == 0:
+        gpus_per_machine = 0
+    else: 
+        gpus_per_machine = machine_type.accelerators[0].count
+
+    if len(top_split) != 2:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+    elif top_split[0] <= 0 or top_split[1] <= 0:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+    elif gpus_per_machine <= 0:
+        log.error(f"The machine type has no accelerators. Cannot use accelerator topology {accelerator_topology}.")
+    elif top_split[1] % gpus_per_machine:
+        log.error(f"The GPU count {gpus_per_machine} per node is not a factor of the accelerator topology {accelerator_topology}")
+    
+    return (top_split[0] * top_split[1]) // gpus_per_machine
+ 
 def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
-    # Calculates the chunk size based on max distance value received
-    machine_type = lkp.template_info(nodeset.instance_template).machine_type.family
+    # Calculates the chunk size based on max distance value received or accelerator topology
+    # Assuming nodeset is not tpu
+    machine_type = lkp.template_info(nodeset.instance_template).machine_type
     max_distance = nodeset.placement_max_distance
+    accelerator_topology = nodeset.accelerator_topology
+
+    # Look for accelerator topology first
+    if accelerator_topology:
+        hosts_per_topo = calculate_hosts_per_topo(accelerator_topology, machine_type)
+        return hosts_per_topo
+
     if max_distance == 1:
         return 22
     elif max_distance == 2:
-        if machine_type.startswith("a3"):
+        if machine_type.family.startswith("a3"):
             return 256
         else:
             return 150
@@ -573,6 +611,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
+    accelerator_topology = lkp.nodeset_accelerator_topology(lkp.node_nodeset_name(nodes[0]))
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
@@ -581,7 +620,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         )
 
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
     }
     if not requests:
         return placements

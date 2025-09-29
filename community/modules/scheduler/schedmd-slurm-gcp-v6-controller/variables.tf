@@ -225,6 +225,7 @@ variable "nodeset" {
       count = number
       type  = string
     }))
+    accelerator_topology = optional(string, null)
     dws_flex = object({
       enabled          = bool
       max_run_duration = number
@@ -455,16 +456,20 @@ EOD
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params      = optional(bool, false)
-    private_data         = optional(list(string))
-    scheduler_parameters = optional(list(string))
-    resume_rate          = optional(number)
-    resume_timeout       = optional(number)
-    suspend_rate         = optional(number)
-    suspend_timeout      = optional(number)
-    topology_plugin      = optional(string)
-    topology_param       = optional(string)
-    tree_width           = optional(number)
+    no_comma_params         = optional(bool, false)
+    private_data            = optional(list(string))
+    scheduler_parameters    = optional(list(string))
+    resume_rate             = optional(number)
+    resume_timeout          = optional(number)
+    suspend_rate            = optional(number)
+    suspend_timeout         = optional(number)
+    slurmd_timeout          = optional(number)
+    unkillable_step_timeout = optional(number)
+    topology_plugin         = optional(string)
+    topology_param          = optional(string)
+    tree_width              = optional(number)
+    prolog_flags            = optional(string)
+    switch_type             = optional(string)
   })
   default  = {}
   nullable = false

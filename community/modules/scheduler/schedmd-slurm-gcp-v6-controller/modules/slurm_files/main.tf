@@ -119,9 +119,10 @@ locals {
 }
 
 resource "google_storage_bucket_object" "config" {
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/config.yaml"
-  content = yamlencode(local.config)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/config.yaml"
+  content        = yamlencode(local.config)
+  source_md5hash = md5(yamlencode(local.config))
 
   # Take dependency on all other "config artifacts" so creation of `config.yaml`
   # can be used as a signal for setup.py that "everything is ready".
@@ -141,25 +142,28 @@ resource "google_storage_bucket_object" "nodeset_config" {
     instance_properties = jsondecode(ns.instance_properties_json)
   }) }
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
+  content        = yamlencode(each.value)
+  source_md5hash = md5(yamlencode(each.value))
 }
 
 resource "google_storage_bucket_object" "nodeset_dyn_config" {
   for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
+  content        = yamlencode(each.value)
+  source_md5hash = md5(yamlencode(each.value))
 }
 
 resource "google_storage_bucket_object" "nodeset_tpu_config" {
   for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
+  content        = yamlencode(each.value)
+  source_md5hash = md5(yamlencode(each.value))
 }
 
 #########
@@ -169,29 +173,94 @@ resource "google_storage_bucket_object" "nodeset_tpu_config" {
 locals {
   build_dir = abspath("${path.module}/build")
 
-  slurm_gcp_devel_zip        = "slurm-gcp-devel.zip"
-  slurm_gcp_devel_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_zip)
+  slurm_gcp_devel_controller_zip     = "slurm-gcp-devel-controller.zip"
+  slurm_gcp_devel_compute_zip        = "slurm-gcp-devel.zip"
+  slurm_gcp_devel_zip_bucket         = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_controller_zip)
+  slurm_gcp_devel_compute_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_compute_zip)
+
+  controller_files = [
+    "tools/gpu-test",
+    "tools/task-epilog",
+    "tools/task-prolog",
+    "conf.py",
+    "file_cache.py",
+    "get_tpu_vmcount.py",
+    "job_submit.lua.tpl",
+    "load_bq.py",
+    "local_pubsub.py",
+    "mig_flex.py",
+    "resume_wrapper.sh",
+    "resume.py",
+    "setup_network_storage.py",
+    "setup.py",
+    "slurmsync.py",
+    "sort_nodes.py",
+    "suspend_wrapper.sh",
+    "suspend.py",
+    "tpu.py",
+    "util.py",
+    "watch_delete_vm_op.py",
+  ]
+
+  compute_files = [
+    "tools/gpu-test",
+    "tools/task-epilog",
+    "tools/task-prolog",
+    "file_cache.py",
+    "get_tpu_vmcount.py",
+    "job_submit.lua.tpl",
+    "local_pubsub.py",
+    "mig_flex.py",
+    "setup_network_storage.py",
+    "setup.py",
+    "slurmsync.py",
+    "sort_nodes.py",
+    "suspend.py",
+    "tpu.py",
+    "util.py",
+    "watch_delete_vm_op.py",
+  ]
 }
 
-data "archive_file" "slurm_gcp_devel_zip" {
-  output_path = "${local.build_dir}/${local.slurm_gcp_devel_zip}"
+data "archive_file" "slurm_gcp_devel_controller_zip" {
+  output_path = "${local.build_dir}/${local.slurm_gcp_devel_controller_zip}"
   type        = "zip"
-  source_dir  = local.scripts_dir
 
-  excludes = flatten([
-    fileset(local.scripts_dir, "tests/**"),
-    # TODO: consider removing (including nested) __pycache__ and all .* files
-    # Though it only affects developers
-  ])
+  dynamic "source" {
+    for_each = local.controller_files
+    content {
+      content  = file("${local.scripts_dir}/${source.value}")
+      filename = source.value
+    }
+  }
+}
 
+data "archive_file" "slurm_gcp_devel_compute_zip" {
+  output_path = "${local.build_dir}/${local.slurm_gcp_devel_compute_zip}"
+  type        = "zip"
+
+  dynamic "source" {
+    for_each = local.compute_files
+    content {
+      content  = file("${local.scripts_dir}/${source.value}")
+      filename = source.value
+    }
+  }
 }
 
 resource "google_storage_bucket_object" "devel" {
-  bucket = var.bucket_name
-  name   = local.slurm_gcp_devel_zip_bucket
-  source = data.archive_file.slurm_gcp_devel_zip.output_path
+  bucket         = var.bucket_name
+  name           = local.slurm_gcp_devel_zip_bucket
+  source         = data.archive_file.slurm_gcp_devel_controller_zip.output_path
+  source_md5hash = data.archive_file.slurm_gcp_devel_controller_zip.output_md5
 }
 
+resource "google_storage_bucket_object" "devel_compute" {
+  bucket         = var.bucket_name
+  name           = local.slurm_gcp_devel_compute_zip_bucket
+  source         = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  source_md5hash = data.archive_file.slurm_gcp_devel_compute_zip.output_md5
+}
 
 ###########
 # SCRIPTS #
@@ -203,9 +272,10 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
     : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
+  bucket         = var.bucket_name
+  name           = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
+  content        = each.value.content
+  source_md5hash = md5(each.value.content)
 }
 
 resource "google_storage_bucket_object" "nodeset_startup_scripts" {
@@ -217,9 +287,10 @@ resource "google_storage_bucket_object" "nodeset_startup_scripts" {
       name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
   ]]) : x.name => x.content }
 
-  bucket  = var.bucket_name
-  name    = format("%s/%s", local.bucket_dir, each.key)
-  content = each.value
+  bucket         = var.bucket_name
+  name           = format("%s/%s", local.bucket_dir, each.key)
+  content        = each.value
+  source_md5hash = md5(each.value)
 }
 
 resource "google_storage_bucket_object" "prolog_scripts" {
@@ -228,10 +299,11 @@ resource "google_storage_bucket_object" "prolog_scripts" {
     : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-prolog-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-  source  = each.value.source
+  bucket         = var.bucket_name
+  name           = format("%s/slurm-prolog-script-%s", local.bucket_dir, each.key)
+  content        = each.value.content
+  source         = each.value.source
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "epilog_scripts" {
@@ -240,10 +312,11 @@ resource "google_storage_bucket_object" "epilog_scripts" {
     : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-  source  = each.value.source
+  bucket         = var.bucket_name
+  name           = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
+  content        = each.value.content
+  source         = each.value.source
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "task_prolog_scripts" {
@@ -252,10 +325,11 @@ resource "google_storage_bucket_object" "task_prolog_scripts" {
     : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-task_prolog-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-  source  = each.value.source
+  bucket         = var.bucket_name
+  name           = format("%s/slurm-task_prolog-script-%s", local.bucket_dir, each.key)
+  content        = each.value.content
+  source         = each.value.source
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "task_epilog_scripts" {
@@ -264,10 +338,11 @@ resource "google_storage_bucket_object" "task_epilog_scripts" {
     : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-task_epilog-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-  source  = each.value.source
+  bucket         = var.bucket_name
+  name           = format("%s/slurm-task_epilog-script-%s", local.bucket_dir, each.key)
+  content        = each.value.content
+  source         = each.value.source
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 ############################

@@ -299,7 +299,7 @@ def parse_gcp_timestamp(s: str) -> datetime:
 def universe_domain() -> str:
     try:
         return instance_metadata("attributes/universe_domain")
-    except Exception:
+    except MetadataNotFoundError:
         return DEFAULT_UNIVERSE_DOMAIN
 
 
@@ -388,6 +388,23 @@ def parse_bucket_uri(uri: str):
     return matches.group("bucket"), matches.group("path")
 
 
+def get_template_gpu(template):
+    """get gpu info from machine type or guest accelerators"""
+    gpu_keyword = "nvidia"
+    gpu = None
+    if template.machine_type.accelerators:
+        tma = template.machine_type.accelerators[0]
+        if gpu_keyword in tma.type.lower():
+            gpu = tma
+    elif template.guestAccelerators:
+        tga = template.guestAccelerators[0]
+        if gpu_keyword in tga.acceleratorType.lower():
+            gpu = AcceleratorInfo(
+                type=tga.acceleratorType,
+                count=tga.acceleratorCount)
+    return gpu
+
+
 def trim_self_link(link: str):
     """get resource name from self link url, eg.
     https://.../v1/projects/<project>/regions/<region>
@@ -397,6 +414,32 @@ def trim_self_link(link: str):
         return link[link.rindex("/") + 1 :]
     except ValueError:
         raise Exception(f"'/' not found, not a self link: '{link}' ")
+
+
+def get_self_link_component(link: str, component_name: str):
+    """
+    Extracts a component (e.g., 'region', 'project') from a self-link URL.
+    Args:
+        link: The self-link URL string.
+        component_name: The name of the component to extract (e.g., 'regions', 'projects').
+    Returns:
+        The extracted component value (e.g., '<region>', '<project>'),
+        or None if the component is not found in the link.
+    """
+    search_string = f"/{component_name}/"
+    start_index = link.rfind(search_string)
+
+    if start_index == -1:
+        return None
+
+    start_index += len(search_string)
+    end_index = link.find("/", start_index)
+
+    if end_index == -1:
+        # If no further slash, the rest of the string is the component
+        return link[start_index:]
+    else:
+        return link[start_index:end_index]
 
 
 def execute_with_futures(func, seq):
@@ -428,7 +471,7 @@ def map_with_futures(func, seq):
 
 def should_mount_slurm_bucket() -> bool:
     try:
-        return instance_metadata("attributes/slurm_bucket_mount").lower() == "true"
+        return instance_metadata("attributes/slurm_bucket_mount", silent=True).lower() == "true"
     except MetadataNotFoundError:
         return False
 
@@ -591,7 +634,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
         try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns")
+            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
             cfg.slurm_control_host = control_dns_name
         except MetadataNotFoundError:
             cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
@@ -1167,23 +1210,23 @@ ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
 class MetadataNotFoundError(Exception):
     pass
 
-def get_metadata(path, root=ROOT_URL):
+def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
-    url = f"{root}/{path}"
+    url = f"{ROOT_URL}/{path}"
     try:
         resp = requests_lib.get(url, headers=HEADERS)
         resp.raise_for_status()
         return resp.text
     except requests_lib.exceptions.HTTPError:
-        log.warn(f"metadata not found ({url})")
+        if not silent:
+            log.warning(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
 @lru_cache(maxsize=None)
-def instance_metadata(path):
-    """Get instance metadata"""
-    return get_metadata(path, root=f"{ROOT_URL}/instance")
+def instance_metadata(path: str, silent:bool=False) -> str:
+    return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
     return instance_metadata("attributes/slurm_instance_role")
@@ -1192,10 +1235,6 @@ def instance_role():
 def instance_login_group():
     return instance_metadata("attributes/slurm_login_group")
 
-@lru_cache(maxsize=None)
-def project_metadata(key):
-    """Get project metadata project/attributes/<slurm_cluster_name>-<path>"""
-    return get_metadata(key, root=f"{ROOT_URL}/project/attributes")
 
 def natural_sort(text):
     def atoi(text):
@@ -1458,6 +1497,8 @@ class ReservationDetails:
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
     reservation_mode: Optional[str]
+    assured_count: int 
+    delete_at_time: Optional[datetime]
 
     @property
     def dense(self) -> bool:
@@ -1619,18 +1660,50 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
+    def nodeset_is_tpu(self, nodeset_name=None) -> bool:
+        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
-    def is_dormant_fr_node(self, node_name:str) -> bool:
+    def is_dormant_res_node(self, node_name:str) -> bool:
         fr = self.future_reservation(self.node_nodeset(node_name))
-        if not fr:
+        res = self.nodeset_reservation(self.node_nodeset(node_name))
+        
+        if fr is None and res is None:
             return False
-        return fr.active_reservation is None
+        
+        if fr:
+            return fr.active_reservation is None
+        
+        if res:
+            if res.calendar:
+                # If reservation is calendar based, check if it is past the delete_at_time
+                if res.delete_at_time is not None and now() >= res.delete_at_time:
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is past deletion time {res.delete_at_time}, skipping resume.")
+                    return True
+
+                # If assured_count is 0 do not resume nodes as they are not active yet
+                if  res.delete_at_time is not None and res.assured_count <= 0:
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
+                    return True
+                
+        return False    
 
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
+
+    def node_is_gke(self, node_name=None) -> bool:
+        template_info = self.node_template_info(node_name)
+        return self.template_is_gke(template_info)
+
+    def nodeset_is_gke(self, nodeset=None) -> bool:
+        template_info = self.template_info(nodeset.instance_template)
+        return self.template_is_gke(template_info)
+
+    def template_is_gke(self, template_info=None) -> bool:
+        return "goog-gke-node" in template_info.labels
 
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """
@@ -1642,6 +1715,11 @@ class Lookup:
     def node_region(self, node_name=None):
         nodeset = self.node_nodeset(node_name)
         return parse_self_link(nodeset.subnetwork).region
+
+    def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
+        if not self.nodeset_is_tpu(nodeset_name):
+            return getattr(self.cfg.nodeset[nodeset_name], 'accelerator_topology', None)
+        return None
 
     def nodeset_prefix(self, nodeset_name):
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}"
@@ -1788,18 +1866,18 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
 
     @lru_cache
-    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
-        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
+        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
 
     @lru_cache()
-    def get_mig_list(self, project: str, zone: str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+    def get_mig_list(self, project: str, region: str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -1820,6 +1898,8 @@ class Lookup:
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
+            assured_count=int(reservation.get("specificReservation", {}).get("assuredCount", 0)),
+            delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
@@ -1944,10 +2024,15 @@ class Lookup:
         if cached := cache.get(template_name):
             return NSDict(cached)
 
+        region = get_self_link_component(template_link, "regions")
+
         template = ensure_execute(
             self.compute.instanceTemplates().get(
                 project=self.project, instanceTemplate=template_name
-            )
+            ) if region is None else 
+            self.compute.regionInstanceTemplates().get(
+                project=self.project, region=region, instanceTemplate=template_name
+            ) 
         ).get("properties")
         template = NSDict(template)
         # name and link are not in properties, so stick them in
@@ -1957,20 +2042,10 @@ class Lookup:
         # TODO delete metadata to reduce memory footprint?
         # del template.metadata
 
-        # translate gpus into an easier-to-read format
-        if template.machine_type.accelerators:
-            template.gpu = template.machine_type.accelerators[0]
-        elif template.guestAccelerators:
-            tga = template.guestAccelerators[0]
-            template.gpu = AcceleratorInfo(
-                type=tga.acceleratorType,
-                count=tga.acceleratorCount)
-        else:
-            template.gpu = None
+        template.gpu = get_template_gpu(template)
 
         cache.set(template_name, template.to_dict())
         return template
-
 
     def _parse_job_info(self, job_info: str) -> Job:
         """Extract job details"""
@@ -2091,11 +2166,11 @@ class Lookup:
 
         nodeset = self.node_nodeset(node)
         zones = nodeset.zone_policy_allow
-        assert len(zones) == 1
-        zone = zones[0]
+        assert len(zones) > 0
+        region = self.node_region(node)
 
         potential_migs=[]
-        mig_list=self.get_mig_list(self.project, zone)
+        mig_list=self.get_mig_list(self.project, region)
         
         if not mig_list or not mig_list.get("items"):
             return False
@@ -2104,7 +2179,7 @@ class Lookup:
             if not mig.get("instanceTemplate"): #possibly an old MIG
                 return False
             if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
-                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+                potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
@@ -2148,5 +2223,7 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running systemctl restart slurmctld.service")
+    run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")

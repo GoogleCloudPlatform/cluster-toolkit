@@ -49,6 +49,9 @@ vars:
   # The name of the compute engine reservation of TPU v6 nodes
   reservation:
 
+  system_node_pool_disk_size_gb: 200
+  v6e_node_pool_disk_size_gb: 100
+
 
 deployment_groups:
 - group: primary
@@ -77,13 +80,40 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+      - container.admin
+
   - id: gke-tpu-v6-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-tpu-v6-net]
+    use: [gke-tpu-v6-net, workload_service_account]
     settings:
       system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
@@ -100,7 +130,7 @@ deployment_groups:
 
   - id: gke-tpu-v6-pool
     source: modules/compute/gke-node-pool
-    use: [gke-tpu-v6-cluster]
+    use: [gke-tpu-v6-cluster, node_pool_service_account]
     settings:
       num_slices: $(vars.num_slices)
       name: gke-tpu-v6-pool
@@ -108,6 +138,7 @@ deployment_groups:
       machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
+      disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION

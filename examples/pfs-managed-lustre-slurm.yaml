@@ -44,7 +44,7 @@ deployment_groups:
       name: $(vars.lustre_instance_id)
       local_mount: /lustre
       remote_mount: lustrefs
-      size_gib: 18000
+      size_gib: 36000
 
 - group: slurm-cluster
   modules:

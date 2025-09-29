@@ -17,6 +17,13 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-login", ghpc_role = "scheduler" })
 }
 
+module "instance_validation" {
+  source = "../../../../modules/internal/instance_validations"
+
+  machine_type = var.machine_type
+  disk_type    = var.disk_type
+}
+
 module "gpu" {
   source = "../../../../modules/internal/gpu-definition"
 
@@ -43,7 +50,7 @@ locals {
       disk_labels                = merge(ad.disk_labels, local.labels)
       auto_delete                = ad.auto_delete
       boot                       = ad.boot
-      disk_resource_manager_tags = ad.var.disk_resource_manager_tags
+      disk_resource_manager_tags = ad.disk_resource_manager_tags
     }
   ]
 

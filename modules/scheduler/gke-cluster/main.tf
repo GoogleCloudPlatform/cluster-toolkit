@@ -226,6 +226,9 @@ resource "google_container_cluster" "gke_cluster" {
     ray_operator_config {
       enabled = var.enable_ray_operator
     }
+    lustre_csi_driver_config {
+      enabled = var.enable_managed_lustre_csi
+    }
   }
 
   timeouts {

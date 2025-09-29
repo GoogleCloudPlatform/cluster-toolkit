@@ -24,9 +24,9 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
   image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.10.0
+  build_slurm_from_git_ref: 6.10.6
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
@@ -39,7 +39,8 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 100
-  nccl_plugin_version: v1.0.6
+  nccl_gib_version: 1.1.0
+  libnccl_version: 2.27.5-1+cuda12.9
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -59,6 +60,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       docker:
         enabled: true
         world_writable: true
@@ -69,23 +71,37 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
-      - type: shell
-        destination: disable_unattended_upgrades.sh
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      # Additional packages are held by:
+      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
         content: |
-          #!/bin/bash
-          # Unattended upgrades are disabled in this blueprint so that software does not
-          # get updated daily and lead to potential instability in the cluster environment.
-          #
-          # Unattended Upgrades installs available security updates from the Ubuntu
-          # security pocket for installed packages daily by default. Administrators who
-          # disable this feature assume all responsibility for manually reviewing and
-          # patching their systems against vulnerabilities.
-          #
-          # To enable unattended upgrades, please remove this section.
-          set -e -o pipefail
-          systemctl stop unattended-upgrades.service
-          systemctl disable unattended-upgrades.service
-          systemctl mask unattended-upgrades.service
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+              - nvidia-imex-*
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -110,7 +126,7 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-            # this duplicates the ulimits configuration of the HPC VM Image
+      # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -120,33 +136,23 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          add-nvidia-repositories -y
+          apt install -y cuda-toolkit-12-8
+          apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       - type: ansible-local
-        destination: configure_gpu.yml
+        destination: settings_nvidia_dcgm.yml
         content: |
           ---
-          - name: Install NVIDIA packages
+          - name: Nvidia and DGMA settings
             hosts: all
             become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
-              enable_nvidia_dcgm: false
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
-              - libnvidia-cfg1-570-server
-              - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ cuda_repo_url }}"
-                dest: "{{ cuda_repo_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ cuda_repo_filename }}"
-                state: present
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -154,27 +160,9 @@ deployment_groups:
                 owner: root
                 group: root
                 content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install NVIDIA fabric and CUDA
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
-                selection: hold
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -225,8 +213,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
-          ENROOT_CONFIG_PATH     ${HOME}/.enroot
-
+          ENROOT_CONFIG_PATH ${HOME}/.enroot
 
 - group: image
   modules:
@@ -236,10 +223,30 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.base_image.family)
+      source_image: $(vars.base_image.image)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      metadata:
+        user-data: |
+          #cloud-config
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
     use:
     - slurm-image-network
     - slurm-build-script
@@ -323,12 +330,104 @@ deployment_groups:
   #   - a3ultra-slurm-net-0
   #   - private_service_access
   #   settings:
-  #     size_gib: 18000
+  #     size_gib: 36000
   #     name: lustre-instance
   #     local_mount: /home
   #     remote_mount: lustrefs
   #   outputs:
   #   - network_storage
+
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
 
 - group: cluster
   modules:
@@ -346,6 +445,12 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -354,47 +459,92 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # Install NCCL
       - type: ansible-local
-        destination: nccl_plugin.yml
+        destination: install_nccl.yml
         content: |
           ---
-          - name: Install NCCL plugin for A3 Ultra series
+          - name: Install nccl
             hosts: all
             become: true
             tasks:
-            - name: Add SystemD unit for NCCL plugin installation
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: yes
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - "libnccl2=$(vars.libnccl_version)"
+                - "libnccl-dev=$(vars.libnccl_version)"
+                state: present
+      # Install NCCL-GIB Plugin
+      - type: ansible-local
+        destination: install_nccl_gib.yml
+        content: |
+          ---
+          - name: Install Google NCCL-GIB Plugin
+            hosts: all
+            become: true
+            tasks:
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
+                state: present
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+                state: present
+            - name: Install Apt Transport AR Apt Repo
+              apt_repository:
+                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
+                state: present
+            - name: Install AR transport
+              ansible.builtin.apt:
+                name: "apt-transport-artifact-registry"
+                update_cache: true
+            - name: Install Google NCCL-GIB Plugin
+              apt_repository:
+                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
+                state: present
+            - name: Install NCCL-GIB Plugin
+              ansible.builtin.apt:
+                name: "nccl-gib=$(vars.nccl_gib_version)"
+                update_cache: true
+            - name: Freeze NCCL GIB Plugin
+              ansible.builtin.dpkg_selections:
+                name: "nccl-gib"
+                selection: hold
+      # --------------------------------------------------------------------------
+      # Environment Configuration
+      # --------------------------------------------------------------------------
+      - type: ansible-local
+        destination: configure_nccl_env.yml
+        name: Ensure NCCL/gIB environment script is sourced for all users
+        content: |
+          ---
+          - name: Configure NCCL/gIB environment
+            hosts: all
+            become: true
+            tasks:
+            - name: Deploy /etc/profile.d/nccl-gib.sh
               ansible.builtin.copy:
-                dest: /etc/systemd/system/nccl-plugin@.service
-                mode: 0o0644
+                dest: /etc/profile.d/nccl-gib.sh
                 content: |
-                  [Unit]
-                  After=network-online.target docker.service
-                  Before=slurmd.service
-                  Requires=docker.service
+                  # Load NCCL/gIB environment
+                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                    source /usr/local/gib/scripts/set_nccl_env.sh
+                  fi
 
-                  [Service]
-                  Type=oneshot
-                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
-                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
-                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
-                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
-                      us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
-                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
-
-                  [Install]
-                  WantedBy=slurmd.service
-              notify:
-              - Reload SystemD
+                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                  if [ -d "/usr/local/gib/lib64" ]; then
+                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                  fi
+                mode: '0644'
             handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
-            post_tasks:
-            - name: Enable NCCL plugin SystemD unit
-              ansible.builtin.service:
-                name: nccl-plugin@$(vars.nccl_plugin_version).service
-                state: started
-                enabled: true
+              - name: Reload SystemD
+                ansible.builtin.systemd:
+                  daemon_reload: true
+
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -452,7 +602,7 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: a3-ultragpu-8g
-      instance_image_custom: true
+
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
       node_count_dynamic_max: 0
@@ -506,7 +656,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      instance_image_custom: true
       disk_size_gb: 300
       enable_login_public_ips: true
       machine_type: n2-standard-8
@@ -543,9 +692,9 @@ deployment_groups:
     - a3_ultra_partition
     - slurm_login
     - homefs
+    - gcs_bucket
     settings:
       enable_controller_public_ips: true
-      instance_image_custom: true
       disk_type: pd-extreme
       disk_size_gb: 300
       machine_type: n2-standard-80

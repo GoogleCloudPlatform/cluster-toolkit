@@ -30,7 +30,6 @@ vars:
   a3mega_maintenance_interval: ""
   enable_placement: false
   local_mount_homefs: /home
-  instance_image_custom: true
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)
@@ -479,7 +478,8 @@ deployment_groups:
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
               nvidia_packages:
               - cuda-toolkit-12-8
-              - datacenter-gpu-manager
+              - datacenter-gpu-manager-4-cuda12
+              - datacenter-gpu-manager-4-dev
               - libnvidia-cfg1-570-server
               - libnvidia-nscq-570
               - nvidia-compute-utils-570-server
