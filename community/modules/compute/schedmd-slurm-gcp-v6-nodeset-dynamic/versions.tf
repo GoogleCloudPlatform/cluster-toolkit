@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,14 @@
 
 terraform {
   required_version = ">= 1.3"
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 4.75.0"
+    }
+  }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-dynamic/v1.67.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-dynamic/v1.68.0"
   }
 }

@@ -62,12 +62,13 @@ modules. For support with the underlying modules, see the instructions in the
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.75.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | n/a |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.75.0 |
 
 ## Modules
 
