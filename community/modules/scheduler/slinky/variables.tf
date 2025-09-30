@@ -32,7 +32,7 @@ variable "node_pool_names" {
 variable "cert_manager_chart_version" {
   description = "Version of the Cert Manager chart to install."
   type        = string
-  default     = "v1.17.1"
+  default     = "v1.18.2"
 }
 
 variable "cert_manager_values" {
@@ -48,7 +48,7 @@ variable "cert_manager_values" {
 variable "slurm_operator_chart_version" {
   description = "Version of the Slurm Operator chart to install."
   type        = string
-  default     = "0.2.1"
+  default     = "0.3.1"
 }
 
 variable "slurm_operator_values" {
@@ -60,7 +60,7 @@ variable "slurm_operator_values" {
 variable "slurm_chart_version" {
   description = "Version of the Slurm chart to install."
   type        = string
-  default     = "0.2.1"
+  default     = "0.3.1"
 }
 
 variable "slurm_values" {
@@ -79,7 +79,7 @@ variable "install_kube_prometheus_stack" {
 variable "prometheus_chart_version" {
   description = "Version of the Kube Prometheus Stack chart to install."
   type        = string
-  default     = "70.4.1"
+  default     = "77.0.1"
 }
 
 variable "prometheus_values" {
@@ -88,4 +88,40 @@ variable "prometheus_values" {
   default = {
     installCRDs = true
   }
+}
+
+variable "slurm_namespace" {
+  description = "slurm namespace for charts"
+  type        = string
+  default     = "slurm"
+}
+
+variable "slurm_operator_namespace" {
+  description = "slurm namespace for charts"
+  type        = string
+  default     = "slinky"
+}
+
+variable "install_slurm_chart" {
+  description = "Install slurm-operator chart."
+  type        = bool
+  default     = true
+}
+
+variable "install_slurm_operator_chart" {
+  description = "Install slurm-operator chart."
+  type        = bool
+  default     = true
+}
+
+variable "slurm_repository" {
+  description = "Value overrides for the Slinky release"
+  type        = string
+  default     = "oci://ghcr.io/slinkyproject/charts"
+}
+
+variable "slurm_operator_repository" {
+  description = "Value overrides for the Slinky release"
+  type        = string
+  default     = "oci://ghcr.io/slinkyproject/charts"
 }

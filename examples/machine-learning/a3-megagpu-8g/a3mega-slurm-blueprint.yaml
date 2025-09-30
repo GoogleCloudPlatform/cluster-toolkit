@@ -36,6 +36,11 @@ vars:
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd
 
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3mega_reservation_name: ""  # supply reservation name
+  a3mega_dws_flex_enabled: false
+  a3mega_enable_spot_vm: false
+
 deployment_groups:
 - group: primary
   modules:
@@ -63,6 +68,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
@@ -77,12 +83,6 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
-      - type: data
-        destination: /etc/apt/preferences.d/block-broken-nvidia-container
-        content: |
-          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
-          Pin: version 1.17.7-1
-          Pin-Priority: 100
 
       # The following holds NVIDIA software that was already installed on the
       # accelerator base image to be the same driver version. This reduces the
@@ -104,6 +104,7 @@ deployment_groups:
               - nvidia-compute-utils-*-server
               - nvidia-fabricmanager-*
               - nvidia-utils-*-server
+              - nvidia-imex-*
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
@@ -148,7 +149,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.6 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -176,18 +177,16 @@ deployment_groups:
                 deb: "{{ package_filename }}"
                 state: present
       - type: shell
-        destination: install-nvidia.sh
+        destination: install-cuda-toolkit.sh
         content: |
           #!/bin/bash
           set -ex -o pipefail
-          # Install nvidia container toolkit
-          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
-            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-          apt-get update -y
-          apt-get install -y nvidia-container-toolkit
+          add-nvidia-repositories -y
+          apt update -y
+          apt install -y cuda-toolkit-12-8
+          apt install -y nvidia-container-toolkit
+          apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
@@ -214,46 +213,9 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: $(vars.enable_ops_agent)
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
-              nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
-            - name: Install CUDA & DCGM
-              ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
-              loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
@@ -286,7 +248,7 @@ deployment_groups:
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
-                enabled: false
+                enabled: "{{ enable_nvidia_dcgm }}"
             - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-persistenced.service
@@ -584,6 +546,9 @@ deployment_groups:
       on_host_maintenance: TERMINATE
       bandwidth_tier: gvnic_enabled
       reservation_name: $(vars.a3mega_reservation_name)
+      enable_spot_vm: $(vars.a3mega_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3mega_dws_flex_enabled)
       maintenance_interval: $(vars.a3mega_maintenance_interval)
       startup_script: $(a3mega_startup.startup_script)
 

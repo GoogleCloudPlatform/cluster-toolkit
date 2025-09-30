@@ -100,6 +100,8 @@ ResumeTimeout=300
 SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -113,6 +115,8 @@ TopologyParam=SwitchAsNodeRank"""),
                 "resume_timeout": None,
                 "suspend_rate": None,
                 "suspend_timeout": None,
+                "unkillable_step_timeout": None,
+                "slurmd_timeout": None,
                 "topology_plugin": None,
                 "topology_param": None,
                 "tree_width": None,
@@ -126,6 +130,8 @@ ResumeTimeout=300
 SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -147,9 +153,11 @@ TopologyParam=SwitchAsNodeRank"""),
                 "resume_timeout": 2,
                 "suspend_rate": 3,
                 "suspend_timeout": 4,
+                "slurmd_timeout": 5,
+                "unkillable_step_timeout": 6,
+                "tree_width": 7,
                 "topology_plugin": "guess",
                 "topology_param": "yellow",
-                "tree_width": 5,
             },
         ),
          """PrivateData=events,jobs
@@ -161,7 +169,9 @@ ResumeTimeout=2
 SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=3
 SuspendTimeout=4
-TreeWidth=5
+SlurmdTimeout=5
+UnkillableStepTimeout=6
+TreeWidth=7
 TopologyPlugin=guess
 TopologyParam=yellow"""),
         (TstCfg(
@@ -181,6 +191,8 @@ ResumeTimeout=300
 SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -190,3 +202,25 @@ def test_conflines(cfg, want):
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     assert conf.conflines(util.Lookup(cfg)) == want
+
+
+@pytest.mark.parametrize(
+    "cfg,gputype,gpucount,want",
+    [
+        (TstCfg(),
+        "",
+        0,
+         "\n"),
+        (TstCfg(
+            nodeset={"turbo": TstNodeset("turbo")}
+        ), 
+        "Popov",
+        8,
+         "Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
+    ])
+def test_gen_cloud_gres_conf_lines(cfg, gputype, gpucount, want):
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=TstTemplateInfo(
+        gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
+    ))
+    assert conf.gen_cloud_gres_conf_lines(lkp) == want

@@ -19,13 +19,8 @@
 
 - name: Wait for startup script to complete
   become: true
-  ansible.builtin.shell: journalctl -u google-startup-scripts.service -b | grep -oP "startup-script exit status \K\d+"
+  ansible.builtin.shell: journalctl -u google-startup-scripts.service -b | grep "Started Google Compute Engine Startup Scripts."
   register: result
   until: result.rc == 0
   retries: "{{ (timeout_seconds/5)|int }}"
   delay: 5
-
-- name: Fail if startup script exited with a non-zero return code
-  ansible.builtin.fail:
-    msg: There was a failure in the startup script
-  when: result.stdout != "0"

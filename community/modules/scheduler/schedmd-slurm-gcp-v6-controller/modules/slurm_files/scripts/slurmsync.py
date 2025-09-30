@@ -81,6 +81,15 @@ class NodeActionPowerDown():
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
 
+
+@dataclass(frozen=True)
+class NodeActionPowerDownForce():
+    def apply(self, nodes:List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} instances to power down ({hostlist})")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
+
+
 @dataclass(frozen=True)
 class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
@@ -233,6 +242,9 @@ def get_node_action(nodename: str) -> NodeAction:
     lkp = lookup()
     state = lkp.node_state(nodename)
 
+    if lkp.node_is_gke(nodename):
+        return NodeActionUnchanged()
+
     if lkp.node_is_fr(nodename):
         fr = lkp.future_reservation(lkp.node_nodeset(nodename))
         assert fr
@@ -268,6 +280,8 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
             return NodeActionPowerDown()
+        if "NOT_RESPONDING" in state.flags:
+            return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
@@ -292,7 +306,11 @@ def get_node_action(nodename: str) -> NodeAction:
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm
         return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
-
+    elif lkp.is_flex_node(nodename) and "POWERING_UP" in state.flags:
+        threshold = timedelta(seconds=int(lkp.cfg.compute_startup_scripts_timeout) * 2) #extra buffer for unexpectedly long startup scripts
+        if util.now() - inst.creation_timestamp > threshold:
+            log.info(f"{nodename} was unable to join the cluster after {threshold.seconds}s, potential failure on VM startup. Powering down...")
+            return NodeActionPowerDownForce()
     return NodeActionUnchanged()
 
 

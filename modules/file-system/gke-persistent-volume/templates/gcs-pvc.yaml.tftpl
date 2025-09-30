@@ -16,3 +16,6 @@ spec:
   resources:
     requests:
       storage: ${capacity}
+  claimRef:
+    name: ${pvc_name}
+    namespace: ${namespace}

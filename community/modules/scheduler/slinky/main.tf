@@ -68,11 +68,12 @@ resource "helm_release" "cert_manager" {
 }
 
 resource "helm_release" "slurm_operator" {
+  count            = var.install_slurm_operator_chart ? 1 : 0
   name             = "slurm-operator"
   chart            = "slurm-operator"
-  repository       = "oci://ghcr.io/slinkyproject/charts"
+  repository       = var.slurm_operator_repository
   version          = var.slurm_operator_chart_version
-  namespace        = "slinky"
+  namespace        = var.slurm_operator_namespace
   create_namespace = true
 
   # The Cert Manager webhook deployment must be running to provision the Operator
@@ -94,11 +95,12 @@ resource "helm_release" "slurm_operator" {
 }
 
 resource "helm_release" "slurm" {
+  count            = var.install_slurm_chart ? 1 : 0
   name             = "slurm"
   chart            = "slurm"
-  repository       = "oci://ghcr.io/slinkyproject/charts"
+  repository       = var.slurm_repository
   version          = var.slurm_chart_version
-  namespace        = "slurm"
+  namespace        = var.slurm_namespace
   create_namespace = true
 
   # The Slurm Operator must be running to provision Slurm clusters/nodesets

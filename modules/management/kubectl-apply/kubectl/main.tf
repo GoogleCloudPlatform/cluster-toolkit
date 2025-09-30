@@ -39,8 +39,18 @@ locals {
 
   # --- CONSOLIDATE & PROCESS ---
   # Coalesce finds the first non-null content from the methods above.
-  yaml_body      = coalesce(local.content_yaml_body, local.yaml_file_content, local.template_file_content, " ")
-  yaml_body_docs = [for doc in split(local.yaml_separator, local.yaml_body) : trimspace(doc) if length(trimspace(doc)) > 0]
+  yaml_body = coalesce(local.content_yaml_body, local.yaml_file_content, local.template_file_content, " ")
+  # Ensure only valid YAML is processed
+  # It explicitly tests if the content can be decoded before including it.
+  yaml_body_docs = compact(flatten([
+    for doc in split(local.yaml_separator, local.yaml_body) : [
+      for content in [trimspace(doc)] : (
+        # Use a temporary local variable and can() to test for successful YAML decoding.
+        # This handles malformed documents (like comment blocks) which cause yamldecode() to fail.
+        can(yamldecode(content)) && length(yamldecode(content)) > 0 ? content : null
+      )
+    ]
+  ]))
 
   # --- METHOD 4: Directory of Files ---
   # If no content was found via the methods above AND the source path looks like a directory,

@@ -20,79 +20,100 @@ locals {
 }
 
 locals {
-  is_gcs = (var.gcs_bucket_name != null)
+  # Flags indicating which storage type is active based on input variables.
+  storage_type_active = {
+    gcs       = var.gcs_bucket_name != null
+    lustre    = var.lustre_id != null
+    filestore = var.filestore_id != null
+  }
 
-  filestore_id = (
-    !local.is_gcs ?                                  # If not using gcs
-    var.filestore_id :                               # Then filestore_id must be provided
-    "projects/empty/locations/empty/instances/empty" # Otherwise use something arbitrary as it will not be used
-  )
-  location             = split("/", local.filestore_id)[3]
-  filestore_name       = split("/", local.filestore_id)[5]
-  filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")
-  base_name            = local.is_gcs ? var.gcs_bucket_name : local.filestore_name
+  # Determine the active storage type name.
+  active_types = [for type, is_active in local.storage_type_active : type if is_active]
 
-  pv_name  = "${local.base_name}-pv"
-  pvc_name = "${local.base_name}-pvc"
+  # The precondition in kubectl_manifest.pv ensures exactly one type is active.
+  storage_type = length(local.active_types) > 0 ? local.active_types[0] : "unknown"
 
-  list_mount_options = split(",", var.network_storage.mount_options)
+  # Map containing the base name derivation logic for each storage type.
+  base_name_map = {
+    gcs       = var.gcs_bucket_name
+    lustre    = var.lustre_id != null ? split("/", var.lustre_id)[5] : null
+    filestore = var.filestore_id != null ? split("/", var.filestore_id)[5] : null
+  }
+  # Retrieve the base name for the active storage type.
+  base_name = local.base_name_map[local.storage_type]
 
-  filestore_pv_contents = templatefile(
-    "${path.module}/templates/filestore-pv.yaml.tftpl",
-    {
-      pv_name        = local.pv_name
-      capacity       = "${var.capacity_gb}Gi"
-      location       = local.location
-      filestore_name = local.filestore_name
-      share_name     = local.filestore_share_name
+  # PV and PVC names
+  pv_name  = var.pv_name != null ? var.pv_name : "${local.base_name}-pv"
+  pvc_name = var.pvc_name != null ? var.pvc_name : "${local.base_name}-pvc"
+
+  # Template file paths
+  pv_templates = {
+    gcs       = "${path.module}/templates/gcs-pv.yaml.tftpl"
+    lustre    = "${path.module}/templates/managed-lustre-pv.yaml.tftpl"
+    filestore = "${path.module}/templates/filestore-pv.yaml.tftpl"
+  }
+  pvc_templates = {
+    gcs       = "${path.module}/templates/gcs-pvc.yaml.tftpl"
+    lustre    = "${path.module}/templates/managed-lustre-pvc.yaml.tftpl"
+    filestore = "${path.module}/templates/filestore-pvc.yaml.tftpl"
+  }
+
+  # Common variables for all PVC templates
+  common_pvc_vars = {
+    pv_name   = local.pv_name
+    pvc_name  = local.pvc_name
+    labels    = local.labels
+    capacity  = "${var.capacity_gib}Gi"
+    namespace = var.namespace
+  }
+
+  # Common variables for all PV templates
+  common_pv_vars = {
+    pv_name  = local.pv_name
+    capacity = "${var.capacity_gib}Gi"
+    labels   = local.labels
+  }
+
+  # Variables for PV templates, merging common vars with type-specific ones.
+  pv_template_vars = {
+    gcs = merge(local.common_pv_vars, {
+      mount_options = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
+      bucket_name   = var.gcs_bucket_name
+      namespace     = var.namespace
+      pvc_name      = local.pvc_name
+    })
+    lustre = merge(local.common_pv_vars, {
+      location        = var.lustre_id != null ? split("/", var.lustre_id)[3] : null
+      project         = split("/", var.cluster_id)[1]
+      instance_name   = local.base_name
+      server_ip       = var.lustre_id != null ? split("@", var.network_storage.server_ip)[0] : null
+      filesystem_name = var.network_storage.remote_mount
+      pvc_name        = local.pvc_name
+      namespace       = var.namespace
+    })
+    filestore = merge(local.common_pv_vars, {
+      location       = var.filestore_id != null ? split("/", var.filestore_id)[3] : null
+      filestore_name = local.base_name
+      share_name     = trimprefix(var.network_storage.remote_mount, "/")
       ip_address     = var.network_storage.server_ip
-      labels         = local.labels
-    }
+      pvc_name       = local.pvc_name
+      namespace      = var.namespace
+    })
+  }
+
+  # Rendered YAML contents
+  pv_content = templatefile(
+    local.pv_templates[local.storage_type],
+    local.pv_template_vars[local.storage_type]
+  )
+  pvc_content = templatefile(
+    local.pvc_templates[local.storage_type],
+    local.common_pvc_vars
   )
 
-  filestore_pvc_contents = templatefile(
-    "${path.module}/templates/filestore-pvc.yaml.tftpl",
-    {
-      pv_name   = local.pv_name
-      capacity  = "${var.capacity_gb}Gi"
-      pvc_name  = local.pvc_name
-      labels    = local.labels
-      namespace = var.namespace
-    }
-  )
-
-  gcs_pv_contents = templatefile(
-    "${path.module}/templates/gcs-pv.yaml.tftpl",
-    {
-      pv_name       = local.pv_name
-      capacity      = "${var.capacity_gb}Gi"
-      labels        = local.labels
-      mount_options = local.is_gcs ? local.list_mount_options : null
-      bucket_name   = local.is_gcs ? var.gcs_bucket_name : ""
-    }
-  )
-
-  gcs_pvc_contents = templatefile(
-    "${path.module}/templates/gcs-pvc.yaml.tftpl",
-    {
-      pv_name   = local.pv_name
-      pvc_name  = local.pvc_name
-      labels    = local.labels
-      capacity  = "${var.capacity_gb}Gi"
-      namespace = var.namespace
-    }
-  )
-
+  # GKE Cluster details
   cluster_name     = split("/", var.cluster_id)[5]
   cluster_location = split("/", var.cluster_id)[3]
-}
-
-resource "local_file" "debug_file" {
-  content  = <<-EOF
-    ${local.filestore_pv_contents}
-    ${local.filestore_pvc_contents}
-    EOF
-  filename = "${path.root}/pv-pvc-debug-file-${local.filestore_name}.yaml"
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -118,17 +139,17 @@ resource "kubectl_manifest" "pvc_namespace" {
 }
 
 resource "kubectl_manifest" "pv" {
-  yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
+  yaml_body = local.pv_content
 
   lifecycle {
     precondition {
-      condition     = (var.gcs_bucket_name != null) != (var.filestore_id != null)
-      error_message = "Either gcs_bucket_name or filestore_id must be set."
+      condition     = length(local.active_types) == 1
+      error_message = "Exactly one of gcs_bucket_name, filestore_id, or lustre_id must be set."
     }
   }
 }
 
 resource "kubectl_manifest" "pvc" {
-  yaml_body  = local.is_gcs ? local.gcs_pvc_contents : local.filestore_pvc_contents
+  yaml_body  = local.pvc_content
   depends_on = [kubectl_manifest.pv, kubectl_manifest.pvc_namespace]
 }
