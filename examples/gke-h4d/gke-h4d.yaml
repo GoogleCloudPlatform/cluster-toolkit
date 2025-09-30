@@ -36,6 +36,12 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
+
   system_node_pool_disk_size_gb: 100
   h4d_node_pool_disk_size_gb: 100
 
@@ -115,8 +121,6 @@ deployment_groups:
       system_node_pool_taints: []
       enable_multi_networking: true
       enable_dcgm_monitoring: true
-      enable_gcsfuse_csi: true
-      cluster_availability_type: "ZONAL"
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -157,6 +161,10 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
       taints:
       # (Optional, but suggested)
       # In order prevent scheduling of generic workloads onto the H4D nodepool,
@@ -171,7 +179,7 @@ deployment_groups:
       #   effect: "NoSchedule"
       - key: node-type
         value: h4d
-        effect: NoSchedule
+        effect: NO_SCHEDULE
       placement_policy:
         type: COMPACT
       additional_networks:

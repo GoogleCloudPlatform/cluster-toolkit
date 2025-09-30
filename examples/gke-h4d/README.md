@@ -28,6 +28,8 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
     1. `zone`: Compute zone used for the deployment.
     1. `static_node_count`: Number of nodes to create.
     1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
+    1. `reservation`: The name of the compute engine reservation in the form of <reservation-name>. To target a BLOCK_NAME, the name of the extended reservation can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>.
+
 1. Build the Cluster Toolkit binary
 
    ```sh
