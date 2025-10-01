@@ -16,6 +16,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
+  * [c4a-vm.yaml](#c4a-vmyaml-) ![core-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
@@ -158,6 +159,20 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
+
+### [c4a-vm.yaml] ![core-badge]
+
+The [c4a-vm.yaml] blueprint creates a small, two-node C4A (Compute-Accelerated Architecture) environment.
+
+To deploy this blueprint:
+
+```bash
+gcluster deploy examples/c4a-vm.yaml \
+    -v project_id=<YOUR-PROJECT-ID> \
+    -v deployment_name=c4a-vm
+```
+
+[c4a-vm.yaml]: ./c4a-vm.yaml
 
 ### [hpc-slurm.yaml] ![core-badge]
 
