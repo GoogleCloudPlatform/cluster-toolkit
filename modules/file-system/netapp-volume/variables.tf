@@ -22,7 +22,10 @@ variable "project_id" {
 variable "netapp_storage_pool_id" {
   description = "The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created."
   type        = string
-  default     = null
+  validation {
+    condition     = length(split("/", var.netapp_storage_pool_id)) == 6
+    error_message = "The storage pool id must be provided in the following format: projects/<project_id>/locations/<location>/storagePools/<pool_name>."
+  }
 }
 
 variable "region" {

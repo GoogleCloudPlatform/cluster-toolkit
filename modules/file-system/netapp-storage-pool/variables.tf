@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "Name of the HPC deployment, used as name of the NetApp storage pool if no name is specified."
+  description = "Name of the deployment, used as name of the NetApp storage pool if no name is specified."
   type        = string
 }
 

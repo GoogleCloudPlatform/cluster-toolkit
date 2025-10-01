@@ -14,7 +14,7 @@
 
 
 output "network_storage" {
-  description = "Describes a NetApp Volume volume."
+  description = "Describes a NetApp Volumes volume."
   value = {
     server_ip             = local.server_ip
     remote_mount          = local.remote_mount

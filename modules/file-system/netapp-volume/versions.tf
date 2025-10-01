@@ -18,14 +18,14 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 7.1"
+      version = ">= 6.45.0"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.60.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.67.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.60.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.67.0"
   }
 
   required_version = ">= 1.3.0"
