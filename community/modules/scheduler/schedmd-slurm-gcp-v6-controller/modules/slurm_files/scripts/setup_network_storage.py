@@ -206,8 +206,8 @@ def munge_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    # wait max 120s for munge mount
-    timeout = 120
+    # wait max 240s for munge mount
+    timeout = 240
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
