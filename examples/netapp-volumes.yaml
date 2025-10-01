@@ -26,9 +26,10 @@ vars:
   deployment_name: netapp-volumes
   region: us-central1
   zone: $(vars.region)-a
+  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
 
 # Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+# https://github.com/GoogleCloudPlatform/hpc-toolkit
 
 deployment_groups:
 - group: primary
@@ -40,9 +41,6 @@ deployment_groups:
 
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
   # included in the Owner role, but not Editor.
-  # PSA is a best practice for Filestore instances, but can be optionally
-  # removed by deleting the private_service_access module and any references to
-  # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
@@ -59,7 +57,7 @@ deployment_groups:
       pool_name: "netapp-pool"
       network_id: $(network.network_id)
       capacity_gib: 2048
-      service_level: "EXTREME"
+      service_level: $(vars.pool_service_level)
       region: $(vars.region)
       # allow_auto_tiering: true
 

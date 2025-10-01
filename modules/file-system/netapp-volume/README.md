@@ -95,7 +95,7 @@ Volumes larger than 15 TiB can be created as [Large Volumes](https://cloud.googl
 This feature is allow-listed GA. To request allow-listing, see [Large Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes).
 
 ## Auto-tiering support
-For auto-tiering enables storage pools you can enable auto-tiering on the volume. For more information, see [manage auto-tiering](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering).
+For auto-tiering enabled storage pools you can enable auto-tiering on the volume. For more information, see [manage auto-tiering](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering).
 
 ## Using existing volumes not created by Cluster Toolkit
 NetApp Volumes volumes are regular NFS exports. You can use the [pre-existing-network-storage] module to integrate them into Cluster Toolkit.
@@ -147,13 +147,13 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.1 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.45.0 |
 
 ## Modules
 
@@ -176,7 +176,7 @@ No modules.
 | <a name="input_large_capacity"></a> [large\_capacity](#input\_large\_capacity) | If true, the volume will be created with large capacity.<br/>Large capacity volumes have 6 IP addresses and a minimal size of 15 TiB. | `bool` | `false` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this volume. Note: If set to the same as the `name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"rw,hard,rsize=65536,wsize=65536,tcp"` | no |
-| <a name="input_netapp_storage_pool_id"></a> [netapp\_storage\_pool\_id](#input\_netapp\_storage\_pool\_id) | The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created. | `string` | `null` | no |
+| <a name="input_netapp_storage_pool_id"></a> [netapp\_storage\_pool\_id](#input\_netapp\_storage\_pool\_id) | The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the NetApp storage pool will be created. | `string` | n/a | yes |
 | <a name="input_protocols"></a> [protocols](#input\_protocols) | The protocols that the volume supports. Currently, only NFSv3 and NFSv4 is supported. | `list(string)` | <pre>[<br/>  "NFSV3"<br/>]</pre> | no |
 | <a name="input_region"></a> [region](#input\_region) | Location for NetApp storage pool. | `string` | n/a | yes |
@@ -193,6 +193,6 @@ No modules.
 | <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using an ansible playbook. The startup-script<br/>module will automatically handle installation of ansible.<br/>- id: example-startup-script<br/>  source: modules/scripts/startup-script<br/>  settings:<br/>    runners:<br/>    - $(your-fs-id.mount\_runner)<br/>... |
 | <a name="output_netapp_volume_id"></a> [netapp\_volume\_id](#output\_netapp\_volume\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/volumes/{{name}}` |
-| <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a NetApp Volume volume. |
+| <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a NetApp Volumes volume. |
 | <a name="output_server_ips"></a> [server\_ips](#output\_server\_ips) | List of IP addresses of the volume. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
