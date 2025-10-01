@@ -102,6 +102,6 @@ urllib3==2.5.0
 uvicorn==0.35.0
 virtualenv==20.34.0
 wrapt==1.17.3
-xmltodict==0.14.2
+xmltodict==1.0.2
 yq==3.4.3
 zipp==3.23.0
