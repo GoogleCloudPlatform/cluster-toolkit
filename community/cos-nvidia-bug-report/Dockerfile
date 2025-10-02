@@ -52,4 +52,4 @@ RUN . .venv/bin/activate
 # Install Python dependencies
 RUN .venv/bin/pip install --no-cache-dir -r requirements.txt
 
-ENTRYPOINT [".venv/bin/python", "gce-cos-nvidia-bug-report.py"]
+ENTRYPOINT [".venv/bin/python", "cos-nvidia-bug-report.py"]
