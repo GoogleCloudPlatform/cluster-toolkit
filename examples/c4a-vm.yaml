@@ -56,7 +56,6 @@ deployment_groups:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
 
-
   - id: c4a-vms
     source: modules/compute/vm-instance
     use: [c4a_startup, homefs, cluster-net-0]
