@@ -22,16 +22,30 @@ locals {
     server_ip     = var.server_ip
     service_name  = "weka-mount${replace(var.local_mount, "/", "-")}"
   }
-  #  mount_runner = {
-  #    type        = "shell"
-  #    content     = templatefile("${path.module}/templates/mount-weka.sh.tftpl", local.template_args)
-  #    destination = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-  #  }
+  mount_script = templatefile("${path.module}/templates/mount-weka.sh.tftpl", local.template_args)
+
+  mount_runner_ansible = {
+    type = "ansible-local"
+    content = templatefile(
+      "${path.module}/templates/mount-weka.yaml.tftpl",
+      merge(
+        local.template_args,
+        { mount_weka_script = local.mount_script }
+      )
+    )
+    destination = "mount_filesystem${replace(var.local_mount, "/", "_")}.yaml"
+  }
 
   client_install_runner = {
     type        = "shell"
     content     = templatefile("${path.module}/templates/install-weka-client.sh.tftpl", local.template_args)
     destination = "install_filesystem${replace(var.local_mount, "/", "_")}.sh"
+  }
+
+  client_install_runner_ansible = {
+    type        = "ansible-local"
+    content     = templatefile("${path.module}/templates/install-weka-client.yaml.tftpl", local.template_args)
+    destination = "install_filesystem${replace(var.local_mount, "/", "_")}.yaml"
   }
 
   systemd_unit_service = {
@@ -42,7 +56,7 @@ locals {
 
   systemd_unit_service_script = {
     type        = "data"
-    content     = templatefile("${path.module}/templates/mount-weka.sh.tftpl", local.template_args)
+    content     = local.mount_script
     destination = "/etc/${local.template_args.service_name}.sh"
   }
 
@@ -53,6 +67,10 @@ locals {
   }
 }
 
+# currently WEKA mounts are not compatible with network_storage logic, as WEKA volumes needs to be mounted by
+# systemd script and not /etc/fstab entry, as the mount command needs to have network configuration which may change
+# between restarts
+# 
 #output "network_storage" {
 #  description = "Describes a remote network storage to be mounted by fs-tab."
 #  value = {
@@ -66,18 +84,18 @@ locals {
 #  }
 #}
 #
-#output "client_install_runner" {
-#  description = "Runner that performs client installation needed to use file system."
-#  value       = local.client_install_runner
-#}
-#
-#output "mount_runner" {
-#  description = "Runner that mounts the file system."
-#  value       = local.mount_runner
-#}
+output "client_install_runner" {
+  description = "Ansible runner that performs client installation needed to use file system."
+  value       = local.client_install_runner_ansible
+}
 
-output "runners" {
-  description = "All runners that"
+output "mount_runner" {
+  description = "Ansible runner that mounts the file system."
+  value       = local.mount_runner_ansible
+}
+
+output "shell_runners" {
+  description = "Shell based runners that install WEKA client (first element) and mount filesystem (the rest)."
   value = [
     local.client_install_runner,
     local.systemd_unit_service,

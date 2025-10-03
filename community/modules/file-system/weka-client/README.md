@@ -51,10 +51,8 @@ runners provided by this script as shown in this example:
       source: modules/scripts/startup-script
       settings:
       runners:
-        - $(wekafs.runners[0])  # client install
-        - $(wekafs.runners[1])  # systemd unit file for service mounting
-        - $(wekafs.runners[2])  # script that enables systemd unit
-        - $(wekafs.runners[3])  # actual script that mounts filesystem
+        - $(wekafs.client_install_runner)
+        - $(wekafs.mount_runner)
         - type: shell
           content: |
             #!/bin/bash
@@ -94,6 +92,24 @@ are dedicated to WEKA DPDK
         # do not set RealMem as this is set automatically by Cluster Toolkit
         CoreSpecCount: 4
         MemSpecLimit: 5120
+```
+
+Due to the fact, that client installation takes ~6-7 minutes, if you use WEKA together with Slurm and do not bundle
+client in the instance image, you may need to increase the timeout for startups scripts.
+
+```yaml
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    settings:
+      compute_startup_scripts_timeout: 600
+      cloud_parameters:
+        resume_timeout: 600
+    ...
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    settings:
+      resume_timeout: 600
+      ...
 ```
 
 ## Supported VM metadata options
@@ -162,5 +178,7 @@ No resources.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_runners"></a> [runners](#output\_runners) | All runners that |
+| <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Ansible runner that performs client installation needed to use file system. |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Ansible runner that mounts the file system. |
+| <a name="output_shell_runners"></a> [shell\_runners](#output\_shell\_runners) | Shell based runners that install WEKA client (first element) and mount filesystem (the rest). |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

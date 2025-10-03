@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,6 @@
  * limitations under the License.
  */
 
-variable "server_ip" {
-  description = "Weka backend IP address used for bootstrapping."
-  type        = string
-  default     = ""
-}
-
-variable "remote_mount" {
-  description = "Weka filesystem name."
-  type        = string
-}
-
 variable "local_mount" {
   description = "The mount point where the contents of the device may be accessed after mounting."
   type        = string
@@ -36,4 +25,15 @@ variable "mount_options" {
   type        = string
   default     = ""
   nullable    = false
+}
+
+variable "remote_mount" {
+  description = "Weka filesystem name."
+  type        = string
+}
+
+variable "server_ip" {
+  description = "Weka backend IP address used for bootstrapping."
+  type        = string
+  default     = ""
 }
