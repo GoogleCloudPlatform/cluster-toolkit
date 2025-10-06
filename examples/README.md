@@ -218,7 +218,7 @@ these features come with additional cost and required additional quotas.
 The Slurm system deployed here connects to the default VPC of the project and
 creates a  login node and the following seven partitions:
 
-* `n2` with general-purpose [`n2-stardard-2` nodes][n2]. Placement policies and
+* `n2` with general-purpose [`n2-standard-2` nodes][n2]. Placement policies and
 exclusive usage are disabled, which means the nodes can be used for multiple jobs.
 Nodes will remain idle for 5 minutes before Slurm deletes them. This partition can
 be used for debugging and workloads that do not require high performance.
