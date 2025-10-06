@@ -16,14 +16,33 @@
 blueprint_name: slurm-gke
 
 vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
   project_id: ## Set GCP Project ID Here ##
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
   deployment_name: slurm-gke
-  region: us-west4
-  zone: us-west4-c
-  authorized_cidr: 0.0.0.0/0 # <your-ip-address>/32
-  gcp_public_cidrs_access_enabled: false
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The number of nodes to be created for the Slurm GKE NodeSet.
   gke_nodeset_replicas: 2
+
+
+  # The pre-built Slinky Image for GKE Nodeset.
+  # Follow instruction in ./images/containers to build this image.
   slinky_image: ghcr.io/slinkyproject/slurmd-pyxis:24.11-ubuntu24.04
+
+  # Namespace where Slurm GKE NodeSet will be created
   slurm_namespace: slurm
 
 deployment_groups:
@@ -73,12 +92,11 @@ deployment_groups:
     use: [network, gke_service_account]
     settings:
       enable_private_endpoint: false
-      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       enable_gcsfuse_csi: true
       enable_filestore_csi: true
       master_authorized_networks:
-      - display_name: deployment-machine
-        cidr_block: $(vars.authorized_cidr)
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
       system_node_pool_enabled: false
       configure_workload_identity_sa: true
       enable_dcgm_monitoring: true
