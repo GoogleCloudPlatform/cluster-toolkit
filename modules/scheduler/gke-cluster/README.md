@@ -103,23 +103,23 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.16 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.16 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
-| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | ~> 34.0 |
+| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
 
 ## Resources
 
@@ -148,6 +148,7 @@ limitations under the License.
 | <a name="input_enable_dataplane_v2"></a> [enable\_dataplane\_v2](#input\_enable\_dataplane\_v2) | Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters. If null, will default to false unless using multi-networking, in which case it will default to true | `bool` | `null` | no |
 | <a name="input_enable_dcgm_monitoring"></a> [enable\_dcgm\_monitoring](#input\_enable\_dcgm\_monitoring) | Enable GKE to collect DCGM metrics | `bool` | `false` | no |
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
+| <a name="input_enable_numa_aware_scheduling"></a> [enable\_numa\_aware\_scheduling](#input\_enable\_numa\_aware\_scheduling) | Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
