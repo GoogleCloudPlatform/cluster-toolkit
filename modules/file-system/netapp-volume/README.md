@@ -20,6 +20,9 @@ Support for NetApp Volumes is split into two modules.
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
 
+## Deletion protection
+The netapp-volume module currently doesn't implement volume deletion protection. If you create a volume with Cluster Toolkit by using this module, Cluster Toolkit will also delete it when you run `gcluster destroy`. All the data in the volume will be gone. If you want to retain the volume instead, it is advised to [use existing volumes not created by Cluster Toolkit](#using-existing-volumes-not-created-by-cluster-toolkit).
+
 ## Volumes overview
 Volumes are filesystem containers which can be shared using NFS or SMB filesharing protocols. Volumes *live* inside of [storage pools](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview), which can be provisioned using the [netapp-storage-pool] module. Volumes inherit fundamental settings from the pool. They *consume* capacity provided by the pool. You can create one or multiple volumes *inside* a pool.
 
@@ -90,7 +93,7 @@ The following examples show the use of netapp-volume. They builds on top of an s
 Since Cluster Toolkit is currently built to provision Linux-based compute clusters, this module  supports NFSv3 and NFSv4.1 only. SMB is blocked.
 
 ## Large volumes
-Volumes larger than 15 TiB can be created as [Large Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes). Such volumes can grow up to 3PiB and can scale read performance up to 29 GiBps. They provide six IP addresses to the volume. They are exported via the `server_ips` output. When connecting a large volume to a client using the USE directive, the mount script will randomly pick an IP from the list to load-balance multiple clients over the available IPs.
+Volumes larger than 15 TiB can be created as [Large Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes). Such volumes can grow up to 3 PiB and can scale read performance up to 29 GiBps. They provide six IP addresses to the volume. They are exported via the `server_ips` output. When connecting a large volume to a client using the USE directive, cluster toolkit currently uses the first IP only. This will be improved in the future.
 
 This feature is allow-listed GA. To request allow-listing, see [Large Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes).
 
@@ -114,7 +117,7 @@ Example code:
 
 This creates a resource in Cluster Toolkit which references the specified NFS export, which will be mounted at `/home` by clients whuch USE it.
 
-Note that the `server_ip` must be known before deploymenta and this module does not allow
+Note that the `server_ip` must be known before deployment and this module does not allow
 to specify a list of IPs for large volumes.
 
 [pre-existing-network-storage]: ../pre-existing-network-storage/README.md

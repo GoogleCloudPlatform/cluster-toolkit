@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2023 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,9 +19,10 @@ LOCAL_MOUNT=$3
 FS_TYPE=$4
 MOUNT_OPTIONS=$5
 
-# netapp-volume passes a list of IPs, separated by colons. Let's pick a random one
-# to distribute clients randomly over the IP addresses
-IFS=":" read -r -a arrIPS <<<"${SERVER_IPS}"
+# accept a list of colon-separated IPs and randomly pick one to enable load balancing
+# In recent changes cluster toolkit doesn't seem to use this file anymore,
+# which makes all mounts use the first IP in the list. Needs to be investigated in future.
+IFS="," read -r -a arrIPS <<<"${SERVER_IPS}"
 rand1=$(od -vAn -t d -N1 </dev/urandom)
 rand=$((rand1 % ${#arrIPS[@]}))
 SERVER_IP=${arrIPS[$rand]}
