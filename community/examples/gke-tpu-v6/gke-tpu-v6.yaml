@@ -56,9 +56,10 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-tpu-v6-net
+  - id: gke-tpu-v6-net-0
     source: modules/network/vpc
     settings:
+      network_name: $(vars.deployment_name)-net-0
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
@@ -72,7 +73,25 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
       firewall_rules:
       - name: $(vars.deployment_name)-internal-0
-        ranges: [192.168.0.0/18]
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-tpu-v6-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
         allow:
         - protocol: tcp
           ports: ["0-65535"]
@@ -107,7 +126,7 @@ deployment_groups:
 
   - id: gke-tpu-v6-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-tpu-v6-net, workload_service_account]
+    use: [gke-tpu-v6-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -117,6 +136,21 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6-net-1.network_name,
+            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.32."
@@ -140,6 +174,21 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6-net-1.network_name,
+            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
