@@ -102,8 +102,7 @@ client in the instance image, you may need to increase the timeout for startups 
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     settings:
       compute_startup_scripts_timeout: 600
-      cloud_parameters:
-        resume_timeout: 600
+      login_startup_scripts_timeout: 600
     ...
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -180,5 +179,4 @@ No resources.
 |------|-------------|
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Ansible runner that performs client installation needed to use file system. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Ansible runner that mounts the file system. |
-| <a name="output_shell_runners"></a> [shell\_runners](#output\_shell\_runners) | Shell based runners that install WEKA client (first element) and mount filesystem (the rest). |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

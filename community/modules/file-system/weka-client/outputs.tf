@@ -37,33 +37,9 @@ locals {
   }
 
   client_install_runner = {
-    type        = "shell"
-    content     = templatefile("${path.module}/templates/install-weka-client.sh.tftpl", local.template_args)
-    destination = "install_filesystem${replace(var.local_mount, "/", "_")}.sh"
-  }
-
-  client_install_runner_ansible = {
     type        = "ansible-local"
     content     = templatefile("${path.module}/templates/install-weka-client.yaml.tftpl", local.template_args)
     destination = "install_filesystem${replace(var.local_mount, "/", "_")}.yaml"
-  }
-
-  systemd_unit_service = {
-    type        = "data"
-    content     = templatefile("${path.module}/templates/weka.service.tftpl", local.template_args)
-    destination = "/etc/systemd/system/${local.template_args.service_name}.service"
-  }
-
-  systemd_unit_service_script = {
-    type        = "data"
-    content     = local.mount_script
-    destination = "/etc/${local.template_args.service_name}.sh"
-  }
-
-  systemd_unit_enable = {
-    type        = "shell"
-    content     = templatefile("${path.module}/templates/enable-weka.sh.tftpl", local.template_args)
-    destination = "enable-weka-service.sh"
   }
 }
 
@@ -86,20 +62,10 @@ locals {
 #
 output "client_install_runner" {
   description = "Ansible runner that performs client installation needed to use file system."
-  value       = local.client_install_runner_ansible
+  value       = local.client_install_runner
 }
 
 output "mount_runner" {
   description = "Ansible runner that mounts the file system."
   value       = local.mount_runner_ansible
-}
-
-output "shell_runners" {
-  description = "Shell based runners that install WEKA client (first element) and mount filesystem (the rest)."
-  value = [
-    local.client_install_runner,
-    local.systemd_unit_service,
-    local.systemd_unit_service_script,
-    local.systemd_unit_enable
-  ]
 }
