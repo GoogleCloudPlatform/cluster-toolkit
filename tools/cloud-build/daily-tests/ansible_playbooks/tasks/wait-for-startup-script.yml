@@ -19,7 +19,7 @@
 
 - name: Wait for startup script to complete
   become: true
-  ansible.builtin.shell: journalctl -u google-startup-scripts.service -b | grep "Started Google Compute Engine Startup Scripts."
+  ansible.builtin.shell: journalctl -u google-startup-scripts.service -b | grep -E "Started Google Compute Engine Startup Scripts\.|Finished Google Compute Engine Startup Scripts\.|Finished google-startup-scripts.service - Google Compute Engine Startup Scripts\."
   register: result
   until: result.rc == 0
   retries: "{{ (timeout_seconds/5)|int }}"
