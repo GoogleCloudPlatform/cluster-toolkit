@@ -525,3 +525,9 @@ variable "enable_external_dns_endpoint" {
   type        = bool
   default     = false
 }
+
+variable "enable_numa_aware_scheduling" {
+  description = "Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling."
+  type        = bool
+  default     = false
+}
