@@ -53,6 +53,8 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 
    Type `a` and hit enter to create the cluster.
 
+1. Additionally, this example blueprint provisions a filestore and connects it to the GKE Cluster via Persistent Volume (PV). An example job template is included in the blueprint which runs a parallel job that reads and writes data to this shared storage. A command similar to `kubectl create -f <file-path>` is displayed in the deployment outputs which can be used to trigger the sample job.
+
 ## Run a test using the MPI Operator
 The MPI Operator is installed on the cluster during the deployment. To run a test using the MPI Operator on the GKE H4D cluster, refer to https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/hpc/mpi.
 
