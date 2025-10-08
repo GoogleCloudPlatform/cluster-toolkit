@@ -43,7 +43,7 @@ README
 
    ```shell
    cd launcher_scripts
-   mkdir data
+   mkdir -p data
 
    MAX_STEPS=10
    NUM_NODES=8
@@ -53,8 +53,8 @@ README
        stages=[training] \
        training=gpt3/5b \
        env_vars.TRANSFORMERS_OFFLINE=0 \
-       container=../nemo-24.12.sqsh \
-       container_mounts=[${HOME}/.cache,/usr/local/gib] \
+       container=../nemo-24.12-v1.1.0.sqsh \
+       container_mounts=[${HOME}/.cache] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \
