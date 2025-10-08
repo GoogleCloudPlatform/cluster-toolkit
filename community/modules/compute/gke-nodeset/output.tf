@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "slurm_namespace" {
-  description = "namespace for the slurm chart"
-  value       = var.slurm_namespace
-}
-
-output "slurm_operator_namespace" {
-  description = "namespace for the slinky operator chart"
-  value       = var.slurm_operator_namespace
+output "nodeset_name" {
+  description = "Name of the new Slinky nodset"
+  value       = local.nodeset.nodeset_name
 }

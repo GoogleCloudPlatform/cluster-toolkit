@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "slurm_namespace" {
-  description = "namespace for the slurm chart"
-  value       = var.slurm_namespace
-}
+terraform {
+  required_version = ">= 1.3"
 
-output "slurm_operator_namespace" {
-  description = "namespace for the slinky operator chart"
-  value       = var.slurm_operator_namespace
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 4.84"
+    }
+  }
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:gke-partition/v1.51.0"
+  }
 }
