@@ -26,6 +26,7 @@ vars:
   #Provisioning model, select one, lack of selection will rely on on-demand capacity
   h4d_dws_flex_enabled: false
   h4d_reservation_name: ""
+  h4d_enable_spot_vm: false
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -85,6 +86,7 @@ deployment_groups:
       node_count_static: 2
       node_count_dynamic_max: 0
       enable_placement: false
+      enable_spot_vm: $(vars.h4d_enable_spot_vm)
 
       #Provisioning models
       reservation_name: $(vars.h4d_reservation_name)
