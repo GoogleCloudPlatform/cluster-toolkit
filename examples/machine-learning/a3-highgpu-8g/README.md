@@ -131,18 +131,12 @@ Cloud representative. Set them at approximately lines 33 and 34 of
 > skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation).
 
 Set the deployment variable `a3_reservation_name` at approximately line 38 of
-`ml-slurm-a3-2-cluster.yaml` to the reservation name provided by Google. The
-value for `a3_maintenance_interval` should also be set as directed by Google
-staff. A common setting is `PERIODIC`, shown below, but this value must be
-confirmed with Google staff.
+`ml-slurm-a3-2-cluster.yaml` to the reservation name provided by Google.
 
 ```yaml
   # a3_reservation_name must be specified; if Google staff have provided you
   # with a reservation name, use it. Otherwise supply user-created reservation.
   a3_reservation_name: reservation-name-provided-by-google
-  # a3_maintenance_interval should be empty string by default; if Google staff
-  # have created a reservation, they will also provide a3_maintenance_interval
-  a3_maintenance_interval: PERIODIC
 ```
 
 ### Manual creation of reservation
@@ -167,8 +161,7 @@ gcloud compute reservations create a3-reservation-0 \
 
 This reservation be must be specified when creating VMs with matching parameters
 (e.g. a3-highgpu-8g VM in configured zone). If you executed the command above
-without modification, you may leave `a3_reservation_name` and
-`a3_maintenance_interval` at their default values in
+without modification, you may leave `a3_reservation_name` at their default values in
 `ml-slurm-a3-2-cluster.yaml`. Otherwise, ensure that the reservation name in the
 blueprint matches the name of the user-created reservation.
 
@@ -176,9 +169,6 @@ blueprint matches the name of the user-created reservation.
   # a3_reservation_name must be specified; if Google staff have provided you
   # with a reservation name, use it. Otherwise supply user-created reservation.
   a3_reservation_name: a3-reservation-0
-  # a3_maintenance_interval should be empty string by default; if Google staff
-  # have created a reservation, they will also provide a3_maintenance_interval
-  a3_maintenance_interval: ""
 ```
 
 ### Using Spot VM or DWS Flex
