@@ -40,6 +40,7 @@ concurrency:
 
 jobs:
   multi-approvers:
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review' && (github.event.review.state == 'approved' ||  github.event.action == 'dismissed')
     uses: 'abcxyz/pkg/.github/workflows/multi-approvers.yml@main'
     with:
       org-members-path: 'GoogleCloudPlatform/cluster-toolkit/develop/cluster-toolkit-writers.json'
