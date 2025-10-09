@@ -34,13 +34,6 @@ user may specify the `instance_image` setting in the yaml blueprint, within
 either the specific module definition or the global variables. The
 `instance_image` setting is defined by three parameters within the blueprint:
 
-```yaml
-instance_image:
-  project: centos-cloud
-  family: centos-v7        # If family is defined, omit name
-  name: centos-7-v20230809 # If name is defined, omit family
-```
-
 The `project` setting defines the space where the image will be found. Either
 this is set to a known project where HPC images are hosted (e.g
 `cloud-hpc-image-public`, `schedmd-slurm-public`, etc.) or a private project
