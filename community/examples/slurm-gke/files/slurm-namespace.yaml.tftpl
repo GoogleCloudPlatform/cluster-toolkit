@@ -12,12 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "slurm_namespace" {
-  description = "namespace for the slurm chart"
-  value       = var.slurm_namespace
-}
-
-output "slurm_operator_namespace" {
-  description = "namespace for the slinky operator chart"
-  value       = var.slurm_operator_namespace
-}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${namespace}
