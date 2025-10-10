@@ -241,22 +241,6 @@ resource "google_container_cluster" "gke_cluster" {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
     }
-
-    kubelet_config {
-      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
-      dynamic "topology_manager" {
-        for_each = var.enable_numa_aware_scheduling ? [1] : []
-        content {
-          policy = "restricted"
-        }
-      }
-      dynamic "memory_manager" {
-        for_each = var.enable_numa_aware_scheduling ? [1] : []
-        content {
-          policy = "Static"
-        }
-      }
-    }
   }
 
   control_plane_endpoints_config {
