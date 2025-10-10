@@ -116,15 +116,19 @@ modules. For example the `gke-persistent-volume` module can `use` a
 `gke-cluster` module and a `filestore` module, as shown in the example above.
 
 ```mermaid
-graph TD;
-    vpc-->|OneToMany|gke-cluster;
-    gke-cluster-->|OneToMany|gke-node-pool;
-    gke-node-pool-->|ManyToMany|gke-job-template;
-    gke-cluster-->|OneToMany|gke-persistent-volume;
-    gke-persistent-volume-->|ManyToMany|gke-job-template;
-    vpc-->|OneToMany|filestore/gcs/managed lustre;
-    filestore-->|OneToOne|gke-persistent-volume;
-```
+ graph TD;
+ vpc--> |OneToMany| gke-cluster;
+ gke-cluster--> |OneToMany| gke-node-pool;
+ gke-node-pool--> |ManyToMany| gke-job-template;
+ gke-cluster--> |OneToMany| gke-persistent-volume;
+ gke-persistent-volume--> |ManyToMany| gke-job-template;
+ vpc--> |OneToMany| filestore;
+ vpc--> |OneToMany| gcs;
+ vpc--> |OneToMany| managed-lustre;
+ filestore--> |OneToOne| gke-persistent-volume;
+ gcs--> |OneToOne| gke-persistent-volume;
+ managed-lustre--> |OneToOne| gke-persistent-volume;
+ ```
 
 ## License
 
