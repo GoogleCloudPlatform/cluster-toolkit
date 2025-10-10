@@ -109,7 +109,6 @@ filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE |
 nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 Managed Lustre (pre-existing) | via USE| Needs Testing | via USE | Needs Testing | Needs Testing |  Needs Testing
 GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
-
 - **via USE:** Client installation and mounting occur automatically when
   connected with the use field. See
   [mounting via use section](#mounting-via-use).
