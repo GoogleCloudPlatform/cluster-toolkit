@@ -90,6 +90,38 @@ This section guides you through the cluster creation process, ensuring that your
     community/examples/gke-tpu-v6/gke-tpu-v6.yaml
    ```
 
+## Advanced Blueprint: GKE TPU with GCS Integration
+
+This repository also includes an advanced blueprint, `gke-tpu-v6-gcs.yaml`, designed for production-ready workloads. It builds on the basic blueprint by adding several key features:
+* **Dedicated Service Accounts** for nodes and workloads, following security best practices.
+* **Automatic creation of two GCS buckets** for training data and checkpoints.
+* **Performance-tuned GCS FUSE mounts** pre-configured in the cluster as Persistent Volumes.
+
+### Deploying the Advanced Blueprint
+
+The process is nearly identical to the basic deployment.
+
+1. Ensure you have completed steps 1-7 from the "Create a cluster" section above. The same `gke-tpu-v6-deployment.yaml` file can be used.
+
+1. In the final deploy command, simply point to the `gke-tpu-v6-advanced.yaml` blueprint instead.
+
+    ```sh
+    cd ~/cluster-toolkit
+    ./gcluster deploy -d \
+    community/examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml \
+    community/examples/gke-tpu-v6/gke-tpu-v6-advanced.yaml
+    ```
+
+1. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
+
+### Understanding the GCS Integration
+
+The advanced blueprint provisions several key technologies to create a robust data pipeline for your TPU workloads. Here are some resources to understand how they work together:
+* [Cloud Storage Overview](https://cloud.google.com/storage/docs/introduction#quickstarts): Start here to understand what Cloud Storage buckets are and their role in storing large-scale data.
+* [Cloud TPU Storage Options](https://cloud.google.com/tpu/docs/storage-options): Learn about the recommended storage patterns for Cloud TPUs, including why GCS FUSE is a best practice for providing training data.
+* [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
+* [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
+
 ## Run the sample job
 
 The [tpu-available-chips.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/community/examples/gke-tpu-v6/tpu-available-chips.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.
