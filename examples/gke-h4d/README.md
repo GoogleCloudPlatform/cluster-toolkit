@@ -28,6 +28,8 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
     1. `zone`: Compute zone used for the deployment.
     1. `static_node_count`: Number of nodes to create.
     1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
+    1. `reservation`: The name of the compute engine reservation in the form of <reservation-name>. To target a BLOCK_NAME, the name of the extended reservation can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>.
+
 1. Build the Cluster Toolkit binary
 
    ```sh
@@ -50,6 +52,11 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
    ```
 
    Type `a` and hit enter to create the cluster.
+
+1. Additionally, this example blueprint provisions a filestore and connects it to the GKE Cluster via Persistent Volume (PV). An example job template is included in the blueprint which runs a parallel job that reads and writes data to this shared storage. A command similar to `kubectl create -f <file-path>` is displayed in the deployment outputs which can be used to trigger the sample job.
+
+## Run a test using the MPI Operator
+The MPI Operator is installed on the cluster during the deployment. To run a test using the MPI Operator on the GKE H4D cluster, refer to https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/hpc/mpi.
 
 ## Clean Up
 To destroy all resources associated with creating the GKE cluster, run the following command:

@@ -55,3 +55,9 @@ vars:
 
   # The name of the compute engine reservation of TPU v6 nodes
   reservation:
+
+  # The disk size of system node pool for this deployment.
+  system_node_pool_disk_size_gb:
+
+  # The disk size of v6e node pool for this deployment.
+  v6e_node_pool_disk_size_gb:

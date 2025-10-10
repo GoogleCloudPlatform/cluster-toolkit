@@ -29,6 +29,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
   * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
+  * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]  
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -217,7 +218,7 @@ these features come with additional cost and required additional quotas.
 The Slurm system deployed here connects to the default VPC of the project and
 creates a  login node and the following seven partitions:
 
-* `n2` with general-purpose [`n2-stardard-2` nodes][n2]. Placement policies and
+* `n2` with general-purpose [`n2-standard-2` nodes][n2]. Placement policies and
 exclusive usage are disabled, which means the nodes can be used for multiple jobs.
 Nodes will remain idle for 5 minutes before Slurm deletes them. This partition can
 be used for debugging and workloads that do not require high performance.
@@ -682,6 +683,139 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
 [pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
+
+### [gke-managed-lustre.yaml] ![core-badge]
+
+This Cluster Toolkit blueprint deploys a Google Kubernetes Engine (GKE) cluster integrated with Google Cloud Managed Lustre,
+providing a high-performance file system for demanding workloads.
+
+#### Features
+
+* **VPC Network:** Sets up a new VPC, subnet, and secondary ranges for GKE pods and services.
+* **Private Services Access:** Configures Private Services Access, required for Managed Lustre.
+* **Firewall Rules:** Creates firewall rules to allow traffic between GKE nodes and the Managed Lustre instance (port 988).
+* **Managed Lustre Instance:** Provisions a Google Cloud Managed Lustre file system instance.
+* **Service Accounts:** Creates dedicated service accounts for GKE node pools and workloads with necessary IAM roles.
+* **GKE Cluster:** Deploys a GKE cluster with the Managed Lustre CSI driver enabled (`enable_managed_lustre_csi: true`).
+* **Persistent Volume:** Creates a Kubernetes PersistentVolume (PV) and PersistentVolumeClaim (PVC) to make the Managed Lustre instance accessible to pods.
+* **GKE Node Pool:** Sets up a node pool where application pods can run and mount the Lustre file system.
+
+#### Requirements
+
+1. **Cluster Toolkit:** Ensure you have the Cluster Toolkit (`gcluster`) binary built and ready to use.
+2. **GCP Project:** A Google Cloud Project with necessary permissions to create VPCs, GKE clusters, Managed Lustre instances, and related resources.
+3. **Quotas:** Sufficient quotas for GCE, GKE, and Managed Lustre resources in the selected region. Note that Managed Lustre capacity and performance tiers have specific quota requirements. See [Managed Lustre Performance Tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) and [Quotas](https://cloud.google.com/managed-lustre/docs/quotas).
+4. **GKE Version:** The blueprint is configured for GKE version `1.33.x` or later, as required by the Managed Lustre CSI driver.
+5. **Location:** Managed Lustre is only available in specific regions and zones. Verify and adjust based on [Managed Lustre Locations](https://cloud.google.com/managed-lustre/docs/locations).
+
+#### Steps to deploy the blueprint
+
+1. Install Cluster Toolkit
+    1. Install [dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    1. Set up [Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
+
+1. Switch to the Cluster Toolkit directory
+
+   ```sh
+   cd cluster-toolkit
+   ```
+
+1. Get the IP address for your host machine
+
+   ```sh
+   curl ifconfig.me
+   ```
+
+1. Update the vars block of the blueprint file
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    1. `deployment_name`: Name of the deployment.
+    1. `region / zone`: Ensure these support Managed Lustre.
+    1. `authorized_cidr`: update the IP address in <your-ip-address>/32.
+    1. `size_gib`: Capacity of the Managed Lustre instance in GiB.
+    1. `per_unit_storage_throughput`: Throughput in MB/s per TiB. The combination of size and throughput must match a valid performance tier.
+
+1. Build the Cluster Toolkit binary
+
+   ```sh
+   make
+   ```
+
+1. Provision the GKE cluster
+
+   ```sh
+   ./gcluster deploy examples/gke-managed-lustre.yaml
+   ```
+
+   This process can take several minutes as it provisions the VPC, GKE cluster, Managed Lustre instance, and configures the CSI driver.
+
+#### Accessing and Using Managed Lustre
+
+1. Configure kubectl: After successful deployment, configure kubectl to connect to your new GKE cluster:
+
+   ```sh
+   gcloud container clusters get-credentials $(vars.deployment_name) \
+   --region $(vars.region) \
+   --project $(vars.project_id)
+   ```
+
+   Replace `$(vars.deployment_name)`, `$(vars.region)`, and `$(vars.project_id)` with the actual values from your blueprint.
+
+1. Verify PVC: Check that the PersistentVolumeClaim has been created and is Bound:
+
+   ```sh
+   kubectl get pvc
+   ```
+
+   You should see a PVC named $(vars.lustre_instance_id)-pvc with STATUS: Bound
+
+1. Example Pod: Create a file named lustre-client-pod.yaml to deploy a test pod that mounts the Lustre volume
+
+   ```sh
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: lustre-client-pod
+   spec:
+     containers:
+     - name: app
+       image: busybox
+       command: ["/bin/sh", "-c", "sleep 36000"] # Keep container running
+       volumeMounts:
+       - mountPath: "/mnt/lustre"
+         name: lustre-volume
+     volumes:
+     - name: lustre-volume
+       persistentVolumeClaim:
+         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name  
+   ```
+
+   Note: This is just an example job using busybox image.
+
+1. Deploy the Pod:
+
+   ```sh
+   kubectl apply -f lustre-pod.yaml
+   ```
+
+1. Verify Mount: Once the pod is running, exec into it to check the mount:
+
+   ```sh
+   kubectl exec -it lustre-client-pod -- /bin/sh
+   # Inside the pod:
+   df -h /mnt/lustre
+   mount | grep lustre
+   ```
+
+#### Clean Up
+To destroy all resources created by this blueprint, run:
+
+   ```sh
+   ./gcluster destroy CLUSTER-NAME
+   ```
+
+   Replace `CLUSTER-NAME` with the `deployment_name` used in blueprint vars block.
+
+[gke-managed-lustre.yaml]: ../examples/gke-managed-lustre.yaml
 
 ### [cae-slurm.yaml] ![core-badge]
 
