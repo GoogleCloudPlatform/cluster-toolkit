@@ -526,8 +526,8 @@ variable "enable_external_dns_endpoint" {
   default     = false
 }
 
-variable "enable_inference_gateway" {
-  description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
+variable "enable_numa_aware_scheduling" {
+  description = "Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling."
   type        = bool
   default     = false
 }
