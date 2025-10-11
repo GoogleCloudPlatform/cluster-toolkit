@@ -1698,8 +1698,7 @@ class Lookup:
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
     def node_is_gke(self, node_name=None) -> bool:
-        template_info = self.node_template_info(node_name)
-        return self.template_is_gke(template_info)
+        return self.nodeset_is_gke(self.node_nodeset(node_name))
 
     def is_a4_dws_flex_mig(self, mig_obj: Any) -> bool:
         """
@@ -1733,11 +1732,7 @@ class Lookup:
             return False
 
     def nodeset_is_gke(self, nodeset=None) -> bool:
-        template_info = self.template_info(nodeset.instance_template)
-        return self.template_is_gke(template_info)
-
-    def template_is_gke(self, template_info=None) -> bool:
-        return "goog-gke-node" in template_info.labels
+        return "gke_nodepool" in nodeset
 
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """

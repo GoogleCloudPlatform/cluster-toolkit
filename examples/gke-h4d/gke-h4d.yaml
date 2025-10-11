@@ -211,3 +211,44 @@ deployment_groups:
       apply_manifests:
       - source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.6.0/deploy/v2beta1/mpi-operator.yaml"
         server_side_apply: true
+
+  # Filestore
+  - id: filestore
+    source: modules/file-system/filestore
+    use: [gke-h4d-net]
+    settings: {local_mount: /mnt/h4d-filestore}
+
+  - id: shared-filestore-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [h4d-cluster, filestore]
+
+  # Shared Filestore Job
+  - id: shared-fs-job
+    source: modules/compute/gke-job-template
+    use:
+    - h4d-cluster
+    - h4d-pool
+    - shared-filestore-pv
+    settings:
+      image: alpine/git:latest
+      command:
+      - sh
+      - -c
+      - |
+        echo "Pod ${HOSTNAME} is starting..."
+        SHARED_DIR=/mnt/h4d-filestore
+        mkdir -p $SHARED_DIR
+        cd $SHARED_DIR
+
+        # Simulate some work and write to a shared file
+        cmd="date +%s"
+        TIMESTAMP=`$cmd`
+        echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+        echo "Displaying content of shared_output.txt:"
+        echo "---"
+        cat shared_output.txt # Read the content to show it's shared
+        echo "---"
+        sleep 120
+        echo "Pod ${HOSTNAME} finished."
+      node_count: 2
+    outputs: [instructions]
