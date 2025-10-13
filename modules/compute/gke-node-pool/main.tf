@@ -223,11 +223,8 @@ resource "google_container_node_pool" "node_pool" {
 
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
-      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values = length(local.verified_specific_reservations) != 1 ? null : [
-        for i, r in local.verified_specific_reservations :
-        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
-      ]
+      key                      = local.is_valid_reservation ? local.reservation_resource_api_label : null
+      values                   = local.is_valid_reservation ? (var.is_reservation_active ? local.active_reservation_values : local.default_reservation_values) : null
     }
 
     dynamic "host_maintenance_policy" {
@@ -297,8 +294,7 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 &&
-          length(local.verified_specific_reservations) > 0 &&
+        ((length(local.verified_specific_reservations) == 1 || !var.is_reservation_active) &&
         length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT
@@ -388,6 +384,25 @@ resource "google_container_node_pool" "node_pool" {
 
 locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
+}
+
+# Replicates GKE's naming logic for its instance templates. The full
+# pattern is "gke-{cluster_name}-{nodepool_name}-{hash}".
+#
+# This code builds the "{cluster_name}-{nodepool_name}" prefix, which is
+# capped at 32 characters plus a dash '-' in between, by truncating names if needed:
+# - If both names > 16 chars, both are cut to 16.
+# - If one name > 16, it's shortened so the combined name length is 32.
+data "google_compute_region_instance_template" "instance_template" {
+  for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
+  project  = var.project_id
+  filter = "name: gke-${
+    (length(local.cluster_name) <= 16 && length(each.value.name) <= 16) ? "${local.cluster_name}-${each.value.name}" :
+    (length(local.cluster_name) > 16 && length(each.value.name) > 16) ? "${substr(local.cluster_name, 0, 16)}-${substr(each.value.name, 0, 16)}" :
+    (length(local.cluster_name) > 16) ? "${substr(local.cluster_name, 0, 32 - length(each.value.name))}-${each.value.name}" :
+    "${local.cluster_name}-${substr(each.value.name, 0, 32 - length(local.cluster_name))}"
+  }*"
+  most_recent = true
 }
 
 resource "null_resource" "install_dependencies" {

@@ -93,13 +93,15 @@ def test_dict_to_conf(value: dict, want: str):
          """LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
-ResumeProgram=ukulele/resume.py
-ResumeFailProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume_wrapper.sh
+ResumeFailProgram=ukulele/suspend_wrapper.sh
 ResumeRate=0
 ResumeTimeout=300
-SuspendProgram=ukulele/suspend.py
+SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -113,19 +115,23 @@ TopologyParam=SwitchAsNodeRank"""),
                 "resume_timeout": None,
                 "suspend_rate": None,
                 "suspend_timeout": None,
+                "unkillable_step_timeout": None,
+                "slurmd_timeout": None,
                 "topology_plugin": None,
                 "topology_param": None,
                 "tree_width": None,
             },
         ),
          """SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
-ResumeProgram=ukulele/resume.py
-ResumeFailProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume_wrapper.sh
+ResumeFailProgram=ukulele/suspend_wrapper.sh
 ResumeRate=0
 ResumeTimeout=300
-SuspendProgram=ukulele/suspend.py
+SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -147,21 +153,25 @@ TopologyParam=SwitchAsNodeRank"""),
                 "resume_timeout": 2,
                 "suspend_rate": 3,
                 "suspend_timeout": 4,
+                "slurmd_timeout": 5,
+                "unkillable_step_timeout": 6,
+                "tree_width": 7,
                 "topology_plugin": "guess",
                 "topology_param": "yellow",
-                "tree_width": 5,
             },
         ),
          """PrivateData=events,jobs
 SchedulerParameters=bf_busy_nodes,bf_continue,ignore_prefer_validation,nohold_on_prolog_fail
-ResumeProgram=ukulele/resume.py
-ResumeFailProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume_wrapper.sh
+ResumeFailProgram=ukulele/suspend_wrapper.sh
 ResumeRate=1
 ResumeTimeout=2
-SuspendProgram=ukulele/suspend.py
+SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=3
 SuspendTimeout=4
-TreeWidth=5
+SlurmdTimeout=5
+UnkillableStepTimeout=6
+TreeWidth=7
 TopologyPlugin=guess
 TopologyParam=yellow"""),
         (TstCfg(
@@ -174,13 +184,15 @@ SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
 TaskProlog=/slurm/custom_scripts/task_prolog.d/task-prolog
 TaskEpilog=/slurm/custom_scripts/task_epilog.d/task-epilog
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
-ResumeProgram=ukulele/resume.py
-ResumeFailProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume_wrapper.sh
+ResumeFailProgram=ukulele/suspend_wrapper.sh
 ResumeRate=0
 ResumeTimeout=300
-SuspendProgram=ukulele/suspend.py
+SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
+SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -190,3 +202,25 @@ def test_conflines(cfg, want):
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     assert conf.conflines(util.Lookup(cfg)) == want
+
+
+@pytest.mark.parametrize(
+    "cfg,gputype,gpucount,want",
+    [
+        (TstCfg(),
+        "",
+        0,
+         "\n"),
+        (TstCfg(
+            nodeset={"turbo": TstNodeset("turbo")}
+        ), 
+        "Popov",
+        8,
+         "Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
+    ])
+def test_gen_cloud_gres_conf_lines(cfg, gputype, gpucount, want):
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=TstTemplateInfo(
+        gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
+    ))
+    assert conf.gen_cloud_gres_conf_lines(lkp) == want

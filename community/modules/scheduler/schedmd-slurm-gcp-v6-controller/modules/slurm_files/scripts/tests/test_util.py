@@ -23,6 +23,7 @@ from common import TstNodeset, TstCfg # needed to import util
 import util
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
+from addict import Dict as NSDict # type: ignore
 
 # Note: need to install pytest-mock
 
@@ -198,6 +199,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
@@ -210,6 +213,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
@@ -222,6 +227,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
@@ -406,6 +413,60 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
 def test_MachineType_from_json(jo: dict, want: MachineType):
     assert MachineType.from_json(jo) == want
 
+
+@pytest.mark.parametrize(
+    "template,expected",
+    [
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="e2",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[]),
+            }),
+            None
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="tpu-machine",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[
+                                        AcceleratorInfo(type="tpu-v6", count=1)
+                                    ]),
+            }),
+            None
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="a2-highgpu-1g",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[AcceleratorInfo(type="nvidia-tesla-a100", count=1)]
+                                    ),
+            }),
+            AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="a2-highgpu-1g",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[]),
+                "guestAccelerators":[ { "acceleratorCount": 1, "acceleratorType": "nvidia-tesla-a100" } ],
+            }),
+            AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+        ),
+    ],
+)
+def test_get_template_gpu(template, expected):
+    assert util.get_template_gpu(template) == expected
+
+
 UTC, PST = timezone.utc, timezone(timedelta(hours=-8))
 
 @pytest.mark.parametrize(
@@ -493,6 +554,25 @@ def test_parse_InstanceResourceStatus(got: dict, want: Optional[InstanceResource
     assert InstanceResourceStatus.from_json(got) == want
 
 
+@pytest.mark.parametrize(
+    "link,component_name,expected",
+    [
+        (
+            "mylink/regions/us-cental1/other",
+            "regions",
+            "us-cental1"
+        ),
+        (
+            "mylink/global/other",
+            "regions",
+            None
+        ),
+    ],
+)
+def test_get_self_link_component(link, component_name, expected):
+    assert util.get_self_link_component(link, component_name) == expected
+
+
 def test_future_reservation_none():
     lkp = util.Lookup(TstCfg())
     assert lkp.future_reservation(TstNodeset()) == None
@@ -549,6 +629,8 @@ def test_future_reservation_active(_):
                 name='melon',
                 policies=[],
                 reservation_mode=None,
+                assured_count=0,
+                delete_at_time=None,
                 bulk_insert_name="projects/manhattan/reservations/melon",
                 deployment_type=None))
     

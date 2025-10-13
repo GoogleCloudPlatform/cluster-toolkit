@@ -265,7 +265,6 @@ data:
                     networking.gke.io/interfaces: |
                       [
                         \{"interfaceName":"eth0","network":"default"\},
-                        \{"interfaceName":"eth1","network":"{sysnet_subnet_prefix}-1"\},
                         \{"interfaceName":"eth2","network":"{gpu_subnet_prefix}-0"\},
                         \{"interfaceName":"eth3","network":"{gpu_subnet_prefix}-1"\},
                         \{"interfaceName":"eth4","network":"{gpu_subnet_prefix}-2"\},

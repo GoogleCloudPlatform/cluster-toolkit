@@ -17,6 +17,18 @@ variable "subnetwork_self_link" {
   type        = string
 }
 
+variable "project_id" {
+  description = "The project ID to host the network in"
+  type        = string
+  default     = null
+}
+
+variable "network_name" {
+  description = "The name of the network to create firewall rules in"
+  type        = string
+  default     = null
+}
+
 variable "ingress_rules" {
   description = "List of ingress rules"
   default     = []

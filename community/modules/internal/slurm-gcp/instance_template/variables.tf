@@ -75,7 +75,7 @@ EOD
 variable "region" {
   type        = string
   description = "Region where the instance template should be created."
-  default     = null
+  nullable    = false
 }
 
 variable "tags" {
@@ -420,5 +420,12 @@ variable "provisioning_model" {
 variable "reservation_affinity" {
   description = "Specifies the reservations that this instance can consume from."
   type        = object({ type = string })
+  default     = null
+}
+
+
+variable "internal_startup_script" {
+  description = "FOR INTERNAL TOOLKIT USAGE ONLY."
+  type        = string
   default     = null
 }

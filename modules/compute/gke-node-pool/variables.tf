@@ -154,6 +154,12 @@ variable "static_node_count" {
   default     = null
 }
 
+variable "is_reservation_active" {
+  description = "Whether the specified reservation is already created."
+  type        = bool
+  default     = true
+}
+
 variable "auto_repair" {
   description = "Whether the nodes will be automatically repaired."
   type        = bool

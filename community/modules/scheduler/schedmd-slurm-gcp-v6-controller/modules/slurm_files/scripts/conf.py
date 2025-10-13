@@ -83,6 +83,11 @@ def conflines(lkp: util.Lookup) -> str:
         for tpu_nodeset in part.partition_nodeset_tpu
     )
 
+    any_gke = any(
+        lkp.nodeset_is_gke(nodeset)
+        for nodeset in lkp.cfg.nodeset.values()
+    )
+
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
         "LaunchParameters": [
@@ -90,7 +95,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
+            "cloud_reg_addrs" if any_dynamic or any_tpu or any_gke else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
         ],
@@ -112,19 +117,23 @@ def conflines(lkp: util.Lookup) -> str:
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
         "TaskProlog": f"{task_prolog_path}/task-prolog" if lkp.cfg.task_prolog_scripts else None,
         "TaskEpilog": f"{task_epilog_path}/task-epilog" if lkp.cfg.task_epilog_scripts else None,
+        "PrologFlags": get("prolog_flags", None),
+        "SwitchType": get("switch_type", None),
         "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
             "bf_continue",
             "salloc_wait_nodes",
             "ignore_prefer_validation",
         ]),
-        "ResumeProgram": f"{scripts_dir}/resume.py",
-        "ResumeFailProgram": f"{scripts_dir}/suspend.py",
+        "ResumeProgram": f"{scripts_dir}/resume_wrapper.sh",
+        "ResumeFailProgram": f"{scripts_dir}/suspend_wrapper.sh",
         "ResumeRate": get("resume_rate", 0),
         "ResumeTimeout": get("resume_timeout", 300),
-        "SuspendProgram": f"{scripts_dir}/suspend.py",
+        "SuspendProgram": f"{scripts_dir}/suspend_wrapper.sh",
         "SuspendRate": get("suspend_rate", 0),
         "SuspendTimeout": get("suspend_timeout", 300),
+        "SlurmdTimeout": get("slurmd_timeout", 300),
+        "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
         "JobSubmitPlugins": "lua" if any_tpu else None,
         "TopologyPlugin": topology_plugin(lkp),
@@ -285,6 +294,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
         "name": lkp.cfg.slurm_cluster_name,
         "control_addr": lkp.control_addr if lkp.control_addr else lkp.hostname_fqdn,
         "control_host": lkp.control_host,
+        "accounting_storage_host": lkp.control_addr if lkp.cfg.controller_network_attachment else lkp.control_host,
         "control_host_port": lkp.control_host_port,
         "scripts": dirs.scripts,
         "slurmlog": dirs.log,
@@ -364,28 +374,36 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, 0o600)
 
 
-def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
-    """generate cloud_gres.conf"""
+def gen_cloud_gres_conf_lines(lkp: util.Lookup) -> str:
+    """generate cloud_gres.conf's content"""
 
     gpu_nodes = defaultdict(list)
     for nodeset in lkp.cfg.nodeset.values():
         ti = lkp.template_info(nodeset.instance_template)
         gpu_count = ti.gpu.count if ti.gpu  else 0
+        gpu_type = ti.gpu.type if ti.gpu  else None
         if gpu_count:
-            gpu_nodes[gpu_count].append(lkp.nodelist(nodeset))
+            gpu_nodes[(gpu_count, gpu_type)].append(lkp.nodelist(nodeset))
 
     lines = [
         dict_to_conf(
             {
                 "NodeName": names,
                 "Name": "gpu",
-                "File": "/dev/nvidia{}".format(f"[0-{i-1}]" if i > 1 else "0"),
+                "Type": gpu_type,
+                "File": "/dev/nvidia{}".format(f"[0-{gpu_count-1}]" if gpu_count > 1 else "0"),
             }
         )
-        for i, names in gpu_nodes.items()
+        for (gpu_count, gpu_type), names in gpu_nodes.items()
     ]
     lines.append("\n")
-    content = FILE_PREAMBLE + "\n".join(lines)
+    return "\n".join(lines)
+
+
+def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
+    """create cloud_gres.conf file"""
+
+    content = FILE_PREAMBLE + gen_cloud_gres_conf_lines(lkp)
 
     conf_file = lkp.etc_dir / "cloud_gres.conf"
     conf_file.write_text(content)

@@ -1,0 +1,220 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Define Lustre Read/Write Test Pod
+  ansible.builtin.copy:
+    dest: "{{ workspace }}/{{ deployment_name }}/lustre-test-pod.yaml"
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: lustre-test-pod
+      spec:
+        containers:
+        - name: test-container
+          image: busybox
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -ex
+              echo "--- Verifying Lustre Mount ---"
+              if ! command -v grep > /dev/null || ! command -v awk > /dev/null; then
+                echo "Error: grep or awk not found in the image."
+                exit 1
+              fi
+
+              # Get the mount information for /mnt/lustre
+              MOUNT_INFO=$(mount | grep ' /mnt/lustre ')
+              if [ -z "$MOUNT_INFO" ]; then
+                echo "Error: /mnt/lustre not found in mount output."
+                mount
+                exit 1
+              fi
+
+              # Extract the filesystem type - it's the word after "type"
+              MOUNT_TYPE=$(echo "$MOUNT_INFO" | awk '{for(i=1;i<=NF;i++) if($i == "type") {print $(i+1); exit}}')
+
+              if [ "$MOUNT_TYPE" != "lustre" ]; then
+                echo "Error: /mnt/lustre is type '$MOUNT_TYPE', expected 'lustre'"
+                exit 1
+              else
+                echo "/mnt/lustre is correctly mounted as type 'lustre'."
+              fi
+
+              echo "--- Testing Write to /mnt/lustre ---"
+              TESTFILE="/mnt/lustre/testfile.txt"
+              WRITE_CONTENT="Hello Managed Lustre $(date)"
+              echo "$WRITE_CONTENT" > "$TESTFILE"
+              echo "Write done."
+              sync
+              sleep 2
+
+              echo "--- Testing Read from /mnt/lustre ---"
+              if ! cat "$TESTFILE"; then
+                echo "Error: Failed to cat $TESTFILE"
+                exit 1
+              fi
+              if ! grep 'Hello Managed Lustre' "$TESTFILE"; then
+                echo "Error: Failed to find expected content in $TESTFILE"
+                exit 1
+              fi
+              rm "$TESTFILE"
+              echo "Read & Verify done."
+          volumeMounts:
+          - name: lustre-vol
+            mountPath: /mnt/lustre
+        restartPolicy: Never
+        volumes:
+        - name: lustre-vol
+          persistentVolumeClaim:
+            claimName: {{ lustre_instance_id }}-pvc
+  delegate_to: localhost
+
+- name: Create Lustre Test Pod
+  delegate_to: localhost
+  ansible.builtin.command: kubectl apply -f {{ workspace }}/{{ deployment_name }}/lustre-test-pod.yaml
+  changed_when: True
+
+- name: Wait for Test Pod to reach a terminal state
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get pod lustre-test-pod -o jsonpath='{.status.phase}'
+  register: pod_phase_result
+  until: >-
+    pod_phase_result.stdout == "Succeeded" or
+    pod_phase_result.stdout == "Failed"
+  retries: 20  # Timeout after 5 minutes (20 * 15s)
+  delay: 15
+  changed_when: false
+  ignore_errors: true # Continue to debug block on failure
+
+- name: Set Pod Final Phase
+  ansible.builtin.set_fact:
+    pod_final_phase: "{{ pod_phase_result.stdout | default('Unknown') }}"
+
+# -- START DEBUGGING BLOCK --
+- name: Check Pod Completion Status
+  when: pod_final_phase != "Succeeded"
+  block:
+  - name: Pod failed or timed out, gathering debug info
+    ansible.builtin.debug:
+      msg: "Pod did not succeed. Final phase: {{ pod_final_phase }}. Fetching details..."
+
+  - name: Get Pod details
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe pod lustre-test-pod
+    register: pod_describe_debug
+    changed_when: False
+
+  - name: Print Pod details
+    ansible.builtin.debug:
+      var: pod_describe_debug.stdout_lines
+
+  - name: Get Pod debug logs
+    delegate_to: localhost
+    ansible.builtin.command: kubectl logs pod/lustre-test-pod
+    register: pod_logs_debug
+    changed_when: False
+    ignore_errors: True
+
+  - name: Print Pod debug logs
+    ansible.builtin.debug:
+      var: pod_logs_debug.stdout_lines
+    when: pod_logs_debug.stdout is defined
+
+  - name: Get PVC details
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe pvc "{{ lustre_instance_id }}-pvc"
+    register: pvc_describe_debug
+    changed_when: False
+
+  - name: Print PVC Describe
+    ansible.builtin.debug:
+      var: pvc_describe_debug.stdout_lines
+
+  - name: Get PV details
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe pv "{{ lustre_instance_id }}-pv"
+    register: pv_describe_debug
+    changed_when: False
+
+  - name: Print PV Describe
+    ansible.builtin.debug:
+      var: pv_describe_debug.stdout_lines
+
+  - name: Fail the test
+    ansible.builtin.fail:
+      msg: "Lustre read/write test pod failed to complete. Final phase: {{ pod_final_phase }} Check debug output above."
+# -- END DEBUGGING BLOCK --
+
+- name: Get Pod details
+  delegate_to: localhost
+  ansible.builtin.command: kubectl describe pod lustre-test-pod
+  register: pod_describe
+  changed_when: False
+
+- name: Print Pod Describe
+  ansible.builtin.debug:
+    var: pod_describe.stdout_lines
+
+- name: Get PVC details
+  delegate_to: localhost
+  ansible.builtin.command: kubectl describe pvc "{{ lustre_instance_id }}-pvc"
+  register: pvc_describe
+  changed_when: False
+
+- name: Print PVC Describe
+  ansible.builtin.debug:
+    var: pvc_describe.stdout_lines
+
+- name: Get PV details
+  delegate_to: localhost
+  ansible.builtin.command: kubectl describe pv "{{ lustre_instance_id }}-pv"
+  register: pv_describe
+  changed_when: False
+
+- name: Print PV Describe
+  ansible.builtin.debug:
+    var: pv_describe.stdout_lines
+
+- name: Get Test Pod Logs
+  delegate_to: localhost
+  ansible.builtin.command: kubectl logs pod/lustre-test-pod
+  register: pod_logs
+  changed_when: False
+  when: pod_final_phase == "Succeeded"
+
+- name: Print Pod Logs
+  ansible.builtin.debug:
+    var: pod_logs.stdout_lines
+  when: pod_final_phase == "Succeeded"
+
+- name: Verify Test Pod Output
+  ansible.builtin.assert:
+    that:
+    - pod_logs.stdout is defined
+    - "'/mnt/lustre is correctly mounted as type \\'lustre\\'.' in pod_logs.stdout"
+    - "'Write done.' in pod_logs.stdout"
+    - "'Hello Managed Lustre' in pod_logs.stdout"
+    - "'Read & Verify done.' in pod_logs.stdout"
+    msg: "Lustre read/write test failed. Logs: {{ pod_logs.stdout | default('No logs available') }}"
+  when: pod_final_phase == "Succeeded"
+
+- name: Cleanup Test Pod
+  delegate_to: localhost
+  ansible.builtin.command: kubectl delete pod lustre-test-pod --ignore-not-found=true
+  changed_when: True

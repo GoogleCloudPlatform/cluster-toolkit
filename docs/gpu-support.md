@@ -7,7 +7,6 @@
     [htcondor-execute-point].
 * Slurm on GCP modules version 6
   * `schedmd-slurm-gcp-v6-*`
-* PBS Pro modules (`pbspro-*`)
 * Cloud Batch modules through custom instance templates
 
 ## Accelerator definition automation

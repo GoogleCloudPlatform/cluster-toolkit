@@ -43,10 +43,7 @@
       dest: /etc/docker/daemon.json
       mode: '0644'
       content: '{{ docker_daemon_config }}'
-      # validate flag requires Docker server version 23.0 and above
-      # can add this back after private A3 DLVM image is deprecated
-      # this image comes with Docker version 20.10.17
-      # validate: /usr/bin/dockerd --validate --config-file %s
+      validate: /usr/bin/dockerd --validate --config-file %s
     when: docker_daemon_config
     notify:
     - Restart Docker

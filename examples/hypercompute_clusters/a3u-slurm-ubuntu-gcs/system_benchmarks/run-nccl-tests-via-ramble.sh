@@ -96,7 +96,7 @@ ramble:
 
     container_dir: "/opt/apps/ramble/sqsh"
     container_name: nccl-plugin-gib-diagnostic
-    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:latest
+    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
     processes_per_node: 8
     processes_per_node: '{gpus_per_node}'
     gpus_per_node: '8'

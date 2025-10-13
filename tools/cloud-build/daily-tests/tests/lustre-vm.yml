@@ -20,7 +20,7 @@ zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-vm.yaml"
 network: "default"
-remote_node: "{{ deployment_name }}-centos-0"
+remote_node: "{{ deployment_name }}-rocky-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-lustre-vm.yml
@@ -30,6 +30,4 @@ custom_vars:
   mounts:
   - /lustre
   vm_os_types:
-  - centos
   - rocky
-  # - ubuntu

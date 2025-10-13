@@ -82,6 +82,7 @@
         owner: condor
         group: condor
         mode: 0755
+        recurse: true
     - name: Create SystemD override directory for HTCondor
       ansible.builtin.file:
         path: /etc/systemd/system/condor.service.d

@@ -20,10 +20,10 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.84"
+      version = ">= 6.41"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-controller/v1.51.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-controller/v1.68.0"
   }
 }

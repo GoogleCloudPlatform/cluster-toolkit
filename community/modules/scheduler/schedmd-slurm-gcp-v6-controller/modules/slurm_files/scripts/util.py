@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from importlib import metadata
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -34,7 +33,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from enum import Enum
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -58,8 +56,7 @@ import httplib2
 
 import google.api_core.exceptions as gExceptions
 
-from requests import get as get_url
-from requests.exceptions import RequestException
+import requests as requests_lib
 
 import yaml
 from addict import Dict as NSDict # type: ignore
@@ -93,6 +90,7 @@ dirs = NSDict(
     munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
+    slurm_bucket_mount = Path("/slurm/bucket"),
 )
 
 slurmdirs = NSDict(
@@ -301,7 +299,7 @@ def parse_gcp_timestamp(s: str) -> datetime:
 def universe_domain() -> str:
     try:
         return instance_metadata("attributes/universe_domain")
-    except Exception:
+    except MetadataNotFoundError:
         return DEFAULT_UNIVERSE_DOMAIN
 
 
@@ -325,8 +323,13 @@ def get_credentials() -> Optional[service_account.Credentials]:
 
 @lru_cache(maxsize=1)
 def get_dev_key() -> Optional[str]:
-    """Get dev key for project"""
-    return os.environ.get("GOOGLE_DEVELOPER_KEY")
+    """Get dev key for project (uses json or yaml format)"""
+    try:
+        with open("/etc/slurm/slurm_vars.yaml", 'r') as file:
+            data = yaml.safe_load(file)
+            return data['google_developer_key']
+    except:
+        return None
 
 
 def create_client_options(api: ApiEndpoint) -> ClientOptions:
@@ -385,6 +388,23 @@ def parse_bucket_uri(uri: str):
     return matches.group("bucket"), matches.group("path")
 
 
+def get_template_gpu(template):
+    """get gpu info from machine type or guest accelerators"""
+    gpu_keyword = "nvidia"
+    gpu = None
+    if template.machine_type.accelerators:
+        tma = template.machine_type.accelerators[0]
+        if gpu_keyword in tma.type.lower():
+            gpu = tma
+    elif template.guestAccelerators:
+        tga = template.guestAccelerators[0]
+        if gpu_keyword in tga.acceleratorType.lower():
+            gpu = AcceleratorInfo(
+                type=tga.acceleratorType,
+                count=tga.acceleratorCount)
+    return gpu
+
+
 def trim_self_link(link: str):
     """get resource name from self link url, eg.
     https://.../v1/projects/<project>/regions/<region>
@@ -394,6 +414,32 @@ def trim_self_link(link: str):
         return link[link.rindex("/") + 1 :]
     except ValueError:
         raise Exception(f"'/' not found, not a self link: '{link}' ")
+
+
+def get_self_link_component(link: str, component_name: str):
+    """
+    Extracts a component (e.g., 'region', 'project') from a self-link URL.
+    Args:
+        link: The self-link URL string.
+        component_name: The name of the component to extract (e.g., 'regions', 'projects').
+    Returns:
+        The extracted component value (e.g., '<region>', '<project>'),
+        or None if the component is not found in the link.
+    """
+    search_string = f"/{component_name}/"
+    start_index = link.rfind(search_string)
+
+    if start_index == -1:
+        return None
+
+    start_index += len(search_string)
+    end_index = link.find("/", start_index)
+
+    if end_index == -1:
+        # If no further slash, the rest of the string is the component
+        return link[start_index:]
+    else:
+        return link[start_index:end_index]
 
 
 def execute_with_futures(func, seq):
@@ -423,6 +469,13 @@ def map_with_futures(func, seq):
                 res = e
             yield res
 
+def should_mount_slurm_bucket() -> bool:
+    try:
+        return instance_metadata("attributes/slurm_bucket_mount", silent=True).lower() == "true"
+    except MetadataNotFoundError:
+        return False
+
+
 def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
     return parse_bucket_uri(uri)
@@ -442,6 +495,16 @@ def blob_list(prefix="", delimiter=None):
     )
     return [blob for blob in blobs]
 
+def file_list(prefix="", subpath="") -> List[os.DirEntry]:
+    path = dirs.slurm_bucket_mount
+    file_prefix = f"{path}/{subpath}"
+    try:
+        files = os.scandir(file_prefix)
+        return [file for file in files if file.name.startswith(prefix)]
+    except:
+        return [] 
+     # Not considering lack of file's existence as fatal (we may check for files we know don't exist).
+     # Responsibility of callee to determine if it is fatal or not, blob_list returns empty iterator in similar cases.
 
 def hash_file(fullpath: Path) -> str:
     with open(fullpath, "rb") as f:
@@ -453,9 +516,14 @@ def hash_file(fullpath: Path) -> str:
     return base64.b64encode(file_hash.digest()).decode("utf-8")
 
 
-def install_custom_scripts(check_hash=False):
+def install_custom_scripts(check_hash:bool=False):
     """download custom scripts from gcs bucket"""
     role, tokens = lookup().instance_role, []
+
+    mounted_scripts=False
+    if should_mount_slurm_bucket() and role != "controller":
+        mounted_scripts=True
+
     all_prolog_tokens = ["prolog", "epilog", "task_prolog", "task_epilog"]
     if role == "controller":
         tokens = ["controller"] + all_prolog_tokens
@@ -467,13 +535,20 @@ def install_custom_scripts(check_hash=False):
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
     # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
-    blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
+    if mounted_scripts:
+        source_collection = list(chain.from_iterable(file_list(prefix=p) for p in prefixes))
+    else:
+        source_collection = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
-    script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
-    for blob in blobs:
-        m = script_pattern.match(Path(blob.name).name)
+    script_pattern = re.compile(r"^slurm-(?P<path>\S+)-script-(?P<name>\S+)")
+    for source in source_collection:
+        if mounted_scripts:
+            m = script_pattern.match(source.name)
+        else:
+            m = script_pattern.match(Path(source.name).name)
+
         if not m:
-            log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
+            log.warning(f"found blob that doesn't match expected pattern: {source.name}")
             continue
         path_parts = m["path"].split("-")
         path_parts[0] += ".d"
@@ -487,14 +562,21 @@ def install_custom_scripts(check_hash=False):
         for par in path.parents:
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
-        if check_hash and fullpath.exists():
+
+        if check_hash and fullpath.exists() and isinstance(source,storage.Blob):
             # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
-            need_update = hash_file(fullpath) != blob.md5_hash
-        if need_update:
-            log.info(f"installing custom script: {path} from {blob.name}")
+            need_update = hash_file(fullpath) != source.md5_hash
+
+        log.info(f"installing custom script: {path} from {source.name}")
+
+        if isinstance(source,os.DirEntry):
+            shutil.copy(source.path, fullpath) #Needs to be copied since mounted nfs is read-only
+            chown_slurm(fullpath, mode=0o755)
+
+        elif need_update:
             with fullpath.open("wb") as f:
-                blob.download_to_file(f)
+                source.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
 
 def compute_service(version="beta"):
@@ -551,7 +633,11 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
-        cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+        try:
+            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
+            cfg.slurm_control_host = control_dns_name
+        except MetadataNotFoundError:
+            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
     return cfg
@@ -562,6 +648,7 @@ class _ConfigBlobs:
     "Private" class that represent a collection of GCS blobs for configuration
     """
     core: storage.Blob
+    controller_addr: Optional[storage.Blob]
     partition: List[storage.Blob] = field(default_factory=list)
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
@@ -572,27 +659,72 @@ class _ConfigBlobs:
     def hash(self) -> str:
         h = hashlib.md5()
         all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
+        if self.controller_addr:
+            all.append(self.controller_addr)
+    
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
             h.update(blob.md5_hash.encode("utf-8"))
         return h.hexdigest()
 
+@dataclass
+class _ConfigFiles:
+    """
+    "Private" class that represent a collection of files for configuration
+    """
+    core: Path
+    controller_addr: Optional[Path]
+    partition: List[Path] = field(default_factory=list)
+    nodeset: List[Path] = field(default_factory=list)
+    nodeset_dyn: List[Path] = field(default_factory=list)
+    nodeset_tpu: List[Path] = field(default_factory=list)
+    login_group: List[Path] = field(default_factory=list)
+
 def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
+    controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+
+    is_controller = instance_role() == "controller"
 
     for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
+        if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
+            # Don't add this config blobs for controller to avoid "double reconfiguration":
+            # Initially this file doesn't exist and produce later by `setup_controller`;
+            # Appearance of this blob would trigger change in combined hash of config files;
+            # Ignore existence of this file for controller, assume that
+            # no other instance nodes will proceed with configuration until this file is created.
+            controller_addr = blob
         for key in rest.keys():
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
                 rest[key].append(blob)
 
     if core is None:
         raise DeffetiveStoredConfigError(f"{common_prefix}/config.yaml not found in bucket")
-    return _ConfigBlobs(core=core, **rest)
+    
+    return _ConfigBlobs(core=core, controller_addr=controller_addr, **rest)
+
+def _list_config_files() -> _ConfigFiles:
+    file_dir = dirs.slurm_bucket_mount
+    core: Optional[Path] = None
+    controller_addr: Optional[Path] = None
+    rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+
+    if Path(f"{file_dir}/config.yaml").exists():
+        core = Path(f"{file_dir}/config.yaml")
+
+    for key in rest.keys():
+        for f in file_list(subpath=f"{key}_configs"):
+            rest[key].append(f.path)
+
+    if core is None:
+        raise Exception(f"config.yaml was not found in mounted folder: {dirs.slurm_bucket_mount}") #Intentionally not using DeffetiveStoredConfigError as this is considered a fatal error
+    
+    return _ConfigFiles(core=core, controller_addr=None, **rest)
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
@@ -605,6 +737,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
 
     return _assemble_config(
         core=_download([blobs.core])[0],
+        controller_addr=_download([blobs.controller_addr])[0] if blobs.controller_addr else None,
         partitions=_download(blobs.partition),
         nodesets=_download(blobs.nodeset),
         nodesets_dyn=_download(blobs.nodeset_dyn),
@@ -612,8 +745,39 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
+def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+    if not dirs.slurm_bucket_mount.is_mount():
+        raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
+
+    files = _list_config_files()
+
+    def _load(files) -> List[Any]:
+        file_yaml=[]
+        for file in files:
+            with open(file, "r") as f:
+                file_yaml.append(yaml.safe_load(f))
+        return file_yaml
+
+    return _assemble_config(
+        core=_load([files.core])[0],
+        controller_addr=None,
+        partitions=_load(files.partition),
+        nodesets=_load(files.nodeset),
+        nodesets_dyn=_load(files.nodeset_dyn),
+        nodesets_tpu=_load(files.nodeset_tpu),
+        login_groups=_load(files.login_group),
+    )
+
+def controller_lookup_self_ip() -> str:
+    assert instance_role() == "controller"
+    # Get IP of LAST network-interface
+    # TODO: Consider change order of NICs definition, so right NIC is always @0.
+    idx = instance_metadata("network-interfaces").split()[-1] # either `0/` or `1/`
+    return instance_metadata(f"network-interfaces/{idx}ip")
+
 def _assemble_config(
         core: Any,
+        controller_addr: Optional[Any],
         partitions: List[Any],
         nodesets: List[Any],
         nodesets_dyn: List[Any],
@@ -621,6 +785,16 @@ def _assemble_config(
         login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
+
+    if cfg.controller_network_attachment:
+        # lookup controller address
+        if instance_role() == "controller":
+            # ignore stored value of `controller_addr`, it will be overwritten during `setup_controller`
+            cfg.slurm_control_addr = controller_lookup_self_ip()
+        else:   
+            if not controller_addr: 
+                raise DeffetiveStoredConfigError("controller_addr.yaml not found in bucket")
+            cfg.slurm_control_addr = controller_addr["slurm_control_addr"]
 
     # add partition configs
     for p_yaml in partitions:
@@ -672,8 +846,15 @@ def fetch_config() -> Tuple[bool, NSDict]:
     """
     hash_file = Path("/slurm/scripts/.config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
-
+    
+    if should_mount_slurm_bucket() and instance_role() != "controller":
+        cfg = _fetch_mounted_config()
+        CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+        chown_slurm(CONFIG_FILE)
+        return False, cfg
+    
     cfg_and_hash = _fetch_config(old_hash=old_hash)
+    
     if not cfg_and_hash:
         return False, _load_config()
 
@@ -1026,24 +1207,26 @@ def backoff_delay(start, timeout=None, ratio=None, count: int = 0):
 
 ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
 
+class MetadataNotFoundError(Exception):
+    pass
 
-def get_metadata(path, root=ROOT_URL):
+def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
-    url = f"{root}/{path}"
+    url = f"{ROOT_URL}/{path}"
     try:
-        resp = get_url(url, headers=HEADERS)
+        resp = requests_lib.get(url, headers=HEADERS)
         resp.raise_for_status()
         return resp.text
-    except RequestException:
-        log.debug(f"metadata not found ({url})")
-        raise Exception(f"failed to get_metadata from {url}")
+    except requests_lib.exceptions.HTTPError:
+        if not silent:
+            log.warning(f"metadata not found ({url})")
+        raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
 @lru_cache(maxsize=None)
-def instance_metadata(path):
-    """Get instance metadata"""
-    return get_metadata(path, root=f"{ROOT_URL}/instance")
+def instance_metadata(path: str, silent:bool=False) -> str:
+    return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
     return instance_metadata("attributes/slurm_instance_role")
@@ -1051,22 +1234,6 @@ def instance_role():
 
 def instance_login_group():
     return instance_metadata("attributes/slurm_login_group")
-
-@lru_cache(maxsize=None)
-def project_metadata(key):
-    """Get project metadata project/attributes/<slurm_cluster_name>-<path>"""
-    return get_metadata(key, root=f"{ROOT_URL}/project/attributes")
-
-
-def bucket_blob_download(bucket_name, blob_name):
-    bucket = storage_client().bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    contents = None
-    with tempfile.NamedTemporaryFile(mode="w+t") as tmp:
-        blob.download_to_filename(tmp.name)
-        with open(tmp.name, "r") as f:
-            contents = f.read()
-    return contents
 
 
 def natural_sort(text):
@@ -1288,42 +1455,6 @@ def wait_for_operation(operation) -> Dict[str, Any]:
 
 
 
-def get_filtered_operations(op_filter):
-    """get list of operations associated with group id"""
-    project = lookup().project
-    operations: List[Any] = []
-
-    def get_aggregated_operations(items):
-        # items is a dict of location key to value: dict(operations=<list of operations>) or an empty dict
-        operations.extend(
-            chain.from_iterable(
-                ops["operations"] for ops in items.values() if "operations" in ops
-            )
-        )
-
-    act = lookup().compute.globalOperations()
-    op = act.aggregatedList(
-        project=project, filter=op_filter, fields="items.*.operations,nextPageToken"
-    )
-
-    while op is not None:
-        result = ensure_execute(op)
-        get_aggregated_operations(result["items"])
-        op = act.aggregatedList_next(op, result)
-    return operations
-
-
-def get_insert_operations(group_ids):
-    """get all insert operations from a list of operationGroupId"""
-    if isinstance(group_ids, str):
-        group_ids = group_ids.split(",")
-    filters = [
-        "operationType=insert",
-        " OR ".join(f"(operationGroupId={id})" for id in group_ids),
-    ]
-    return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
-
-
 def getThreadsPerCore(template) -> int:
     if not template.machine_type.supports_smt:
         return 1
@@ -1366,6 +1497,8 @@ class ReservationDetails:
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
     reservation_mode: Optional[str]
+    assured_count: int 
+    delete_at_time: Optional[datetime]
 
     @property
     def dense(self) -> bool:
@@ -1417,30 +1550,9 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @lru_cache(maxsize=None)
-    def _lookup_network_attachment(self, self_link: str) -> str:
-        resp = self.compute.networkAttachments().get(
-            project=self.project,
-            region=parse_self_link(self_link).region,
-            networkAttachment=trim_self_link(self_link)
-        ).execute()
-        eps = resp.get("connectionEndpoints", [])
-        if not eps or len(eps) > 2:
-            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
-        ep: Dict[str, str] = eps[0]
-        if "ipAddress" not in ep:
-            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
-        return ep["ipAddress"]
-
     @cached_property
     def control_addr(self) -> Optional[str]:
-        if self.cfg.slurm_control_addr:
-            return self.cfg.slurm_control_addr
-
-        if self.cfg.controller_network_attachment:
-            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
-
-        return None
+        return self.cfg.get("slurm_control_addr", None)
 
     @property
     def control_host(self):
@@ -1548,18 +1660,45 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
+    def nodeset_is_tpu(self, nodeset_name=None) -> bool:
+        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
-    def is_dormant_fr_node(self, node_name:str) -> bool:
+    def is_dormant_res_node(self, node_name:str) -> bool:
         fr = self.future_reservation(self.node_nodeset(node_name))
-        if not fr:
+        res = self.nodeset_reservation(self.node_nodeset(node_name))
+        
+        if fr is None and res is None:
             return False
-        return fr.active_reservation is None
+        
+        if fr:
+            return fr.active_reservation is None
+        
+        if res:
+            if res.calendar:
+                # If reservation is calendar based, check if it is past the delete_at_time
+                if res.delete_at_time is not None and now() >= res.delete_at_time:
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is past deletion time {res.delete_at_time}, skipping resume.")
+                    return True
+
+                # If assured_count is 0 do not resume nodes as they are not active yet
+                if  res.delete_at_time is not None and res.assured_count <= 0:
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
+                    return True
+                
+        return False    
 
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
+
+    def node_is_gke(self, node_name=None) -> bool:
+        return self.nodeset_is_gke(self.node_nodeset(node_name))
+
+    def nodeset_is_gke(self, nodeset=None) -> bool:
+        return "gke_nodepool" in nodeset
 
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """
@@ -1571,6 +1710,11 @@ class Lookup:
     def node_region(self, node_name=None):
         nodeset = self.node_nodeset(node_name)
         return parse_self_link(nodeset.subnetwork).region
+
+    def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
+        if not self.nodeset_is_tpu(nodeset_name):
+            return getattr(self.cfg.nodeset[nodeset_name], 'accelerator_topology', None)
+        return None
 
     def nodeset_prefix(self, nodeset_name):
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}"
@@ -1717,18 +1861,18 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
 
     @lru_cache
-    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
-        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
+        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
 
     @lru_cache()
-    def get_mig_list(self, project: str, zone: str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+    def get_mig_list(self, project: str, region: str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -1749,6 +1893,8 @@ class Lookup:
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
+            assured_count=int(reservation.get("specificReservation", {}).get("assuredCount", 0)),
+            delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
@@ -1873,10 +2019,15 @@ class Lookup:
         if cached := cache.get(template_name):
             return NSDict(cached)
 
+        region = get_self_link_component(template_link, "regions")
+
         template = ensure_execute(
             self.compute.instanceTemplates().get(
                 project=self.project, instanceTemplate=template_name
-            )
+            ) if region is None else 
+            self.compute.regionInstanceTemplates().get(
+                project=self.project, region=region, instanceTemplate=template_name
+            ) 
         ).get("properties")
         template = NSDict(template)
         # name and link are not in properties, so stick them in
@@ -1886,20 +2037,10 @@ class Lookup:
         # TODO delete metadata to reduce memory footprint?
         # del template.metadata
 
-        # translate gpus into an easier-to-read format
-        if template.machine_type.accelerators:
-            template.gpu = template.machine_type.accelerators[0]
-        elif template.guestAccelerators:
-            tga = template.guestAccelerators[0]
-            template.gpu = AcceleratorInfo(
-                type=tga.acceleratorType,
-                count=tga.acceleratorCount)
-        else:
-            template.gpu = None
+        template.gpu = get_template_gpu(template)
 
         cache.set(template_name, template.to_dict())
         return template
-
 
     def _parse_job_info(self, job_info: str) -> Job:
         """Extract job details"""
@@ -1954,10 +2095,16 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+    def controller_mount_server_ip(self) -> str:
+        return self.control_addr or self.control_host
+
+    def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
+        if isinstance(ns, NSMount):
+            return ns
+
         server_ip = ns.get("server_ip") or "$controller"
         if server_ip == "$controller":
-            server_ip = self.control_addr or self.control_host
+            server_ip = self.controller_mount_server_ip()
 
         return NSMount(
             server_ip=server_ip,
@@ -1972,30 +2119,30 @@ class Lookup:
         if self.cfg.munge_mount:
             mnt = self.cfg.munge_mount
             mnt.local_mount = mnt.local_mount or "/mnt/munge"
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
-                local_mount="/mnt/munge",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
+                local_mount=Path("/mnt/munge"),
                 remote_mount=dirs.munge,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     @property
     def slurm_key_mount(self) -> NSMount:
         if self.cfg.slurm_key_mount:
             mnt = self.cfg.slurm_key_mount
             mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
                 local_mount=slurmdirs.key_distribution,
                 remote_mount=slurmdirs.key_distribution,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     def is_flex_node(self, node: str) -> bool:
         try:
@@ -2014,11 +2161,11 @@ class Lookup:
 
         nodeset = self.node_nodeset(node)
         zones = nodeset.zone_policy_allow
-        assert len(zones) == 1
-        zone = zones[0]
+        assert len(zones) > 0
+        region = self.node_region(node)
 
         potential_migs=[]
-        mig_list=self.get_mig_list(self.project, zone)
+        mig_list=self.get_mig_list(self.project, region)
         
         if not mig_list or not mig_list.get("items"):
             return False
@@ -2027,7 +2174,7 @@ class Lookup:
             if not mig.get("instanceTemplate"): #possibly an old MIG
                 return False
             if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
-                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+                potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
@@ -2071,5 +2218,7 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running systemctl restart slurmctld.service")
+    run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")

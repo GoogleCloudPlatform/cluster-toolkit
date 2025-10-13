@@ -52,7 +52,7 @@ StateSaveLocation={state_save}
 #
 # LOGGING AND ACCOUNTING
 AccountingStorageType=accounting_storage/slurmdbd
-AccountingStorageHost={control_host}
+AccountingStorageHost={accounting_storage_host}
 ClusterName={name}
 SlurmctldLogFile={slurmlog}/slurmctld.log
 SlurmdLogFile={slurmlog}/slurmd-%n.log

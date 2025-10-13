@@ -89,6 +89,7 @@ resource "google_container_cluster" "gke_cluster" {
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
+  node_locations           = var.system_node_pool_zones
 
   deletion_protection = var.deletion_protection
 
@@ -224,6 +225,9 @@ resource "google_container_cluster" "gke_cluster" {
     }
     ray_operator_config {
       enabled = var.enable_ray_operator
+    }
+    lustre_csi_driver_config {
+      enabled = var.enable_managed_lustre_csi
     }
   }
 
@@ -389,7 +393,7 @@ provider "kubernetes" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = "~> 34.0"
+  version = ">= 40.0"
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name

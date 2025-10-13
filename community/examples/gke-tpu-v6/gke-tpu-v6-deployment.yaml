@@ -53,8 +53,11 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU v4 nodes in the form of
-  # <project>/<reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation:
+  # The name of the compute engine reservation of TPU v6 nodes
+  reservation:
+
+  # The disk size of system node pool for this deployment.
+  system_node_pool_disk_size_gb:
+
+  # The disk size of v6e node pool for this deployment.
+  v6e_node_pool_disk_size_gb:

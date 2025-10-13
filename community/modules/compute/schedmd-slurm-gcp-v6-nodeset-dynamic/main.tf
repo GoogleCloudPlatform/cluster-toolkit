@@ -17,6 +17,13 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset-dynamic", ghpc_role = "compute" })
 }
 
+module "instance_validation" {
+  source = "../../../../modules/internal/instance_validations"
+
+  machine_type = var.machine_type
+  disk_type    = var.disk_type
+}
+
 module "gpu" {
   source = "../../../../modules/internal/gpu-definition"
 
@@ -31,9 +38,11 @@ locals {
   feature      = coalesce(var.feature, local.nodeset_name)
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+  universe_domain                    = { "universe_domain" = var.universe_domain }
 
   metadata = merge(
     local.disable_automatic_updates_metadata,
+    local.universe_domain,
     { slurmd_feature = local.feature },
     var.metadata
   )
@@ -41,6 +50,8 @@ locals {
   nodeset = {
     nodeset_name = local.nodeset_name
     nodeset_feature : local.feature
+    startup_script  = local.ghpc_startup_script
+    network_storage = var.network_storage
   }
 
   additional_disks = [
@@ -62,6 +73,12 @@ locals {
     email  = var.service_account_email
     scopes = var.service_account_scopes
   }
+
+  ghpc_startup_script = [{
+    filename = "ghpc_nodeset_startup.sh"
+    content  = var.startup_script
+  }]
+
 }
 
 module "slurm_nodeset_template" {

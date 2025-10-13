@@ -3,10 +3,6 @@
 This module creates a Google Kubernetes Engine
 ([GKE](https://cloud.google.com/kubernetes-engine)) cluster.
 
-> **_NOTE:_** This is an experimental module and the functionality and
-> documentation will likely be updated in the near future. This module has only
-> been tested in limited capacity.
-
 ### Example
 
 The following example creates a GKE cluster and a VPC designed to work with GKE.
@@ -107,23 +103,23 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.16 |
-| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.23 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
+| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.16 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
-| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | ~> 34.0 |
+| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
 
 ## Resources
 
@@ -155,6 +151,7 @@ limitations under the License.
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
+| <a name="input_enable_managed_lustre_csi"></a> [enable\_managed\_lustre\_csi](#input\_enable\_managed\_lustre\_csi) | The status of the Google Compute Engine Managed Lustre Container Storage Interface (CSI) driver addon, which allows the usage of a lustre as volumes. | `bool` | `false` | no |
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
 | <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en). If null, will determine state based on if additional\_networks are passed in. | `bool` | `null` | no |
 | <a name="input_enable_node_local_dns_cache"></a> [enable\_node\_local\_dns\_cache](#input\_enable\_node\_local\_dns\_cache) | Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency | `bool` | `false` | no |

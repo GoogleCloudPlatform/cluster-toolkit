@@ -24,6 +24,7 @@ import stat
 import time
 import yaml
 from pathlib import Path
+import functools
 
 import util
 from util import (
@@ -323,8 +324,24 @@ def update_system_config(file, content):
     slurmd_file = Path(conf_dir, file)
     slurmd_file.write_text(content)
 
+def _symlink_mysql_datadir(lkp: util.Lookup) -> None:
+    """ Symlink /var/lib/mysql to controller state disk if needed. """
+    if not lkp.cfg.controller_state_disk.device_name:
+        return
+    
+    datadir = Path("/var/lib/mysql")
+    dst = slurmdirs.state / "mysql"
 
-def configure_mysql():
+    if dst.exists():
+        run(f"rm -rf {datadir}")
+    else:
+        shutil.move(datadir, dst)    
+
+    datadir.symlink_to(dst, target_is_directory=True)
+    shutil.chown(datadir, user="mysql", group="mysql")
+    run(f"chown -R mysql:mysql {dst}")
+
+def configure_mysql(lkp: util.Lookup) -> None:
     cnfdir = Path("/etc/my.cnf.d")
     if not cnfdir.exists():
         cnfdir = Path("/etc/mysql/conf.d")
@@ -338,26 +355,21 @@ innodb_log_file_size=64M
 innodb_lock_wait_timeout=900
 """
         )
+
+    run("systemctl stop mariadb", timeout=30)
+    _symlink_mysql_datadir(lkp)
+
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
+    
+    db_name = "slurm_acct_db"
+    
 
-    mysql = "mysql -u root -e"
-    run(f"""{mysql} "drop user 'slurm'@'localhost'";""", timeout=30, check=False)
-    run(f"""{mysql} "create user 'slurm'@'localhost'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""",
-        timeout=30,
-    )
-    run(
-        f"""{mysql} "drop user 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-        check=False,
-    )
-    run(f"""{mysql} "create user 'slurm'@'{lookup().control_host}'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-    )
+    cmd = "mysql -u root -e"
+    for host  in ("localhost", lkp.control_host):
+        run(f"""{cmd} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
+        run(f"""{cmd} "create user 'slurm'@'{host}'";""", timeout=30)
+        run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
 
 
 def configure_dirs():
@@ -387,11 +399,20 @@ def configure_dirs():
                                   Path("tools/task-prolog")),
                                  (dirs.custom_scripts / "task_epilog.d",
                                   Path("tools/task-epilog"))):
-        dst = Path(dst_folder / src_file.name)
+        dst = Path(dst_folder) / src_file.name
         util.mkdirp(dst.parent)
         shutil.copyfile(util.scripts_dir / src_file, dst)
         os.chmod(dst, 0o755)
 
+
+def self_report_controller_address(lkp: util.Lookup) -> None:
+    if not lkp.cfg.controller_network_attachment:
+        return # only self report address if network attachment is used
+    data = { "slurm_control_addr": lkp.cfg.slurm_control_addr }
+    bucket, prefix = util._get_bucket_and_common_prefix()
+    blob = util.storage_client().bucket(bucket).blob(f"{prefix}/controller_addr.yaml")
+    with blob.open('w') as f:
+        f.write(yaml.dump(data))
 
 def setup_controller():
     """Run controller setup"""
@@ -412,8 +433,8 @@ def setup_controller():
 
     run_custom_scripts()
 
-    if not lookup().cfg.cloudsql_secret:
-        configure_mysql()
+    if not lkp.cfg.cloudsql_secret:
+        configure_mysql(lkp)
 
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
@@ -423,7 +444,7 @@ def setup_controller():
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
-        f"{sacctmgr} add cluster {lookup().cfg.slurm_cluster_name}", timeout=30, check=False
+        f"{sacctmgr} add cluster {lkp.cfg.slurm_cluster_name}", timeout=30, check=False
     )
     if "already exists" in result.stdout:
         log.info(result.stdout)
@@ -450,13 +471,19 @@ def setup_controller():
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
 
-    slurmsync.sync_instances()
+    try:
+        slurmsync.sync_instances()
+    except Exception:
+        log.exception("Failed to sync instances, will try next time.")
+
     run("systemctl enable slurm_load_bq.timer", timeout=30)
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
 
     # Add script to perform maintenance
     setup_maintenance_script()
+
+    self_report_controller_address(lkp)
 
     log.info("Done setting up controller")
     pass
@@ -509,9 +536,8 @@ def setup_compute():
     ]
 
     try:
-        slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
-    except Exception:
-        # TODO: differentiate between unset and error
+        slurmd_feature = util.instance_metadata("attributes/slurmd_feature", silent=True)
+    except util.MetadataNotFoundError:
         slurmd_feature = None
 
     if slurmd_feature is not None:
@@ -560,13 +586,6 @@ def setup_cloud_ops() -> None:
     # Update setup receiver path
     file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]
 
-    # Add chs_health_check receiver
-    file["logging"]["receivers"]["chs_health_check"] = {
-        "type": "files",
-        "include_paths": ["/var/log/slurm/chs_health_check.log"],
-        "record_log_file_path": True,
-    }
-
     cluster_info = {
         'type':'modify_fields',
         'fields': {
@@ -583,15 +602,21 @@ def setup_cloud_ops() -> None:
     file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
     file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
 
-    # Add chs_health_check to slurmlog2_pipeline
-    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["receivers"].append(
-        "chs_health_check"
-    )
-
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 
-    run("systemctl restart google-cloud-ops-agent.service", timeout=30)
+    retries = 2
+    for _ in range(retries):
+        try:
+            run("systemctl restart google-cloud-ops-agent.service", timeout=120)
+            break
+        except subprocess.TimeoutExpired:
+            log.error("google-cloud-ops-agent.service did not restart within 120s.")
+            result=run("cat /var/log/google-cloud-ops-agent/subagents/logging-module.log", timeout=120, shell=True)
+            if result.stdout:
+                log.error(f"Logs for google-cloud-ops-agent (logging-module.log file):\n{result.stdout}")
+            raise
+
 
 def main():
     start_motd()

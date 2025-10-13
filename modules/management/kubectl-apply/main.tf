@@ -20,8 +20,32 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
-  apply_manifests_map = tomap({
+  # 1. First, Identify manifests that are explicitly enabled.
+  enabled_manifests = {
     for index, manifest in var.apply_manifests : index => manifest
+    if try(manifest.enable, true)
+  }
+
+  # 2. Identify URL-based manifests
+  url_manifests = {
+    for index, manifest in local.enabled_manifests : index => manifest
+    if try(manifest.source, null) != null && (startswith(manifest.source, "http://") || startswith(manifest.source, "https://"))
+  }
+
+  # 3. Rebuild the map by populating the 'content' field for URLs based manifest
+  processed_apply_manifests_map = tomap({
+    for index, manifest in local.enabled_manifests : tostring(index) => {
+      # If this manifest was a URL, its content is the body from the HTTP call.
+      content = contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body : manifest.content
+
+      # If this was a URL, its source path is now null. Otherwise, use original.
+      source = contains(keys(local.url_manifests), tostring(index)) ? null : manifest.source
+
+      # Pass other vars
+      template_vars     = manifest.template_vars
+      server_side_apply = manifest.server_side_apply
+      wait_for_rollout  = manifest.wait_for_rollout
+    }
   })
 
   install_kueue             = try(var.kueue.install, false)
@@ -29,8 +53,12 @@ locals {
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
-  kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
+}
+
+data "http" "manifest_from_url" {
+  for_each = local.url_manifests
+  url      = each.value.source
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -42,7 +70,7 @@ data "google_container_cluster" "gke_cluster" {
 data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
-  for_each   = local.apply_manifests_map
+  for_each   = local.processed_apply_manifests_map
   source     = "./kubectl"
   depends_on = [var.gke_cluster_exists]
 
@@ -54,20 +82,25 @@ module "kubectl_apply_manifests" {
 
   providers = {
     kubectl = kubectl
-    http    = http.h
   }
 }
 
 module "install_kueue" {
-  source            = "./kubectl"
-  source_path       = local.install_kueue ? local.kueue_install_source : null
-  server_side_apply = true
-  depends_on        = [var.gke_cluster_exists]
+  source           = "./helm_install"
+  count            = local.install_kueue ? 1 : 0
+  wait             = false
+  timeout          = 1200
+  release_name     = "kueue"
+  chart_repository = "oci://registry.k8s.io/kueue/charts"
+  chart_name       = "kueue"
+  chart_version    = var.kueue.version
+  namespace        = "kueue-system"
+  create_namespace = true
+  values_yaml = [
+    file("${path.module}/kueue/kueue-helm-values.yaml")
+  ]
 
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
+  depends_on = [var.gke_cluster_exists]
 }
 
 module "configure_kueue" {
@@ -81,7 +114,6 @@ module "configure_kueue" {
 
   providers = {
     kubectl = kubectl
-    http    = http.h
   }
 }
 
@@ -89,17 +121,17 @@ module "install_jobset" {
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
+  wait_for_rollout  = true
   depends_on        = [var.gke_cluster_exists, module.configure_kueue]
 
   providers = {
     kubectl = kubectl
-    http    = http.h
   }
 }
 
 module "install_nvidia_dra_driver" {
   count      = local.install_nvidia_dra_driver ? 1 : 0
-  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists, module.configure_kueue]
   source     = "./helm_install"
 
   release_name     = "nvidia-dra-driver-gpu"              # The release name
@@ -113,7 +145,6 @@ module "install_nvidia_dra_driver" {
   # This corresponds to the -f <(cat <<EOF ... EOF) part
   values_yaml = [<<EOF
       nvidiaDriverRoot: /home/kubernetes/bin/nvidia
-      nvidiaCtkPath: /home/kubernetes/bin/nvidia/nvidia-ctk
       resources:
         gpus:
           enabled: false
@@ -228,9 +259,9 @@ module "install_gib" {
   source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
   template_vars     = var.gib.template_vars
+  wait_for_rollout  = true
 
   providers = {
     kubectl = kubectl
-    http    = http.h
   }
 }

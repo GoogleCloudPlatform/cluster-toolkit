@@ -279,16 +279,16 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.32 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.46 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.46 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.32 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.46 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.46 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
@@ -307,6 +307,7 @@ limitations under the License.
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_machine_types.machine_info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
+| [google_compute_region_instance_template.instance_template](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_region_instance_template) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 
@@ -334,6 +335,7 @@ limitations under the License.
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_internal_ghpc_module_id"></a> [internal\_ghpc\_module\_id](#input\_internal\_ghpc\_module\_id) | DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide). | `string` | n/a | yes |
+| <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. | `bool` | `true` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
@@ -368,8 +370,13 @@ limitations under the License.
 |------|-------------|
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
+| <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_guest_accelerator"></a> [guest\_accelerator](#output\_guest\_accelerator) | The accelerator type of the nodes. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
+| <a name="output_instance_templates"></a> [instance\_templates](#output\_instance\_templates) | The URLs of Instance Templates |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
+| <a name="output_machine_type"></a> [machine\_type](#output\_machine\_type) | Machine Type |
+| <a name="output_node_count_static"></a> [node\_count\_static](#output\_node\_count\_static) | The number of static nodes in node-pool. |
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
 | <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
