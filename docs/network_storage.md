@@ -118,7 +118,6 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | 
 - **Needs Testing:** May currently work but has not yet been fully tested.
 - **Not Supported:** This feature is not supported right now.
 
-
 [filestore]: ../modules/file-system/filestore/README.md
 [pre-existing-network-storage]: ../modules/file-system/pre-existing-network-storage/README.md
 [managed-lustre]: ../modules/file-system/managed-lustre/README.md
