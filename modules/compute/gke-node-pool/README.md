@@ -279,16 +279,16 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.46 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.46 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.46 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.46 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
@@ -326,6 +326,7 @@ limitations under the License.
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
 | <a name="input_enable_flex_start"></a> [enable\_flex\_start](#input\_enable\_flex\_start) | If true, start the node pool with Flex Start provisioning model.<br/>To learn more about flex-start mode, please refer to<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
+| <a name="input_enable_numa_aware_scheduling"></a> [enable\_numa\_aware\_scheduling](#input\_enable\_numa\_aware\_scheduling) | Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling. | `bool` | `false` | no |
 | <a name="input_enable_private_nodes"></a> [enable\_private\_nodes](#input\_enable\_private\_nodes) | Whether nodes have internal IP addresses only. | `bool` | `false` | no |
 | <a name="input_enable_queued_provisioning"></a> [enable\_queued\_provisioning](#input\_enable\_queued\_provisioning) | If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
