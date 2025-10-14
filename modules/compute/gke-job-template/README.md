@@ -9,10 +9,6 @@ get instructions on how to use `kubectl` to submit the job.
 This module is designed to `use` one or more `gke-node-pool` modules. The job
 will be configured to run on any of the specified node pools.
 
-> **_NOTE:_** This is an experimental module and the functionality and
-> documentation will likely be updated in the near future. This module has only
-> been tested in limited capacity.
-
 ### Example
 
 The following example creates a GKE job template file.
