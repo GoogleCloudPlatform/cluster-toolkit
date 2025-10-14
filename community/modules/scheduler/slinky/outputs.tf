@@ -12,22 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "instructions" {
-  description = "Post deployment instructions."
-  value       = <<-EOT
-    To test Slurm functionality, connect to the controller to use Slurm client commands:
-      kubectl exec -it statefulsets/slurm-controller \
-        --namespace=slurm \
-        -- bash --login
-
-    On the controller pod (e.g. host slurm@slurm-controller-0), run the following commands to quickly test Slurm is functioning:
-      sinfo
-      srun hostname
-      sbatch --wrap="sleep 60"
-      squeue
-  EOT
-}
-
 output "slurm_namespace" {
   description = "namespace for the slurm chart"
   value       = var.slurm_namespace

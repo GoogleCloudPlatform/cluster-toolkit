@@ -20,6 +20,9 @@ tags:
 - m.service-account
 - m.vpc
 - m.kubectl-apply
+- m.filestore
+- m.gke-job-template
+- m.gke-persistent-volume
 
 timeout: 14400s  # 4hr
 steps:

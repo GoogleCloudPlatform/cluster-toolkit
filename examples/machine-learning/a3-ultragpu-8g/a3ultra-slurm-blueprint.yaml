@@ -40,6 +40,7 @@ vars:
     family: $(vars.deployment_name)-u22
   disk_size_gb: 100
   nccl_gib_version: 1.1.0
+  libnccl_version: 2.27.5-1+cuda12.9
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -91,6 +92,7 @@ deployment_groups:
               - nvidia-compute-utils-*-server
               - nvidia-fabricmanager-*
               - nvidia-utils-*-server
+              - nvidia-imex-*
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
@@ -142,6 +144,7 @@ deployment_groups:
           add-nvidia-repositories -y
           apt install -y cuda-toolkit-12-8
           apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       - type: ansible-local
         destination: settings_nvidia_dcgm.yml
         content: |
@@ -327,7 +330,7 @@ deployment_groups:
   #   - a3ultra-slurm-net-0
   #   - private_service_access
   #   settings:
-  #     size_gib: 18000
+  #     size_gib: 36000
   #     name: lustre-instance
   #     local_mount: /home
   #     remote_mount: lustrefs
@@ -456,6 +459,24 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # Install NCCL
+      - type: ansible-local
+        destination: install_nccl.yml
+        content: |
+          ---
+          - name: Install nccl
+            hosts: all
+            become: true
+            tasks:
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: yes
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - "libnccl2=$(vars.libnccl_version)"
+                - "libnccl-dev=$(vars.libnccl_version)"
+                state: present
       # Install NCCL-GIB Plugin
       - type: ansible-local
         destination: install_nccl_gib.yml
