@@ -1,0 +1,61 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- gke
+- m.gke-cluster
+- m.gke-node-pool
+- m.gke-job-template
+- m.service-account
+- m.vpc
+- m.kubectl-apply
+
+timeout: 14400s  # 4hr
+steps:
+- id: gke-g4
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    EXAMPLE_BP=examples/gke-g4/gke-g4.yaml
+    # adding vm to act as remote node
+    echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
+    echo '    use: [gke-g4-net-0]'                       >> $${EXAMPLE_BP}
+    echo '    settings:'                                 >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'             >> $${EXAMPLE_BP}
+    echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
+    echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
+    echo ''
+    echo '  - id: job_template_hostname'                       >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/gke-job-template'        >> $${EXAMPLE_BP}
+    echo '    use: [g4-pool]'                                  >> $${EXAMPLE_BP}
+    echo '    settings:'                                       >> $${EXAMPLE_BP}
+    echo '      image: nvidia/cuda:13.0.0-base-ubuntu24.04'    >> $${EXAMPLE_BP}
+    echo '      command:'                                      >> $${EXAMPLE_BP}
+    echo '      - nvidia-smi'                                  >> $${EXAMPLE_BP}
+    echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
+    echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-g4.yml"
