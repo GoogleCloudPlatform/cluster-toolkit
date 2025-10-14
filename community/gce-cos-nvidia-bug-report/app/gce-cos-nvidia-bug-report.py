@@ -725,8 +725,9 @@ def IdentifyMftKernelModules(
     )
 
   latest_blob = None
-  latest_build_version = None
-  latest_version = None
+  latest_build_version_str = None
+  latest_version_str = None
+  latest_version_obj = None
   version_regex = re.compile(r"mft-kernel-modules-([\d\.]+)-(\d+)-.*\.tgz$")
   for blob in mft_kernel_module_blobs:
     match = version_regex.search(blob.name)
@@ -734,19 +735,20 @@ def IdentifyMftKernelModules(
       continue
     current_version_str = match.group(1)
     build_version_str = match.group(2)
-    current_version = version.parse(
+    current_version_obj = version.parse(
         f"{current_version_str}.{build_version_str}"
     )
-    if latest_version is None or current_version > latest_version:
-      latest_version = current_version_str
-      latest_build_version = build_version_str
+    if latest_version_obj is None or current_version_obj > latest_version_obj:
+      latest_version_str = current_version_str
+      latest_version_obj = current_version_obj
+      latest_build_version_str = build_version_str
       latest_blob = blob
   logging.info(
       "The latest MFT kernel modules available on COS tools is: %s-%s",
-      latest_version,
-      latest_build_version,
+      latest_version_str,
+      latest_build_version_str,
   )
-  return latest_blob, latest_version, latest_build_version
+  return latest_blob, latest_version_str, latest_build_version_str
 
 
 def DownloadMftKernelModulesFromCosTools(

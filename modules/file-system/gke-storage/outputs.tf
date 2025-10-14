@@ -19,9 +19,10 @@ output "persistent_volume_claims" {
   value = flatten([
     for idx in range(var.pvc_count) : [{
       name          = "${local.pvc_name_prefix}-${idx}"
+      namespace     = var.namespace
       mount_path    = "${var.pv_mount_path}/${local.pvc_name_prefix}-${idx}"
       mount_options = var.mount_options
-      is_gcs        = false
+      storage_type  = local.storage_type
     }]
   ])
 }

@@ -586,13 +586,6 @@ def setup_cloud_ops() -> None:
     # Update setup receiver path
     file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]
 
-    # Add chs_health_check receiver
-    file["logging"]["receivers"]["chs_health_check"] = {
-        "type": "files",
-        "include_paths": ["/var/log/slurm/chs_health_check.log"],
-        "record_log_file_path": True,
-    }
-
     cluster_info = {
         'type':'modify_fields',
         'fields': {
@@ -608,11 +601,6 @@ def setup_cloud_ops() -> None:
     file["logging"]["processors"]["add_cluster_info"] = cluster_info
     file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
     file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
-
-    # Add chs_health_check to slurmlog2_pipeline
-    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["receivers"].append(
-        "chs_health_check"
-    )
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)

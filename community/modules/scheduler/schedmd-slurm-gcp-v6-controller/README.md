@@ -262,14 +262,14 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.41 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.41 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.0.0 |
 
 ## Modules
@@ -395,6 +395,7 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Post deployment instructions. |
+| <a name="output_slurm_bucket"></a> [slurm\_bucket](#output\_slurm\_bucket) | GCS Bucket of Slurm cluster file storage. |
 | <a name="output_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#output\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
 | <a name="output_slurm_bucket_name"></a> [slurm\_bucket\_name](#output\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |

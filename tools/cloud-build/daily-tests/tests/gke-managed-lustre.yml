@@ -17,8 +17,8 @@ deployment_name: gke-ml-{{ build }}
 region: us-central1
 zone: us-central1-c
 lustre_instance_id: "{{ deployment_name }}-lstr"
-size_gib: 18000
-per_unit_storage_throughput: 1000
+size_gib: 36000
+per_unit_storage_throughput: 500
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-managed-lustre.yaml"
 network: "{{ deployment_name }}-basic-net"

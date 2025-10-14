@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,12 +19,19 @@
 #SBATCH --exclusive
 
 : "${NEMOFW_VERSION:=24.12}"
+: "${NCCL_GIB_VERSION:=v1.1.0}"
 
-srun docker build --build-arg="NEMOFW_VERSION=${NEMOFW_VERSION}" -t nemo-"${NEMOFW_VERSION}" .
-srun rm -f nemo-"${NEMOFW_VERSION}".sqsh
-srun enroot import dockerd://nemo-"${NEMOFW_VERSION}"
+# This ensures that the docker process on the compute node can access us-docker.pkg.dev
+srun gcloud auth configure-docker us-docker.pkg.dev --quiet
+
+srun docker build \
+	--build-arg="NEMOFW_VERSION=${NEMOFW_VERSION}" \
+	--build-arg="NCCL_GIB_VERSION=${NCCL_GIB_VERSION}" \
+	-t nemo-"${NEMOFW_VERSION}"-"${NCCL_GIB_VERSION}" .
+srun rm -f nemo-"${NEMOFW_VERSION}"-"${NCCL_GIB_VERSION}".sqsh
+srun enroot import dockerd://nemo-"${NEMOFW_VERSION}"-"${NCCL_GIB_VERSION}"
 
 srun \
 	--container-mounts="${PWD}":/workspace/mount_dir,/var/tmp:/var/tmp \
-	--container-image=./nemo-"${NEMOFW_VERSION}".sqsh \
+	--container-image=./nemo-"${NEMOFW_VERSION}"-"${NCCL_GIB_VERSION}".sqsh \
 	bash -c "cp -r /opt/NeMo-Framework-Launcher/requirements.txt /opt/NeMo-Framework-Launcher/launcher_scripts /opt/NeMo-Framework-Launcher/auto_configurator /workspace/mount_dir/"
