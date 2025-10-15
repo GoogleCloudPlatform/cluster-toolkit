@@ -71,11 +71,11 @@ deployment_groups:
 
   # This file system has an associated license cost.
   # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network]
-    settings:
-      local_mount: /scratch
+ # - id: scratchfs
+ #   source: community/modules/file-system/DDN-EXAScaler
+ #   use: [network]
+ #   settings:
+ #     local_mount: /scratch
 
   # The compute partition is designed for performance.
   # Use:
@@ -154,7 +154,7 @@ deployment_groups:
     use:
     - network
     - homefs
-    - scratchfs
+   # - scratchfs
     - projectsfs
     - low_cost_partition
     - compute_partition
