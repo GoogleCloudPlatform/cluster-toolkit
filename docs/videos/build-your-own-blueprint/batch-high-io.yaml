@@ -33,11 +33,6 @@ deployment_groups:
     settings:
       local_mount: /apps
 
-  #- id: lustrefs
-  #  source: community/modules/file-system/DDN-EXAScaler
-  #  use: [network1]
-  #  settings: {local_mount: /scratch}
-
   - id: batch-job
     source: modules/scheduler/batch-job-template
     use: [network1, appfs]
