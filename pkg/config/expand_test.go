@@ -361,7 +361,7 @@ func (s *zeroSuite) TestSubstituteModuleSources(c *C) {
 	y := Module{ID: "moduleY", Source: "./modules/network/pre-existing-vpc"}
 
 	dg := []Group{
-		{Name: "zero", Modules: []Module{a, b}},
+		{Name: "zero", Modules: []Module{a}},
 		{Name: "one", Modules: []Module{y}},
 	}
 
