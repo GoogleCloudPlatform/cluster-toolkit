@@ -262,9 +262,9 @@ File systems:
   2.5 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
+#* The scratchfs is mounted at `/scratch` and is a
+#  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+#  file system designed for high IO performance. The capacity is ~10TiB.
 
 > [!WARNING]
 > This module is deprecated and will be removed on July 1, 2025. The
@@ -609,13 +609,13 @@ _This blueprint has been deprecated and will be removed on August 1, 2025._
 
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
-The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of
-~10TiB and is mounted at `/lustre`.
+#The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+#file system is designed for high IO performance. It has a default capacity of
+#~10TiB and is mounted at `/lustre`.
 
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+#> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+#> described in the pricing section of the
+#> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
 After the creation of the file-system and the client instances, the startup
 scripts on the client instances will automatically install the lustre drivers,
