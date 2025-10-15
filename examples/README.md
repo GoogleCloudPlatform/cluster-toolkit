@@ -604,12 +604,6 @@ The blueprint contains the following:
 
 _This blueprint has been deprecated and will be removed on August 1, 2025._
 
-Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
-
-#The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-#file system is designed for high IO performance. It has a default capacity of
-#~10TiB and is mounted at `/lustre`.
-
 After the creation of the file-system and the client instances, the startup
 scripts on the client instances will automatically install the lustre drivers,
 configure the mount-point, and mount the file system to the specified
