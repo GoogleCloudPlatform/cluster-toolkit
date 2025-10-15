@@ -40,15 +40,15 @@ deployment_groups:
 
   # This file system has an associated license cost.
   # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network1]
-    settings:
-      local_mount: /lustre
+#  - id: lustre
+#    source: community/modules/file-system/DDN-EXAScaler
+#    use: [network1]
+#    settings:
+#      local_mount: /lustre
 
   - source: modules/compute/vm-instance
     id: compute_instances
-    use: [network1, lustre]
+    use: [network1]
     settings:
       name_prefix: client-vm
       add_deployment_name_before_prefix: true
