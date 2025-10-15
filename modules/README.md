@@ -105,6 +105,8 @@ Modules that are still in development and less stable are labeled with the
   persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
+* **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
+  and mounts [WEKA](https://www.weka.io/) filesystems.
 
 [filestore]: file-system/filestore/README.md
 [parallelstore]: file-system/parallelstore/README.md
@@ -114,6 +116,7 @@ Modules that are still in development and less stable are labeled with the
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
+[weka-client]: ../community/modules/file-system/weka-client/README.md
 
 ### Monitoring
 
