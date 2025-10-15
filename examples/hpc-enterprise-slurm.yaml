@@ -103,14 +103,6 @@ deployment_groups:
     settings:
       local_mount: /projects
 
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-#  - id: scratchfs
-#    source: community/modules/file-system/DDN-EXAScaler
-#    use: [network]
-#    settings:
-#      local_mount: /scratch
-
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
