@@ -49,12 +49,6 @@ func defaultAPIList(source string) []string {
 			"bigqueryconnection.googleapis.com",
 			"sqladmin.googleapis.com",
 		},
-	#	"community/modules/file-system/DDN-EXAScaler": {
-	#		"compute.googleapis.com",
-	#		"deploymentmanager.googleapis.com",
-	#		"iam.googleapis.com",
-	#		"runtimeconfig.googleapis.com",
-	#	},
 		"community/modules/file-system/nfs-server": {
 			"compute.googleapis.com",
 		},
