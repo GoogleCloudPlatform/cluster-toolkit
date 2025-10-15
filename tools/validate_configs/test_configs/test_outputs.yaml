@@ -104,12 +104,3 @@ deployment_groups:
     source: modules/scripts/startup-script
     outputs:
     - startup_script
-
-  - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
-    outputs:
-    - private_addresses
-    - ssh_console
-    - mount_command
-    - http_console
-    - network_storage
