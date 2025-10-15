@@ -381,7 +381,6 @@ deployment_groups:
           - controller_sa
           - homefs
           - projectsfs
-        #  - scratchfs
           - slurm_login
           - n2_partition
           - c2_partition
