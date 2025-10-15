@@ -222,7 +222,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     reservation_affinity {
-      consume_reservation_type = var.reservation_affinity.consume_reservation_type
+      consume_reservation_type = local.reservation_affinity_override.consume_reservation_type
       key                      = local.is_valid_reservation ? local.reservation_resource_api_label : null
       values                   = local.is_valid_reservation ? (var.is_reservation_active ? local.active_reservation_values : local.default_reservation_values) : null
     }
@@ -299,8 +299,8 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition = (
-        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
-        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
+        (local.reservation_affinity_override.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
+        (local.reservation_affinity_override.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
       )
       error_message = <<-EOT
       When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
@@ -360,7 +360,7 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
     }
     precondition {
-      condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
+      condition     = !(var.enable_queued_provisioning == true && local.reservation_affinity_override.consume_reservation_type != "NO_RESERVATION")
       error_message = "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
     }
     precondition {
@@ -388,7 +388,7 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
     }
     precondition {
-      condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      condition     = var.enable_flex_start == true ? (local.reservation_affinity_override.consume_reservation_type == "NO_RESERVATION") : true
       error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
     precondition {

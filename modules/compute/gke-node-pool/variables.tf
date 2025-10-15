@@ -202,7 +202,10 @@ variable "threads_per_core" {
 }
 
 variable "spot" {
-  description = "Provision VMs using discounted Spot pricing, allowing for preemption"
+  description = <<-EOT
+  Provision VMs using discounted Spot pricing, allowing for preemption.
+  Note: When set to `true`, this will automatically force `reservation_affinity` to `NO_RESERVATION`, as Spot VMs cannot be used with reservations. Any user-provided `reservation_affinity` settings will be ignored.
+  EOT
   type        = bool
   default     = false
 }
@@ -355,6 +358,9 @@ variable "additional_networks" {
 
 variable "reservation_affinity" {
   description = <<-EOT
+  Note: If `enable_queued_provisioning` or `spot` is set to `true`, any values provided for this variable will be ignored. The module will automatically enforce `consume_reservation_type = "NO_RESERVATION"` to comply with GCP requirements for those features.
+
+  ---
   Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.
   Even though specific_reservations is a list, only one reservation is allowed by the NodePool API.
   It is assumed that the specified reservation exists and has available capacity.
@@ -431,7 +437,10 @@ variable "run_workload_script" {
 }
 
 variable "enable_queued_provisioning" {
-  description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool."
+  description = <<-EOT
+  If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool.
+  Note: When set to `true`, this will automatically force `reservation_affinity` to `NO_RESERVATION`, as this is a requirement for queued provisioning. Any user-provided `reservation_affinity` settings will be ignored.
+  EOT
   type        = bool
   default     = false
 }
