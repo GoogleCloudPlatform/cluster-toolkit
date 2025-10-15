@@ -67,17 +67,6 @@ module "projectsfs" {
   zone            = var.zone
 }
 
-# module "scratchfs" {
-#  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/DDN-EXAScaler?ref=v1.38.0&depth=1"
-#  labels               = var.labels
-#  local_mount          = "/scratch"
-#  network_self_link    = module.network.network_self_link
-#  project_id           = var.project_id
-#  subnetwork_address   = module.network.subnetwork_address
-#  subnetwork_self_link = module.network.subnetwork_self_link
-#  zone                 = var.zone
-# }
-
 module "n2_nodeset" {
   source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
   allow_automatic_updates = false
