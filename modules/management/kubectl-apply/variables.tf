@@ -18,8 +18,11 @@ locals {
   # This list defines the Kueue Helm chart versions that are officially tested and supported by this toolkit, based on the official changelog.
   # The list should be updated as new versions are tested and approved.
   # Refer https://github.com/kubernetes-sigs/kueue/tree/main/CHANGELOG
-  kueue_supported_versions  = ["0.13.3", "0.13.2", "0.13.1", "0.13.0"]
-  jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
+  kueue_supported_versions = ["0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+
+  # Officially supported latest helm chart versions of Jobset.
+  # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
+  jobset_supported_versions = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
   gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
 }
 
@@ -112,7 +115,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.7.2")
+    version = optional(string, "0.10.1")
   })
   default = {}
 }

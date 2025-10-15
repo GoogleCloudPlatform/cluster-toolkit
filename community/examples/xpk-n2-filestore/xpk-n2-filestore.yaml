@@ -32,7 +32,7 @@ vars:
   slice_cpu_count: 64
   xpk_version: v0.8.0
   kueue_version: v0.11.1
-  jobset_version: v0.7.2
+  jobset_version: 0.10.1
   kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
 
 deployment_groups:
