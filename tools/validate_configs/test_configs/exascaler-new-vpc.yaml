@@ -27,9 +27,3 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
-
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network1]
-    settings:
-      local_mount: /scratch
