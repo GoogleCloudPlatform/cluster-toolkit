@@ -14,7 +14,6 @@
 
 ---
 tags:
-- m.DDN-EXAScaler
 - m.pre-existing-vpc
 - m.startup-script
 - m.vm-instance
