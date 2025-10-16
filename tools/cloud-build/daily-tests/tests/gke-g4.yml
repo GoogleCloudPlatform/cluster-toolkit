@@ -1,0 +1,40 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# region, zone must be defined
+# in build file with --extra-vars flag!
+test_name: gke-g4
+deployment_name: gke-g4-{{ build }}
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/gke-g4/gke-g4.yaml"
+network: "{{ deployment_name }}-net-0"
+region: us-central1
+zone: us-central1-b
+remote_node: "{{ deployment_name }}-remote-node-0"
+machine_type: g4-standard-48
+num_gpus: 1
+static_node_count: 2
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  machine_type: "{{ machine_type }}"
+  num_gpus: "{{ num_gpus }}"
+  static_node_count: "{{ static_node_count }}"
+  authorized_cidr: "{{ build_ip.stdout }}/32"
+custom_vars:
+  project: "{{ project }}"
+post_deploy_tests:
+- test-validation/test-gke-job.yml

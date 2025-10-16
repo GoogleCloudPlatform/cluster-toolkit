@@ -3,7 +3,7 @@
 This module creates Kubernetes Persistent Volumes (PV) and Persistent Volume
 Claims (PVC) that can be used by a [gke-job-template].
 
-`gke-persistent-volume` works with Filestore and Google Cloud Storage. Each
+`gke-persistent-volume` works with Filestore, Google Cloud Storage and Managed Lustre. Each
 `gke-persistent-volume` can only be used with a single file system so if multiple
 shared file systems are used then multiple `gke-persistent-volume` modules are
 needed in the blueprint.
@@ -39,7 +39,7 @@ The following example creates a Filestore and then uses the
 
   - id: job-template
     source: modules/compute/gke-job-template
-    use: [datafs-pv, compute_pool]
+    use: [datafs-pv, compute_pool, gke_cluster]
 ```
 
 The following example creates a GCS bucket and then uses the
@@ -60,13 +60,40 @@ The following example creates a GCS bucket and then uses the
     settings:
       local_mount: /data
 
-  - id: datafs-pv
+  - id: datagcs-pv
     source: modules/file-system/gke-persistent-volume
     use: [data-bucket, gke_cluster]
 
   - id: job-template
     source: modules/compute/gke-job-template
-    use: [datafs-pv, compute_pool, gke_cluster]
+    use: [datagcs-pv, compute_pool, gke_cluster]
+```
+
+The following example creates a Managed Lustre and then uses the
+`gke-persistent-volume` module to use the Lustre as shared storage in a
+`gke-job-template`.
+
+```yaml
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1]
+    settings:
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: <your-ip-address>/32
+
+  - id: data-managedlustre
+    source: modules/file-system/managed-lustre
+    settings:
+      local_mount: /data
+
+  - id: datalustre-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [data-managedlustre, gke_cluster]
+
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [datalustre-pv, compute_pool, gke_cluster]
 ```
 
 See example
@@ -89,15 +116,19 @@ modules. For example the `gke-persistent-volume` module can `use` a
 `gke-cluster` module and a `filestore` module, as shown in the example above.
 
 ```mermaid
-graph TD;
-    vpc-->|OneToMany|gke-cluster;
-    gke-cluster-->|OneToMany|gke-node-pool;
-    gke-node-pool-->|ManyToMany|gke-job-template;
-    gke-cluster-->|OneToMany|gke-persistent-volume;
-    gke-persistent-volume-->|ManyToMany|gke-job-template;
-    vpc-->|OneToMany|filestore;
-    filestore-->|OneToOne|gke-persistent-volume;
-```
+ graph TD;
+ vpc--> |OneToMany| gke-cluster;
+ gke-cluster--> |OneToMany| gke-node-pool;
+ gke-node-pool--> |ManyToMany| gke-job-template;
+ gke-cluster--> |OneToMany| gke-persistent-volume;
+ gke-persistent-volume--> |ManyToMany| gke-job-template;
+ vpc--> |OneToMany| filestore;
+ vpc--> |OneToMany| gcs;
+ vpc--> |OneToMany| managed-lustre;
+ filestore--> |OneToOne| gke-persistent-volume;
+ gcs--> |OneToOne| gke-persistent-volume;
+ managed-lustre--> |OneToOne| gke-persistent-volume;
+ ```
 
 ## License
 

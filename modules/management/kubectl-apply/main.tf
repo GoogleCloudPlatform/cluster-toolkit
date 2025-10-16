@@ -53,7 +53,6 @@ locals {
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
-  kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
@@ -87,15 +86,21 @@ module "kubectl_apply_manifests" {
 }
 
 module "install_kueue" {
-  source            = "./kubectl"
-  source_path       = local.install_kueue ? local.kueue_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists]
+  source           = "./helm_install"
+  count            = local.install_kueue ? 1 : 0
+  wait             = false
+  timeout          = 1200
+  release_name     = "kueue"
+  chart_repository = "oci://registry.k8s.io/kueue/charts"
+  chart_name       = "kueue"
+  chart_version    = var.kueue.version
+  namespace        = "kueue-system"
+  create_namespace = true
+  values_yaml = [
+    file("${path.module}/kueue/kueue-helm-values.yaml")
+  ]
 
-  providers = {
-    kubectl = kubectl
-  }
+  depends_on = [var.gke_cluster_exists]
 }
 
 module "configure_kueue" {

@@ -1,0 +1,66 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cos-nvidia-bug-report
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: <gke-node-name> # TODO: Replace with your GKE node name
+  tolerations:
+  - effect: NoSchedule
+    key: nvidia.com/gpu
+    operator: Exists
+  containers:
+  - name: bug-reporter-container
+    resources:
+      limits:
+        nvidia.com/gpu: "<number_of_gpus>" # TODO: Replace with number of GPUs on this machine type
+      requests:
+        nvidia.com/gpu: "<number_of_gpus>" # TODO: Replace with number of GPUs on this machine type
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    image: us-central1-docker.pkg.dev/gce-ai-infra/gce-cos-nvidia-bug-report-repo/gce-cos-nvidia-bug-report:latest
+    imagePullPolicy: Always
+    args:
+    - --gcs_bucket=${GCS_BUCKET}
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: host-etc
+      mountPath: /etc_host
+      readOnly: true
+    - name: host-tmp
+      mountPath: /tmp
+      readOnly: false
+    - mountPath: /usr/local/nvidia
+      name: nvidia
+      readOnly: true
+  hostNetwork: true
+  volumes:
+  - name: host-etc
+    hostPath:
+      path: /etc
+      type: Directory
+  - name: host-tmp
+    hostPath:
+      path: /tmp
+      type: Directory
+  - hostPath:
+      path: /home/kubernetes/bin/nvidia
+      type: Directory
+    name: nvidia

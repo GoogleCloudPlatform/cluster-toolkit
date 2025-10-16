@@ -16,7 +16,7 @@
 set -e -u -o pipefail
 
 usage() {
-	echo >&2 "Usage: bash build-and-push-gce-cos-nvidia-bug-report.sh -p <PROJECT_ID> -r <REPO_NAME> -i <IMAGE_NAME> [-l <REGION>]"
+	echo >&2 "Usage: bash build-and-push-cos-nvidia-bug-report.sh -p <PROJECT_ID> -r <REPO_NAME> -i <IMAGE_NAME> [-l <REGION>]"
 	echo >&2 "This script builds a Docker image and pushes it to Google Artifact Registry."
 	echo >&2 ""
 	echo >&2 "Options:"
@@ -27,10 +27,10 @@ usage() {
 	echo >&2 "  -h    Display this help message."
 	echo >&2 ""
 	echo >&2 "Example (default region):"
-	echo >&2 "  bash build-and-push-gce-cos-nvidia-bug-report.sh -p gpu-test-project -r gce-cos-nvidia-bug-report-repo -i gce-cos-nvidia-bug-report"
+	echo >&2 "  bash build-and-push-cos-nvidia-bug-report.sh -p gpu-test-project -r gce-cos-nvidia-bug-report-repo -i gce-cos-nvidia-bug-report"
 	echo >&2 ""
 	echo >&2 "Example (specific region):"
-	echo >&2 "  bash build-and-push-gce-cos-nvidia-bug-report.sh -p gpu-test-project -r gce-cos-nvidia-bug-report-repo -i gce-cos-nvidia-bug-report -l us-east4"
+	echo >&2 "  bash build-and-push-cos-nvidia-bug-report.sh -p gpu-test-project -r gce-cos-nvidia-bug-report-repo -i gce-cos-nvidia-bug-report -l us-east4"
 	exit 1
 }
 

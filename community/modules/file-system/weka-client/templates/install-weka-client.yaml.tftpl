@@ -1,0 +1,133 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Mounts the file systems specified in the metadata network_storage key
+  hosts: localhost
+  become: true
+  vars:
+    meta_key: "network_storage"
+    url: "http://metadata.google.internal/computeMetadata/v1/instance/attributes"
+  tasks:
+  - name: Check if weka is installed
+    ansible.builtin.stat:
+      path: /usr/bin/weka
+    register: weka_binary
+
+  - name: Create temporary location for installation script
+    ansible.builtin.tempfile:
+      state: file
+    register:
+      install_script
+    when: not weka_binary.stat.exists
+
+  - name: Download WEKA client
+    ansible.builtin.get_url:
+      url: http://${server_ip}:14000/dist/v1/install
+      dest: "{{ install_script.path }}"
+      mode: "700"
+    when: not weka_binary.stat.exists
+
+  - name: Run WEKA installation script
+    ansible.builtin.shell:
+      cmd: "{{ install_script.path }}"
+    when: not weka_binary.stat.exists
+    register: weka_install_result
+    changed_when: weka_install_result.rc == 0
+
+  - name: Read metadata network_storage information
+    ansible.builtin.uri:
+      url: "{{ url }}/weka-version"
+      method: GET
+      headers:
+        Metadata-Flavor: "Google"
+      status_code:
+        - 200
+        - 404
+    register: get_weka_version
+
+  - name: Set WEKA version from metadata server
+    ansible.builtin.set_fact:
+      weka_version: "{{ get_weka_version.body }}"
+    when: get_weka_version.status == 200
+
+  - name: Get version of WEKA installation client
+    ansible.builtin.shell:
+      cmd: weka -v | sed -e 's/^[^0-9.]*\([0-9.]*\)[^0-9.]*$/\1/'
+    register: get_weka_client_version
+    changed_when: get_weka_client_version.rc == 0
+
+  - name: Set WEKA version from WEKA installation client
+    ansible.builtin.set_fact:
+      weka_version: "{{ get_weka_client_version.stdout  }}"
+    when: get_weka_version.status == 404
+
+  - name: Download user-defined WEKA version
+    ansible.builtin.shell:
+      cmd: weka version get {{ weka_version }}
+    register: result
+    changed_when: result.rc == 0
+
+  - name: Set user-defined WEKA version
+    ansible.builtin.shell:
+      cmd: weka version set {{ weka_version }}
+    register: result
+    changed_when: result.rc == 0
+
+  - name: Setup WEKA client
+    ansible.builtin.shell:
+      cmd: weka local setup weka
+    register: setup_1_result
+    changed_when: setup_1_result.rc == 0
+    failed_when: false # ignore errors
+
+  - name: Setup WEKA client (2nd try)
+    ansible.builtin.shell:
+      cmd: weka local setup weka
+    register: result
+    changed_when: result.rc == 0
+    when: setup_1_result.rc != 0
+
+  - name: Prepare WEKA version
+    ansible.builtin.shell:
+      cmd: weka version prepare {{ weka_version }}
+    register: result
+    changed_when: result.rc == 0
+
+  - name: Stop WEKA client
+    ansible.builtin.shell:
+      cmd: weka local stop 
+    async: 30
+    poll: 10
+    register: weka_stop
+    changed_when: weka_stop.get("rc") == 0 # when killed by async, rc is not defined
+    failed_when: false # ignore errors
+
+  - name: Stop WEKA client (2nd try)
+    ansible.builtin.shell:
+      cmd: weka local stop 
+    async: 30
+    poll: 10
+    register: result
+    changed_when: result.rc == 0
+    failed_when: false # ignore errors
+    when: weka_stop.get("rc") != 0
+
+  - name: Remove WEKA containers
+    ansible.builtin.shell:
+      cmd: weka local rm -f --all 
+    register: result
+    changed_when: result.rc == 0
+    failed_when: false # ignore errors
