@@ -42,6 +42,7 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
 
 deployment_groups:
 - group: primary
@@ -183,13 +184,17 @@ deployment_groups:
         ))
     outputs: [instructions]
 
-  # Install Kueue and Jobset
+  # Install Jobset and NCCL installer
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [g4-cluster]
     settings:
-      kueue:
-        install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          version: v1.1.0
+          accelerator_count: $(vars.num_gpus)
       jobset:
         install: true
 
