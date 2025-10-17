@@ -54,6 +54,8 @@ Modules that are still in development and less stable are labeled with the
 * **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
+* **[gke-nodeset]** ![community-badge] ![experimental-badge] : Create a slinky nodeset to be used by the [gke-partition] module.
+* **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md

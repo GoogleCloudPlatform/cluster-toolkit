@@ -60,6 +60,10 @@ FINISH_LINE="startup-script exit status"
 # Match string for failures on the new guest agent
 FINISH_LINE_ERR="Script.*failed with error:"
 
+# NEW: Accept also these finish lines as success.
+STARTUP_SCRIPT_SUCCEEDED_LINE="google-startup-scripts.service: Succeeded."
+STARTUP_SCRIPT_FINISHED_LINE="Finished Google Compute Engine Startup Scripts."
+
 NON_FATAL_ERRORS=(
 	"Internal error"
 )
@@ -68,7 +72,7 @@ until [[ now -gt deadline ]]; do
 	ser_log=$(
 		set -o pipefail
 		${fetch_cmd} 2>"${error_file}" |
-			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
+			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}\|${STARTUP_SCRIPT_SUCCEEDED_LINE}\|${STARTUP_SCRIPT_FINISHED_LINE}"
 	) || {
 		err=$(cat "${error_file}")
 		echo "$err"
@@ -100,6 +104,12 @@ if [[ "${STATUS}" == 0 ]]; then
 elif [[ "${STATUS}" == 1 ]]; then
 	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
+elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_SUCCEEDED_LINE}"; then
+	echo "startup-script finished successfully (startup script succeeded line detected)"
+	exit 0
+elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_FINISHED_LINE}"; then
+	echo "startup-script finished successfully (startup script finished line detected)"
+	exit 0
 elif [[ now -ge deadline ]]; then
 	echo "startup-script timed out after ${TIMEOUT} seconds"
 	echo "${INSPECT_OUTPUT_TEXT}"
