@@ -22,6 +22,8 @@ locals {
   input_reservation_projects = [for r in try(var.reservation_affinity.specific_reservations, []) : coalesce(r.project, var.project_id)]
   # We, also, remember the suffix "/reservationBlocks/exr-one-block-1" for use elsewhere afterwards
   input_reservation_suffixes = [for r in try(var.reservation_affinity.specific_reservations, []) : substr(r.name, length(split("/", r.name)[0]), -1)]
+  # Adding this variable to by-pass the machine-type validation for TPUs
+  is_tpu = var.placement_policy.tpu_topology != null
 }
 
 data "google_compute_reservation" "specific_reservations" {
@@ -56,9 +58,9 @@ locals {
   verified_specific_reservations = [for k, v in data.google_compute_reservation.specific_reservations : v if(v.specific_reservation != null && v.specific_reservation_required == true)]
 
   # Build two maps to be used to compare the VM properties between reservations and the node pool
-  # Skip this for TPUs
   # Validation of only machine-type for CPUs and and both machine-type and guest-accelerators for GPUs
-  reservation_vm_properties = [for reservation in local.verified_specific_reservations : {
+  # Skip this for TPUs ( returns an empty list to skip the machine-type validation for aggregate TPU reservations)
+  reservation_vm_properties = local.is_tpu ? [] : [for reservation in local.verified_specific_reservations : {
     "machine_type" : try(reservation.specific_reservation[0].instance_properties[0].machine_type, "")
     "guest_accelerators" : local.has_gpu ? ( # Conditional check for GPUs
       { for acc in try(reservation.specific_reservation[0].instance_properties[0].guest_accelerators, []) : acc.accelerator_type => acc.accelerator_count }
