@@ -1,0 +1,212 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: eda-all-on-cloud
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: eda-all-on-cloud
+  region: us-central1
+  zone: $(var.region)-a
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Setup
+#
+# Sets up VPC network, persistent NFS shares
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: setup
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  - id: network
+    source: modules/network/vpc
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+      service_name: "netapp.servicenetworking.goog"
+      deletion_policy: "ABANDON"
+
+  - id: netapp_pool
+    source: modules/file-system/netapp-storage-pool
+    use: [network, private_service_access]
+    settings:
+      pool_name: "eda-pool"
+      network_id: $(network.network_id)
+      capacity_gib: 4096
+      service_level: "EXTREME"
+      region: $(vars.region)
+      # allow_auto_tiering: true
+
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "homefs"
+      capacity_gib: 1024
+      large_capacity: false
+      local_mount: "/home"
+      protocols: ["NFSV3"]
+
+  - id: toolsfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "toolsfs"
+      capacity_gib: 1024
+      large_capacity: false
+      local_mount: "/tools"
+      protocols: ["NFSV3"]
+      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  - id: libraryfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "libraryfs"
+      capacity_gib: 1024
+      large_capacity: false
+      local_mount: "/library"
+      protocols: ["NFSV3"]
+      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  - id: scratchfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "scratchfs"
+      capacity_gib: 1024
+      large_capacity: false
+      local_mount: "/scratch"
+      protocols: ["NFSV3"]
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Software Installation
+#
+# This deployment group is a stub for installing software before
+# bringing up the actual cluster.
+# See the README.md for useful software deployment patterns.
+#
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# - group: software_installation
+#   modules:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Cluster
+#
+# Provisions the actual EDA cluster with compute partitions,
+# Connects to the previously set up NFS shares.
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: cluster
+  modules:
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
+      machine_type: h3-standard-88
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h3_nodeset
+    settings:
+      partition_name: h3
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - h3_partition
+    - homefs
+    - toolsfs
+    - scratchfs
+    - slurm_login
+    settings:
+      enable_controller_public_ips: true

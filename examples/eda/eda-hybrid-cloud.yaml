@@ -1,0 +1,215 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: eda-hybrid-cloud
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: eda-hybrid-cloud
+  region: us-central1
+  zone: us-central1-a
+  network: shared-vpc-prod
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Setup
+#
+# Sets up VPC network, persistent NFS shares
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: setup
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      network_name: $(vars.network)
+
+  - id: firewall_rule
+    source: modules/network/firewall-rules
+    use:
+    - network
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-allow-internal-traffic
+        description: Allow internal traffic
+        destination_ranges:
+        - $(network.subnetwork_address)
+        source_ranges:
+        - $(network.subnetwork_address)
+        allow:
+        - protocol: tcp
+          ports:
+          - 0-65535
+        - protocol: udp
+          ports:
+          - 0-65535
+        - protocol: icmp
+      - name: $(vars.deployment_name)-allow-iap-ssh
+        description: Allow IAP-tunneled SSH connections
+        destination_ranges:
+        - $(network.subnetwork_address)
+        source_ranges:
+        - 35.235.240.0/20
+        allow:
+        - protocol: tcp
+          ports:
+          - 22
+
+# Connect existing Google Cloud NetApp Volumes
+# Replace server_ip, remote_mount, and local_mount values as needed for toolsfs, libraryfs, homefs, scratchfs
+  - id: toolsfs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: 10.165.129.4     # Set IP address of the NFS server here
+      remote_mount: toolsfs       # Set exported NFS share on the server here
+      local_mount: /tools
+      fs_type: nfs
+      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  - id: libraryfs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: 10.165.129.4     # Set IP address of the NFS server here
+      remote_mount: libraryfs     # Set exported NFS share on the server here
+      local_mount: /library
+      fs_type: nfs
+      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  - id: homefs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: 10.165.129.4     # Set IP address of the NFS server here
+      remote_mount: homefs        # Set exported NFS share on the server here
+      local_mount: /home
+      fs_type: nfs
+      mount_options: "hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  - id: scratchfs
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      server_ip: 10.165.129.5     # Set IP address of the NFS server here
+      remote_mount: scratchfs     # Set exported NFS share on the server here
+      local_mount: /scratch
+      fs_type: nfs
+      mount_options: "hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Software Installation
+#
+# This deployment group is a stub for installing software before
+# bringing up the actual cluster.
+# See the README.md for useful software deployment patterns.
+#
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# - group: software_installation
+#   modules:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Cluster
+#
+# Provisions the actual EDA cluster with compute partitions,
+# Connects to the previously set up NFS shares.
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: cluster
+  modules:
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
+      machine_type: h3-standard-88
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h3_nodeset
+    settings:
+      partition_name: h3
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - h3_partition
+    - toolsfs
+    - libraryfs
+    - homefs
+    - scratchfs
+    - slurm_login
+    settings:
+      enable_controller_public_ips: true
