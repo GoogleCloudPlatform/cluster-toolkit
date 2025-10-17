@@ -61,6 +61,13 @@ locals {
   cluster_location = local.cluster_id_parts[3]
 }
 
+module "tpu" {
+  source = "../../internal/tpu-definition"
+
+  machine_type     = var.machine_type
+  placement_policy = var.placement_policy
+}
+
 
 data "google_container_cluster" "gke_cluster" {
   name     = local.cluster_name
@@ -160,7 +167,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     dynamic "taint" {
-      for_each = concat(var.taints, local.gpu_taint)
+      for_each = concat(var.taints, local.gpu_taint, module.tpu.tpu_taint)
       content {
         key    = taint.value.key
         value  = taint.value.value
