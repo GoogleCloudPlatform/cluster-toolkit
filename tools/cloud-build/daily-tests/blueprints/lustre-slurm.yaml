@@ -35,37 +35,6 @@ deployment_groups:
   - id: network
     source: modules/network/pre-existing-vpc
 
-  ###########
-  # Storage #
-  ###########
-
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network]
-    settings:
-      local_mount: /lustre
-      waiter: deploymentmanager
-      mgs:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 1
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
-      mds:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 1
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
-      oss:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 3
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
-
   #############
   # Slurm VMs #
   #############
@@ -84,7 +53,6 @@ deployment_groups:
   #   source: community/modules/compute/schedmd-slurm-gcp-v6-partition
   #   use:
   #   - ubuntu_nodeset
-  #   - lustre
   #   settings:
   #     partition_name: ubuntu
 
@@ -115,7 +83,6 @@ deployment_groups:
     - network
     # - ubuntu_partition
     - rocky_partition
-    - lustre
     - slurm_login
     settings:
       enable_controller_public_ips: true
