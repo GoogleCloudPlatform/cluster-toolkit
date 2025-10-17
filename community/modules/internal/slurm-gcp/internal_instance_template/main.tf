@@ -52,7 +52,7 @@ locals {
   alias_ip_range_enabled = var.alias_ip_range != null
   preemptible            = var.preemptible || var.spot
   on_host_maintenance = (
-    local.preemptible || var.enable_confidential_vm || local.gpu_enabled
+    local.preemptible || var.enable_confidential_vm || local.gpu_enabled || var.resource_policy_self_link != null
     ? "TERMINATE"
     : var.on_host_maintenance
   )
@@ -87,6 +87,7 @@ resource "google_compute_instance_template" "tpl" {
   region                  = var.region
   min_cpu_platform        = var.min_cpu_platform
   resource_manager_tags   = var.resource_manager_tags
+  resource_policies       = var.resource_policy_self_link != null ? [var.resource_policy_self_link] : null
 
   service_account {
     email  = coalesce(var.service_account.email, "${data.google_project.this.number}-compute@developer.gserviceaccount.com")
@@ -179,6 +180,7 @@ resource "google_compute_instance_template" "tpl" {
   lifecycle {
     create_before_destroy = "true"
   }
+
 
   scheduling {
     preemptible                 = local.preemptible

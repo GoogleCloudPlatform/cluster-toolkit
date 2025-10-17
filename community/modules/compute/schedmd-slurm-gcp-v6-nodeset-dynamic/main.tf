@@ -32,7 +32,8 @@ module "gpu" {
 }
 
 locals {
-  guest_accelerator = module.gpu.guest_accelerator
+  placement_policy_name = coalesce(var.placement_policy_name, format("%s-%s-compact-policy", var.slurm_cluster_name, local.nodeset_name))
+  guest_accelerator     = module.gpu.guest_accelerator
 
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
@@ -81,6 +82,21 @@ locals {
 
 }
 
+resource "google_compute_resource_policy" "compact_placement" {
+  count = var.enable_placement ? 1 : 0
+
+  name        = local.placement_policy_name
+  project     = var.project_id
+  region      = var.region
+  description = "Compact placement policy for Slurm nodeset ${local.nodeset_name}"
+
+  group_placement_policy {
+    collocation = var.placement_policy_collocation
+    # vm_count is not specified here as this policy is for an instance template,
+    # and the number of VMs will be determined by the MIG.
+  }
+}
+
 module "slurm_nodeset_template" {
   source = "../../internal/slurm-gcp/instance_template"
 
@@ -121,8 +137,9 @@ module "slurm_nodeset_template" {
   source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
   source_image         = local.source_image                    # requires source_image_logic.tf
 
-  subnetwork          = var.subnetwork_self_link
-  additional_networks = var.additional_networks
-  access_config       = local.access_config
-  tags                = concat([var.slurm_cluster_name], var.tags)
+  subnetwork                = var.subnetwork_self_link
+  additional_networks       = var.additional_networks
+  access_config             = local.access_config
+  tags                      = concat([var.slurm_cluster_name], var.tags)
+  resource_policy_self_link = var.enable_placement ? google_compute_resource_policy.compact_placement[0].self_link : null
 }
