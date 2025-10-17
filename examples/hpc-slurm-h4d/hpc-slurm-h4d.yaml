@@ -22,10 +22,11 @@ vars:
   instance_image:
     family: slurm-gcp-6-11-hpc-rocky-linux-8
     project: schedmd-slurm-public
+  h4d_cluster_size: 2
 
   #Provisioning model, select one, lack of selection will rely on on-demand capacity
-  h4d_dws_flex_enabled: false
   h4d_reservation_name: ""
+  h4d_dws_flex_enabled: false
   h4d_enable_spot_vm: false
 
 # Documentation for each of the modules used below can be found at
@@ -83,7 +84,7 @@ deployment_groups:
       allow_automatic_updates: false
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
-      node_count_static: 2
+      node_count_static: $(vars.h4d_cluster_size)
       node_count_dynamic_max: 0
       enable_placement: false
       enable_spot_vm: $(vars.h4d_enable_spot_vm)
