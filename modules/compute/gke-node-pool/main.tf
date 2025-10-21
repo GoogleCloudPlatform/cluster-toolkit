@@ -233,6 +233,22 @@ resource "google_container_node_pool" "node_pool" {
         maintenance_interval = var.host_maintenance_interval
       }
     }
+
+    kubelet_config {
+      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
+      dynamic "topology_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "restricted"
+        }
+      }
+      dynamic "memory_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "Static"
+        }
+      }
+    }
   }
 
   network_config {

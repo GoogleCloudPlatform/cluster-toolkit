@@ -160,6 +160,7 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
+      enable_numa_aware_scheduling: true
       guest_accelerator:
       - type: nvidia-rtx-pro-6000
         count: $(vars.num_gpus)

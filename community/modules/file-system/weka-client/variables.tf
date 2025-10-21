@@ -12,25 +12,28 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 6.27.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.69.0"
-  }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.69.0"
-  }
+variable "local_mount" {
+  description = "The mount point where the contents of the device may be accessed after mounting."
+  type        = string
+  default     = "/mnt"
+}
 
-  required_version = ">= 1.3.0"
+variable "mount_options" {
+  description = "Mount options for filesystem shared by all clients."
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+variable "remote_mount" {
+  description = "Weka filesystem name."
+  type        = string
+}
+
+variable "server_ip" {
+  description = "Weka backend IP address used for bootstrapping."
+  type        = string
+  default     = ""
 }
