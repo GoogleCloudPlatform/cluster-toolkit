@@ -177,6 +177,11 @@ curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
 sudo dpkg --configure -a
 sudo bash add-monitoring-agent-repo.sh --uninstall
 sudo bash add-monitoring-agent-repo.sh --remove-repo
+curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
+sudo dpkg --configure -a
+sudo bash add-logging-agent-repo.sh --uninstall
+sudo bash add-logging-agent-repo.sh --remove-repo
+
 
 # Install ops-agent
 
