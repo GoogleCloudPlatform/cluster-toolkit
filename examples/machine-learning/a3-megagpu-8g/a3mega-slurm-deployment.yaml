@@ -31,7 +31,6 @@ vars:
   disk_size_gb: 200
   final_image_family: slurm-a3mega
   slurm_cluster_name: a3mega
-  a3mega_maintenance_interval: ""
   a3mega_cluster_size: 2 # supply cluster size
   a3mega_reservation_name: "" # supply reservation name
   # Additional provisioning models (pick only one), can be used to substitute `a3mega_reservation_name`:
