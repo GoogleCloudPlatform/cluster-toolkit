@@ -140,7 +140,7 @@ better performance under some HPC workloads. While official documentation
 recommends using the _Cloud Ops Agent_, it is recommended to use
 `install_stackdriver_agent` when performance is important.
 
-#### Stackdriver Agent and google-fluentd Installation
+#### Stackdriver Agent
 
 If an image or machine already has Cloud Ops Agent installed and you would like
 to instead use the Stackdriver Agent, the following script will remove the Cloud
@@ -170,7 +170,7 @@ like to instead use the Cloud Ops Agent, the following script will remove the
 Stackdriver Agent and install the Cloud Ops Agent.
 
 ```bash
-# UnInstall Stackdriver Agent and google-fluentd
+# UnInstall Stackdriver Agent
 
 sudo systemctl stop stackdriver-agent.service
 sudo systemctl disable stackdriver-agent.service
