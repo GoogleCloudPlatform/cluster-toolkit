@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,16 @@
  * limitations under the License.
 */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "> 5.0"
-    }
-  }
+variable "machine_type" {
+  description = "The machine type of the node pool."
+  type        = string
+}
 
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.69.0"
-  }
-
-  required_version = ">= 1.3"
+variable "placement_policy" {
+  description = "The placement policy for the node pool."
+  type = object({
+    type         = string
+    name         = optional(string)
+    tpu_topology = optional(string)
+  })
 }

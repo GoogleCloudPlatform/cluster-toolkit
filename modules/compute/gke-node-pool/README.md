@@ -297,6 +297,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
 
 ## Resources
 
@@ -381,4 +382,7 @@ limitations under the License.
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
 | <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
+| <a name="output_tpu_accelerator_type"></a> [tpu\_accelerator\_type](#output\_tpu\_accelerator\_type) | The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice'). |
+| <a name="output_tpu_chips_per_node"></a> [tpu\_chips\_per\_node](#output\_tpu\_chips\_per\_node) | The number of TPU chips on each node in the pool. |
+| <a name="output_tpu_topology"></a> [tpu\_topology](#output\_tpu\_topology) | The topology of the TPU slice (e.g., '4x4'). |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
