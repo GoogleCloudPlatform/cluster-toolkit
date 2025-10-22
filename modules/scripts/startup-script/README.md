@@ -140,7 +140,7 @@ better performance under some HPC workloads. While official documentation
 recommends using the _Cloud Ops Agent_, it is recommended to use
 `install_stackdriver_agent` when performance is important.
 
-#### Stackdriver Agent Installation
+#### Stackdriver Agent and google-fluentd Installation
 
 If an image or machine already has Cloud Ops Agent installed and you would like
 to instead use the Stackdriver Agent, the following script will remove the Cloud
@@ -154,12 +154,13 @@ curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
 sudo bash add-google-cloud-ops-agent-repo.sh --uninstall
 sudo bash add-google-cloud-ops-agent-repo.sh --remove-repo
 
-# Install Stackdriver Agent
+# Install Stackdriver Agent and google-fluentd
 curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
 sudo bash add-monitoring-agent-repo.sh --also-install
 curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
 sudo bash add-logging-agent-repo.sh --also-install
 sudo service stackdriver-agent start
+sudo service google-fluentd restart
 ```
 
 #### Cloud Ops Agent Installation
@@ -169,7 +170,7 @@ like to instead use the Cloud Ops Agent, the following script will remove the
 Stackdriver Agent and install the Cloud Ops Agent.
 
 ```bash
-# UnInstall Stackdriver Agent
+# UnInstall Stackdriver Agent and google-fluentd
 
 sudo systemctl stop stackdriver-agent.service
 sudo systemctl disable stackdriver-agent.service
@@ -177,6 +178,8 @@ curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
 sudo dpkg --configure -a
 sudo bash add-monitoring-agent-repo.sh --uninstall
 sudo bash add-monitoring-agent-repo.sh --remove-repo
+sudo systemctl stop google-fluentd.service
+sudo systemctl disable google-fluentd.service
 curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
 sudo dpkg --configure -a
 sudo bash add-logging-agent-repo.sh --uninstall
