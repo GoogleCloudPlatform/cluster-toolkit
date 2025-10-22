@@ -154,7 +154,7 @@ curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
 sudo bash add-google-cloud-ops-agent-repo.sh --uninstall
 sudo bash add-google-cloud-ops-agent-repo.sh --remove-repo
 
-# Install Stackdriver Agent and google-fluentd
+# Install Stackdriver Agent
 curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
 sudo bash add-monitoring-agent-repo.sh --also-install
 curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
