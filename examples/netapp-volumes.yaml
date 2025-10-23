@@ -25,7 +25,7 @@ vars:
   project_id: ## Set GCP Project ID Here ##
   deployment_name: netapp-volumes
   region: us-central1
-  zone: $(vars.region)-a
+  zone: us-central1-a
   pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
 
 # Documentation for each of the modules used below can be found at
