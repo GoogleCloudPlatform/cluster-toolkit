@@ -43,15 +43,10 @@ spec:
           requests:
             nvidia.com/gpu: 2  # Update this to match the number of GPUs per node in your cluster
         env:
-        # Force NCCL to use TCP and the primary ethernet interface
-        - name: NCCL_IB_DISABLE
-          value: "1"
-        - name: NCCL_SOCKET_IFNAME
-          value: "eth0"
         - name: NCCL_DEBUG
           value: "INFO"
         - name: NCCL_P2P_LEVEL
-          value: "PHB"
+          value: "PHB"  # Update this to "SYS" if using 8-GPU g4-standard-384 machines.
         command:
         - /bin/bash
         - -c
@@ -72,7 +67,7 @@ spec:
           mpirun \
             -np 1 \
             --allow-run-as-root \
-            -x NCCL_IB_DISABLE -x NCCL_SOCKET_IFNAME -x NCCL_DEBUG -x NCCL_P2P_LEVEL \
+            -x NCCL_DEBUG -x NCCL_P2P_LEVEL \
             /nccl-tests/build/all_reduce_perf \
             -b 1M -e 8G -f 2 -g 2 -w 5 --iters 100
         volumeMounts:

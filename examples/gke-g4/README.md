@@ -62,11 +62,7 @@ This directory contains a manifest to run NVIDIA NCCL performance tests on the G
 
 ### Overview
 
-As RDMA networking and the Google gIB plugin are not supported for G4 machines, the G4 instances use standard TCP/IP networking. The NCCL tests provided here are configured to:
-
-1. **Disable InfiniBand/RDMA:** explicitly sets `NCCL_IB_DISABLE=1` to force NCCL to use TCP sockets.
-2. **Use Standard Ethernet:** sets `NCCL_SOCKET_IFNAME=eth0` to bind to the default network interface.
-3. **Build from Source:** uses the `nvidia/cuda` development image to clone and compile `nccl-tests` at runtime, ensuring the latest compatible tests are run.
+As RDMA networking and the Google gIB plugin are not supported for G4 machines, the G4 instances use standard TCP/IP networking. The NCCL test provided here is configured to build from source. It uses the `nvidia/cuda` development image to clone and compile `nccl-tests` at runtime, ensuring the latest compatible tests are run.
 
 ### Running the Test
 
@@ -78,6 +74,7 @@ As RDMA networking and the Google gIB plugin are not supported for G4 machines, 
    * `cloud.google.com/gke-nodepool`: Ensure this matches your deployed nodepool name (default in blueprint is `g4-standard-96-g4-pool`).
    * `nvidia.com/gpu` (limits/requests): Set this to the number of GPUs on your node (e.g., 1, 4, 8, etc.).
    * Command argument `-g 2`: Update the `-g` flag in the command to match the number of GPUs.
+   * `NCCL_P2P_LEVEL`: Update this to "SYS" if using 8-GPU g4-standard-384 machines. Else should remain as "PHB".
 
 3. **Apply the Job:**
 
