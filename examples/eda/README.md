@@ -24,8 +24,27 @@ Goolge Cloud including:
 Two example blueprints are provided.
 
 ### Blueprint "eda-all-on-cloud"
+This blueprint assumes that all compute and data resides in the cloud.
+
+In the setup deploment group (see #deployment_stages) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, create them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes).
+
+The cluster deployment group provions compute autoscaling groups which are managed by SLURM.
+
+When scaling down the deploment, make sure to only destroy the *compute* deployment group. If you destroy the *setup* group too, you will lose all the data stored in your NetApp Volumes.
 
 ### Blueprint "eda-hybrid-cloud"
+This blueprint assumes you are using an pre-existing Google VPC with pre-existing NFS shares which store your data. This can be NetApp Volumes shares managed outside of Cluster Toolkit, which avoids the danger of being deleted accidentally when deleting the setup deployment group (see #deployment_stages). On top if that, on-premises ONTAP volumes can be cached in NetApp Volumes using the [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) feature. FlexCache offers the following features which enable bursting on-premises workloads into Google Cloud to use its powerful compute options:
+
+- Read-writable sparse volume
+- Block-level, “pull only” paradigm
+- 100% consistent, coherent, current
+- write-around
+- LAN-like latencies after first read
+- Fan-out. Use multiple caches to scale out workload
+It can accelerate metadata- or throughput-heavy read workloads considerably.
+It can accelerate metadata- or throughput-heavy read workloads considerably.
+
+This blueprint is designed for you to provide FlexCache (or regular) volumes for "tools", "libraries", "home" and "scratch".
 
 ## Getting Started
 To explore the reference architecture, you should follow the these steps:
