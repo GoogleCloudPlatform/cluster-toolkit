@@ -1,9 +1,9 @@
-# GCE COS NVIDIA Bug Report Collector
+# GCP COS NVIDIA Bug Report Collector
 
-![Platform: GCE/COS](https://img.shields.io/badge/Platform-GCE%2FCOS-green.svg)
+![Platform: GCP/COS](https://img.shields.io/badge/Platform-GCP%2FCOS-green.svg)
 
 A universal tool to simplify the generation of NVIDIA bug reports on Google
-Compute Engine (GCE) VMs that use the Container-Optimized OS (COS) guest
+Compute Platform (GCP) VMs that use the Container-Optimized OS (COS) guest
 operating system.
 
 This script provides a simple and reliable one-command experience to collect
@@ -14,11 +14,11 @@ to generate a more comprehensive report with deep hardware diagnostics.
 
 --------------------------------------------------------------------------------
 
-## 🤔 The Challenge: Getting GPU Bug Report on GCE with COS
+## 🤔 The Challenge: Getting GPU Bug Report on GCP with COS
 
 When troubleshooting GPU issues, the first step is often to generate an
-`nvidia-bug-report`. However, doing so on a **Google Compute Engine (GCE)
-virtual machine that uses Container-Optimized OS (COS) as its guest operating
+`nvidia-bug-report`. However, doing so on a **Google Compute Platform (GCP)
+that uses Container-Optimized OS (COS) as its guest operating
 system** could be a less trivial.
 
 COS is a minimal, security-hardened operating system from Google, designed
@@ -66,7 +66,7 @@ However, setting up MFT is a cumbersome process on COS:
 ## 💡 Our Solution: A Smart, All-in-One Collector
 
 This script eliminates all of the aforementioned complexity. It acts as a
-universal collector that simplifies bug report generation for all users on GCE
+universal collector that simplifies bug report generation for all users on GCP
 with COS.
 
 * **For all supported GPUs**, it automates the steps needed to generate a
@@ -80,8 +80,8 @@ docker command.
 
 ### ✨ Key Features
 
-* **Universal Collector for GCE COS**: A single, simple command to generate an
-    `nvidia-bug-report` on any supported GCE VM with the COS guest OS.
+* **Universal Collector for GCP COS**: A single, simple command to generate an
+    `nvidia-bug-report` on any supported GCP machine with the COS guest OS.
 * **Automatic MFT Enhancement**: For Blackwell and newer GPUs, the script
     automatically installs and configures the NVIDIA MFT suite to unlock deeper,
     more comprehensive hardware diagnostics.
@@ -92,14 +92,15 @@ docker command.
 
 Before running the script, ensure you have:
 
-1. A Google Compute Engine (GCE) GPU VM instance with **Container-Optimized OS
+1. A Google Compute Engine (GCE) GPU VM instance or a GKE node with **Container-Optimized OS
     (COS)** as its guest operating system.
 
-2. The GPU driver is installed on the VM instance.
+2. The GPU driver is installed on the GCE VM instance.
    * Please refer to
         [COS's official documentation page](\(https://cloud.google.com/container-optimized-os/docs/how-to/run-gpus#install\))
         for more detail.
    * Sample commands to install the GPU driver and verify the installation:
+   * ***NOTE:*** For GKE the driver is already installed. Unless opted for [manual driver installation](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#create-gpu-pool-auto-drivers)
 
     ```bash
     # Install NVIDIA GPU Driver
@@ -151,7 +152,9 @@ Before running the script, ensure you have:
 This tool is designed to be run as a Docker container. The primary method of use
 is a single docker run command.
 
-Sample command to run on a VM with 8 GPUs:
+### To run in a GCE VM instance
+
+Sample command to run on a GCE VM with 8 GPUs:
 
 Note: If you have a different number of GPUs on your system, you may need to
 adjust the `--device /dev/nvidia<gpu_num>:/dev/nvidia<gpu_num>` in the docker
@@ -175,6 +178,22 @@ docker run \
   --device /dev/nvidiactl:/dev/nvidiactl \
 us-central1-docker.pkg.dev/gce-ai-infra/gce-cos-nvidia-bug-report-repo/gce-cos-nvidia-bug-report:latest \
 --gcs_bucket=${GCS_BUCKET}
+```
+
+### To run in a GKE cluster
+Note: Update the below fields in the pod manifest `./bug-report-pod.yaml`
+
+| Fields | Description | Example |
+|:--------:|:--------:|:--------:|
+|  `<gke-node-name>`  |   GKE node which we want to target  |  gke-a4-2-a4-highgpu-8g-a4-p-b99cb17a-xrre  |
+|  `<number_of_gpus>`  |  Total number of GPUs on the targeted GPU node  |  A4 - 8, A4X - 4  |
+
+Note: Exporting the final bug reports to a GCS bucket is optional. If you do not
+intend to export it elsewhere, you may remove the `--gcs_bucket=${GCS_BUCKET}`
+at the end.
+
+```bash
+kubectl apply -f cluster-toolkit/community/cos-nvidia-bug-report/bug-report-pod.yaml
 ```
 
 ### 📝 Example Output
@@ -274,7 +293,7 @@ Registry.
 We provide a convenient shell script to build and push your customized image to
 your own Artifact Registry.
 
-You can do so by invoking the `build-and-push-gce-cos-nvidia-bug-report.sh`
+You can do so by invoking the `build-and-push-cos-nvidia-bug-report.sh`
 script with the following parameters:
 
 | Flag | Description                                                     | Required |
@@ -288,7 +307,7 @@ script with the following parameters:
 Sample command:
 
 ```bash
-bash build-and-push-gce-cos-nvidia-bug-report.sh \
+bash build-and-push-cos-nvidia-bug-report.sh \
     -p ${PROJECT?} \
     -r ${ARTIFACT_REPO?} \
     -i "custom-bug-report-collector" \

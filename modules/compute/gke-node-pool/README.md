@@ -279,16 +279,16 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.46 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.46 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.46 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.46 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
@@ -297,6 +297,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
 
 ## Resources
 
@@ -326,6 +327,7 @@ limitations under the License.
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
 | <a name="input_enable_flex_start"></a> [enable\_flex\_start](#input\_enable\_flex\_start) | If true, start the node pool with Flex Start provisioning model.<br/>To learn more about flex-start mode, please refer to<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
+| <a name="input_enable_numa_aware_scheduling"></a> [enable\_numa\_aware\_scheduling](#input\_enable\_numa\_aware\_scheduling) | Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling. | `bool` | `false` | no |
 | <a name="input_enable_private_nodes"></a> [enable\_private\_nodes](#input\_enable\_private\_nodes) | Whether nodes have internal IP addresses only. | `bool` | `false` | no |
 | <a name="input_enable_queued_provisioning"></a> [enable\_queued\_provisioning](#input\_enable\_queued\_provisioning) | If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
@@ -380,4 +382,7 @@ limitations under the License.
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
 | <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
+| <a name="output_tpu_accelerator_type"></a> [tpu\_accelerator\_type](#output\_tpu\_accelerator\_type) | The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice'). |
+| <a name="output_tpu_chips_per_node"></a> [tpu\_chips\_per\_node](#output\_tpu\_chips\_per\_node) | The number of TPU chips on each node in the pool. |
+| <a name="output_tpu_topology"></a> [tpu\_topology](#output\_tpu\_topology) | The topology of the TPU slice (e.g., '4x4'). |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

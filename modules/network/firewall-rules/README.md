@@ -83,7 +83,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 9.0 |
+| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 12.0 |
 
 ## Resources
 

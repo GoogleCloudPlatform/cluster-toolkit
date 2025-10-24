@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   service                 = var.service_name
   reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
   deletion_policy         = var.deletion_policy
+  update_on_creation_fail = var.deletion_policy == "ABANDON" ? true : null
 }
 
 # Google Cloud NetApp Volumes need enablement of custom_route import and export

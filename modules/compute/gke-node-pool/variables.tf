@@ -470,3 +470,9 @@ variable "num_slices" {
   type        = number
   default     = 1
 }
+
+variable "enable_numa_aware_scheduling" {
+  description = "Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling."
+  type        = bool
+  default     = false
+}

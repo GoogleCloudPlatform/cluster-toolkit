@@ -24,6 +24,7 @@ vars:
   rdma_net_range: 192.168.32.0/24
   hostname_prefix: $(vars.deployment_name)-odyssey
   base_network_name: $(vars.deployment_name)
+  reservation_name: "" # Optional: Set only if a reservation is available.
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -84,6 +85,7 @@ deployment_groups:
       instance_count: 2
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
+      reservation_name: $(vars.reservation_name)
       network_interfaces:
         $(concat(
           [{

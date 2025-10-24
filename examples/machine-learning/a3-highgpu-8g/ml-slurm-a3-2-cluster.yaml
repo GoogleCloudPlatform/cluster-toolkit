@@ -45,9 +45,6 @@ vars:
   a3_dws_flex_enabled: false
   a3_enable_spot_vm: false
 
-  # a3_maintenance_interval should be empty string by default; if Google staff
-  # have created a reservation, they will also provide a3_maintenance_interval
-  a3_maintenance_interval: ""
   # network parameters must match base blueprint deployment_name!
   # these values are accurate if deployment_name was not modified from example
   network_name_system: slurm-a3-base-sysnet
@@ -188,7 +185,6 @@ deployment_groups:
       enable_spot_vm: $(vars.a3_enable_spot_vm)
       dws_flex:
         enabled: $(vars.a3_dws_flex_enabled)
-      maintenance_interval: $(vars.a3_maintenance_interval)
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0
       disk_type: pd-ssd
