@@ -20,6 +20,18 @@ locals {
 }
 
 locals {
+  tpu_accelerator_node_selector = var.tpu_accelerator_type[0] != null ? [{
+    key   = "cloud.google.com/gke-tpu-accelerator"
+    value = var.tpu_accelerator_type[0]
+  }] : []
+
+  tpu_topology_node_selector = var.tpu_topology[0] != null ? [{
+    key   = "cloud.google.com/gke-tpu-topology"
+    value = var.tpu_topology[0]
+  }] : []
+}
+
+locals {
   # Start with the minimum cpu available of used node pools
   min_allocatable_cpu = min(var.allocatable_cpu_per_node...)
   full_node_cpu_request = (
@@ -107,7 +119,7 @@ locals {
     key   = "cloud.google.com/machine-family"
     value = var.machine_family
   }] : []
-  node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, var.node_selectors)
+  node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, local.tpu_accelerator_node_selector, local.tpu_topology_node_selector, var.node_selectors)
 
   any_gcs = anytrue([for pvc in var.persistent_volume_claims :
     pvc.storage_type == "gcs"
@@ -125,6 +137,7 @@ locals {
       k8s_service_account_name = var.k8s_service_account_name
       node_pool_names          = var.node_pool_names
       node_selectors           = local.node_selectors
+      tpu_limit                = var.tpu_chips_per_node[0]
       full_node_request        = local.full_node_request
       cpu_request              = local.cpu_request_string
       gpu_limit                = local.gpu_limit_string

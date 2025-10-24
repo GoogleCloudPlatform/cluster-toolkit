@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.3"
+# For referencing the original jobset helm chart values, pull the latest jobset chart version
+# `helm pull oci://registry.k8s.io/jobset/charts/jobset --version=0.10.1` (latest helm chart version)
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "> 5.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:mig/v1.70.0"
-  }
-}
+controller:
+  # It ensures the Jobset pod(s) can be scheduled on GKE clusters where the
+  # system node pool uses the default "gke-managed-components" taint.
+  tolerations:
+  - key: "components.gke.io/gke-managed-components"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"

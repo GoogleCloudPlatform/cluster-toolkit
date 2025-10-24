@@ -27,7 +27,6 @@ vars:
   source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   source_image_project_id: [ubuntu-os-accelerator-images]
   a3mega_partition_name: a3mega
-  a3mega_maintenance_interval: ""
   local_mount_homefs: /home
   instance_image:
     family: $(vars.final_image_family)
@@ -549,7 +548,6 @@ deployment_groups:
       enable_spot_vm: $(vars.a3mega_enable_spot_vm)
       dws_flex:
         enabled: $(vars.a3mega_dws_flex_enabled)
-      maintenance_interval: $(vars.a3mega_maintenance_interval)
       startup_script: $(a3mega_startup.startup_script)
 
   - id: a3mega_partition
