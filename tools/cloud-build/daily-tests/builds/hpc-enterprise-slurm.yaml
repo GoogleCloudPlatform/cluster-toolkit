@@ -15,6 +15,7 @@
 ---
 tags:
 - slurm6
+- m.DDN-EXAScaler
 - m.dashboard
 - m.filestore
 - m.private-service-access
