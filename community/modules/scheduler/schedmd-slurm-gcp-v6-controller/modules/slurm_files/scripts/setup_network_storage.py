@@ -167,7 +167,7 @@ def mount_fstab(mounts: list[NSMount], log):
     MAX_MOUNT_TIMEOUT = 60 * 5
     future_list = []
     retry_policy = ExceptionRetryPolicy(
-        max_attempts=40, exponent=1.6, sleep=1.0, max_sleep=16.0
+        max_attempts=120, exponent=1.6, sleep=1.0, max_sleep=16.0
     )
     with Executors.thread_pool().with_timeout(MAX_MOUNT_TIMEOUT).with_retry(
         retry_policy=retry_policy
@@ -206,8 +206,8 @@ def munge_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    # wait max 120s for munge mount
-    timeout = 120
+    # wait max 240s for munge mount
+    timeout = 240
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
