@@ -87,7 +87,7 @@ variable "active_directory_policy" {
   type        = string
   default     = null
   validation {
-    condition     = var.active_directory_policy == null || length(split("/", var.active_directory_policy)) == 6
+    condition     = var.active_directory_policy == null ? true : length(split("/", var.active_directory_policy)) == 6
     error_message = "The active directory policy must be provided in the following format: projects/<project_id>/locations/<location>/activeDirectoryPolicies/<policy_id>."
   }
 }
@@ -100,7 +100,7 @@ variable "cmek_policy" {
   type        = string
   default     = null
   validation {
-    condition     = var.cmek_policy == null || length(split("/", var.cmek_policy)) == 6
+    condition     = var.cmek_policy == null ? true : length(split("/", var.cmek_policy)) == 6
     error_message = "The CMEK policy must be provided in the following format: projects/<project>/locations/<location>/kmsConfigs/<name>."
   }
 }
