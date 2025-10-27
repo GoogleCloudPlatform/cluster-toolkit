@@ -103,6 +103,14 @@ deployment_groups:
     settings:
       local_mount: /projects
 
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
+  - id: scratchfs
+    source: community/modules/file-system/DDN-EXAScaler
+    use: [network]
+    settings:
+      local_mount: /scratch
+
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, compute_sa]
@@ -276,7 +284,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, controller_sa, homefs, projectsfs, slurm_login,
+    use: [network, controller_sa, homefs, projectsfs, scratchfs, slurm_login,
           n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
     settings:
       instance_image: $(vars.slurm_image)
