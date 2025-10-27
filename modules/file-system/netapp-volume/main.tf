@@ -81,8 +81,8 @@ resource "google_netapp_volume" "netapp_volume" {
           access_type     = rules.value.access_type
           allowed_clients = rules.value.allowed_clients
           has_root_access = rules.value.has_root_access
-          nfsv3           = rules.value.nfsv3 == null ? contains(var.protocols, "NFSV3") : rules.value.nfsv3
-          nfsv4           = rules.value.nfsv4 == null ? contains(var.protocols, "NFSV4") : rules.value.nfsv4
+          nfsv3           = rules.value.nfsv3 == null ? contains([for p in var.protocols : lower(p)], "nfsv3") : rules.value.nfsv3
+          nfsv4           = rules.value.nfsv4 == null ? contains([for p in var.protocols : lower(p)], "nfsv4") : rules.value.nfsv4
         }
       }
     }
