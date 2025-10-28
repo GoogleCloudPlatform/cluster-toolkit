@@ -14,7 +14,6 @@
 
 ---
 - name: Run prerequisite NCCL scripts
-  # Use the 'shell' module to execute complex shell commands
   shell: |
     set -x -e
     cd {{ ansible_user_dir }}
@@ -49,7 +48,6 @@
     executable: /bin/bash
 
 - name: Submit NCCL test job and get job ID
-  # Use 'shell' here as well to handle the pipe '|'
   shell: "sbatch run-nccl-tests.sh | awk '{print $4}'"
   args:
     chdir: "{{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}"
