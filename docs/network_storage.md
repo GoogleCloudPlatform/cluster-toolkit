@@ -9,7 +9,6 @@ The Toolkit contains modules that will **provision**:
 - [DDN EXAScaler lustre][ddn-exascaler] (Deprecated, removal on July 1, 2025)
 - [Managed Lustre][managed-lustre]
 - [NFS server (non-GCP managed)][nfs-server]
-- [Sycomp Intelligent Data Storage Platform][sycomp-storage]
 
 The Toolkit also provides a **[pre-existing-network-storage]** module to work
 with a network storage device that is already set up. The
@@ -19,7 +18,6 @@ with a network storage device that is already set up. The
 - daos
 - managed-lustre
 - gcsfuse
-- sycomp-storage
 
 ## Connecting to Network Storage
 
@@ -131,4 +129,3 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | 
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [managed-lustre]: ../modules/file-system/managed-lustre/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
-[sycomp-storage]: ../community/examples/sycomp/README.md

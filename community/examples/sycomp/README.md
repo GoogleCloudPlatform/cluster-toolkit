@@ -15,7 +15,7 @@ The directory contains four example blueprints that can be used to deploy or exp
 
 - sycomp-storage-ece.yaml
 
-  Blueprint used to deploy a `Sycomp Storage` cluster consisting of 7 storage servers using `ECE`(Erasure Code Edition) software RAID.
+  Blueprint used to deploy a `Sycomp Storage` cluster consisting of 7 storage servers using `ECE` (Erasure Code Edition) software RAID.
 
 - sycomp-storage-slurm.yaml
 
@@ -32,7 +32,8 @@ The directory contains four example blueprints that can be used to deploy or exp
 6. You have a valid **Customer Token** provided by Sycomp.
 7. You have a valid **Project access token** provided by Sycomp.
 
-> **_NOTE:_** To get a customer and project access token, contact Sycomp (sycompstorage@sycomp.com). <br>
+> **_NOTE:_** To get a customer and project access token, contact Sycomp (sycompstorage@sycomp.com).
+>
 > **_NOTE:_** To avoid repeatedly entering passwords, you can set `credential.helper` in git.
 
 ```shell
@@ -65,7 +66,7 @@ Required parameter updates for each blueprint:
   - `security.ssh.ssh_user_name`: The username for SSH access to the management node (e.g., `sycomp`).
   - `security.ssh.private_key`: The file path to your SSH private key (e.g., `~/.ssh/id_rsa`).
   - `security.ssh.public_key`: The file path to your SSH public key (e.g., `~/.ssh/id_rsa.pub`).
-  - `security.customer_token.token`: Your Sycomp Customer Token. To getn a customer token, contact Sycomp (sycompstorage@sycomp.com).
+  - `security.customer_token.token`: Your Sycomp Customer Token. To get a customer token, contact Sycomp (sycompstorage@sycomp.com).
 
 - **(Optional) `scale_config` settings:**
   - `scale_node_count`: The number of nodes in the Sycomp Storage cluster. Default is `3`.

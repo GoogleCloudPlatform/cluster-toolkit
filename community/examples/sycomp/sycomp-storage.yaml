@@ -46,7 +46,7 @@ deployment_groups:
     settings:
       security:
         ssh:
-          ssh_user_name: ""      ## Set user name to ssh mgmt node, for example: sycompacct"
+          ssh_user_name: ""      ## Set user name to ssh mgmt node, for example: "sycompacct"
           private_key: ""        ## Set private key file, for example: ~/.ssh/id_rsa
           public_key: ""         ## Set public key file, for example: ~/.ssh/id_rsa.pub
         customer_token:
