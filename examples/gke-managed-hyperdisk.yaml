@@ -150,6 +150,18 @@ deployment_groups:
       - |
 
         set -eux
+
+        cleanup() {
+          # This function will be called on script exit
+          if [ -n "${TAG:-}" ]; then
+            echo "--- Cleaning up temporary directories for tag ${TAG} ---"
+            rm -rf "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+            rm -rf "/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}"
+            rm -rf "/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}"
+          fi
+          }
+        trap cleanup EXIT
+
         export DEBIAN_FRONTEND=noninteractive
 
         # Install fio
@@ -165,32 +177,27 @@ deployment_groups:
         mountpoint /data/hyperdisk-throughput-pvc-0
 
         # Create temporary directory for fio benchmarks
-        mkdir -p /data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}
-        mkdir -p /data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}
-        mkdir -p /data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}
+        mkdir -p "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+        mkdir -p "/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}"
+        mkdir -p "/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}"
 
         # Perform hyperdisk balanced performance (Mixed IOPS) test
         fio --name=hyperdisk-balanced-iops --ioengine=libaio --iodepth=256 --rw=randrw \
         --bs=4k --direct=1 --size=10G --numjobs=16 --group_reporting --time_based --runtime=300s \
         --ramp_time=10s --iodepth_batch_submit=256 --iodepth_batch_complete_max=256 \
-        --directory=/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG} --filename_format=fiotest-balanced-iops
+        --directory="/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-balanced-iops
 
         # Perform hyperdisk extreme performance test (Max IOPS)
         fio --name=hyperdisk-extreme-iops --ioengine=libaio --iodepth=256 --rw=randwrite \
         --bs=4k --direct=1 --size=10G --numjobs=32 --group_reporting --time_based --runtime=300s --ramp_time=10s \
         --iodepth_batch_submit=256 --iodepth_batch_complete_max=256 \
-        --directory=/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG} --filename_format=fiotest-extreme-iops
+        --directory="/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-extreme-iops
 
         # Perform hyperdisk throughput performance test
         fio --name=hyperdisk-throughput-bw --ioengine=libaio --iodepth=64 --rw=write --bs=1M \
         --direct=1 --size=10G --numjobs=32 --group_reporting --time_based --runtime=300s --ramp_time=10s \
         --iodepth_batch_submit=64 --iodepth_batch_complete_max=64 \
-        --directory=/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG} --filename_format=fiotest-throughput-bw
-
-        # Clean up temporary directories for fio benchmarks
-        rm -rf /data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}
-        rm -rf /data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}
-        rm -rf /data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}
+        --directory="/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-throughput-bw
       node_count: 1
 
     outputs: [instructions]

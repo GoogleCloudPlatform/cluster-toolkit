@@ -39,23 +39,18 @@
 - name: Wait for FIO Job to complete
   # The FIO job should take approximately 20 minutes, process times out after a max wait of 40 mins
   delegate_to: localhost
-  ansible.builtin.shell: "kubectl get job {{ fio_job_name }} -o jsonpath='{.status.succeeded}'"
-  register: fio_job_status
-  until: fio_job_status.stdout == '1'
-  retries: 80
-  delay: 30
+  ansible.builtin.command: "kubectl wait --for=condition=complete --timeout=40m job/{{ fio_job_name }}"
+  changed_when: false
 
 - name: Fetch logs from the FIO job pod and save to fio_pod_logs.txt
   delegate_to: localhost
   ansible.builtin.shell: |
     pod_name="$(kubectl get pods -l job-name={{ fio_job_name }} -o jsonpath='{.items[0].metadata.name}')"
     kubectl logs "$pod_name" > fio_pod_logs.txt
-    cat fio_pod_logs.txt
-  register: fio_test_logs
 
 - name: Print the FIO test logs
   debug:
-    msg: "{{fio_test_logs.stdout}}"
+    msg: "{{ lookup('file', 'fio_pod_logs.txt') }}"
 
 - name: Clean up FIO job
   delegate_to: localhost
