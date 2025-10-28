@@ -22,7 +22,7 @@ vars:
   deployment_name: "mystorage2"  ## Set a customized deployment name
   region: ""                     ## Set region
   zone: ""                       ## Set zone
-  nfs_dir: "/gpfs/fs1/export1"   ## Set the directory want to export
+  nfs_dir: "/gpfs/fs1/export1"   ## Set the directory to export
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

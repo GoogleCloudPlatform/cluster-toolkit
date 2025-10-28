@@ -11,7 +11,7 @@ The directory contains four example blueprints that can be used to deploy or exp
 
 - sycomp-storage-expansion.yaml
 
-  Blueprint used to expand a the `Sycomp Storage` cluster to 4 storage servers.
+  Blueprint used to expand the `Sycomp Storage` cluster to 4 storage servers.
 
 - sycomp-storage-ece.yaml
 
