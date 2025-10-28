@@ -64,7 +64,7 @@ vars:
   # # Please refer https://cloud.google.com/managed-lustre/docs/locations
 
   # # Managed-Lustre instance name. This should be unique for each deployment.
-  # lustre_instance_id: gke-lustre-instance-a4x1
+  # lustre_instance_id: $(vars.deployment_name)
 
   # # The values of size_gib and per_unit_storage_throughput are co-related
   # # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
@@ -259,8 +259,6 @@ deployment_groups:
   #     remote_mount: lustrefs
   #     size_gib: $(vars.lustre_size_gib)
   #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
-  #     zone: us-central1-a
-
 
   # - id: lustre-pv
   #   source: modules/file-system/gke-persistent-volume
