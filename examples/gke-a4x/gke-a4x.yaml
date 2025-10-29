@@ -56,11 +56,28 @@ vars:
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
+  version_prefix: "1.33."
+
+  # # To enable Managed-Lustre please uncomment this section and fill out the settings.
+  # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
+  # # Managed Lustre is only supported in specific regions and zones
+  # # Please refer https://cloud.google.com/managed-lustre/docs/locations
+
+  # # Managed-Lustre instance name. This should be unique for each deployment.
+  # lustre_instance_id: $(vars.deployment_name)
+
+  # # The values of size_gib and per_unit_storage_throughput are co-related
+  # # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # # Storage capacity of the lustre instance in GiB
+  # lustre_size_gib: 36000
+
+  # # Maximum throughput of the lustre instance in MBps per TiB
+  # per_unit_storage_throughput: 500
 
 terraform_providers:
   google:
     source: hashicorp/google
-    version: 6.34.0
+    version: 7.2.0
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)
@@ -69,7 +86,7 @@ terraform_providers:
 
   google-beta:
     source: hashicorp/google-beta
-    version: 6.34.0
+    version: 7.2.0
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)
@@ -170,6 +187,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
       enable_k8s_beta_apis:
       - "resource.k8s.io/v1beta1/deviceclasses"
       - "resource.k8s.io/v1beta1/resourceclaims"
@@ -181,7 +199,7 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      version_prefix: "1.32."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -205,6 +223,48 @@ deployment_groups:
          gke-a4x-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
+
+  # # --- MANAGED LUSTRE ADDITIONS ---
+  # # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # # included in the Owner role, but not Editor.
+  # # PSA is required for all Managed Lustre functionality.
+  # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [gke-a4x-net-0]
+  #   settings:
+  #     prefix_length: 24
+
+  # # Firewall to allow Managed Lustre connection
+  # - id: lustre_firewall_rule
+  #   source: modules/network/firewall-rules
+  #   use: [gke-a4x-net-0]
+  #   settings:
+  #     ingress_rules:
+  #     - name: $(vars.deployment_name)-allow-lustre-traffic
+  #       description: Allow Managed Lustre traffic
+  #       source_ranges:
+  #       - $(private_service_access.cidr_range)
+  #       allow:
+  #       - protocol: tcp
+  #       ports:
+  #       - "988"
+
+  # - id: managed-lustre
+  #   source: modules/file-system/managed-lustre
+  #   use: [gke-a4x-net-0, private_service_access]
+  #   settings:
+  #     name: $(vars.lustre_instance_id)
+  #     local_mount: /lustre
+  #     remote_mount: lustrefs
+  #     size_gib: $(vars.lustre_size_gib)
+  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+
+  # - id: lustre-pv
+  #   source: modules/file-system/gke-persistent-volume
+  #   use: [managed-lustre, a4x-cluster]
+  #   settings:
+  #     capacity_gib: $(vars.lustre_size_gib)
 
   - id: workload_policy
     source: modules/compute/resource-policy
