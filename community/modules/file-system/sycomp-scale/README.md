@@ -13,7 +13,6 @@ The Terraform module parameters are documented in the README.md files in each mo
 - Sycomp Storage module README: sycomp-scale/README.md
 - Sycomp Storage Expansion module README: sycomp-scale-expansion/README.md
 
-For more information on this and other network storage options in the Cloud HPC Toolkit, see the extended Network Storage documentation (docs/network_storage.md).
 ## Examples
 
 The community examples folder (community/examples/sycomp/) contains four example blueprints that you can use to deploy or expand a Sycomp Storage cluster.

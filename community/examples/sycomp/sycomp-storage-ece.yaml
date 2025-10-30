@@ -35,9 +35,10 @@ deployment_groups:
     settings:
       network_name: ""           ## Set network name
       subnetwork_name: ""        ## Set subnetwork name
-      allowed_ssh_ip_ranges: []  ## Source ip ranges for ssh, for example: [21.32.32.0/24]
-                                 ## In order to be able to login to the login node via ssh,
-                                 ## The ip address of this machine needs to be placed in the allowed_ssh_ip_ranges.
+      # Source ip ranges for ssh, for example: [21.32.32.0/24].
+      # In order to be able to login to the login node via ssh, the ip address
+      # of this machine needs to be placed in the allowed_ssh_ip_ranges.
+      allowed_ssh_ip_ranges: []
 
   - id: sycomp-scale-gcp
     source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=v1.0.0"
