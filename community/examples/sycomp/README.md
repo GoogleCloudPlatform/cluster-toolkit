@@ -86,7 +86,7 @@ Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can dep
 
    ```bash
    # Replace <blueprint-filename> with the specific blueprint filename (e.g., "sycomp-storage.yaml").
-   gcluster create community/examples/sycomp/<blueprint-filename>.yaml
+   gcluster create community/examples/sycomp/<blueprint-filename>
    ```
 
    This command will create a new directory named after your `deployment_name` (e.g., `sycomp-storage`).
