@@ -17,10 +17,11 @@
 blueprint_name: sycomp-storage-expansion
 
 vars:
-  project_id: ""                       ## Set GCP Project ID Here
-  deployment_name: "sycomp-expansion"  ## Set customized deployment name
-  region: ""                           ## Set region
-  zone: ""                             ## Set zone
+  # Note: project_id, region, and zone must match the existing cluster.
+  project_id: ""                       ## Set GCP Project ID of existing cluster
+  deployment_name: "sycomp-expansion"  ## Set a name for this expansion deployment
+  region: ""                           ## Set region of existing cluster
+  zone: ""                             ## Set zone of existing cluster
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
