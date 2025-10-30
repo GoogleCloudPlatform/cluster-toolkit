@@ -11,7 +11,7 @@ Terraform modules for Sycomp Intelligent Data Storage Platform are downloaded on
 The Terraform module parameters are documented in the README.md files in each module directory.
 
 - Sycomp Storage module README: sycomp-scale/README.md
-- Sycomp Storage Expansion module: README sycomp-scale-expansion/README.md
+- Sycomp Storage Expansion module README: sycomp-scale-expansion/README.md
 
 For more information on this and other network storage options in the Cloud HPC Toolkit, see the extended Network Storage documentation (docs/network_storage.md).
 ## Examples
@@ -28,7 +28,7 @@ The community examples folder (community/examples/sycomp/) contains four example
   Blueprint for deploying a Sycomp Storage cluster consisting of 7 storage servers with ECE (Erasure Code Edition) software RAID.
 
 - [community/examples/sycomp/sycomp-storage-slurm.yaml][sycomp-storage-slurm-yaml] -
-  Blueprint for deploying a Slurm cluster and Sycomp Storage cluster with 4 servers. The Slurm compute nodes are configured as NFS clients and have the ability to use the Sycomp Storage filesystem.
+  Blueprint for deploying a Slurm cluster and Sycomp Storage cluster with 3 servers. The Slurm compute nodes are configured as NFS clients and have the ability to use the Sycomp Storage filesystem.
 
 [sycomp-storage-yaml]: ../../../examples/sycomp/sycomp-storage.yaml
 [sycomp-storage-expansion-yaml]: ../../../examples/sycomp/sycomp-storage-expansion.yaml
