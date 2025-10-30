@@ -19,7 +19,7 @@ The directory contains four example blueprints that can be used to deploy or exp
 
 - sycomp-storage-slurm.yaml
 
-  Blueprint used to deploy a `SLURM` cluster and a `Sycomp Storage` cluster with four servers. The `SLURM` compute nodes are configured as `NFS` clients and have the ability to use the Sycomp Storage filesystem.
+  Blueprint used to deploy a `SLURM` cluster and a `Sycomp Storage` cluster with three servers. The `SLURM` compute nodes are configured as `NFS` clients and have the ability to use the Sycomp Storage filesystem.
 
 ## Prerequisites
 
