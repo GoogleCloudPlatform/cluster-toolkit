@@ -107,8 +107,7 @@ Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can dep
 
 ## Cleanup
 
-To remove all resources created by this blueprint, run the following command from
-within the deployment directory:
+To remove all resources created by this blueprint, run the following command:
 
 ```bash
 gcluster destroy <deployment_name>

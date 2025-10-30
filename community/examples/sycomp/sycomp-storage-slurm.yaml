@@ -65,7 +65,7 @@ deployment_groups:
       nfs_exports:
       - path: $(vars.nfs_dir)
         clients:
-        - no_root_squash: true
+        - no_root_squash: false
 
   ## Set up slurm cluster and configure NFS client
   - id: debug_nodeset
