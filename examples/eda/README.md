@@ -117,6 +117,8 @@ storage intact and b) you can build software before you deploy your cluster.
    make
    ```
 
+1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for exiting networks, H4D instance group node limits or export paths of existing NFS volumes.
+
 1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-gybrid-cloud`) and `<project>` with the project id.
 
    ```bash
