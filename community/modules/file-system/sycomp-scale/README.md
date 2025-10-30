@@ -1,6 +1,6 @@
 ## Description
 
-This module allows you to deploy an instance of [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/) on Google Cloud Platform ([GCP](https://cloud.google.com/)) using the Google Cluster Toolkit.
+This document provides information on how to deploy an instance of [Sycomp Intelligent Data Storage Platform](https://sycomp.com/solution/hpc/storage/) on Google Cloud Platform ([GCP](https://cloud.google.com/)) using the Google Cluster Toolkit.
 
 > **_NOTE:_**
 > Sycomp Storage on GCP does not require an HPC Toolkit wrapper.
@@ -8,10 +8,10 @@ This module allows you to deploy an instance of [Sycomp Intelligent Data Storage
 
 Terraform modules for Sycomp Intelligent Data Storage Platform are downloaded on deployment using the Google Cloud Toolkit.
 
-The Terraform module parameters are documented in the README.md files in each module directory.
+The Terraform module parameters are documented in the `README.md` files in the respective module directories of the source GitLab repository. The main modules are:
 
-- Sycomp Storage module README: sycomp-scale/README.md
-- Sycomp Storage Expansion module README: sycomp-scale-expansion/README.md
+- `sycomp-scale`
+- `sycomp-scale-expansion`
 
 ## Examples
 
