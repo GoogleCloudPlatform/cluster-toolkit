@@ -276,7 +276,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 6.1 |
+| <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | >= 6.1 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_login"></a> [login](#module\_login) | ../../internal/slurm-gcp/login | n/a |
