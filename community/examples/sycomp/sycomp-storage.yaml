@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 ---
 
-blueprint_name: sycomp-scale
+blueprint_name: sycomp-storage
 
 vars:
-  project_id: ""                 ## Set GCP Project ID Here
-  deployment_name: "mystorage1"  ## Set customized deployment name
-  region: ""                     ## Set region
-  zone: ""                       ## Set zone
+  project_id: ""                     ## Set GCP Project ID Here
+  deployment_name: "sycomp-storage"  ## Set customized deployment name
+  region: ""                         ## Set region
+  zone: ""                           ## Set zone
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -44,6 +43,7 @@ deployment_groups:
     source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=v1.0.0"
     use: [network1]
     settings:
+      name_prefix: "sycompstorage"
       security:
         ssh:
           ssh_user_name: ""      ## Set user name to ssh mgmt node, for example: "sycompacct"

@@ -48,7 +48,7 @@ Required parameter updates for each blueprint:
 
 - **`vars` block:**
   - `project_id`: Your Google Cloud project ID.
-  - `deployment_name`: A unique name for this deployment (e.g., `mystorage1`).
+  - `deployment_name`: A unique name for this deployment (e.g., `sycomp-storage`).
   - `region`: The region where you want to deploy the cluster.
   - `zone`: The zone where you want to deploy the cluster.
 
@@ -74,7 +74,7 @@ Required parameter updates for each blueprint:
 
 ## Deployment
 
-Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can deploy blueprint cluster by following these steps from your terminal.
+Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can deploy the cluster from the blueprint by following these steps from your terminal.
 
 1. **Authenticate with Google Cloud:**
 
@@ -89,15 +89,17 @@ Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can dep
    gcluster create community/examples/sycomp/sycomp-storage.yaml
    ```
 
-   This command will create a new directory named after your `deployment_name` (e.g., `mystorage1`).
+   This command will create a new directory named after your `deployment_name` (e.g., `sycomp-storage`).
 
 3. **Deploy the resources:**
 
    ```bash
-   # terraform will prompt you to enter the username and password.
-   # Enter any username and use the project access token obtained from Sycomp as the password.
+   # The terraform init command will prompt for a username and password.
+   # Enter any username and use the project access token from Sycomp as the password.
    # To get a project access token, contact Sycomp (sycompstorage@sycomp.com).
-   terraform -chdir=<deployment_name>/primary init # e.g., mystorage1
+   #
+   # Replace <deployment_name> with the `deployment_name` from your blueprint (e.g., "sycomp-storage").
+   terraform -chdir=<deployment_name>/primary init
    gcluster deploy <deployment_name>
    ```
 

@@ -6,7 +6,7 @@ This module allows you to deploy an instance of [Sycomp Intelligent Data Storage
 > Sycomp Storage on GCP does not require an HPC Toolkit wrapper.
 > Terraform modules are sourced directly from GitLab.
 
-Terraform modules for Sycomp Intelligent Data Storage Platform are downloaded on deployment using the Googel Cloud Toolkit.
+Terraform modules for Sycomp Intelligent Data Storage Platform are downloaded on deployment using the Google Cloud Toolkit.
 
 The Terraform module parameters are documented in the README.md files in each module directory.
 

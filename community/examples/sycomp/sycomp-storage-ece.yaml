@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 ---
 
-blueprint_name: sycomp-scale-ece
+blueprint_name: sycomp-storage-ece
 
 vars:
   project_id: ""                 ## Set GCP Project ID Here
-  deployment_name: "mystorage3"  ## Set customized deployment name
+  deployment_name: "sycomp-ece"  ## Set customized deployment name
   region: ""                     ## Set region
   zone: ""                       ## Set zone
 

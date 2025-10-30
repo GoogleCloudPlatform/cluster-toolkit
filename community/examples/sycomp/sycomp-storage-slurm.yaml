@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 ---
 
-blueprint_name: sycomp-scale-slurm
+blueprint_name: sycomp-storage-slurm
 
 vars:
-  project_id: ""                 ## Set GCP Project ID Here
-  deployment_name: "mystorage2"  ## Set a customized deployment name
-  region: ""                     ## Set region
-  zone: ""                       ## Set zone
-  nfs_dir: "/gpfs/fs1/export1"   ## Set the directory to export
+  project_id: ""                   ## Set GCP Project ID Here
+  deployment_name: "sycomp-slurm"  ## Set a customized deployment name
+  region: ""                       ## Set region
+  zone: ""                         ## Set zone
+  nfs_dir: "/gpfs/fs1/export1"     ## Set the directory to export
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
