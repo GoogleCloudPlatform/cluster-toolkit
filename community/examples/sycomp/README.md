@@ -52,8 +52,6 @@ Required parameter updates for each blueprint:
   - `region`: The region where you want to deploy the cluster.
   - `zone`: The zone where you want to deploy the cluster.
 
-      **Note**: By default, the value of `deployment_name` is set by `sycomp-storage-gcp` module to its `name_prefix` variable, and `name_prefix` only accepts letters and numbers. If you want `deployment_name` to contain other characters, you need to set `name_prefix` separately for `sycomp-storage-gcp`.
-
 - **`network1` module settings:**
   - `source`: modules/network/vpc is the default and deploys the cluster in a newly created network. To use an existing network, change source to modules/network/pre-existing-vpc.
   - `network_name`: A name for the new VPC network (e.g., `sycomp-net`).
@@ -62,11 +60,12 @@ Required parameter updates for each blueprint:
      are allowed to connect via SSH. **You must include the IP address of the
      machine you are running the deployment from.** For example: `["1.2.3.0/24"]`.
 
-- **`sycomp-storage-gcp` module settings:**
+- **`sycomp-scale-gcp` module settings:**
   - `security.ssh.ssh_user_name`: The username for SSH access to the management node (e.g., `sycomp`).
   - `security.ssh.private_key`: The file path to your SSH private key (e.g., `~/.ssh/id_rsa`).
   - `security.ssh.public_key`: The file path to your SSH public key (e.g., `~/.ssh/id_rsa.pub`).
-  - `security.customer_token.token`: Your Sycomp Customer Token. To get a customer token, contact Sycomp (sycompstorage@sycomp.com).
+  - `security.customer_token.token`: Your Sycomp Customer Token. To get a customer token, contact Sycomp (`sycompstorage@sycomp.com`).
+  - `name_prefix` (Optional): By default, `sycomp-scale-gcp` sets the value of `name_prefix` based on the `deployment_name`. Since `name_prefix` only accepts **alphanumeric** characters (letters and numbers), `sycomp-scale-gcp` automatically **removes any non-alphanumeric characters** before assigning the value.
 
 - **(Optional) `scale_config` settings:**
   - `scale_node_count`: The number of nodes in the Sycomp Storage cluster. Default is `3`.
@@ -86,7 +85,7 @@ Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can dep
 2. **Create the deployment directory:**
 
    ```bash
-   # Replace <blueprint-filename> with the specific blueprint filename (e.g., "sycomp-storage.yml").
+   # Replace <blueprint-filename> with the specific blueprint filename (e.g., "sycomp-storage.yaml").
    gcluster create community/examples/sycomp/<blueprint-filename>.yaml
    ```
 
