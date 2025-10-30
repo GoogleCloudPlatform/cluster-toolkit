@@ -122,106 +122,24 @@ deployment_groups:
     settings:
       name: sample-pool
       zones: [$(vars.zone)]
-      machine_type: c3-standard-88 # Hyperdisk-extreme required C3 machine with 88 or more vCPUs
+      machine_type: c3-standard-88 # Hyperdisk-extreme requires C3 machine with 88 or more vCPUs
       auto_upgrade: true
 
-  # Train a TensorFlow model with Keras and Hyperdisk Balanced on GKE
-  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
-  - id: hyperdisk-balanced-job
+  # This is an example job that will install and run an `fio`benchmark against the hyperdisk volumes.
+  # For more FIO tests, see https://cloud.google.com/compute/docs/disks/benchmark-hyperdisk-performance
+  - id: fio-bench-job-template
     source: modules/compute/gke-job-template
     use:
     - gke_cluster
     - hyperdisk-balanced-setup
-    settings:
-      name: tensorflow
-      image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
-      security_context:  # to make sure the job have enough access to execute the jobs and r/w from hyperdisk
-      - key: runAsUser
-        value: 1000
-      - key: runAsGroup
-        value: 100
-      - key: fsGroup
-        value: 100
-      command:
-      - bash
-      - -c
-      - |
-        pip install transformers datasets
-        python - <<EOF
-        from datasets import load_dataset
-        dataset = load_dataset("glue", "cola", cache_dir='/data/hyperdisk-balanced-pvc-0')
-        dataset = dataset["train"]
-        from transformers import AutoTokenizer
-        import numpy as np
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        sentences = [str(s) for s in dataset["sentence"]]
-        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
-        tokenized_data = dict(tokenized_data)
-        labels = np.array(dataset["label"])
-        from transformers import TFAutoModelForSequenceClassification
-        from tensorflow.keras.optimizers import Adam
-        model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
-        model.compile(optimizer=Adam(3e-5))
-        model.fit(tokenized_data, labels)
-        EOF
-      node_count: 1
-    outputs: [instructions]
-
-  # Train a TensorFlow model with Keras and Hyperdisk Extreme on GKE
-  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
-  - id: hyperdisk-extreme-job
-    source: modules/compute/gke-job-template
-    use:
-    - gke_cluster
     - hyperdisk-extreme-setup
-    settings:
-      name: tensorflow
-      image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
-      security_context:  # to make sure the job have enough access to execute the jobs and r/w from hyperdisk
-      - key: runAsUser
-        value: 1000
-      - key: runAsGroup
-        value: 100
-      - key: fsGroup
-        value: 100
-      command:
-      - bash
-      - -c
-      - |
-        pip install transformers datasets
-        python - <<EOF
-        from datasets import load_dataset
-        dataset = load_dataset("glue", "cola", cache_dir='/data/hyperdisk-extreme-pvc-0')
-        dataset = dataset["train"]
-        from transformers import AutoTokenizer
-        import numpy as np
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        sentences = [str(s) for s in dataset["sentence"]]
-        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
-        tokenized_data = dict(tokenized_data)
-        labels = np.array(dataset["label"])
-        from transformers import TFAutoModelForSequenceClassification
-        from tensorflow.keras.optimizers import Adam
-        model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
-        model.compile(optimizer=Adam(3e-5))
-        model.fit(tokenized_data, labels)
-        EOF
-      node_count: 1
-    outputs: [instructions]
-
-  # Train a TensorFlow model with Keras and Hyperdisk Throughput on GKE
-  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
-  - id: hyperdisk-throughput-job
-    source: modules/compute/gke-job-template
-    use:
-    - gke_cluster
     - hyperdisk-throughput-setup
     settings:
-      name: tensorflow
-      image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
-      security_context:  # to make sure the job have enough access to execute the jobs and r/w from hyperdisk
+      name: fio-benchmark
+      image: ubuntu:latest
+      security_context:  # to make sure the job have enough access to install the fio packages
       - key: runAsUser
-        value: 1000
+        value: 0
       - key: runAsGroup
         value: 100
       - key: fsGroup
@@ -230,23 +148,56 @@ deployment_groups:
       - bash
       - -c
       - |
-        pip install transformers datasets
-        python - <<EOF
-        from datasets import load_dataset
-        dataset = load_dataset("glue", "cola", cache_dir='/data/hyperdisk-throughput-pvc-0')
-        dataset = dataset["train"]
-        from transformers import AutoTokenizer
-        import numpy as np
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        sentences = [str(s) for s in dataset["sentence"]]
-        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
-        tokenized_data = dict(tokenized_data)
-        labels = np.array(dataset["label"])
-        from transformers import TFAutoModelForSequenceClassification
-        from tensorflow.keras.optimizers import Adam
-        model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
-        model.compile(optimizer=Adam(3e-5))
-        model.fit(tokenized_data, labels)
-        EOF
+
+        set -eux
+
+        cleanup() {
+          # This function will be called on script exit
+          if [ -n "${TAG:-}" ]; then
+            echo "--- Cleaning up temporary directories for tag ${TAG} ---"
+            rm -rf "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+            rm -rf "/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}"
+            rm -rf "/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}"
+          fi
+          }
+        trap cleanup EXIT
+
+        export DEBIAN_FRONTEND=noninteractive
+
+        # Install fio
+        apt update -y && apt install -y fio
+
+        # Use a tag to create a unique path for tests
+        TAG=`date +%s`
+
+        # Verify mountpoints
+        df -h
+        mountpoint /data/hyperdisk-balanced-pvc-0
+        mountpoint /data/hyperdisk-extreme-pvc-0
+        mountpoint /data/hyperdisk-throughput-pvc-0
+
+        # Create temporary directory for fio benchmarks
+        mkdir -p "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+        mkdir -p "/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}"
+        mkdir -p "/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}"
+
+        # Perform hyperdisk balanced performance (Mixed IOPS) test
+        fio --name=hyperdisk-balanced-iops --ioengine=libaio --iodepth=256 --rw=randrw \
+        --bs=4k --direct=1 --size=10G --numjobs=16 --group_reporting --time_based --runtime=300s \
+        --ramp_time=10s --iodepth_batch_submit=256 --iodepth_batch_complete_max=256 \
+        --directory="/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-balanced-iops
+
+        # Perform hyperdisk extreme performance test (Max IOPS)
+        fio --name=hyperdisk-extreme-iops --ioengine=libaio --iodepth=256 --rw=randwrite \
+        --bs=4k --direct=1 --size=10G --numjobs=32 --group_reporting --time_based --runtime=300s --ramp_time=10s \
+        --iodepth_batch_submit=256 --iodepth_batch_complete_max=256 \
+        --directory="/data/hyperdisk-extreme-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-extreme-iops
+
+        # Perform hyperdisk throughput performance test
+        fio --name=hyperdisk-throughput-bw --ioengine=libaio --iodepth=64 --rw=write --bs=1M \
+        --direct=1 --size=10G --numjobs=32 --group_reporting --time_based --runtime=300s --ramp_time=10s \
+        --iodepth_batch_submit=64 --iodepth_batch_complete_max=64 \
+        --directory="/data/hyperdisk-throughput-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-throughput-bw
       node_count: 1
+
     outputs: [instructions]
