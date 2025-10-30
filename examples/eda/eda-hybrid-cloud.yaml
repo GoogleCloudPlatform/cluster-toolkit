@@ -21,7 +21,8 @@ vars:
   deployment_name: eda-hybrid-cloud
   region: us-central1
   zone: us-central1-a
-  network: shared-vpc-prod
+  network: default
+  rdma_net_range: 192.168.128.0/18
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -37,27 +38,26 @@ deployment_groups:
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 - group: setup
   modules:
-  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
-  # as a prefix. To refer to a local module, prefix with ./, ../ or /
-  - id: network
+  # Frontend network for GCE, NetApp Volumes and other services. Make sure it has internet access.
+  - id: frontend-network
     source: modules/network/pre-existing-vpc
     settings:
       project_id: $(vars.project_id)
       region: $(vars.region)
       network_name: $(vars.network)
 
-  - id: firewall_rule
+  - id: firewall-rule-frontend
     source: modules/network/firewall-rules
     use:
-    - network
+    - frontend-network
     settings:
       ingress_rules:
       - name: $(vars.deployment_name)-allow-internal-traffic
         description: Allow internal traffic
         destination_ranges:
-        - $(network.subnetwork_address)
+        - $(frontend-network.subnetwork_address)
         source_ranges:
-        - $(network.subnetwork_address)
+        - $(frontend-network.subnetwork_address)
         allow:
         - protocol: tcp
           ports:
@@ -69,7 +69,7 @@ deployment_groups:
       - name: $(vars.deployment_name)-allow-iap-ssh
         description: Allow IAP-tunneled SSH connections
         destination_ranges:
-        - $(network.subnetwork_address)
+        - $(frontend-network.subnetwork_address)
         source_ranges:
         - 35.235.240.0/20
         allow:
@@ -77,13 +77,31 @@ deployment_groups:
           ports:
           - 22
 
+  # Backend RDMA network for GCE instances with RDMA capabilities
+  - id: backend-network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      enable_internal_traffic: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.rdma_net_range)
+        region: $(vars.region)
+
 # Connect existing Google Cloud NetApp Volumes
 # Replace server_ip, remote_mount, and local_mount values as needed for toolsfs, libraryfs, homefs, scratchfs
+# Make sure the root inode of each volume has appropriate permissions for intended users, otherwise SLURM jobs may fail
   - id: toolsfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: 10.165.129.4     # Set IP address of the NFS server here
-      remote_mount: toolsfs       # Set exported NFS share on the server here
+      server_ip:    # Set IP address of the NFS server here
+      remote_mount: # Set exported path of NFS share here
       local_mount: /tools
       fs_type: nfs
       # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
@@ -92,8 +110,8 @@ deployment_groups:
   - id: libraryfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: 10.165.129.4     # Set IP address of the NFS server here
-      remote_mount: libraryfs     # Set exported NFS share on the server here
+      server_ip:    # Set IP address of the NFS server here
+      remote_mount: # Set exported path of NFS share here
       local_mount: /library
       fs_type: nfs
       # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
@@ -102,8 +120,8 @@ deployment_groups:
   - id: homefs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: 10.165.129.4     # Set IP address of the NFS server here
-      remote_mount: homefs        # Set exported NFS share on the server here
+      server_ip:    # Set IP address of the NFS server here
+      remote_mount: # Set exported path of NFS share here
       local_mount: /home
       fs_type: nfs
       mount_options: "hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
@@ -111,8 +129,8 @@ deployment_groups:
   - id: scratchfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: 10.165.129.5     # Set IP address of the NFS server here
-      remote_mount: scratchfs     # Set exported NFS share on the server here
+      server_ip:    # Set IP address of the NFS server here
+      remote_mount: # Set exported path of NFS share here
       local_mount: /scratch
       fs_type: nfs
       mount_options: "hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
@@ -140,61 +158,63 @@ deployment_groups:
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 - group: cluster
   modules:
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: h4d_startup
+    source: modules/scripts/startup-script
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
-      allow_automatic_updates: false
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
 
-  - id: debug_partition
+  - id: h4d_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - h4d_startup
+    - frontend-network
+    - homefs
+    - toolsfs
+    - libraryfs
+    - scratchfs
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: h4d-highmem-192-lssd
+      node_count_static: 1        # Adjust as needed
+      node_count_dynamic_max: 0   # Adjust as needed
+      enable_placement: false
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      additional_networks:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=backend-network.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=null,
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+
+  - id: h4d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - debug_nodeset
+    - h4d_nodeset
     settings:
-      partition_name: debug
-      exclusive: false # allows nodes to stay up after jobs are done
+      exclusive: false
+      partition_name: h4d
       is_default: true
-
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings:
-      node_count_dynamic_max: 20
-      bandwidth_tier: gvnic_enabled
-      allow_automatic_updates: false
-
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - compute_nodeset
-    settings:
-      partition_name: compute
-
-  - id: h3_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings:
-      node_count_dynamic_max: 20
-      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
-      machine_type: h3-standard-88
-      # H3 does not support pd-ssd and pd-standard
-      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
-      disk_type: pd-balanced
-      bandwidth_tier: gvnic_enabled
-      allow_automatic_updates: false
-
-  - id: h3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - h3_nodeset
-    settings:
-      partition_name: h3
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [frontend-network]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
@@ -202,14 +222,14 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network
-    - debug_partition
-    - compute_partition
-    - h3_partition
+    - frontend-network
+    - h4d_partition
+    - slurm_login
+    - homefs
     - toolsfs
     - libraryfs
-    - homefs
     - scratchfs
-    - slurm_login
     settings:
       enable_controller_public_ips: true
+      cloud_parameters:
+        slurmd_timeout: 900
