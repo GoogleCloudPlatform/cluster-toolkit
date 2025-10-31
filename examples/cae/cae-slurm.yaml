@@ -130,7 +130,7 @@ deployment_groups:
   # If you require maximum IO performance, you can consider to bring up a dedicated parallel
   # file system, e.g.Sycomp GPFS.
   # Note: Those solutions may have associated license cost.
-  
+  #
   # Please visit here for more information
   # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
 
