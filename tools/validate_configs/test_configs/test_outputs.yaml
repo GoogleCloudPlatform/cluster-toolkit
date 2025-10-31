@@ -105,8 +105,8 @@ deployment_groups:
     outputs:
     - startup_script
 
-  - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed-lustre
+    source: modules/file-system/managed-lustre
     outputs:
     - private_addresses
     - ssh_console
