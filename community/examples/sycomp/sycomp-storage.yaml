@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -60,8 +60,8 @@ deployment_groups:
             count: 4                         ## Number of disks to configure on each storage node
             size_in_gb: 250                  ## Size of each disk
             type: "hyperdisk-balanced"       ## Type of persistent disk to use
-            provisioned_iops: 30000          ## Provisiioned IOPS per disk, required for Hyperdisk
-            provisioned_throughput: 500      ## Provisiioned Throughput in MiB/sec per disk, required for Hyperdisk
+            provisioned_iops: 30000          ## Provisioned IOPS per disk, required for Hyperdisk
+            provisioned_throughput: 500      ## Provisioned Throughput in MiB/sec per disk, required for Hyperdisk
         afm_config:
           afm_node_count: 1                  ## Number of AFM nodes to deploy
           afm_machine_type: "c3-standard-44" ## Instance type of the AFM nodes
