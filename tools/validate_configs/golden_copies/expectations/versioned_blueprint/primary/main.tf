@@ -67,14 +67,14 @@ module "projectsfs" {
   zone            = var.zone
 }
 
-module "scratchfs" {
-  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/DDN-EXAScaler?ref=v1.38.0&depth=1"
+module "managed-lustre" {
+  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.38.0&depth=1"
+  deployment_name      = var.deployment_name
   labels               = var.labels
-  local_mount          = "/scratch"
+  local_mount          = "/lustre"
   network_self_link    = module.network.network_self_link
+  network_id           = module.network.network_id
   project_id           = var.project_id
-  subnetwork_address   = module.network.subnetwork_address
-  subnetwork_self_link = module.network.subnetwork_self_link
   zone                 = var.zone
 }
 
@@ -304,7 +304,7 @@ module "slurm_controller" {
   instance_image_custom        = var.instance_image_custom
   labels                       = var.labels
   login_nodes                  = flatten([module.slurm_login.login_nodes])
-  network_storage              = flatten([module.scratchfs.network_storage, flatten([module.projectsfs.network_storage, flatten([module.homefs.network_storage])])])
+  network_storage              = flatten([module.managed-lustre.network_storage, flatten([module.projectsfs.network_storage, flatten([module.homefs.network_storage])])])
   nodeset                      = flatten([module.h3_partition.nodeset, flatten([module.a2_16_partition.nodeset, flatten([module.a2_8_partition.nodeset, flatten([module.c3_partition.nodeset, flatten([module.c2d_partition.nodeset, flatten([module.c2_partition.nodeset, flatten([module.n2_partition.nodeset])])])])])])])
   nodeset_dyn                  = flatten([module.h3_partition.nodeset_dyn, flatten([module.a2_16_partition.nodeset_dyn, flatten([module.a2_8_partition.nodeset_dyn, flatten([module.c3_partition.nodeset_dyn, flatten([module.c2d_partition.nodeset_dyn, flatten([module.c2_partition.nodeset_dyn, flatten([module.n2_partition.nodeset_dyn])])])])])])])
   nodeset_tpu                  = flatten([module.h3_partition.nodeset_tpu, flatten([module.a2_16_partition.nodeset_tpu, flatten([module.a2_8_partition.nodeset_tpu, flatten([module.c3_partition.nodeset_tpu, flatten([module.c2d_partition.nodeset_tpu, flatten([module.c2_partition.nodeset_tpu, flatten([module.n2_partition.nodeset_tpu])])])])])])])
