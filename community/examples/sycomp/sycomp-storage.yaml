@@ -44,7 +44,7 @@ deployment_groups:
     source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=v1.0.0"
     use: [network1]
     settings:
-      name_prefix: "sycompstorage"
+      name_prefix: "sycomp"
       security:
         ssh:
           ssh_user_name: ""                  ## Set user name to ssh mgmt node, for example: "sycompacct"

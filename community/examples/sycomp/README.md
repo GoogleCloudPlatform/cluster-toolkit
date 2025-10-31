@@ -53,7 +53,7 @@ Required parameter updates for each blueprint:
   - `zone`: The zone where you want to deploy the cluster.
 
 - **`network1` module settings:**
-  - `source`: modules/network/vpc is the default and deploys the cluster in a newly created network. To use an existing network, change source to modules/network/pre-existing-vpc.
+  - `source`: `modules/network/vpc` is the default and deploys the cluster in a newly created network. To use an existing network, change `source` to `modules/network/pre-existing-vpc`.
   - `network_name`: A name for the new VPC network (e.g., `sycomp-net`).
   - `subnetwork_name`: A name for the new subnetwork (e.g., `sycomp-subnet`).
   - `allowed_ssh_ip_ranges`: A list of IP address ranges in CIDR format that

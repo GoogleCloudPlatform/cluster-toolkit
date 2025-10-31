@@ -69,7 +69,7 @@ deployment_groups:
       nfs_exports:
       - path: $(vars.nfs_dir)
         clients:
-        - no_root_squash: false               ## Disable no_root_squash in NFS
+        - no_root_squash: false               ## Enable root squashing (secure default). Set to true to disable.
 
   ## Set up slurm cluster and configure NFS client
   - id: compute_nodeset
