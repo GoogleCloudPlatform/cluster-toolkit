@@ -66,10 +66,13 @@ Required parameter updates for each blueprint:
   - `security.ssh.public_key`: The file path to your SSH public key (e.g., `~/.ssh/id_rsa.pub`).
   - `security.customer_token.token`: Your Sycomp Customer Token. To get a customer token, contact Sycomp (`sycompstorage@sycomp.com`).
   - `name_prefix` (Optional): By default, `sycomp-scale-gcp` sets the value of `name_prefix` based on the `deployment_name`. Since `name_prefix` only accepts **alphanumeric** characters (letters and numbers), `sycomp-scale-gcp` automatically **removes any non-alphanumeric characters** (such as hyphens and underscores) before assigning the value. For example, a `deployment_name` of `sycomp-storage-1` would result in a `name_prefix` of `sycompstorage1`.
+  - **`scale_config`(Optional):**
+    - `scale_node_count`: The number of nodes in the Sycomp Storage cluster. Default is `3`.
+    - `scale_volumes`: Configuration for the data disks. Default is 4 disks of 250GiB each per storage node.
 
-- **(Optional) `scale_config` settings:**
-  - `scale_node_count`: The number of nodes in the Sycomp Storage cluster. Default is `3`.
-  - `scale_volumes`: Configuration for the data disks. Default is 4 disks of 250GiB each per storage node.
+- **`sycomp-scale-gcp` module settings:**
+  - `name_prefix`: Its value must be the same as the `name_prefix` of the cluster that is desired to be expanded.
+  - `add_scale_nodes`: The number of nodes to be added.
 
 ## Deployment
 

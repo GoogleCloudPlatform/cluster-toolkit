@@ -47,21 +47,21 @@ deployment_groups:
       name_prefix: "sycompstorage"
       security:
         ssh:
-          ssh_user_name: ""      ## Set user name to ssh mgmt node, for example: "sycompacct"
-          private_key: ""        ## Set private key file, for example: ~/.ssh/id_rsa
-          public_key: ""         ## Set public key file, for example: ~/.ssh/id_rsa.pub
+          ssh_user_name: ""                  ## Set user name to ssh mgmt node, for example: "sycompacct"
+          private_key: ""                    ## Set private key file, for example: ~/.ssh/id_rsa
+          public_key: ""                     ## Set public key file, for example: ~/.ssh/id_rsa.pub
         customer_token:
-          token: ""              ## Set Your Customer Token
+          token: ""                          ## Set Your Customer Token
       scale_config:
-        scale_node_count: 3
-        scale_machine_type: "c3-standard-44"
+        scale_node_count: 3                  ## Number of storage nodes to deploy
+        scale_machine_type: "c3-standard-44" ## Instance type of the storage nodes
         scale_volumes:
           data-storage:
-            count: 4
-            size_in_gb: 250
-            type: "hyperdisk-balanced"
-            provisioned_iops: 30000
-            provisioned_throughput: 500
+            count: 4                         ## Number of disks to configure on each storage node
+            size_in_gb: 250                  ## Size of each disk
+            type: "hyperdisk-balanced"       ## Type of persistent disk to use
+            provisioned_iops: 30000          ## Provisiioned IOPS per disk, required for Hyperdisk
+            provisioned_throughput: 500      ## Provisiioned Throughput in MiB/sec per disk, required for Hyperdisk
         afm_config:
-          afm_node_count: 1
-          afm_machine_type: "c3-standard-44"
+          afm_node_count: 1                  ## Number of AFM nodes to deploy
+          afm_machine_type: "c3-standard-44" ## Instance type of the AFM nodes

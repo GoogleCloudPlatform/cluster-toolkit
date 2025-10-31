@@ -30,8 +30,8 @@ deployment_groups:
 - group: primary
   modules:
 
-  - id: sycomp-scale-gcp
+  - id: sycomp-scale-expansion
     source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale-expansion?ref=v1.0.0"
     settings:
       name_prefix: "<name_prefix_of_existing_cluster>" ## Its value must be the same as the name_prefix of the cluster that is desired to be expanded
-      add_scale_nodes: 1
+      add_scale_nodes: 1                               ## Number of storage nodes to add
