@@ -70,7 +70,7 @@ Required parameter updates for each blueprint:
     - `scale_node_count`: The number of nodes in the Sycomp Storage cluster. Default is `3`.
     - `scale_volumes`: Configuration for the data disks. Default is 4 disks of 250GiB each per storage node.
 
-- **`sycomp-scale-gcp` module settings:**
+- **`sycomp-scale-expansion` module settings:**
   - `name_prefix`: Its value must be the same as the `name_prefix` of the cluster that is desired to be expanded.
   - `add_scale_nodes`: The number of nodes to be added.
 
