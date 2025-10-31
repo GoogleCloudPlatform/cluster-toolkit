@@ -61,6 +61,6 @@ deployment_groups:
             type: "hyperdisk-balanced"       ## Type of persistent disk to use
             provisioned_iops: 30000          ## Provisioned IOPS per disk, required for Hyperdisk
             provisioned_throughput: 500      ## Provisioned Throughput in MiB/sec per disk, required for Hyperdisk
-        afm_config:
-          afm_node_count: 1                  ## Number of AFM nodes to deploy
-          afm_machine_type: "c3-standard-44" ## Instance type of the AFM nodes
+      afm_config:
+        afm_node_count: 1                    ## Number of AFM nodes to deploy
+        afm_machine_type: "c3-standard-44"   ## Instance type of the AFM nodes

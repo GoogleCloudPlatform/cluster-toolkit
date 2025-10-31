@@ -34,4 +34,4 @@ deployment_groups:
     source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale-expansion?ref=v1.0.0"
     settings:
       name_prefix: "<name_prefix_of_existing_cluster>" ## Set to the name_prefix of the cluster to expand. See the README for details on how this value is determined.
-      add_scale_nodes: 1                               ## Number of storage nodes to add
+      add_scale_nodes: 1                               ## Number of storage nodes to add, This value is configurable.
