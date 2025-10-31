@@ -1,0 +1,1 @@
+Note: The Cluster Toolkit no longer includes support for the DDN-EXAScaler file system. Please use alternate, currently supported option such as **[Managed-Lustre](modules/file-system/managed-lustre)**

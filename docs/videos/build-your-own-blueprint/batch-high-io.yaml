@@ -33,14 +33,14 @@ deployment_groups:
     settings:
       local_mount: /apps
 
-  - id: lustrefs
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
     use: [network1]
-    settings: {local_mount: /scratch}
+    settings: {local_mount: /lustre}
 
   - id: batch-job
     source: modules/scheduler/batch-job-template
-    use: [network1, appfs, lustrefs]
+    use: [network1, appfs, managed_lustre]
     settings:
       runnable: "echo 'hello world'"
       machine_type: n2-standard-4
