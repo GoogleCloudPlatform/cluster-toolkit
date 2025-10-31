@@ -71,7 +71,7 @@ Required parameter updates for each blueprint:
     - `scale_volumes`: Configuration for the data disks. Default is 4 disks of 250GiB each per storage node.
 
 - **`sycomp-scale-expansion` module settings:**
-  - `name_prefix`: Its value must be the same as the `name_prefix` of the cluster that is desired to be expanded.
+  - `name_prefix`: Must match the `name_prefix` of the cluster to be expanded. Note: if not set explicitly, `name_prefix` is derived from `deployment_name` by removing non-alphanumeric characters.
   - `add_scale_nodes`: The number of nodes to be added.
 
 ## Deployment

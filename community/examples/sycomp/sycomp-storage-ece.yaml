@@ -65,5 +65,5 @@ deployment_groups:
             count: 3                          ## Number of disks to configure on each storage node
             size_in_gb: 250                   ## Size of each disk
             type: "hyperdisk-balanced"        ## Type of persistent disk to use
-            provisioned_iops: 30000           ## Provisioned IOPS per disk
-            provisioned_throughput: 500       ## Provisioned Throughput in MiB/sec per disk
+            provisioned_iops: 30000           ## Provisioned IOPS per disk, required for Hyperdisk
+            provisioned_throughput: 500       ## Provisioned Throughput in MiB/sec per disk, required for Hyperdisk
