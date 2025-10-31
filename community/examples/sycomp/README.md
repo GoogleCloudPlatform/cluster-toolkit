@@ -88,7 +88,7 @@ Once the blueprint file (e.g., `sycomp-storage.yaml`) is configured, you can dep
 2. **Create the deployment directory:**
 
    ```bash
-   # Replace <blueprint-filename> with the specific blueprint filename (e.g., "sycomp-storage.yaml").
+   # Replace <blueprint-filename> with the specific blueprint filename (e.g., sycomp-storage.yaml).
    gcluster create community/examples/sycomp/<blueprint-filename>
    ```
 
