@@ -128,11 +128,10 @@ deployment_groups:
       local_mount: /scratch
 
   # If you require maximum IO performance, you can consider to bring up a dedicated parallel
-  # file system, e.g. DDN Exascaler Lustre, Sycomp GPFS.
+  # file system, e.g.Sycomp GPFS.
   # Note: Those solutions may have associated license cost.
-  #
+  
   # Please visit here for more information
-  # - DDN Exascaler Lustre: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/DDN-EXAScaler/README.md
   # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
 
   ######## Remote Desktop(s) #######

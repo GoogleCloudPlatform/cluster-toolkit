@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hexa-net
+blueprint_name: managed-lustre-net
 
 vars:
   project_id: hpc-toolkit-demo
@@ -26,10 +26,10 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
 
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
     use: [network1]
     settings:
-      local_mount: /scratch
+      local_mount: /lustre
