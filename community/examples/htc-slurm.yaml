@@ -61,22 +61,6 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: projectsfs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /projects
-
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network]
-    settings:
-      local_mount: /scratch
-
   # The compute partition is designed for performance.
   # Use:
   # `srun -N 4 -p compute <<Command>>` for any node in the partition.
@@ -154,8 +138,6 @@ deployment_groups:
     use:
     - network
     - homefs
-    - scratchfs
-    - projectsfs
     - low_cost_partition
     - compute_partition
     - slurm_login
