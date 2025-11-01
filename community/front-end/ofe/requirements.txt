@@ -6,7 +6,7 @@ astroid==3.3.11
 attrs==25.3.0
 # This should be supported by zoneinfo in Python 3.9+
 backports.zoneinfo==0.2.1;python_version<"3.9"
-cachetools>=2.0,<6.0
+cachetools>=2.0,<7.0
 certifi==2025.10.5
 cffi>=2.0.0
 cfgv==3.4.0
