@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "bucket_name" {
+variable "gcs_bucket_name" {
+  description = "bucket name"
   type        = string
-  description = "The name of the bucket."
 }
 
 variable "caches" {

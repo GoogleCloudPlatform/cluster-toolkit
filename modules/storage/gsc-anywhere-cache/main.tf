@@ -15,7 +15,7 @@
 terraform {
   required_version = ">= 1.7.0"
   required_providers {
-    google = { # Changed to google-beta
+    google = {
       source  = "hashicorp/google"
       version = ">= 5.2.0"
     }
@@ -31,7 +31,7 @@ resource "google_storage_anywhere_cache" "cache_instances" {
 
   provider = google
 
-  bucket = var.bucket_name
+  bucket = var.gcs_bucket_name
   zone   = each.key
 
   ttl              = each.value.ttl

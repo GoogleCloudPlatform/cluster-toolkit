@@ -25,7 +25,7 @@ deployment_groups:
       - id: my_bucket_anywhere_caches
         source: "modules/storage/gsc-anywhere-cache" # Adjust path as needed
         settings:
-          bucket_name: $(vars.data_bucket_name) # Replace with your DATA bucket name
+          gcs_bucket_name: $(vars.data_bucket_name) # Replace with your DATA bucket name
           caches:
             - zone: "us-central1-a"
               ttl: "43200s"  # 12 hours
@@ -41,6 +41,42 @@ deployment_groups:
 | Name | Version |
 |------|---------|
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.2.0 |
+
+## Modules
+
+No modules.
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [google_storage_anywhere_cache.cache_instances](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_anywhere_cache) | resource |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | The name of the bucket. | `string` | n/a | yes |
+| <a name="input_caches"></a> [caches](#input\_caches) | A list of Anywhere Cache configurations. | <pre>list(object({<br/>    zone             = string<br/>    ttl              = optional(string, "86400s")<br/>    admission_policy = optional(string, "admit-on-first-miss")<br/>  }))</pre> | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_cache_ids"></a> [cache\_ids](#output\_cache\_ids) | The IDs of the created Anywhere Cache instances. |
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.7.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.2.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | >= 5.2.0 |
 
 ## Modules
 
@@ -93,8 +129,8 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | The name of the bucket. | `string` | n/a | yes |
 | <a name="input_caches"></a> [caches](#input\_caches) | A list of Anywhere Cache configurations. | <pre>list(object({<br/>    zone             = string<br/>    ttl              = optional(string, "86400s")<br/>    admission_policy = optional(string, "admit-on-first-miss")<br/>  }))</pre> | `[]` | no |
+| <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | bucket name | `string` | n/a | yes |
 
 ## Outputs
 
