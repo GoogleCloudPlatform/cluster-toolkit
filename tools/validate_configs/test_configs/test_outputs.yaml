@@ -108,8 +108,5 @@ deployment_groups:
   - id: managed-lustre
     source: modules/file-system/managed-lustre
     outputs:
-    - private_addresses
-    - ssh_console
-    - mount_command
-    - http_console
     - network_storage
+    - install_managed_lustre_client
