@@ -35,6 +35,13 @@
   debug:
     msg: "{{nccl_test_file_contents.stdout}}"
 
+- name: Pin nccl-plugin-gpudirecttcpx-dev to latest tag
+  delegate_to: localhost
+  ansible.builtin.replace:
+    path: "{{ workspace }}/examples/nccl-test.yaml"
+    regexp: 'nccl-plugin-gpudirecttcpx-dev:v3.1.9'
+    replace: 'nccl-plugin-gpudirecttcpx-dev:latest'
+
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -60,12 +67,12 @@
   debug:
     msg: "{{nccl_test_logs.stdout}}"
 
-- name: Ensure average bus bandwidth is >= 19 GB/s
+- name: Ensure average bus bandwidth is >= 25 GB/s
   delegate_to: localhost
   ansible.builtin.shell: |
     grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
   register: avg_bus_bandwidth
-  failed_when: avg_bus_bandwidth.stdout | float < 19
+  failed_when: avg_bus_bandwidth.stdout | float < 25
 
 - name: Clean up
   delegate_to: localhost
