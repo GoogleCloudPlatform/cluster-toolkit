@@ -15,7 +15,6 @@
 output "cache_ids" {
   description = "The IDs of the created Anywhere Cache instances."
   value = [
-    # Ensure this line uses google_storage_anywhere_cache
     for instance in google_storage_anywhere_cache.cache_instances : instance.id
   ]
 }

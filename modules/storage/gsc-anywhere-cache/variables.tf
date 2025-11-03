@@ -34,7 +34,6 @@ variable "caches" {
         coalesce(cache.admission_policy, "admit-on-first-miss")
       )
     ])
-    # MODIFIED ERROR MESSAGE:
     error_message = "DEBUG STALE CHECK: Allowed policies are 'admit-on-first-miss' or 'admit-on-second-miss'."
   }
 }
