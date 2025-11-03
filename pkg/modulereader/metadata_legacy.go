@@ -52,6 +52,9 @@ func defaultAPIList(source string) []string {
 		"community/modules/file-system/nfs-server": {
 			"compute.googleapis.com",
 		},
+		"modules/file-system/managed-lustre": {
+		        "lustre.googleapis.com",
+		},
 		"modules/project/service-account": {
 			"iam.googleapis.com",
 		},
