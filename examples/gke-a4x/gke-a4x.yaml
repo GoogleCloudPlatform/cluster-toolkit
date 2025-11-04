@@ -289,8 +289,6 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-gb200
         count: 4
-        gpu_driver_installation_config:
-          gpu_driver_version: DEFAULT
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
