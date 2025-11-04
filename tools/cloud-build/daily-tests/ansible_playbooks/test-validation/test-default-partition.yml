@@ -18,16 +18,16 @@
     - custom_vars.gpu_partition is defined
 
 - name: Get default partition configuration
-  ansible.builtin.shell: "scontrol show config | grep '^DefaultPartition'"
-  register: default_partition_config
+  ansible.builtin.shell: sinfo --noheader  --all --format "%P" | grep "\*"
+  register: sinfo_default_partition_output
   retries: 10
   delay: 12
-  until: default_partition_config.stdout | length > 0
+  until: sinfo_default_partition_output.stdout | length > 0
   changed_when: false
 
 - name: Extract default partition name
   set_fact:
-    default_partition: "{{ (default_partition_config.stdout.split('='))[1] | trim }}"
+    default_partition: "{{ sinfo_default_partition_output.stdout_lines | first | replace('*', '') }}"
 
 - name: Assert default partition is the GPU partition
   ansible.builtin.assert:
