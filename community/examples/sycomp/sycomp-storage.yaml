@@ -41,7 +41,7 @@ deployment_groups:
       allowed_ssh_ip_ranges: []
 
   - id: sycomp-scale-gcp
-    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=v1.0.0"
+    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=main"
     use: [network1]
     settings:
       security:

@@ -42,7 +42,7 @@ deployment_groups:
       allowed_ssh_ip_ranges: []
 
   - id: sycomp-scale-gcp
-    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=v1.0.0"
+    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=main"
     use: [network1]
     settings:
       security:
@@ -69,7 +69,7 @@ deployment_groups:
       nfs_exports:
       - path: $(vars.nfs_dir)
         clients:
-        - no_root_squash: false               ## Enable root squashing (secure default). Set to true to disable.
+        - no_root_squash: true                ## Disable root squashing. Set to false to enable(secure default).
 
   ## Set up slurm cluster and configure NFS client
   - id: compute_nodeset
@@ -101,12 +101,6 @@ deployment_groups:
     - network1
     - compute_partition
     - slurm_login
+    - sycomp-scale-gcp
     settings:
       enable_controller_public_ips: true
-      network_storage:
-      ## Setup NFS client to mount sycomp storage NFS server
-      - server_ip: $(sycomp-scale-gcp.nfs_server.dns_name)
-        remote_mount: $(vars.nfs_dir)
-        mount_options: "vers=4,nconnect=16,rsize=1048576,wsize=1048576"
-        local_mount: "/nfs/sycomp"
-        fs_type: nfs
