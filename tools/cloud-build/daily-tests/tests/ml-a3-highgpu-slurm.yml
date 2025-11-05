@@ -16,34 +16,38 @@
 
 # region, zone, nfs_ip, remote_mount_homefs, must be defined in build file
 # with --extra-vars flag!
-test_name: a3h-cluster
-deployment_name: a3hc-{{ build }}
-slurm_cluster_name: "a3hc{{ build[0:4] }}"
+test_name: a3h-slurm
+deployment_name: a3h-{{ build }}
+slurm_cluster_name: "a3h{{ build[0:4] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-2-cluster.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: default
+network: "{{ deployment_name }}-net-0"
+nccl_test_path: "examples/machine-learning/a3-megagpu-8g/nccl-tests"
+sub_network: "{{ deployment_name }}-sub-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
 custom_vars:
   gpu_partition: a3
   gpu_count: 8
   partitions:
   - a3
-  - debug
   mounts:
   - /home
 cli_deployment_vars:
-  network_name_system: default
-  subnetwork_name_system: default
   region: "{{ region }}"
   zone: "{{ zone }}"
-  server_ip_homefs: "{{ nfs_ip }}"
-  remote_mount_homefs: "{{ remote_mount_homefs }}"
+  tcpx_kernel_login: "{{ tcpx_kernel_login }}"
+  tcpx_kernel_password: "{{ tcpx_kernel_password }}"
+  keyserver_ubuntu_key: "{{ keyserver_ubuntu_key }}"
+  a3_reservation_name: "a3-reservation-0"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   a3_static_cluster_size: 2
+  a3_partition_name: "a3"

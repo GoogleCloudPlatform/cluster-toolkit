@@ -1,0 +1,44 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: # supply bucket to store Terraform state
+
+vars:
+  deployment_name: # supply unique deployment name
+  project_id: # supply existing project id
+  region: # supply region with a3-highgpu-8g capacity in reservation
+  zone: # supply zone with a3-highgpu-8g capacity in reservation
+  tcpx_kernel_login: # use value supplied by Google Cloud staff
+  tcpx_kernel_password: # use value supplied by Google Cloud staff
+  keyserver_ubuntu_key: # use value supplied by Google Cloud staff
+  a3_reservation_name: # supply a3-highgpu-8g reservation name
+  slurm_cluster_name: # supply name for slurm cluster
+  a3_static_cluster_size: # supply a3-highgpu-8g reservation size
+  a3_partition_name: # supply partition name
+  disk_size_gb: 200
+  # Additional provisioning models (pick only one), can be used to substitute `a3_reservation_name`:
+  #
+  # a3_dws_flex_enabled: true
+  #
+  # To make use of DWS Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+  #
+  # a3_enable_spot_vm: true
+  #
+  # To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+  a3_dws_flex_enabled: false # set this if you want to use DWS Flex
+  a3_enable_spot_vm: false # set this if you want to use spot VMs
