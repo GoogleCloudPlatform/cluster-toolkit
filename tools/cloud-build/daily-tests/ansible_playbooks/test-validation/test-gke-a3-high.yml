@@ -59,7 +59,7 @@
 - name: Trigger all-gather NCCL test
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl -v=9 exec --stdin --tty --container=nccl-test nccl-test-host-1 -- /configs/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
+    kubectl -v=9 exec --stdin --tty --container=nccl-test nccl-test-host-1 -- NCCL_DEBUG=INFO /configs/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
     cat pod_logs.txt
   register: nccl_test_logs
 
