@@ -21,7 +21,7 @@ Pay close attention to the following specifics:
    * Check for clear variable definitions in `variables.tf` with descriptions, types, and sensible defaults where applicable.
    * Ensure resources within the module are logically structured.
    * Encourage the use of best practices for writing clean and maintainable Terraform code.
-   * Ensure new modules are placed in the correct directory (`modules/` or `community/modules/`).
+   * Ensure new modules are placed in the correct directory (`modules/` or `community/modules/`) and within the appropriate subdirectory (e.g., `compute`, `network`, `file-system`, `scheduler`, etc.).
 
 3. **Go Language:**
    * Follow standard Go idioms and best practices (e.g., error handling, naming).
