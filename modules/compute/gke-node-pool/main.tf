@@ -113,7 +113,7 @@ resource "google_container_node_pool" "node_pool" {
     content {
       type         = var.placement_policy.type
       policy_name  = var.placement_policy.name
-      tpu_topology = var.placement_policy.tpu_topology
+      tpu_topology = module.tpu.is_tpu ? var.placement_policy.tpu_topology : null
     }
   }
 

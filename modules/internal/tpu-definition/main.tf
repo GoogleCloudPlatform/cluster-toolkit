@@ -15,8 +15,8 @@
 */
 
 locals {
-  # Safely check for the existence of a TPU topology.
-  is_tpu = try(var.placement_policy.tpu_topology, null) != null && try(var.placement_policy.tpu_topology, "") != ""
+  # Determine if this is a TPU node pool by checking if the machine_type exists in our authoritative map of TPU machine types.
+  is_tpu = contains(keys(local.tpu_chip_count_map), var.machine_type)
 
   tpu_taint = local.is_tpu ? [{
     key    = "google.com/tpu"
@@ -24,7 +24,7 @@ locals {
     effect = "NO_SCHEDULE"
   }] : []
 
-  # Exhaustive map of machine prefixes to GKE accelerator labels.
+  # Map of machine prefixes to GKE accelerator labels.
   tpu_accelerator_map = {
     "ct4p"  = "tpu-v4-podslice"      # TPU v4
     "ct5lp" = "tpu-v5-lite-podslice" # TPU v5e
@@ -33,7 +33,7 @@ locals {
   }
 
   # Map specific GCE machine types to the number of TPU chips per node (VM).
-  # Based on public Google Cloud TPU documentation.
+  # The machine-type map must be updated to reflect new TPU releases with reference to public documentation: https://docs.cloud.google.com/tpu/docs/intro-to-tpu
   tpu_chip_count_map = {
     # v4 - ct4p
     "ct4p-hightpu-4t" = 4
