@@ -191,6 +191,7 @@
   ignore_unreachable: true  # ensure always block will run even if SSH fails
   vars:
     key_type: "munge"
+    integration_tests_failed: false  # Initialize failure flag
   tasks:
   - name: Slurm Test Block
     vars:
@@ -209,7 +210,7 @@
     - name: Wait until Slurm key exists
       ansible.builtin.wait_for:
         path: /etc/slurm/slurm.key
-        timeout: 600 # Waits for up to 10 minutes for the file to appear
+        timeout: 600  # Waits for up to 10 minutes for the file to appear
       when: key_type == 'slurm'
 
     - name: Count Slurm nodes
@@ -223,17 +224,43 @@
       retries: 60
       delay: 15
 
-    - name: Run Integration tests for Cluster Toolkit
-      ansible.builtin.include_tasks: "{{ test }}"
-      vars:
-        login_node: "{{ login_node }}"
-        custom_vars: "{{ custom_vars }}"
-      loop: "{{ post_deploy_tests }}"
-      loop_control:
-        loop_var: test
+    - name: Block for running main integration tests
+      block:
+      - name: Run Integration tests for Cluster Toolkit
+        ansible.builtin.include_tasks: "{{ test }}"
+        vars:
+          login_node: "{{ login_node }}"
+          custom_vars: "{{ custom_vars }}"
+        loop: "{{ post_deploy_tests }}"
+        loop_control:
+          loop_var: test
+      rescue:
+      - name: Set flag indicating test failure
+        ansible.builtin.set_fact:
+          integration_tests_failed: true
+      - name: Display test failure message
+        ansible.builtin.debug:
+          msg: "A task within the integration tests failed. Preemption check might run."
 
     ## Always cleanup, even on failure
     always:
+    - name: Check if tests failed
+      ansible.builtin.debug:
+        var: integration_tests_failed
+
+    - name: Check if spot is enable
+      ansible.builtin.debug:
+        var: custom_vars.enable_spot | default(false) | bool
+
+    # Conditional Preemption Check
+    - name: Check for recent preemptions if tests failed and Spot is enabled
+      ansible.builtin.include_tasks: test-validation/test-a3m-preemption.yml
+      when:
+      - integration_tests_failed | bool
+      - custom_vars.enable_spot | default(false) | bool
+      vars:
+        custom_vars: "{{ custom_vars }}"
+
     - name: Ensure all nodes are powered down
       vars:
         wait_for_compute_nodes_to_go_down: true
