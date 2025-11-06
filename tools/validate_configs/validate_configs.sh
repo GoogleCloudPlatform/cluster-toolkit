@@ -124,6 +124,10 @@ CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-ece.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-slurm.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-expansion.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}

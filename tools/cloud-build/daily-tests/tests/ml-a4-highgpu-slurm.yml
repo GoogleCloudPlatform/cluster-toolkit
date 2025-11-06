@@ -28,6 +28,7 @@ network: "{{ test_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
+- test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
 post_destroy_tasks:

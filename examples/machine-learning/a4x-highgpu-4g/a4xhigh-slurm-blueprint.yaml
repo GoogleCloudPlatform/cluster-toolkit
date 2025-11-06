@@ -597,6 +597,12 @@ deployment_groups:
       instance_image_custom: true
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4x_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 70
+        SocketsPerBoard: 2
+        ThreadsPerCore: 1
       additional_networks:
         $(concat(
           [{
@@ -663,6 +669,14 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/imex_prolog" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_prolog
+          chmod 0755 "${SLURM_ROOT}/scripts/imex_prolog"
+          ln -s "${SLURM_ROOT}/scripts/imex_prolog" "${SLURM_ROOT}/prolog_slurmd.d/imex_prolog.prolog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/imex_epilog" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_epilog
+          chmod 0755 "${SLURM_ROOT}/scripts/imex_epilog"
+          ln -s "${SLURM_ROOT}/scripts/imex_epilog" "${SLURM_ROOT}/epilog_slurmd.d/imex_epilog.epilog_slurmd"
       - type: data
         destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
         source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
@@ -689,74 +703,3 @@ deployment_groups:
         switch_type: switch/nvidia_imex
       controller_state_disk: null
       controller_startup_script: $(controller_startup.startup_script)
-      prolog_scripts:
-      - filename: imex_prolog.sh
-        content: |
-          #!/usr/bin/env bash
-          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
-            exit 0
-          fi
-
-          activate_imex() {
-            set -ex
-
-            # Clean the config file in case the service gets started by accident
-            > /etc/nvidia-imex/nodes_config.cfg
-
-            NVIDIA_IMEX_START_TIMEOUT=80
-            IMEX_CONN_WAIT_TIMEOUT=70
-            IMEX_SHUTDOWN_WAIT=60
-            NVIDIA_IMEX_STOP_TIMEOUT=15
-            DOMAIN_READY_TIMEOUT=15
-            IMEX_SERVER_PORT=1101
-            IMEX_CMD_PORT=1102
-            # clean up prev connection
-            set +e
-            timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
-            pkill -9 nvidia-imex
-            set -e
-
-            # update peer list
-            scontrol -a show node "${SLURM_NODELIST}" -o | sed 's/^.* NodeAddr=\([^ ]*\).*/\1/' > /etc/nvidia-imex/nodes_config.cfg
-
-            # rotate server port to prevent race condition
-            sed -i "s/SERVER_PORT.*/SERVER_PORT=${IMEX_SERVER_PORT}/" /etc/nvidia-imex/config.cfg
-
-            # enable imex-ctl on all nodes so you can query imex status with: nvidia-imex-ctl -a -q
-            sed -i "s/IMEX_CMD_PORT.*/IMEX_CMD_PORT=${IMEX_CMD_PORT}/" /etc/nvidia-imex/config.cfg
-            sed -i "s/IMEX_CMD_ENABLED.*/IMEX_CMD_ENABLED=1/" /etc/nvidia-imex/config.cfg
-
-            # set timeouts for start
-            sed -i "s/IMEX_CONN_WAIT_TIMEOUT.*/IMEX_CONN_WAIT_TIMEOUT=${IMEX_CONN_WAIT_TIMEOUT}/" /etc/nvidia-imex/config.cfg
-
-            sleep ${IMEX_SHUTDOWN_WAIT}
-            netstat -na | grep tcp | grep ":${IMEX_SERVER_PORT}" || true
-            netstat -na | grep tcp | grep ":${IMEX_CMD_PORT}" || true
-
-            timeout $NVIDIA_IMEX_START_TIMEOUT systemctl start nvidia-imex
-
-            sleep ${DOMAIN_READY_TIMEOUT}
-          }
-          activate_imex >> "/var/log/slurm/imex_prolog_${SLURM_JOB_ID}.log" 2>&1
-      epilog_scripts:
-      - filename: imex_epilog.sh
-        content: |
-          #!/usr/bin/env bash
-          set -ex
-
-          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
-            exit 0
-          fi
-
-          # Clean the config file in case the service gets started by accident
-          > /etc/nvidia-imex/nodes_config.cfg
-
-          NVIDIA_IMEX_STOP_TIMEOUT=30
-
-          # clean up connection
-          set +e
-
-          timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
-
-          pkill -9 nvidia-imex
-          set -e
