@@ -31,16 +31,16 @@
     cat {{ workspace }}/examples/nccl-test.yaml
   register: nccl_test_file_contents
 
-- name: Display NCCL test file
-  debug:
-    msg: "{{nccl_test_file_contents.stdout}}"
-
 - name: Pin nccl-plugin-gpudirecttcpx-dev to latest tag
   delegate_to: localhost
   ansible.builtin.replace:
     path: "{{ workspace }}/examples/nccl-test.yaml"
     regexp: 'nccl-plugin-gpudirecttcpx-dev:v3.1.9'
     replace: 'nccl-plugin-gpudirecttcpx-dev:latest'
+
+- name: Display NCCL test file
+  debug:
+    msg: "{{nccl_test_file_contents.stdout}}"
 
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
