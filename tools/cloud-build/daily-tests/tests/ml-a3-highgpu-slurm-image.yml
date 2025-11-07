@@ -15,16 +15,20 @@
 ---
 
 test_name: a3h-image
-deployment_name: a3himg{{ build }}
+deployment_name: f{{ build[0:3] }}{{ build[-3:] }}a3himg
+slurm_cluster_name: "i{{ build[0:3] }}{{ build[-3:] }}a3h"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-1-image.yaml"
 packer_group_name: slurm-build
+network: "{{ deployment_name }}-net-0"
+sub_network: "{{ deployment_name }}-sub-net-0"
 packer_module_id: slurm-image
 delete_image: false
 cli_deployment_vars:
-  network_name_system: default
-  subnetwork_name_system: default
+  network_name_system: "{{ network }}"
+  subnetwork_name_system: "{{ sub_network }}"
   region: us-west1
   zone: us-west1-a
   source_image_project_id: deeplearning-platform
   source_image: dlvm-tcpd-cu120-718492384-ubuntu-2004-py310
+  slurm_cluster_name: "{{ slurm_cluster_name }}"

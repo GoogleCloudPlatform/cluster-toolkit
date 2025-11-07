@@ -16,13 +16,13 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a3u-jbvms
-deployment_name: a3u-jbvms-{{ build }}
+deployment_name: "a{{ build[0:3] }}{{ build[-3:] }}-a3u-jbvms"
 hostname_prefix: "{{ deployment_name }}-beowulf"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"
 region: europe-west1
 zone: europe-west1-b
-network: "{{ test_name }}-net-0"
+network: "{{ deployment_name }}-net-0"
 remote_node: "{{ hostname_prefix }}-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -36,4 +36,4 @@ cli_deployment_vars:
   disk_size_gb: 200
   a3u_reservation_name: hpc-exr-2
   a3u_provisioning_model: RESERVATION_BOUND
-  base_network_name: "{{ test_name }}"
+  base_network_name: "{{ deployment_name }}"
