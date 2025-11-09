@@ -1,0 +1,18 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: webhook-cert
+  namespace: irdma-health-check
+spec:
+  isCA: true
+  commonName: irdma-webhook.irdma-health-check.svc
+  secretName: webhook-tls
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+  dnsNames:
+  - irdma-webhook.irdma-health-check.svc

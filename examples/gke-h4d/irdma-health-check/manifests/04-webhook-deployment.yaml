@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: irdma-webhook
+  namespace: irdma-health-check
+  labels:
+    app: irdma-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: irdma-webhook
+  template:
+    metadata:
+      labels:
+        app: irdma-webhook
+    spec:
+      containers:
+      - name: webhook
+        image: us-central1-docker.pkg.dev/MY-GCP-PROJECT/h4d/irdma-webhook-server:v1.0.0 # update
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: webhook-tls
+          mountPath: /etc/webhook/certs
+          readOnly: true
+      volumes:
+      - name: webhook-tls
+        secret:
+          secretName: webhook-tls

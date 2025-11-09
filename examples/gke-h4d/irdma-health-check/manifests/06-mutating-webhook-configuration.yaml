@@ -1,0 +1,26 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: irdma-health-check-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: irdma-health-check/webhook-cert
+webhooks:
+- name: irdma-health-check.example.com
+  clientConfig:
+    service:
+      name: irdma-webhook
+      namespace: irdma-health-check
+      path: "/mutate"
+    caBundle: Cg==
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values: ["irdma-health-check", "cert-manager"]
+  rules:
+  - operations: [ "CREATE" ]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  sideEffects: None
+  admissionReviewVersions: ["v1beta1"]

@@ -1,0 +1,5 @@
+# RBAC for the webhook is not strictly necessary for this example
+# as it doesn't modify any resources other than the pod being created.
+# However, in a production environment, you would likely want to
+# create a dedicated ServiceAccount for the webhook and grant it
+# minimal permissions.
