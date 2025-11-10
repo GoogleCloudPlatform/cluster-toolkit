@@ -16,8 +16,8 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a3m-slurm
-deployment_name: e{{ build[0:3] }}{{ build[-3:] }}-a3m-slurm
-slurm_cluster_name: "e{{ build[0:3] }}{{ build[-3:] }}a3m"
+deployment_name: a3m-slurm-{{ build }}
+slurm_cluster_name: "a3m{{ build[0:4] }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"

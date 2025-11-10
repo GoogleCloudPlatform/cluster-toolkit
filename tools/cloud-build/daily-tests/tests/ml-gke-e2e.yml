@@ -13,7 +13,7 @@
 # limitations under the License.
 ---
 test_name: ml-gke-e2e
-deployment_name: g{{ build[0:3] }}{{ build[-3:] }}-ml-gke-e2e
+deployment_name: ml-gke-e2e-{{ build }}
 region: asia-southeast1
 zone: asia-southeast1-b  # for remote node
 workspace: /workspace
