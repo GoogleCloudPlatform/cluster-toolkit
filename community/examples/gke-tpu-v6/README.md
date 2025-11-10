@@ -92,10 +92,11 @@ This section guides you through the cluster creation process, ensuring that your
 
 ## Advanced Blueprint: GKE TPU with GCS Integration
 
-This repository also includes an advanced blueprint, `gke-tpu-v6-gcs.yaml`, designed for production-ready workloads. It builds on the basic blueprint by adding several key features:
+This repository also includes an advanced blueprint, `gke-tpu-v6-advanced.yaml`, designed for production-ready workloads. It builds on the basic blueprint by adding several key features:
 * **Dedicated Service Accounts** for nodes and workloads, following security best practices.
 * **Automatic creation of two GCS buckets** for training data and checkpoints.
 * **Performance-tuned GCS FUSE mounts** pre-configured in the cluster as Persistent Volumes.
+* **Optional High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview)** for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration)
 
 ### Deploying the Advanced Blueprint
 
@@ -113,14 +114,6 @@ The process is nearly identical to the basic deployment.
     ```
 
 1. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
-
-### Understanding the GCS Integration
-
-The advanced blueprint provisions several key technologies to create a robust data pipeline for your TPU workloads. Here are some resources to understand how they work together:
-* [Cloud Storage Overview](https://cloud.google.com/storage/docs/introduction#quickstarts): Start here to understand what Cloud Storage buckets are and their role in storing large-scale data.
-* [Cloud TPU Storage Options](https://cloud.google.com/tpu/docs/storage-options): Learn about the recommended storage patterns for Cloud TPUs, including why GCS FUSE is a best practice for providing training data.
-* [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
-* [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
 
 ## Run the sample job
 
@@ -180,6 +173,78 @@ To avoid recurring charges for the resources used on this page, clean up the res
    ./gcluster destroy gke-tpu-v6/
    ```
 
-Useful TPU links:
+## Appendix
+
+### Useful TPU links
 1. [TPU architecture](https://cloud.google.com/tpu/docs/system-architecture-tpu-vm)
 2. [TPU v6](https://cloud.google.com/tpu/docs/v6e)
+
+### Understanding the GCS Integration
+
+The advanced blueprint provisions several key technologies to create a robust data pipeline for your TPU workloads. Here are some resources to understand how they work together:
+* [Cloud Storage Overview](https://cloud.google.com/storage/docs/introduction#quickstarts): Start here to understand what Cloud Storage buckets are and their role in storing large-scale data.
+* [Cloud TPU Storage Options](https://cloud.google.com/tpu/docs/storage-options): Learn about the recommended storage patterns for Cloud TPUs, including why GCS FUSE is a best practice for providing training data.
+* [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
+* [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
+
+### Understanding Managed Lustre integration
+The advanced blueprint `gke-tpu-v6-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.
+
+#### Enabling Managed Lustre
+To enable Managed Lustre, you must make these changes before deploying:
+
+1. In the `gke-tpu-v6-advanced.yaml`:
+Find the **vars:** section and **uncomment** the Managed Lustre variables. The defaults provide a high-performance **36000GiB** (~35.16TiB) filesystem with **18 GB/s** of throughput.
+
+2. In the `gke-tpu-v6-advanced.yaml`:
+Find the section commented # --- MANAGED LUSTRE ADDITIONS ---. **Uncomment** the entire block of four modules: `private_service_access`, `lustre_firewall_rule`, `managed-lustre`, and `lustre-pv`.
+
+After making these changes, run the `gcluster deploy` command as usual.
+
+#### Using Managed Lustre in a Pod
+Once deployed, the `Lustre` filesystem is available to the cluster as a `Persistent Volume (PV)`. To use it in your workloads, you need to create a `Persistent Volume Claim (PVC)` and mount it in your pod.
+
+#### Testing the Lustre Mount
+
+1. Create a file named `lustre-claim-pod.yaml`:
+
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: my-lustre-claim
+    spec:
+      accessModes:
+      - ReadWriteMany
+      # storageClassName must be empty to bind to the manually created PV
+      storageClassName: ""
+      resources:
+        requests:
+          # This size must match lustre_size_gib from your variables
+          storage: 36000Gi
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: lustre-test-pod
+    spec:
+      containers:
+      - name: test-container
+        image: ubuntu:22.04
+        command: ["/bin/sleep", "infinity"]
+        volumeMounts:
+        - name: lustre-storage
+          mountPath: /mnt/lustre
+      volumes:
+      - name: lustre-storage
+        persistentVolumeClaim:
+          claimName: my-lustre-claim
+    ```
+
+2. Apply the manifest to your cluster:
+
+    ```yaml
+    kubectl apply -f lustre-claim-pod.yaml
+    ```
+
+The pod will start, and the Managed Lustre filesystem will be available inside the container at `/mnt/lustre`.

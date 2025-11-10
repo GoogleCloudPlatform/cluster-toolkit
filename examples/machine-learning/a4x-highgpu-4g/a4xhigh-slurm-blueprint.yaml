@@ -597,6 +597,12 @@ deployment_groups:
       instance_image_custom: true
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4x_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 70
+        SocketsPerBoard: 2
+        ThreadsPerCore: 1
       additional_networks:
         $(concat(
           [{

@@ -1,0 +1,66 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: sycomp-storage
+
+vars:
+  project_id: ""                     ## Set GCP Project ID Here
+  deployment_name: "sycomp-storage"  ## Set customized deployment name
+  region: ""                         ## Set region
+  zone: ""                           ## Set zone
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+
+  ## Create network shared between sycomp storage cluster
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: ""           ## Set network name
+      subnetwork_name: ""        ## Set subnetwork name
+      # Source ip ranges for ssh, for example: [21.32.32.0/24].
+      # In order to be able to login to the login node via ssh, the ip address
+      # of this machine needs to be placed in the allowed_ssh_ip_ranges.
+      allowed_ssh_ip_ranges: []
+
+  - id: sycomp-scale-gcp
+    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale?ref=main"
+    use: [network1]
+    settings:
+      security:
+        ssh:
+          ssh_user_name: ""                  ## Set user name to ssh mgmt node, for example: "sycompacct"
+          private_key: ""                    ## Set private key file, for example: ~/.ssh/id_rsa
+          public_key: ""                     ## Set public key file, for example: ~/.ssh/id_rsa.pub
+        customer_token:
+          token: ""                          ## Set Your Customer Token
+      scale_config:
+        scale_node_count: 3                  ## Number of storage nodes to deploy
+        scale_machine_type: "c3-standard-44" ## Instance type of the storage nodes
+        scale_volumes:
+          data-storage:
+            count: 4                         ## Number of disks to configure on each storage node
+            size_in_gb: 250                  ## Size of each disk
+            type: "hyperdisk-balanced"       ## Type of persistent disk to use
+            provisioned_iops: 30000          ## Provisioned IOPS per disk, required for Hyperdisk
+            provisioned_throughput: 500      ## Provisioned Throughput in MiB/sec per disk, required for Hyperdisk
+      afm_config:
+        afm_node_count: 1                    ## Number of AFM nodes to deploy
+        afm_machine_type: "c3-standard-44"   ## Instance type of the AFM nodes
