@@ -26,7 +26,7 @@ spec:
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 16
+      maxUnavailable: ${yamlencode(max_unavailable)}
   template:
     metadata:
       labels:
