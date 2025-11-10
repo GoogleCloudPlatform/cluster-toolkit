@@ -22,8 +22,24 @@ locals {
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
-  jobset_supported_versions = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
-  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
+  jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
+  gib_supported_versions_x86   = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
+  gib_supported_versions_arm64 = ["v1.0.7"]
+  gib_supported_versions = var.target_architecture == "arm64" ? (
+    local.gib_supported_versions_arm64
+    ) : (
+    local.gib_supported_versions_x86
+  )
+}
+
+variable "target_architecture" {
+  description = "The target architecture for the GKE nodes and gIB plugin (e.g., 'x86_64' or 'arm64')."
+  type        = string
+  default     = "x86_64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.target_architecture)
+    error_message = "The target_architecture must be either 'x86_64' or 'arm64'."
+  }
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -48,7 +64,7 @@ resource "terraform_data" "gib_validations" {
   lifecycle {
     precondition {
       condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.template_vars.version)
-      error_message = "Supported version of the NCCL gIB plugin are ${join(", ", local.gib_supported_versions)}"
+      error_message = "Supported version of the NCCL gIB plugin for architecture ${var.target_architecture} are ${join(", ", local.gib_supported_versions)}"
     }
   }
 }
@@ -159,6 +175,7 @@ variable "gib" {
         }
       })
       accelerator_count = number
+      max_unavailable : optional(string, "50%")
     })
   })
   default = {
