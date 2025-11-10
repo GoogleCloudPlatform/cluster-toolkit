@@ -1658,7 +1658,7 @@ You can provision multiple volumes in a pool. For service levels Standard, Premi
 To provision the bluebrint, please run:
 
 ```shell
-./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
 ./gcluster deploy netapp-volumes
 ```
 

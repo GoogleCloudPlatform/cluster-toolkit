@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "netapp_storage_pool_id" {
-  description = "The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created."
+  description = "The ID of the NetApp storage pool to use for the volume."
   type        = string
   validation {
     condition     = length(split("/", var.netapp_storage_pool_id)) == 6
@@ -34,7 +34,7 @@ variable "region" {
 }
 
 variable "volume_name" {
-  description = "The name of the volume. Leave empty to use generates name based on deployment name."
+  description = "The name of the volume. Needs to be unique within the storage pool."
   type        = string
   default     = null
 }
@@ -75,7 +75,7 @@ variable "labels" {
 }
 
 variable "local_mount" {
-  description = "Mountpoint for this volume. Note: If set to the same as the `name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md))."
+  description = "Mountpoint for this volume."
   type        = string
   default     = "/shared"
 }
@@ -96,7 +96,7 @@ variable "large_capacity" {
 }
 
 variable "unix_permissions" {
-  description = "UNIX permissions for root inode the volume."
+  description = "UNIX permissions for root inode in the volume."
   type        = string
   default     = "0777"
   validation {

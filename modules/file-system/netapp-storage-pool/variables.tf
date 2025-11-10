@@ -54,7 +54,7 @@ variable "private_vpc_connection_peering" {
 }
 
 variable "pool_name" {
-  description = "The name of the storage pool. Leave empty to use generates name based on deployment name."
+  description = "The name of the storage pool. Leave empty to generate name based on deployment name."
   type        = string
   default     = null
 }
