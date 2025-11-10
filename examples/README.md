@@ -265,8 +265,7 @@ File systems:
   2.5 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
-* The DDN-EXAScaler module is deprecated. The recommended replacement is the
-  [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
+* The managed_lustre is mounted at /lustre and is designed for the highly parallel and random I/O performance. It has a minimum capacity of ~18TiB.
 
 #### Quota Requirements for hpc-enterprise-slurm.yaml
 

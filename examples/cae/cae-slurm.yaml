@@ -128,12 +128,13 @@ deployment_groups:
       local_mount: /scratch
 
   # If you require maximum IO performance, you can consider to bring up a dedicated parallel
-  # file system, e.g.Sycomp GPFS.
+  # file system, e.g.GCPs Managed Lustre,Sycomp GPFS,NetApp Volumes etc.
   # Note: Those solutions may have associated license cost.
   #
   # Please visit here for more information
   # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
-
+  # - Managed Lustre: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/file-system/managed-lustre/README.md
+  
   ######## Remote Desktop(s) #######
   # This block creates chrome remote desktop.
   # For more info: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/remote-desktop/chrome-remote-desktop

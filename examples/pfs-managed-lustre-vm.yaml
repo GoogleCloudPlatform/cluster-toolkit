@@ -55,9 +55,26 @@ deployment_groups:
       size_gib: $(vars.lustre_size_gib)
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: startup.sh
+        content: |
+          #!/bin/bash
+          set -ex
+
+          output_dir=/lustre/test
+          [[ ! -d $output_dir ]] && mkdir -m a+w $output_dir
+
+          os_name=\$(sed -nr 's/^ID="?([^"]+)"?/\1/p' /etc/os-release)
+          echo $os_name > ${output_dir}/${os_name}.txt
+
   - source: modules/compute/vm-instance
     id: lustre_ubuntu22_instances
-    use: [network, lustre-gcp]
+    use: [network, lustre-gcp, startup-script]
     settings:
       add_deployment_name_before_prefix: true
       name_prefix: lustre-ubuntu22
@@ -66,3 +83,9 @@ deployment_groups:
       instance_image:
         project: ubuntu-os-cloud
         name: ubuntu-2204-jammy-v20250128
+  - id: wait-lustre-ubuntu22
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: $(lustre_ubuntu22_instances.name[0])
+      timeout: 7200
+
