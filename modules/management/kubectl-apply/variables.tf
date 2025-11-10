@@ -23,7 +23,7 @@ locals {
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
   jobset_supported_versions = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
-  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
+  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.0.7", "v1.1.0"]
 }
 
 resource "terraform_data" "kueue_validations" {
