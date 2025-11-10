@@ -106,7 +106,7 @@ deployment_groups:
   # This file system has an associated license cost.
   - id: managed_lustre
     source: modules/file-system/managed-lustre
-    use: [network]
+    use: [network, private_service_access]
     settings:
       local_mount: /lustre
 
