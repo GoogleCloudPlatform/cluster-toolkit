@@ -136,6 +136,7 @@ resource "google_compute_resource_policy" "placement_policy" {
     availability_domain_count = try(var.placement_policy.availability_domain_count, null)
     collocation               = try(var.placement_policy.collocation, null)
     max_distance              = try(var.placement_policy.max_distance, null)
+    gpu_topology              = try(var.placement_policy.gpu_topology, null)
   }
 }
 
@@ -145,6 +146,7 @@ resource "null_resource" "replace_vm_trigger_from_placement" {
     availability_domain_count = try(tostring(var.placement_policy.availability_domain_count), "")
     max_distance              = try(tostring(var.placement_policy.max_distance), "")
     collocation               = try(var.placement_policy.collocation, "")
+    gpu_topology              = try(var.placement_policy.gpu_topology, "") 
   }
 }
 
