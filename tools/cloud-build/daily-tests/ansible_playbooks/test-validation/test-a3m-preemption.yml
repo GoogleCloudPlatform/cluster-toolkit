@@ -13,28 +13,22 @@
 # limitations under the License.
 
 ---
+- name: Fail if required custom_vars are not set
+  ansible.builtin.fail:
+    msg: "custom_vars.{{ item }} is not defined or is empty. Please ensure it is passed."
+  when: custom_vars[item] is not defined or custom_vars[item] | string == ""
+  loop:
+  - project_id
+  - zone
+  - slurm_cluster_name
+
 - name: Set up variables for preemption query
   ansible.builtin.set_fact:
     zone: "{{ custom_vars.zone }}"
     slurm_cluster_name: "{{ custom_vars.slurm_cluster_name }}"
     node_pattern: "{{ custom_vars.slurm_cluster_name }}-a3mega-*"
     gcp_project: "{{ custom_vars.project_id }}"
-    query_window: "24h" # How far back to look for preemptions
-
-- name: Fail if gcp_project is not set
-  ansible.builtin.fail:
-    msg: "gcp_project variable is not defined. Please ensure custom_vars.project_id is passed."
-  when: gcp_project is not defined or gcp_project == ""
-
-- name: Fail if zone is not set
-  ansible.builtin.fail:
-    msg: "zone variable is not defined. Please ensure custom_vars.zone is passed."
-  when: zone is not defined or zone == ""
-
-- name: Fail if slurm_cluster_name is not set
-  ansible.builtin.fail:
-    msg: "slurm_cluster_name variable is not defined. Please ensure custom_vars.slurm_cluster_name is passed."
-  when: slurm_cluster_name is not defined or slurm_cluster_name == ""
+    query_window: "4h" # How far back to look for preemptions
 
 - name: Get current A3 Mega node instance details
   ansible.builtin.shell: |
@@ -53,11 +47,6 @@
   ansible.builtin.set_fact:
     instance_id_filter: "{{ a3_nodes | map(attribute='id') | map('regex_replace', '^(.*)$', 'resource.labels.instance_id=\"\\1\"') | join(' OR ') }}"
   when: a3_nodes is defined and a3_nodes | length > 0
-
-- name: Debug instance ID filter
-  ansible.builtin.debug:
-    var: instance_id_filter
-  when: instance_id_filter is defined and instance_id_filter != ""
 
 - name: Query Cloud Audit Logs for any preemption events for these nodes
   ansible.builtin.shell: |

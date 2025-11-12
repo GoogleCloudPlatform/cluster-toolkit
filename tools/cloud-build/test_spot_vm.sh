@@ -15,10 +15,7 @@
 
 set +e
 
-PROJECT=$PROJECT_ID
-BUILD_ID_FULL=$BUILD_ID
-BUILD_ID_SHORT="${BUILD_ID_FULL:0:6}"
-IMAGE_PROJECT=$PROJECT_ID
+BUILD_ID_SHORT="${BUILD_ID:0:6}"
 PROVISIONING_MODEL="SPOT"
 TERMINATION_ACTION="DELETE"
 OPTIONS_GCS_PATH="gs://hpc-ctk1357/options/options.txt"
@@ -38,14 +35,12 @@ cleanup_instances() {
 	local prefix=$3
 
 	if [[ -n "${zone}" ]]; then
-		local INSTANCES_TO_DELETE
-		INSTANCES_TO_DELETE=$(gcloud compute instances list --project="${project}" --zones="${zone}" \
+		local INSTANCES_TO_DELETE_ARRAY=()
+		readarray -t INSTANCES_TO_DELETE_ARRAY < <(gcloud compute instances list --project="${project}" --zones="${zone}" \
 			--filter="name ~ ^${prefix}" --format='value(name)')
 
-		if [[ -n "${INSTANCES_TO_DELETE}" ]]; then
-			echo "${INSTANCES_TO_DELETE}" | while read -r inst; do
-				gcloud compute instances delete "${inst}" --project="${project}" --zone="${zone}" --quiet --delete-disks=all || true
-			done
+		if [[ "${#INSTANCES_TO_DELETE_ARRAY[@]}" -gt 0 ]]; then
+			gcloud compute instances delete "${INSTANCES_TO_DELETE_ARRAY[@]}" --project="${project}" --zone="${zone}" --quiet --delete-disks=all || true
 		fi
 	fi
 }
@@ -82,11 +77,11 @@ for pair in "${REGION_ZONE_PAIRS[@]}"; do
 	readarray -t INSTANCE_NAMES_ARRAY < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
 
 	CREATE_OUTPUT=$(gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}" \
-		--project="${PROJECT}" \
+		--project="${PROJECT_ID}" \
 		--zone="${ZONE}" \
 		--machine-type="${MACHINE_TYPE}" \
 		--image-family="${IMAGE_FAMILY}" \
-		--image-project="${IMAGE_PROJECT}" \
+		--image-project="${PROJECT_ID}" \
 		--provisioning-model="${PROVISIONING_MODEL}" \
 		--instance-termination-action="${TERMINATION_ACTION}" \
 		--no-address \
@@ -94,10 +89,9 @@ for pair in "${REGION_ZONE_PAIRS[@]}"; do
 
 	GCLOUD_EXIT_CODE=$?
 
-	if [[ ${GCLOUD_EXIT_CODE} -ne 0 ]] || [[ "${CREATE_OUTPUT}" == *"ERROR:"* ]] || [[ "${CREATE_OUTPUT}" == *"Could not fetch resource:"* ]]; then
-		cleanup_instances "${PROJECT}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
-	else
-		cleanup_instances "${PROJECT}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
+	cleanup_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
+
+	if [[ ${GCLOUD_EXIT_CODE} -eq 0 ]] && [[ "${CREATE_OUTPUT}" != *"ERROR:"* ]] && [[ "${CREATE_OUTPUT}" != *"Could not fetch resource:"* ]] && [[ "${CREATE_OUTPUT}" != *"INSUFFICIENT_CAPACITY"* ]]; then
 		SELECTED_REGION="${REGION}"
 		SELECTED_ZONE="${ZONE}"
 		SUCCESS=true
@@ -115,7 +109,7 @@ if [[ "${SUCCESS}" == "true" ]]; then
 
 	ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
 		--user=sa_106486320838376751393 \
-		--extra-vars="project=${PROJECT} build=${BUILD_ID_SHORT}" \
+		--extra-vars="project=${PROJECT_ID} build=${BUILD_ID_SHORT}" \
 		--extra-vars="region=${SELECTED_REGION} zone=${SELECTED_ZONE}" \
 		--extra-vars="${TEST_VARS_FILE}"
 

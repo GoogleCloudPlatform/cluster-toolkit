@@ -242,21 +242,11 @@
         ansible.builtin.debug:
           msg: "A task within the integration tests failed. Preemption check might run."
 
-    ## Always cleanup, even on failure
-    always:
-    - name: Check if tests failed
-      ansible.builtin.debug:
-        var: integration_tests_failed
-
-    - name: Check if spot is enable
-      ansible.builtin.debug:
-        var: custom_vars.enable_spot | default(false) | bool
-
     # Conditional Preemption Check
     - name: Check for recent preemptions if tests failed and Spot is enabled
       ansible.builtin.include_tasks: test-validation/test-a3m-preemption.yml
       when:
-      - integration_tests_failed | bool
+      - integration_tests_failed
       - custom_vars.enable_spot | default(false) | bool
       vars:
         custom_vars: "{{ custom_vars }}"

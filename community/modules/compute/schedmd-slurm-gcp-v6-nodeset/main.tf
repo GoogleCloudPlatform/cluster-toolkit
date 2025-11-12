@@ -17,10 +17,6 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset", ghpc_role = "compute" })
 }
 
-locals {
-  spot_label = { spot = tostring(var.enable_spot_vm) }
-}
-
 module "instance_validation" {
   source = "../../../../modules/internal/instance_validations"
 
@@ -100,7 +96,7 @@ locals {
     gpu                    = one(local.guest_accelerator)
     accelerator_topology   = var.accelerator_topology
 
-    labels                    = merge(local.labels, local.spot_label)
+    labels                    = merge(local.labels, { spot = tostring(var.enable_spot_vm) })
     machine_type              = terraform_data.machine_type_zone_validation.output
     advanced_machine_features = var.advanced_machine_features
     metadata                  = local.metadata
