@@ -40,7 +40,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     PROJECT_ID: ID of the project where the bucket is being created.\
     COMPUTE_REGION: the compute region where you want to store the state of the Terraform deployment.
 
-1. In the `examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu-deployment.yaml` file, fill in the following settings in the terraform_backend_defaults and vars sections to match the specific values for your deployment:
+1. In the `examples/gke-g4/gke-consumption-options/dws-flex-start/gke-g4-deployment.yaml` file, fill in the following settings in the terraform_backend_defaults and vars sections to match the specific values for your deployment:
 
     `bucket`: the name of the Cloud Storage bucket you created in the previous step.\
     `deployment_name`: the name of the deployment.\
@@ -51,7 +51,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.\
     `system_node_pool_disk_size_gb`: the size of disk for each node of the system node pool. Default value is 100.\
     `a3ultra_node_pool_disk_size_gb`: the size of disk for each node of the A3 Ultra node pool. Default value is 100.\
-    To modify advanced settings, edit `examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml`.
+    To modify advanced settings, edit `examples/gke-g4/gke-consumption-options/dws-flex-start/gke-g4.yaml`.
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
@@ -64,8 +64,8 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu-deployment.yaml \
-    examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml
+    examples/gke-g4/gke-consumption-options/dws-flex-start/gke-g4-deployment.yaml \
+    examples/gke-g4/gke-consumption-options/dws-flex-start/gke-g4.yaml
     ```
 
 1. When prompted, select (A)pply to deploy the blueprint.
@@ -90,7 +90,7 @@ The dws-flex-start example provides a `dws-flex-start.yaml` file that runs this 
 1. Run the jobs.
 
     ```sh
-    kubectl apply -f examples/gke-consumption-options/dws-flex-start/dws-flex-start.yaml
+    kubectl apply -f examples/gke-g4/gke-consumption-options/dws-flex-start/dws-flex-start.yaml
     ```
 
 1. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
@@ -117,7 +117,7 @@ To validate the functionality of the provisioned cluster, you can run a NCCL tes
     Create the resources to run the test.
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-consumption-options/dws-flex-start/nccl-jobset-example.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-g4/gke-consumption-options/dws-flex-start/nccl-jobset-example.yaml
     ```
 
     This command returns a JobSet name.
