@@ -24,7 +24,7 @@ locals {
 
 module "bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 6.1"
+  version = ">= 6.1"
 
   count = var.create_bucket ? 1 : 0
 

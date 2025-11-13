@@ -62,19 +62,7 @@ spec:
             path: /home/kubernetes/bin/nvidia
             type: Directory
       initContainers:
-        - name: disable-log-martian
-          image: alpine:latest
-          command: ["/bin/sh"]
-          securityContext:
-            privileged: true
-          args:
-            - -c
-            - |
-              sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
-              sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
-              sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
-              sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
-        - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64:v1.0.4
+        - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64:v1.0.7
           name: nccl-rdma-installer
           resources:
             requests:

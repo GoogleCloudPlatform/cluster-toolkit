@@ -479,7 +479,7 @@ variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
     - /home
-    - /apps
+    - /opt/apps
     EOD
   type        = bool
   default     = true
