@@ -28,13 +28,14 @@
     model_dir:
     db_dir:
     pdb_database_path:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
     max_template_date:
     conformer_max_iterations:
     num_recycles:
     num_diffusion_samples:
     num_seeds:
     save_embeddings:
+    inference_enable_unified_memory:
 
   tasks:
   - name: Ensure target directory exists (if needed)
