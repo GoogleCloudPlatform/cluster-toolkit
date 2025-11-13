@@ -175,7 +175,7 @@ variable "gib" {
         }
       })
       accelerator_count = number
-      max_unavailable : optional(string, "50%")
+      max_unavailable   = optional(string, "50%")
     })
   })
   default = {
