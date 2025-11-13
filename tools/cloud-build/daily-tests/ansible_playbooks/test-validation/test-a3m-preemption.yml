@@ -1,0 +1,79 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Fail if required custom_vars are not set
+  ansible.builtin.fail:
+    msg: "custom_vars.{{ item }} is not defined or is empty. Please ensure it is passed."
+  when: custom_vars[item] is not defined or custom_vars[item] | string == ""
+  loop:
+  - project_id
+  - zone
+  - slurm_cluster_name
+
+- name: Set up variables for preemption query
+  ansible.builtin.set_fact:
+    zone: "{{ custom_vars.zone }}"
+    slurm_cluster_name: "{{ custom_vars.slurm_cluster_name }}"
+    node_pattern: "{{ custom_vars.slurm_cluster_name }}-a3mega-*"
+    gcp_project: "{{ custom_vars.project_id }}"
+    query_window: "4h" # How far back to look for preemptions
+
+- name: Get current A3 Mega node instance details
+  ansible.builtin.shell: |
+    gcloud compute instances list --project={{ gcp_project }} --filter="name ~ '^{{ node_pattern }}' AND zone={{ zone }}" --format="json(name,id)"
+  register: a3_nodes_raw
+  changed_when: false
+  environment:
+    CLOUDSDK_CORE_PROJECT: "{{ gcp_project }}"
+  delegate_to: localhost
+
+- name: Parse instance details for query
+  ansible.builtin.set_fact:
+    a3_nodes: "{{ a3_nodes_raw.stdout | from_json }}"
+
+- name: Build instance ID filter string
+  ansible.builtin.set_fact:
+    instance_id_filter: "{{ a3_nodes | map(attribute='id') | map('regex_replace', '^(.*)$', 'resource.labels.instance_id=\"\\1\"') | join(' OR ') }}"
+  when: a3_nodes is defined and a3_nodes | length > 0
+
+- name: Query Cloud Audit Logs for any preemption events for these nodes
+  ansible.builtin.shell: |
+    gcloud logging read '
+      resource.type="gce_instance"
+      AND protoPayload.methodName="compute.instances.preempted"
+      AND log_id("cloudaudit.googleapis.com/system_event")
+      AND ({{ instance_id_filter }})
+    ' --project={{ gcp_project }} --freshness={{ query_window }} --format="json"
+  register: audit_logs_raw
+  changed_when: false
+  environment:
+    CLOUDSDK_CORE_PROJECT: "{{ gcp_project }}"
+  delegate_to: localhost
+  when: instance_id_filter is defined and instance_id_filter != ""
+
+- name: Parse preemption logs
+  ansible.builtin.set_fact:
+    preemption_logs: "{{ audit_logs_raw.stdout | from_json }}"
+  when: audit_logs_raw.stdout is defined and audit_logs_raw.stdout != "" and audit_logs_raw.stdout != "[]"
+
+- name: Report preempted nodes
+  ansible.builtin.debug:
+    msg: "Preemption Events Found in the last {{ query_window }}: {{ preemption_logs }}"
+  when: preemption_logs is defined and preemption_logs | length > 0
+
+- name: Report no preemptions found
+  ansible.builtin.debug:
+    msg: "No preemption events found for nodes matching '{{ node_pattern }}' in zone {{ zone }} in the last {{ query_window }}."
+  when: preemption_logs is not defined or preemption_logs | length == 0
