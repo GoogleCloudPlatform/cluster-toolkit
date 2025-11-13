@@ -50,7 +50,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
-  * [gke-a3-highgpu-inference-gateway.yaml](#gke-a3-highgpu-inference-gatewayyaml--) ![core-badge]
+  * [gke-a3-highgpu-inference-gateway.yaml](#gke-a3-highgpu-inference-gatewayyaml-) ![core-badge]
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
