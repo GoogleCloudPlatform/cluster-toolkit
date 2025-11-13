@@ -242,6 +242,9 @@
       - custom_vars.machine_type | default('') == 'a3-megagpu-8g'
       vars:
         custom_vars: "{{ custom_vars }}"
+    - name: Force failure after rescue tasks
+      ansible.builtin.fail:
+        msg: "Integration tests failed. Marking play as failed after running rescue tasks."
 
     ## Always cleanup, even on failure
     always:
