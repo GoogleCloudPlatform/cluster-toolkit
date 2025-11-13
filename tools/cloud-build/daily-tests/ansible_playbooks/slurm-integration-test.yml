@@ -234,16 +234,12 @@
     rescue:
     - name: Display test failure message
       ansible.builtin.debug:
-        msg: "A task within the integration tests failed. Preemption check might run if you are working with. a3-megagpu-8g machine."
-    - name: Print instance machine type (in always)
-      ansible.builtin.debug:
-        msg: "Instance machine type is: {{ ansible_facts.gce_instance_machine_type | default('N/A - Facts may not be available') }}"
+        msg: "A task within the integration tests failed. Preemption check might run if you are working with a3-megagpu-8g machines."
     - name: Check for recent preemptions for a3-megagpu-8g
       ansible.builtin.include_tasks: test-validation/test-a3m-preemption.yml
       when:
       - custom_vars.enable_spot | default(false) | bool
-      - ansible_facts.gce_instance_machine_type is defined
-      - ansible_facts.gce_instance_machine_type | default('') | endswith('/a3megagpu8g')
+      - custom_vars.machine_type | default('') == 'a3-megagpu-8g'
       vars:
         custom_vars: "{{ custom_vars }}"
 

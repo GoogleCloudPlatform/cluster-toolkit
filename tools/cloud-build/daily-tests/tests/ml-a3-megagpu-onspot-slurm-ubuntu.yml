@@ -44,6 +44,7 @@ custom_vars:
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   enable_spot: true
+  machine_type: "a3-megagpu-8g"
 cli_deployment_vars:
   network_name_system: "{{ network }}"
   subnetwork_name_system: "{{ sub_network}}"
