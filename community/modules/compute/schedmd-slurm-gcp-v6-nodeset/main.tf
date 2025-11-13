@@ -96,7 +96,7 @@ locals {
     gpu                    = one(local.guest_accelerator)
     accelerator_topology   = var.accelerator_topology
 
-    labels                    = merge(local.labels, { spot = tostring(var.enable_spot_vm) })
+    labels                    = local.labels
     machine_type              = terraform_data.machine_type_zone_validation.output
     advanced_machine_features = var.advanced_machine_features
     metadata                  = local.metadata

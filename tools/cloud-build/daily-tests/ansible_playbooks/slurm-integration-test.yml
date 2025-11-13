@@ -191,7 +191,6 @@
   ignore_unreachable: true  # ensure always block will run even if SSH fails
   vars:
     key_type: "munge"
-    integration_tests_failed: false  # Initialize failure flag
   tasks:
   - name: Slurm Test Block
     vars:
@@ -224,33 +223,32 @@
       retries: 60
       delay: 15
 
-    - name: Block for running main integration tests
-      block:
-      - name: Run Integration tests for Cluster Toolkit
-        ansible.builtin.include_tasks: "{{ test }}"
-        vars:
-          login_node: "{{ login_node }}"
-          custom_vars: "{{ custom_vars }}"
-        loop: "{{ post_deploy_tests }}"
-        loop_control:
-          loop_var: test
-      rescue:
-      - name: Set flag indicating test failure
-        ansible.builtin.set_fact:
-          integration_tests_failed: true
-      - name: Display test failure message
-        ansible.builtin.debug:
-          msg: "A task within the integration tests failed. Preemption check might run."
-
-    # Conditional Preemption Check
-    - name: Check for recent preemptions if tests failed and Spot is enabled
+    - name: Run Integration tests for Cluster Toolkit
+      ansible.builtin.include_tasks: "{{ test }}"
+      vars:
+        login_node: "{{ login_node }}"
+        custom_vars: "{{ custom_vars }}"
+      loop: "{{ post_deploy_tests }}"
+      loop_control:
+        loop_var: test
+    rescue:
+    - name: Display test failure message
+      ansible.builtin.debug:
+        msg: "A task within the integration tests failed. Preemption check might run if you are working with. a3-megagpu-8g machine."
+    - name: Print instance machine type (in always)
+      ansible.builtin.debug:
+        msg: "Instance machine type is: {{ ansible_facts.gce_instance_machine_type | default('N/A - Facts may not be available') }}"
+    - name: Check for recent preemptions for a3-megagpu-8g
       ansible.builtin.include_tasks: test-validation/test-a3m-preemption.yml
       when:
-      - integration_tests_failed
       - custom_vars.enable_spot | default(false) | bool
+      - ansible_facts.gce_instance_machine_type is defined
+      - ansible_facts.gce_instance_machine_type | default('') | endswith('/a3megagpu8g')
       vars:
         custom_vars: "{{ custom_vars }}"
 
+    ## Always cleanup, even on failure
+    always:
     - name: Ensure all nodes are powered down
       vars:
         wait_for_compute_nodes_to_go_down: true
