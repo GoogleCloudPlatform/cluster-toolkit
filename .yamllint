@@ -8,7 +8,6 @@ yaml-files:
 ignore:
 - modules/management/kubectl-apply/manifests/*
 - examples/gke-a4x/nvidia-dra-driver.yaml
-- examples/gke-a4x/nccl-rdma-installer.yaml
 
 rules:
   # Defaults
