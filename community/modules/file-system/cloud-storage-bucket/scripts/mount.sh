@@ -18,6 +18,8 @@ REMOTE_MOUNT=$2
 LOCAL_MOUNT=$3
 FS_TYPE=$4
 MOUNT_OPTIONS=$5
+LOCAL_MOUNT_MODE=$6
+LOCAL_MOUNT_OWNER=$7
 
 [[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
 
@@ -56,3 +58,9 @@ fi
 echo "Mounting --target ${LOCAL_MOUNT} from fstab"
 mkdir -p "${LOCAL_MOUNT}"
 mount --target "${LOCAL_MOUNT}"
+if [ -n "${LOCAL_MOUNT_MODE}" ]; then
+	chmod "${LOCAL_MOUNT_MODE}" "${LOCAL_MOUNT}"
+fi
+if [ -n "${LOCAL_MOUNT_OWNER}" ]; then
+	chwon "${LOCAL_MOUNT_OWNER}" "${LOCAL_MOUNT}"
+fi

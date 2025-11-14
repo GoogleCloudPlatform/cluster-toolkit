@@ -17,15 +17,36 @@
 output "network_storage" {
   description = "Describes a remote network storage to be mounted by fs-tab."
   value = {
-    server_ip             = var.server_ip
-    remote_mount          = local.remote_mount
-    local_mount           = var.local_mount
-    fs_type               = local.fs_type
-    mount_options         = var.mount_options
-    client_install_runner = local.client_install_runner
-    mount_runner          = local.mount_runner
+    server_ip               = var.server_ip
+    remote_mount            = local.remote_mount
+    local_mount             = var.local_mount
+    local_mount_owner       = var.local_mount_owner
+    local_mount_permissions = var.local_mount_permissions
+    fs_type                 = local.fs_type
+    mount_options           = var.mount_options
+    client_install_runner   = local.client_install_runner
+    mount_runner            = local.mount_runner
   }
 }
+
+check "gcs_owner" {
+  assert {
+    condition     = !(var.fs_type == "gcsfuse" && var.local_mount_owner != "")
+    error_message = <<-EOT
+      To change the ownership of the files with GCS Fuse mount use `uid` and `gid` mount_options.
+    EOT
+  }
+}
+
+check "gcs_mode" {
+  assert {
+    condition     = !(var.fs_type == "gcsfuse" && var.local_mount_permissions != "")
+    error_message = <<-EOT
+      To change the mode of the files with GCS Fuse mount use `dir_mode` and `file_mode` mount_options.
+    EOT
+  }
+}
+
 
 locals {
   # Update remote mount to include a slash if the fs_type requires one to exist
@@ -75,7 +96,7 @@ locals {
   mount_runner_vanilla = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"${var.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${var.mount_options}\""
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${var.mount_options}\" \"${var.local_mount_permissions}\"  \"${var.local_mount_owner}\""
     "content" = (
       contains(local.mount_vanilla_supported_fstype, local.fs_type) ?
       file("${path.module}/scripts/mount.sh") :
@@ -93,10 +114,12 @@ locals {
   mount_runner_daos = {
     "type" = "shell"
     "content" = templatefile("${path.module}/templates/mount-daos.sh.tftpl", {
-      access_points     = var.remote_mount
-      daos_agent_config = var.parallelstore_options.daos_agent_config
-      dfuse_environment = var.parallelstore_options.dfuse_environment
-      local_mount       = var.local_mount
+      access_points           = var.remote_mount
+      daos_agent_config       = var.parallelstore_options.daos_agent_config
+      dfuse_environment       = var.parallelstore_options.dfuse_environment
+      local_mount             = var.local_mount
+      local_mount_owner       = var.local_mount_owner
+      local_mount_permissions = var.local_mount_permissions
       # avoid passing "--" as mount option to dfuse
       mount_options = length(var.mount_options) == 0 ? "" : join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
     })
