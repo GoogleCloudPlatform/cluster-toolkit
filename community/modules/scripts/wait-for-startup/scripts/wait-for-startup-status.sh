@@ -54,25 +54,24 @@ fi
 deadline=$((now + TIMEOUT))
 error_file=$(mktemp)
 fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
-# Match string for all finish types of the old guest agent and successful
-# finishes on the new guest agent
-FINISH_LINE="startup-script exit status"
-# Match string for failures on the new guest agent
-FINISH_LINE_ERR="Script.*failed with error:"
 
-# NEW: Accept also these finish lines as success.
-STARTUP_SCRIPT_SUCCEEDED_LINE="google-startup-scripts.service: Succeeded."
-STARTUP_SCRIPT_FINISHED_LINE="Finished Google Compute Engine Startup Scripts."
+# Custom finish line pattern
+FINISH_LINE_CUSTOM="passed_startup_script.sh-.* finished with exit_code="
+
+# Original patterns for compatibility or other script types
+FINISH_LINE="startup-script exit status"
+FINISH_LINE_ERR="Script.*failed with error:"
 
 NON_FATAL_ERRORS=(
 	"Internal error"
 )
 
-until [[ now -gt deadline ]]; do
-	ser_log=$(
+ser_log=""
+until [[ $(date +%s) -gt deadline ]]; do
+	current_ser_log=$(
 		set -o pipefail
 		${fetch_cmd} 2>"${error_file}" |
-			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}\|${STARTUP_SCRIPT_SUCCEEDED_LINE}\|${STARTUP_SCRIPT_FINISHED_LINE}"
+			c1grep -E "${FINISH_LINE_CUSTOM}|${FINISH_LINE}|${FINISH_LINE_ERR}"
 	) || {
 		err=$(cat "${error_file}")
 		echo "$err"
@@ -85,41 +84,73 @@ until [[ now -gt deadline ]]; do
 		done
 
 		if [[ $fatal_error = "true" ]]; then
+			rm -f "${error_file}"
 			exit 1
 		fi
 	}
-	if [[ -n "${ser_log}" ]]; then break; fi
-	echo "Could not detect end of startup script. Sleeping."
+	if [[ -n "${current_ser_log}" ]]; then
+		ser_log="${current_ser_log}"
+		break
+	fi
 	sleep 5
-	now=$(date +%s)
 done
+rm -f "${error_file}"
 
-# This line checks for an exit code - the assumption is that there is a number
-# at the end of the line and it is an exit code
-STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
-# This specific text is monitored for in tests, do not change.
 INSPECT_OUTPUT_TEXT="To inspect the startup script output, please run:"
-if [[ "${STATUS}" == 0 ]]; then
-	echo "startup-script finished successfully"
-elif [[ "${STATUS}" == 1 ]]; then
-	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
-	echo "${fetch_cmd}"
-elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_SUCCEEDED_LINE}"; then
-	echo "startup-script finished successfully (startup script succeeded line detected)"
-	exit 0
-elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_FINISHED_LINE}"; then
-	echo "startup-script finished successfully (startup script finished line detected)"
-	exit 0
-elif [[ now -ge deadline ]]; then
+
+if [[ -z "${ser_log}" ]]; then
+	# This case means timeout
 	echo "startup-script timed out after ${TIMEOUT} seconds"
-	echo "${INSPECT_OUTPUT_TEXT}"
-	echo "${fetch_cmd}"
-	exit 1
-else
-	echo "Invalid return status: '${STATUS}'"
 	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
 	exit 1
 fi
 
-exit "${STATUS}"
+STATUS=""
+EXIT_CODE_FOUND=false
+
+if echo "${ser_log}" | grep -qE "${FINISH_LINE_CUSTOM}"; then
+	STATUS=$(echo "${ser_log}" | sed -rn "s/.*${FINISH_LINE_CUSTOM}([0-9]+).*/\1/p" | head -n 1)
+	if [[ "${STATUS}" =~ ^[0-9]+$ ]]; then
+		echo "Detected custom finish pattern. Startup script exit code: ${STATUS}"
+		EXIT_CODE_FOUND=true
+	else
+		echo "Warning: Matched custom finish pattern but failed to extract exit code from: ${ser_log}"
+		STATUS=1 # Fallback to general error
+	fi
+elif echo "${ser_log}" | grep -qE "${FINISH_LINE}"; then
+	TEMP_STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq | head -n 1)
+	if [[ "${TEMP_STATUS}" =~ ^[0-9]+$ ]]; then
+		STATUS=${TEMP_STATUS}
+		echo "Detected old finish pattern. Startup script exit code: ${STATUS}"
+		EXIT_CODE_FOUND=true
+	else
+		echo "Warning: Matched old finish pattern but failed to extract exit code from: ${ser_log}"
+		STATUS=1 # Fallback to general error
+	fi
+elif echo "${ser_log}" | grep -qE "${FINISH_LINE_ERR}"; then
+	echo "startup-script failed (error line detected): ${ser_log}"
+	STATUS=1 # General error
+else
+	echo "Unknown completion log line: ${ser_log}"
+	echo "${INSPECT_OUTPUT_TEXT}"
+	echo "${fetch_cmd}"
+	exit 1
+fi
+
+if [[ "${EXIT_CODE_FOUND}" == "true" ]]; then
+	if [[ "${STATUS}" == 0 ]]; then
+		echo "Startup script completed successfully."
+	else
+		echo "Startup script completed with errors (exit code ${STATUS})."
+		echo "${INSPECT_OUTPUT_TEXT}"
+		echo "${fetch_cmd}"
+	fi
+	exit "${STATUS}"
+else
+	# Fallback for cases where a pattern matched but code extraction failed, or FINISH_LINE_ERR
+	echo "Startup script finished with errors (assumed exit code ${STATUS})."
+	echo "${INSPECT_OUTPUT_TEXT}"
+	echo "${fetch_cmd}"
+	exit "${STATUS}"
+fi
