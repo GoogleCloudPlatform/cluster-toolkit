@@ -24,7 +24,7 @@ validators:
 
 vars:
   sys_net_range: 172.16.0.0/16
-  source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
+  source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20251023
   source_image_project_id: [ubuntu-os-accelerator-images]
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
