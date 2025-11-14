@@ -26,7 +26,7 @@ cli_deployment_vars:
   gpu_zones: "[europe-west4-a,europe-west4-b,europe-west4-c]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
-network: "{{ test_name }}"
+network: "{{ deployment_name }}"
 
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
@@ -35,6 +35,7 @@ post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 custom_vars:
+  num_slurm_nodes: 1
   partitions:
   - n2
   - c2
