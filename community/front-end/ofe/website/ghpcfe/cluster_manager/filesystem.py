@@ -90,7 +90,12 @@ def create_filesystem(fs: Filesystem) -> None:
 
 
 def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
-    ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
+    
+    if utils.is_local_mode():
+        config = utils.load_config()
+        ghpc_path = config["server"]["gcluster_path"]
+    else:
+        ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
     try:
         logger.info("Invoking ghpc create")

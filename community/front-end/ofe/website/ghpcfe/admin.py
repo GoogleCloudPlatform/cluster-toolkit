@@ -221,13 +221,33 @@ class SpackApplicationAdmin(admin.ModelAdmin):
 
 class JobAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Job model """
-    list_display = ("id", "get_name", "partition", "number_of_nodes",
-                    "ranks_per_node", "threads_per_rank", "status")
+    list_display = ("id", "get_name", "cluster", "partition", "slurm_jobid", "slurm_status",
+                    "number_of_nodes", "ranks_per_node", "threads_per_rank", "status", "user")
+    list_filter = ("status", "slurm_status", "job_type", "cluster", "partition")
+    search_fields = ("name", "slurm_jobid", "user__username", "cluster__name", "partition__name")
+    readonly_fields = ("slurm_jobid", "slurm_status", "slurm_additional_states", "slurm_start_time", "slurm_end_time", "slurm_exit_code")
 
     def get_name(self, obj):
-        return obj.application.name
+        if obj.application:
+            return obj.application.name
+        elif obj.job_type == 'installation':
+            return "Installation Job"
+        else:
+            return "External Job"
 
     get_name.short_description = "Application"  #Renames column head
+
+    def slurm_additional_states(self, obj):
+        """Display additional SLURM states in a readable format"""
+        if obj.slurm_additional_states:
+            states = obj.slurm_additional_states
+            if isinstance(states, list):
+                return ", ".join(states)
+            else:
+                return str(states)
+        return "-"
+
+    slurm_additional_states.short_description = "Additional SLURM States"
 
 
 # Register your models here.
@@ -257,3 +277,4 @@ admin.site.register(StartupScript)
 admin.site.register(Image)
 admin.site.register(ContainerRegistry, ContainerRegistryAdmin)
 admin.site.register(ContainerApplication)
+admin.site.register(SlurmQueueStatus)
