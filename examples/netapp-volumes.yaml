@@ -1,0 +1,107 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# This blueprint show how to provision shared file systems with Google Cloud NetApp Volumes.
+# It creates a NetApp storage pool and a volume for use by VM instances.
+# It can be used to build compute clusters on top of it and as a drop-in replacement
+# for Filestore in existing blueprints.
+
+blueprint_name: netapp-volumes
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: netapp-volumes
+  region:     ## Set GCP Region Here ##
+  zone:       ## Set GCP Zone Here ##
+  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/cluster-toolkit
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+      service_name: "netapp.servicenetworking.goog"
+      deletion_policy: "ABANDON"
+
+  - id: netapp_pool
+    source: modules/file-system/netapp-storage-pool
+    use: [network, private_service_access]
+    settings:
+      pool_name: $(vars.deployment_name)-netapp-pool
+      capacity_gib: 2048
+      service_level: $(vars.pool_service_level)
+      region: $(vars.region)
+      # allow_auto_tiering: true
+
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]             # Create this pool using the netapp-storage-pool module
+    settings:
+      region: $(vars.region)
+      volume_name: $(vars.deployment_name)-homefs
+      capacity_gib: 2048           # Size up to available capacity in the pool
+      large_capacity: false
+      local_mount: "/home"         # Mount point at client when client uses USE directive
+      # mount_options: "..."       # Use custom mount_options for special use cases. Defaults are sane.
+      protocols: ["NFSV3"]         # List of protocols. ["NFSV3], ["NFSv4] or ["NFSV3, "NFSV4"]
+      unix_permissions: "0777"     # Specify default permissions for root inode owned by root:root
+      # If no export policy is specified, a permissive default policy will be applied, which is:
+      #  allowed_clients = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16" # RFC1918
+      #  has_root_access = true      # no_root_squash enabled
+      #  access_type = "READ_WRITE"
+      # export_policy_rules:
+      # - allowed_clients: "10.10.20.8,10.10.20.9"
+      #   has_root_access: true      # no_root_squash enabled
+      #   access_type: "READ_WRITE"
+      #   nfsv3: true
+      #   nfsv4: false
+      # - allowed_clients: "10.0.0.0/8"
+      #   has_root_access: false     # no_root_squash disabled
+      #   access_type: "READ_WRITE"
+      #   nfsv3: true
+      #   nfsv4: false
+      # tiering_policy:              # Enable auto-tiering. Requires auto-tiering enabled storage pool
+      #   tier_action: "ENABLED"
+      #   cooling_threshold_days: 31 # tier data blocks which have not been touched for 31 days
+      # description: "Shared volume for EDA job"
+      # labels:
+      #   department: eda
+
+  # Example VMs which use homefs
+  - id: gcnv_ubuntu_instances
+    source: modules/compute/vm-instance
+    use: [network, homefs]
+    settings:
+      instance_count: 1
+      machine_type: n2-standard-2
+
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(gcnv_ubuntu_instances.name)
+      timeout: 7200
