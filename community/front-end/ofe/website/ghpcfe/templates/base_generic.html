@@ -49,6 +49,9 @@
     <div class="container-fluid">
       <a class="navbar-brand" href="{% url 'index' %}" style="color: white;">
         <img src="/static/img/white-hamburger.png" width="24">&nbsp;&nbsp;Cluster Toolkit FrontEnd
+        {% if is_local_mode %}
+        <span class="badge badge-warning ml-2" style="font-size: 0.65em; vertical-align: middle;" title="Running in local development mode">DEV MODE ACTIVE</span>
+        {% endif %}
       </a>
 
       <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar-list-4" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
