@@ -16,7 +16,7 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a3u-jbvms
-deployment_name: a3u-{{ build[0:3] }}{{ build[-3:] }}-jbvms
+deployment_name: a3u-{{ build }}-jbvms
 hostname_prefix: "{{ deployment_name }}-beowulf"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"
