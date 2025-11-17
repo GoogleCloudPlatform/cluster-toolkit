@@ -24,7 +24,7 @@ blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/a3high-
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 network: "{{ deployment_name }}-net-0"
-nccl_test_path: "examples/machine-learning/a3-megagpu-8g/nccl-tests"
+nccl_test_path: "examples/machine-learning/a3-highgpu-8g/nccl-tests"
 sub_network: "{{ deployment_name }}-sub-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -32,6 +32,7 @@ post_deploy_tests:
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+- test-validation/test-nccl.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
