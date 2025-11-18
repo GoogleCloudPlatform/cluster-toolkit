@@ -52,7 +52,7 @@ vars:
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
-  nccl_rdma_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
@@ -315,6 +315,7 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a4x-cluster]
     settings:
+      target_architecture: "arm64"
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
@@ -325,8 +326,26 @@ deployment_groups:
         install: true
       nvidia_dra_driver:
         install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
+          version: v1.0.7
+          accelerator_count: 4
+          node_affinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: cloud.google.com/gke-accelerator
+                  operator: In
+                  values:
+                  - $(vars.accelerator_type)
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - arm64
       apply_manifests:
-      - source: $(vars.nccl_rdma_installer_path)
       - source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template
