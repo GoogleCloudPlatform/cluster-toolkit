@@ -62,6 +62,8 @@ locals {
 }
 
 module "tpu" {
+  count = module.tpu.is_tpu ? 1 : 0
+
   source = "../../internal/tpu-definition"
 
   machine_type     = var.machine_type
@@ -113,7 +115,7 @@ resource "google_container_node_pool" "node_pool" {
     content {
       type         = var.placement_policy.type
       policy_name  = var.placement_policy.name
-      tpu_topology = module.tpu.is_tpu ? var.placement_policy.tpu_topology : null
+      tpu_topology = module.tpu.is_tpu ? module.tpu[0].tpu_topology : null
     }
   }
 
@@ -167,7 +169,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     dynamic "taint" {
-      for_each = concat(var.taints, local.gpu_taint, module.tpu.tpu_taint)
+      for_each = concat(var.taints, local.gpu_taint, module.tpu.is_tpu ? module.tpu[0].tpu_taint : [])
       content {
         key    = taint.value.key
         value  = taint.value.value
