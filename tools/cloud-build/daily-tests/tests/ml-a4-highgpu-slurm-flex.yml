@@ -16,15 +16,15 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a4h-slurm-flex
-deployment_name: a4h-slurm-flex-{{ build }}
-slurm_cluster_name: "a4hf{{ build[0:4] }}"
+deployment_name: a4h-{{ build }}-slurm-flex
+slurm_cluster_name: "a4hf{{ build }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 region: us-central1
 zone: us-central1-b
-network: "{{ test_name }}-net-0"
+network: "{{ deployment_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
@@ -47,5 +47,5 @@ cli_deployment_vars:
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   disk_size_gb: 200
   a4h_cluster_size: 2
-  base_network_name: "{{ test_name }}"
+  base_network_name: "{{ deployment_name }}"
   a4h_dws_flex_enabled: true
