@@ -1,0 +1,114 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: ml-slurm-g4
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-g4
+  region: us-central1
+  zone: us-central1-b
+  g4_reservation_name: "" ## Set Reservation Name
+  disk_size_gb: 200
+  new_image:
+    family: slurm-gcp-6-11-ubuntu-2204-lts-nvidia-570
+    project: schedmd-slurm-public
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+
+- group: cluster
+  modules:
+
+  - id: g4_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 0
+      enable_placement: false
+      node_count_static: 1
+      bandwidth_tier: gvnic_enabled
+      machine_type: g4-standard-48
+      disk_type: hyperdisk-balanced
+      instance_image: $(vars.new_image)
+      instance_image_custom: true
+      reservation_name: $(vars.g4_reservation_name)
+
+  - id: g4_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [g4_nodeset]
+    settings:
+      is_default: true
+      partition_name: g4
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: e2-standard-2
+      enable_login_public_ips: true
+      instance_image: $(vars.new_image)
+      instance_image_custom: true
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [network]
+
+  # To use Managed Lustre as for the shared /home directory:
+  # 1. Comment out the filestore block above and the `filestore_ip_range` line in the vars block.
+  # 2. Uncomment the managed-lustre and private-service-access blocks.
+  # 3. Ensure the instance_image being used has the Lustre client installed.
+  # - id: homefs
+  #   source: modules/file-system/managed-lustre
+  #   use:
+  #   - network
+  #   - private_service_access
+  #   settings:
+  #     size_gib: 18000
+  #     name: lustre-instance1
+  #     local_mount: /home
+  #     remote_mount: lustrefs
+  #     outputs:
+  #     - network_storage
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - g4_partition
+    - slurm_login
+    - homefs
+    settings:
+      machine_type: e2-standard-2
+      enable_controller_public_ips: true
+      instance_image: $(vars.new_image)
+      instance_image_custom: true

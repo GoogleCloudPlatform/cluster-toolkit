@@ -1,0 +1,128 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: gke-a3-highgpu-inference-gateway
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: ## Set Deployment Name Here ##
+  region: us-central1
+  zone: us-central1-c
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+  gpu_static_node_count: 2
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      ips_per_nat: 6
+      mtu: 8244
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: "10.1.0.0/20"
+      - subnet_name: $(vars.deployment_name)-proxy-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: "10.1.16.0/24"
+        purpose: "REGIONAL_MANAGED_PROXY"
+        role: "ACTIVE"
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      global_ip_address_range: 192.168.0.0/16
+      network_count: 4
+      subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
+      mtu: 8244
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, gpunets, workload_service_account]
+    settings:
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
+        display_name: "kubectl-access-network"
+      k8s_network_names:
+        gvnic_prefix: vpc
+        gvnic_start_index: 1
+      enable_inference_gateway: true
+    outputs: [instructions]
+
+  - id: a3_highgpu_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gpunets, node_pool_service_account]
+    settings:
+      machine_type: a3-highgpu-8g
+      static_node_count: $(vars.gpu_static_node_count)
+      # To use Spot VMs, uncomment the following line:
+      # spot: true
+      # To use a reservation, uncomment and configure the following lines:
+      # reservation_affinity:
+      #   consume_reservation_type: "SPECIFIC_RESERVATION"
+      #   specific_reservations:
+      #   - name: "my-reservation"
+      zones: [$(vars.zone)]
+    outputs: [instructions]
+
+  - id: cpu_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      name: "default"
+      machine_type: "e2-standard-2"
+      autoscaling_total_min_nodes: 1
+      autoscaling_total_max_nodes: 3
+      zones: [$(vars.zone)]
