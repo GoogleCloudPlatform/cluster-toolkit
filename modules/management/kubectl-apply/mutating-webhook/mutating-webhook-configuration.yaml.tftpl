@@ -1,0 +1,26 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: ${MUTATING_WEBHOOK_CONFIGURATION_NAME}
+  annotations:
+    cert-manager.io/inject-ca-from: ${NAMESPACE}/${CERTIFICATE_NAME}
+webhooks:
+- name: ${WEBHOOK_SERVICE_NAME}.${NAMESPACE}.svc
+  clientConfig:
+    service:
+      name: ${WEBHOOK_SERVICE_NAME}
+      namespace: ${NAMESPACE}
+      path: "/mutate"
+    caBundle: Cg==
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values: ["${NAMESPACE}", "cert-manager"]
+  rules:
+  - operations: [ "CREATE" ]
+    apiGroups: [""]
+    apiVersions: ["v1"]
+    resources: ["pods"]
+  sideEffects: None
+  admissionReviewVersions: ["v1beta1"]
