@@ -4,8 +4,8 @@ This module simplifies the following functionality:
 
 * Applying Kubernetes manifests to GKE clusters: It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
 * Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/) or [Jobset](https://jobset.sigs.k8s.io/docs/).
-
 > Note: Kueue can work with a variety of frameworks out of the box, find them [here](https://kueue.sigs.k8s.io/docs/tasks/run/)
+* Deploying [mutating admission webhooks](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#mutatingadmissionwebhook). Learn how to deploy a mutating webhook using a blueprint [here](./mutating-webhook/README.md).
 
 ### Explanation
 
