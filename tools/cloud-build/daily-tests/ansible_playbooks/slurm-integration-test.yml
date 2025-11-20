@@ -235,13 +235,12 @@
     rescue:
     - name: Display test failure message
       ansible.builtin.debug:
-        msg: "A task within the integration tests failed. Conditional preemption check will run for a3-megagpu-8g spot instances."
+        msg: "A task within the integration tests failed. Conditional preemption check will run for spot instances."
 
-    - name: Check for recent preemptions for a3-megagpu-8g
-      ansible.builtin.include_tasks: test-validation/test-a3m-preemption.yml
+    - name: Check for recent preemptions for spot instances
+      ansible.builtin.include_tasks: test-validation/test-preemption.yml
       when:
       - custom_vars.enable_spot | default(false) | bool
-      - custom_vars.machine_type | default('') == 'a3-megagpu-8g'
       vars:
         custom_vars: "{{ custom_vars }}"
 

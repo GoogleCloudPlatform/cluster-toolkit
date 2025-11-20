@@ -1,0 +1,54 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# region, zone must be defined in build file with --extra-vars flag!
+test_name: a3u-onspot-slurm
+deployment_name: a3u-onspot-slurm-{{ build }}
+slurm_cluster_name: "a3usp{{ build[0:5] }}"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+network: "{{ deployment_name }}-net-0"
+post_deploy_tests:
+- tasks/add-labels.yml
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
+- test-validation/test-default-partition.yml
+# - test-validation/test-enroot.yml
+# - test-validation/test-gpus-slurm.yml
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
+custom_vars:
+  gpu_count: 8
+  gpu_partition: a3ultra
+  test_persistenced: true
+  partitions:
+  - a3ultra
+  mounts:
+  - /home
+  - /gcs
+  instance_labels:
+    a3ultra_onspot: true
+  enable_spot: true
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  disk_size_gb: 200
+  a3u_cluster_size: 2
+  base_network_name: "{{ deployment_name }}"
+  a3u_enable_spot_vm: true

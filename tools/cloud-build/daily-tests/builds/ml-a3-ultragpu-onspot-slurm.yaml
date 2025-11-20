@@ -15,42 +15,42 @@
 ---
 tags:
 - m.custom-image
-- m.startup-script
-- slurm6
+- m.cloud-storage-bucket
+- m.pre-existing-network-storage
 - m.filestore
+- m.gpu-rdma-vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
 - m.vpc
-- m.cloud-storage-bucket
-- m.multivpc
-- m.private-service-access
+- slurm6
 
 timeout: 14400s  # 4hr
 steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "/workspace/tools/cloud-build/check_running_build.sh /workspace/tools/cloud-build/daily-tests/builds/ml-a3-megagpu-onspot-slurm-ubuntu.yaml"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-onspot-slurm.yaml"
 
-- id: ml-a3-megagpu-slurm
+- id: ml-a3-ultragpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
-  # General Ansible configuration
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
 
-  # Configuration Variables for the A3-MegaGPU Test.
-  - "MACHINE_TYPE=a3-megagpu-8g"
-  - "IMAGE_FAMILY=slurm-a3mega"
+  - "PROJECT_ID=hpc-toolkit-dev"
   - "NUM_NODES=4"
-  - "BLUEPRINT_PATH=/workspace/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
-  - "TEST_VARS_FILE=@tools/cloud-build/daily-tests/tests/ml-a3-megagpu-onspot-slurm-ubuntu.yml"
-  - "INSTANCE_PREFIX=a3msp"
+  - "IMAGE_PROJECT=ubuntu-os-accelerator-images"
+  - "IMAGE_NAME=ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722"
+  - "MACHINE_TYPE=a3-ultragpu-8g"
+  - "BLUEPRINT_PATH=/workspace/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
+  - "TEST_VARS_FILE=@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-slurm.yml"
+  - "INSTANCE_PREFIX=a3usp"
   - "PROJECT_ID=$PROJECT_ID"
   - "BUILD_ID=$BUILD_ID"
-  - "IMAGE_PROJECT=hpc-toolkit-dev"
   args:
   - -c
   - |

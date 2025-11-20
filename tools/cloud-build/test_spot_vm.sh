@@ -53,6 +53,18 @@ cleanup_instances() {
 	fi
 }
 
+if [[ "${MACHINE_TYPE}" == "a3-ultragpu-8g" ]]; then
+	OPTIONS_GCS_PATH="gs://hpc-ctk1357/options/a3uoptions.txt"
+	echo "INFO: Using A3 Ultra options: ${OPTIONS_GCS_PATH}"
+elif [[ "${MACHINE_TYPE}" == "a3-ultragpu-8g" ]]; then
+	OPTIONS_GCS_PATH="gs://hpc-ctk1357/options/a3moptions.txt"
+	echo "INFO: Using A3 Mega/High options: ${OPTIONS_GCS_PATH}"
+else
+	echo "--- ERROR: Failed to find file corresponding to machine type."
+	set -e
+	exit 1
+fi
+
 GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}" 2>&1)
 GCLOUD_CAT_EXIT_CODE=$?
 if [[ ${GCLOUD_CAT_EXIT_CODE} -ne 0 ]]; then
@@ -61,15 +73,15 @@ if [[ ${GCLOUD_CAT_EXIT_CODE} -ne 0 ]]; then
 	exit 1
 fi
 
-declare -a REGION_ZONE_PAIRS=()
+declare -a ZONES_ARRAY=()
 while IFS= read -r line; do
 	if [[ -n "${line}" ]]; then
-		REGION_ZONE_PAIRS+=("${line}")
+		ZONES_ARRAY+=("${line}")
 	fi
 done <<<"${GCS_CONTENT}"
 
-if [[ "${#REGION_ZONE_PAIRS[@]}" -eq 0 ]]; then
-	echo "--- ERROR: No valid region/zone pairs found in ${OPTIONS_GCS_PATH} ---"
+if [[ "${#ZONES_ARRAY[@]}" -eq 0 ]]; then
+	echo "--- ERROR: No valid zones found in ${OPTIONS_GCS_PATH} ---"
 	set -e
 	exit 1
 fi
@@ -78,25 +90,54 @@ SELECTED_REGION=""
 SELECTED_ZONE=""
 SUCCESS=false
 
-# Loop through all region zone pairs to find
-for pair in "${REGION_ZONE_PAIRS[@]}"; do
-	REGION=$(echo "${pair}" | awk '{print $1}')
-	ZONE=$(echo "${pair}" | awk '{print $2}')
+# Loop through all zones to find capacity
+for ZONE in "${ZONES_ARRAY[@]}"; do
+	REGION="${ZONE%-*}"
+	echo "--- Trying Zone: ${ZONE} in Region: ${REGION} ---"
 
 	readarray -t INSTANCE_NAMES_ARRAY < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
 
-	CREATE_OUTPUT=$(gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}" \
-		--project="${PROJECT_ID}" \
-		--zone="${ZONE}" \
-		--machine-type="${MACHINE_TYPE}" \
-		--image-family="${IMAGE_FAMILY}" \
-		--image-project="${PROJECT_ID}" \
-		--provisioning-model="${PROVISIONING_MODEL}" \
-		--instance-termination-action="${TERMINATION_ACTION}" \
-		--no-address \
-		--quiet 2>&1)
+	declare -a GCLOUD_CMD
+	COMMON_FLAGS=(
+		--project="${PROJECT_ID}"
+		--zone="${ZONE}"
+		--machine-type="${MACHINE_TYPE}"
+		--image-project="${IMAGE_PROJECT}"
+		--provisioning-model="${PROVISIONING_MODEL}"
+		--instance-termination-action="${TERMINATION_ACTION}"
+		--quiet
+	)
 
+	if [[ "${MACHINE_TYPE}" == "a3-ultragpu-8g" ]]; then
+		echo "INFO: Configuring for A3 Ultra (a3-ultragpu-8g)"
+		if [[ -z "${IMAGE_NAME}" ]]; then
+			echo "ERROR: IMAGE_NAME must be set for a3-ultragpu-8g" >&2
+			continue
+		fi
+		GCLOUD_CMD=(
+			gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}"
+			"${COMMON_FLAGS[@]}"
+			--image="${IMAGE_NAME}"
+		)
+	else
+		echo "INFO: Configuring for ${MACHINE_TYPE}"
+		if [[ -z "${IMAGE_FAMILY}" ]]; then
+			echo "ERROR: IMAGE_FAMILY must be set for ${MACHINE_TYPE}" >&2
+			continue
+		fi
+		GCLOUD_CMD=(
+			gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}"
+			"${COMMON_FLAGS[@]}"
+			--image-family="${IMAGE_FAMILY}"
+			--no-address
+		)
+	fi
+
+	echo "Attempting to create ${NUM_NODES} ${MACHINE_TYPE} instances..."
+	CREATE_OUTPUT=$("${GCLOUD_CMD[@]}" 2>&1)
 	GCLOUD_EXIT_CODE=$?
+
+	echo "${CREATE_OUTPUT}"
 
 	cleanup_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 
@@ -104,15 +145,14 @@ for pair in "${REGION_ZONE_PAIRS[@]}"; do
 		SELECTED_REGION="${REGION}"
 		SELECTED_ZONE="${ZONE}"
 		SUCCESS=true
-		break # Exit the loop, zone found
-
-	elif [[ "${CREATE_OUTPUT}" != *"INSUFFICIENT_CAPACITY"* &&
-		"${CREATE_OUTPUT}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* &&
-		"${CREATE_OUTPUT}" != *"Could not fetch resource:"* ]]; then
-		# --- Failure Case: Not Capacity Issue ---
-		echo "${CREATE_OUTPUT}" >&2
+		break
+	elif [[ "${CREATE_OUTPUT}" == *"INSUFFICIENT_CAPACITY"* ||
+		"${CREATE_OUTPUT}" == *"ZONE_RESOURCE_POOL_EXHAUSTED"* ||
+		"${CREATE_OUTPUT}" == *"Could not fetch resource:"* ]]; then
+		echo "INFO: Capacity/stockout issue in ${ZONE}." >&2
+	else
+		echo "ERROR: Unexpected error in ${ZONE} (Exit Code: ${GCLOUD_EXIT_CODE})." >&2
 	fi
-
 done
 
 if [[ "${SUCCESS}" == "true" ]]; then
@@ -123,6 +163,9 @@ if [[ "${SUCCESS}" == "true" ]]; then
 	sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' "${BLUEPRINT_PATH}"
 	sed -i -e '/reason:/d' "${BLUEPRINT_PATH}"
 
+	# sed -i -E 's/^[[:space:]]*(.*reservation_name:)/# &/g' "${BLUEPRINT_PATH}"
+	sed -i -E '/reservation_name:/d' "${BLUEPRINT_PATH}"
+	cat "${BLUEPRINT_PATH}"
 	ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
 		--user=sa_106486320838376751393 \
 		--extra-vars="project=${PROJECT_ID} build=${BUILD_ID_SHORT}" \
@@ -131,7 +174,7 @@ if [[ "${SUCCESS}" == "true" ]]; then
 
 	echo "--- DEPLOYMENT COMPLETE ---"
 else
-	echo "--- DEPLOYMENT FAILED (No Capacity Found) ---" >&2
+	echo "--- DEPLOYMENT FAILED (No Capacity Found or Persistent Error) ---" >&2
 	set -e
 	exit 1
 fi
