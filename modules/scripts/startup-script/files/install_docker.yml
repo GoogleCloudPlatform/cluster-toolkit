@@ -21,10 +21,56 @@
     docker_daemon_config: ''
     enable_docker_world_writable: false
   tasks:
+  - name: Gather distribution facts
+    ansible.builtin.setup:
+      gather_subset: platform
   - name: Check if docker is installed
     ansible.builtin.stat:
       path: /usr/bin/docker
     register: docker_binary
+  - name: Add Docker GPG key
+    ansible.builtin.rpm_key:
+      state: present
+      key: https://download.docker.com/linux/rhel/gpg
+    when:
+    - ansible_distribution == "Rocky"
+    - not docker_binary.stat.exists
+    register: add_docker_key
+    retries: 30
+    delay: 10
+    until: add_docker_key is succeeded
+  - name: Add Docker repository for Rocky Linux
+    ansible.builtin.command: >
+      dnf config-manager --add-repo
+      https://download.docker.com/linux/rhel/docker-ce.repo
+    when:
+    - ansible_distribution == "Rocky"
+    - not docker_binary.stat.exists
+    notify: Refresh dnf cache
+  - name: Install Docker Engine Community Edition through DNF
+    ansible.builtin.package:
+      name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      state: present
+      update_cache: yes
+    when:
+    - ansible_distribution == "Rocky"
+    - not docker_binary.stat.exists
+  - name: Ensure Docker SDK for Python is installed
+    block:
+    - name: Install python3-pip
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+    - name: Install Docker SDK for Python
+      ansible.builtin.pip:
+        name: docker
+        executable: /usr/local/ghpc-venv/bin/pip3
+    when: ansible_distribution == "Rocky"
   - name: Download Docker Installer
     ansible.builtin.get_url:
       url: https://get.docker.com
@@ -32,12 +78,16 @@
       owner: root
       group: root
       mode: '0644'
-    when: not docker_binary.stat.exists
-  - name: Install Docker
+    when:
+    - ansible_distribution != "Rocky"
+    - not docker_binary.stat.exists
+  - name: Install Docker Engine Community Edition through get.docker.com
     ansible.builtin.command: sh /tmp/get-docker.sh
     register: docker_installed
     changed_when: docker_installed.rc != 0
-    when: not docker_binary.stat.exists
+    when:
+    - ansible_distribution != "Rocky"
+    - not docker_binary.stat.exists
   - name: Create Docker daemon configuration
     ansible.builtin.copy:
       dest: /etc/docker/daemon.json
@@ -104,6 +154,9 @@
     ansible.builtin.service:
       name: docker.service
       state: restarted
+  - name: Refresh dnf cache
+    ansible.builtin.dnf:
+      update_cache: yes
 
   post_tasks:
   - name: Start Docker
