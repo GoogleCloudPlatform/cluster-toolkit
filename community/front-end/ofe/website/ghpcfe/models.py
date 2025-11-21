@@ -33,6 +33,8 @@ from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
 from django import template
 
+from .cluster_manager import utils
+
 register = template.Library()
 
 logger = logging.getLogger(__name__)
@@ -305,6 +307,8 @@ class CloudResource(models.Model):
 
     @property
     def project_id(self):
+        if utils.is_local_mode():
+            return "local-project"
         if self.cloud_credential:
             cred_info = json.loads(self.cloud_credential.detail)
             return cred_info.get("project_id", None)
@@ -698,6 +702,7 @@ class Cluster(CloudResource):
         ("c", "Cluster is being created"),
         ("i", "Cluster is being initialised"),
         ("r", "Cluster is ready for jobs"),
+        ("v", "Cluster blueprint validated"),
         ("re", "Cluster is reconfiguring"),
         ("s", "Cluster is stopped (can be restarted)"),
         ("t", "Cluster is terminating"),
