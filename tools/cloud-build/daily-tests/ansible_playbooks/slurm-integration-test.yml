@@ -209,7 +209,7 @@
     - name: Wait until Slurm key exists
       ansible.builtin.wait_for:
         path: /etc/slurm/slurm.key
-        timeout: 600 # Waits for up to 10 minutes for the file to appear
+        timeout: 600  # Waits for up to 10 minutes for the file to appear
       when: key_type == 'slurm'
 
     - name: Count Slurm nodes
@@ -231,6 +231,22 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
+
+    rescue:
+    - name: Display test failure message
+      ansible.builtin.debug:
+        msg: "A task within the integration tests failed. Conditional preemption check will run for spot instances."
+
+    - name: Check for recent preemptions for spot instances
+      ansible.builtin.include_tasks: test-validation/test-preemption.yml
+      when:
+      - custom_vars.enable_spot | default(false) | bool
+      vars:
+        custom_vars: "{{ custom_vars }}"
+
+    - name: Propagate original failure after rescue tasks
+      ansible.builtin.fail:
+        msg: "Integration tests failed. Rescue tasks were executed."
 
     ## Always cleanup, even on failure
     always:

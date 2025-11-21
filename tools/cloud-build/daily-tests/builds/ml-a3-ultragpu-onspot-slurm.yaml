@@ -1,0 +1,58 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.custom-image
+- m.cloud-storage-bucket
+- m.pre-existing-network-storage
+- m.filestore
+- m.gpu-rdma-vpc
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
+- m.vpc
+- slurm6
+
+timeout: 14400s  # 4hr
+steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-onspot-slurm.yaml"
+
+- id: ml-a3-ultragpu-slurm
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+
+  - "PROJECT_ID=hpc-toolkit-dev"
+  - "NUM_NODES=4"
+  - "IMAGE_PROJECT=ubuntu-os-accelerator-images"
+  - "IMAGE_NAME=ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722"
+  - "MACHINE_TYPE=a3-ultragpu-8g"
+  - "BLUEPRINT_PATH=/workspace/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
+  - "TEST_VARS_FILE=@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-slurm.yml"
+  - "INSTANCE_PREFIX=a3usp"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "BUILD_ID=$BUILD_ID"
+  args:
+  - -c
+  - |
+    set -x
+    /workspace/tools/cloud-build/test_spot_vm.sh
