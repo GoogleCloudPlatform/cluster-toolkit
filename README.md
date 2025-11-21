@@ -2,19 +2,19 @@
 
 ## Description
 
-Cluster Toolkit is an open-source software offered by Google Cloud which makes it
-easy for customers to deploy AI/ML and HPC environments on Google Cloud.
+Cluster Toolkit, formerly known as Cloud HPC Toolkit, is an open-source software offered by Google Cloud which simplifies the process for you to deploy high performance computing (HPC), artificial intelligence (AI), and machine learning (ML) workloads on Google Cloud.
 
-Cluster Toolkit allows customers to deploy turnkey AI/ML and HPC environments (compute,
-networking, storage, etc.) following Google Cloud best-practices, in a repeatable
-manner. The Cluster Toolkit is designed to be highly customizable and extensible,
-and intends to address the AI/ML and HPC deployment needs of a broad range of customers.
+Cluster Toolkit lets you deploy ready-to-use AI, ML and HPC environments (including compute,
+networking, or storage) following Google Cloud best-practices, in a repeatable
+manner. Cluster Toolkit is designed to be highly customizable and extensible,
+and to help address the AI, ML and HPC deployment needs of a broad range of use cases.
 
-## AI/ML Hypercomputer
+## AI Hypercomputer
 
-The Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer][aihc].
-Documentation concerning AI Hypercomputer solutions is available for
-[GKE][aihc-gke] and for [Slurm][aihc-slurm].
+Cluster Toolkit is part of [Google Cloud AI Hypercomputer][aihc], a supercomputing system that provides performance-optimized hardware, open software, leading ML frameworks, and flexible consumption models. To learn more about AI Hypercomputer solutions for GKE and Slurm, see the following:
+
+* [GKE][aihc-gke]
+* [Slurm][aihc-slurm]
 
 [aihc]: https://cloud.google.com/ai-hypercomputer/docs
 [aihc-gke]: https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute
@@ -22,10 +22,7 @@ Documentation concerning AI Hypercomputer solutions is available for
 
 ## Detailed documentation and examples
 
-The Toolkit provides [tutorials], [examples], and comprehensive
-developer documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
-
-For end-user guides and how-to information, please refer to the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
+Cluster Toolkit comes with a suite of [tutorials], [examples], and full documentation for a set of [modules] that have been designed for AI, ML and HPC use cases. To learn more, see the [Google Cloud documentation](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 [tutorials]: docs/tutorials/README.md
 [examples]: examples/README.md
@@ -33,13 +30,11 @@ For end-user guides and how-to information, please refer to the [Google Cloud Do
 
 ## Quickstart
 
-Running through the
-[quickstart tutorial](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster)
-is the recommended path to get started with the Cluster Toolkit.
+To get started with the Cluster Toolkit, we recommend that you run through the quickstart tutorial in [Deploy an HPC cluster with Slurm](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster).
 
 ---
 
-If a self directed path is preferred, you can use the following commands to
+If you don’t want to begin with the quickstart, you can use the following commands to
 build the `gcluster` binary:
 
 ```shell
@@ -54,68 +49,57 @@ make
 
 ## Cluster Toolkit Components
 
-Learn about the components that make up the Cluster Toolkit and more on how it works
-on the
-[Google Cloud Docs Product Overview](https://cloud.google.com/cluster-toolkit/docs/overview#components).
+To learn more about Cluster Toolkit and its components, see [Components](https://docs.cloud.google.com/cluster-toolkit/docs/overview#components).
 
-## GCP Credentials
+## Google Cloud Credentials
+
+This section describes different approaches for gaining the credentials that you need for authentication on Google Cloud.
 
 ### Supplying cloud credentials to Terraform
 
-Terraform can discover credentials for authenticating to Google Cloud Platform
-in several ways. We will summarize Terraform's documentation for using
-[gcloud][terraform-auth-gcloud] from your workstation and for automatically
-finding credentials in cloud environments. We do **not** recommend following
-Hashicorp's instructions for downloading
-[service account keys][terraform-auth-sa-key].
+You can use Terraform to discover credentials for authenticating to Google Cloud Platform in several ways. The following section summarizes Terraform's documentation for using
+[gcloud][terraform-auth-gcloud] from your workstation and for automatically finding credentials in cloud environments. We do **not** recommend that you follow Hashicorp's instructions for downloading [service account keys][terraform-auth-sa-key].
 
 [terraform-auth-gcloud]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#configuring-the-provider
 [terraform-auth-sa-key]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#adding-credentials
 
-### Cloud credentials on your workstation
+### Generate Cloud credentials on your workstation
 
-You can generate cloud credentials associated with your Google Cloud account
-using the following command:
+1. You can generate cloud credentials associated with your Google Cloud account using the following command on the cloud workstation terminal:
 
-```shell
-gcloud auth application-default login
-```
+   ```shell
+   gcloud auth application-default login
+   ```
 
-You will be prompted to open your web browser and authenticate to Google Cloud
-and make your account accessible from the command-line. Once this command
-completes, Terraform will automatically use your "Application Default
-Credentials."
+   Once this command completes, Terraform will automatically use your "Application Default Credentials (ADC)".
 
-If you receive failure messages containing "quota project" you should change the
-quota project associated with your Application Default Credentials with the
-following command and provide your current project ID as the argument:
+1. When you are prompted, open your web browser and authenticate to Google Cloud. Make your account accessible from the command-line by copy-pasting the token displayed on the screen.
 
-```shell
-gcloud auth application-default set-quota-project ${PROJECT-ID}
-```
+1. If you see an error message that contains the phrase "quota project", you must change the quota project associated with your ADC. Run the following command, using your current project ID as the argument:
+
+   ```shell
+   gcloud auth application-default set-quota-project ${PROJECT-ID}
+   ```
 
 ### Cloud credentials in virtualized cloud environments
 
-In virtualized settings, the cloud credentials of accounts can be attached
-directly to the execution environment. For example: a VM or a container can
-have [service accounts](https://cloud.google.com/iam/docs/service-accounts)
-attached to them. The Google [Cloud Shell][cloud-shell] is an interactive
-command line environment which inherits the credentials of the user logged in
-to the Google Cloud Console.
+In virtualized settings, cloud credentials of accounts can be attached directly to the execution environment. For example, a VM or a container can have [service accounts](https://cloud.google.com/iam/docs/service-accounts)
+attached to them. [Cloud Shell][cloud-shell] is an interactive
+command line environment which inherits your credentials when you are logged in to the Google Cloud Console.
+
+Many of the example approaches described in this section can be executed within a Cloud Shell environment.
+However, note that Cloud Shell has [several limitations][cloud-shell-limitations]. In particular, running shells are closed after 20 minutes of inactivity. For this reason, we recommend that you only use Cloud Shell for blueprints that are quickly deployed.
 
 [cloud-shell]: https://console.cloud.google.com/home/dashboard?cloudshell=true
 [cloud-shell-limitations]: https://cloud.google.com/shell/docs/quotas-limits#limitations_and_restrictions
 
-Many of the above examples are easily executed within a Cloud Shell environment.
-Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
-in particular an inactivity timeout that will close running shells after 20
-minutes. Please consider it only for blueprints that are quickly deployed.
+## VM image support
 
-## VM Image Support
+This section describes the VM support available in Cluster Toolkit.
 
 ### Standard Images
 
-The Cluster Toolkit officially supports the following VM images:
+Cluster Toolkit officially supports the following VM images:
 
 * HPC Rocky Linux 8
 * Debian 11
@@ -126,47 +110,40 @@ For more information on these and other images, see
 
 ### Slurm Images
 
-> **_Warning:_** Slurm Terraform modules cannot be directly used on the standard OS images. They must be used in combination with images built for the versioned release of the Terraform module.
+> **_Warning:_** You can't use Slurm Terraform modules directly on the standard OS images. These modules must be used in combination with images built for the versioned release of the Terraform module.
 
-The Cluster Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
+The Cluster Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images. To learn more, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
 
 ## Blueprint Validation
 
-The Toolkit contains "validator" functions that perform basic tests of the
-blueprint to ensure that deployment variables are valid and that the AI/ML and HPC
-environment can be provisioned in your Google Cloud project. Further information
-can be found in [dedicated documentation](docs/blueprint-validation.md).
+Cluster Toolkit contains "validator" functions that perform basic tests on the blueprint to ensure that deployment variables are valid and that the AI, ML and HPC environment can be provisioned in your Google Cloud project. To learn more, see the [Cluster Toolkit documentation](docs/blueprint-validation.md).
 
-## Enable GCP APIs
+## Enable Google Cloud APIs
 
-In a new GCP project there are several APIs that must be enabled to deploy your
-cluster. These will be caught when you perform `terraform apply` but you can
-save time by enabling them upfront.
+When you create a new Google Cloud project there are several APIs that you enable to deploy your cluster. These will be caught when you perform `terraform apply` but you can save time by enabling them upfront.
 
-See
-[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis)
-for instructions.
+To learn more, see
+[Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis).
 
-## GCP Quotas
+## Google Cloud Quotas
 
 You may need to request additional quota to be able to deploy and use your
 cluster.
 
-See
-[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota)
-for more information.
+For more information, see
+[Request additional quotas](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota).
 
 ## Billing Reports
 
-You can view your billing reports for your cluster on the
+You can view billing reports for your cluster on the
 [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports)
-page. ​​To view the Cloud Billing reports for your Cloud Billing account,
-including viewing the cost information for all of the Cloud projects that are
+page. To view the Cloud Billing reports for your Cloud Billing account,
+including the cost information for all of the Cloud projects that are
 linked to the account, you need a role that includes the
 `billing.accounts.getSpendingInformation` permission on your Cloud Billing
 account.
 
-To view the Cloud Billing reports for your Cloud Billing account:
+To view the Cloud Billing reports for your Cloud Billing account, do the following:
 
 1. In the Google Cloud Console, go to `Navigation Menu` >
    [`Billing`](https://console.cloud.google.com/billing/overview).
@@ -174,67 +151,54 @@ To view the Cloud Billing reports for your Cloud Billing account:
    reports. The Billing Overview page opens for the selected billing account.
 3. In the Billing navigation menu, select `Reports`.
 
-In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
+On the right side of the page, expand the `Filters` view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
 
 ## Troubleshooting
 
 ### Authentication
 
-Confirm that you have [properly setup Google Cloud credentials](#gcp-credentials)
+Check your Google Cloud credential settings. To learn more, see [Google Cloud credentials](#google-cloud-credentials).
 
 ### Slurm Clusters
 
-Please see the dedicated [troubleshooting guide for Slurm](docs/slurm-troubleshooting.md).
+To troubleshoot Slurm, see the [Slurm Troubleshooting documentation](docs/slurm-troubleshooting.md).
 
-### Terraform Deployment
+### Terraform deployment
 
-When `terraform apply` fails, Terraform generally provides a useful error
-message. Here are some common reasons for the deployment to fail:
+When a `terraform apply` command fails, Terraform generally provides an error
+message. Some common reasons for the deployment to fail are as follows:
 
-* **GCP Access:** The credentials being used to call `terraform apply` do not
-  have access to the GCP project. This can be fixed by granting access in
-  `IAM & Admin`.
-* **Disabled APIs:** The GCP project must have the proper APIs enabled. See
-  [Enable GCP APIs](#enable-gcp-apis).
-* **Insufficient Quota:** The GCP project does not have enough quota to
-  provision the requested resources. See [GCP Quotas](#gcp-quotas).
+* **Google Cloud project Access:** The credentials being used to call `terraform apply` do not have access to the Google Cloud project. You can fix this issue by granting access in `IAM & Admin` [section](https://console.cloud.google.com/iam-admin/iam) on Google Cloud Console.
+* **Disabled APIs:** Your Google Cloud project must have the proper APIs enabled. To learn more, see [Enable GCP APIs](#enable-gcp-apis).
+* **Insufficient quota:** Your Google Cloud project does not have enough quota to
+  provision the requested resources. To learn more, see [GCP Quotas](#gcp-quotas).
 * **Filestore resource limit:** When regularly deploying Filestore instances
-  with a new VPC you may see an error during deployment such as:
+  with a new VPC, you may see an error during deployment such as:
   `System limit for internal resources has been reached`. See
   [this doc](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance)
   for the solution.
-* **Required permission not found:**
-  * Example: `Required 'compute.projects.get' permission for 'projects/... forbidden`
-  * Credentials may not be set, or are not set correctly. Please follow
-    instructions at [Cloud credentials on your workstation](#cloud-credentials-on-your-workstation).
-  * Ensure proper permissions are set in the cloud console
-    [IAM section](https://console.cloud.google.com/iam-admin/iam).
+* **Required permission not found:** If you see an error message such as the following, your credentials might not be set, or set incorrectly. `Required 'compute.projects.get' permission for 'projects/... forbidden`. To learn more, see [Cloud credentials on your workstation](#cloud-credentials-on-your-workstation). Ensure proper permissions are set in the Google Cloud Console [IAM section](https://console.cloud.google.com/iam-admin/iam).
 
-### Failure to Destroy VPC Network
+### Failure to destroy VPC network
 
-If `terraform destroy` fails with an error such as the following:
+If the `terraform destroy` command fails, you might see an error message similar to one of the following examples. These errors indicate that the VPC network cannot be destroyed because resources that depend upon the network were added outside of Terraform and that those resources depend upon the network. You must manually delete these resources.
+The following message indicates that a new VM has been added to a subnetwork within the VPC network:
 
 ```text
 │ Error: Error when reading or editing Subnetwork: googleapi: Error 400: The subnetwork resource 'projects/<project_name>/regions/<region>/subnetworks/<subnetwork_name>' is already being used by 'projects/<project_name>/zones/<zone>/instances/<instance_name>', resourceInUseByAnotherResource
 ```
 
-or
+Or
+
+The following message indicates that a new firewall rule has been added to the VPC network:
 
 ```text
 │ Error: Error waiting for Deleting Network: The network resource 'projects/<project_name>/global/networks/<vpc_network_name>' is already being used by 'projects/<project_name>/global/firewalls/<firewall_rule_name>'
 ```
 
-These errors indicate that the VPC network cannot be destroyed because resources
-were added outside of Terraform and that those resources depend upon the
-network. These resources should be deleted manually. The first message indicates
-that a new VM has been added to a subnetwork within the VPC network. The second
-message indicates that a new firewall rule has been added to the VPC network.
-If your error message does not look like these, examine it carefully to identify
-the type of resource to delete and its unique name. In the two messages above,
-the resource names appear toward the end of the error message. The following
-links will take you directly to the areas within the Cloud Console for managing
-VMs and Firewall rules. Make certain that your project ID is selected in the
-drop-down menu at the top-left.
+If you see an error message that does not look like either of the examples in this section, examine it carefully to identify the type of resource to delete and its unique name. As in the two preceding example messages, the resource name appears toward the end of the error message.
+
+To manage VMs and firewall rules within the Cloud Console, see the following:
 
 * [Cloud Console: Manage VM instances][cc-vms]
 * [Cloud Console: Manage Firewall Rules][cc-firewall]
@@ -242,9 +206,11 @@ drop-down menu at the top-left.
 [cc-vms]: https://console.cloud.google.com/compute/instances
 [cc-firewall]:  https://console.cloud.google.com/networking/firewalls/list
 
-## Inspecting the Deployment
+To ensure that you are looking at the correct page, check that your project ID is selected in the drop-down menu at the top-left of the screen.
 
-The deployment will be created with the following directory structure:
+## Inspect the deployment
+
+The deployment that you create has the following directory structure:
 
 ```text
 <<OUTPUT_PATH>>/<<DEPLOYMENT_NAME>>/{<<DEPLOYMENT_GROUPS>>}/
@@ -252,23 +218,18 @@ The deployment will be created with the following directory structure:
 
 If an output directory is provided with the `--output/-o` flag, the deployment
 directory will be created in the output directory, represented as
-`<<OUTPUT_PATH>>` here. If not provided, `<<OUTPUT_PATH>>` will default to the
-current working directory.
+`<<OUTPUT_PATH>>`. If no output directory is provided, `<<OUTPUT_PATH>>` will default to the current working directory.
 
 The deployment directory is created in `<<OUTPUT_PATH>>` as a directory matching
 the provided `deployment_name` deployment variable (`vars`) in the blueprint.
 
-Within the deployment directory are directories representing each deployment
-group in the blueprint named the same as the `group` field for each element
-in `deployment_groups`.
+There are directories representing each deployment group in the blueprint contained within the deployment directory. These directories are named the same as the `group` field for each element in `deployment_groups`.
 
-In each deployment group directory, are all of the configuration scripts and
-modules needed to deploy. The modules are in a directory named `modules` named
-the same as the source module, for example the
+Each deployment group directory contains all of the configuration scripts and
+modules that you need to make a deployment. Each module in the `modules` directory is named as the resource it creates, for example the
 [vpc module](./modules/network/vpc/README.md) is in a directory named `vpc`.
 
-A hidden directory containing meta information and backups is also created and
-named `.ghpc`.
+A hidden directory named .ghpc is also created. This directory contains meta information and backups.
 
 From the [hpc-slurm.yaml example](./examples/hpc-slurm.yaml), we
 get the following deployment directory:
@@ -287,22 +248,17 @@ hpc-slurm/
 
 ## Dependencies
 
-See
-[Cloud Docs on Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+For more information, see [Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
 
 ### Notes on Packer
 
-The Toolkit supports Packer templates in the contemporary [HCL2 file
-format][pkrhcl2] and not in the legacy JSON file format. We require the use of
-Packer 1.7.9 or above, and recommend using the latest release.
+Cluster Toolkit supports Packer templates in [HCL2 file
+format][pkrhcl2] and not in the legacy JSON file format. You must use Packer 1.7.9 or above, although we recommend using the latest release.
 
 The Toolkit's [Packer template module documentation][pkrmodreadme] describes
 input variables and their behavior. An [image-building example][pkrexample]
 and [usage instructions][pkrexamplereadme] are provided. The example integrates
-Packer, Terraform and
-[startup-script](./modules/scripts/startup-script/README.md) runners to
-demonstrate the power of customizing images using the same scripts that can be
-applied at boot-time.
+Packer, Terraform and [startup-script](./modules/scripts/startup-script/README.md) runners to demonstrate the power of customizing images using the same scripts that can be applied at boot-time.
 
 [pkrhcl2]: https://www.packer.io/guides/hcl
 [pkrmodreadme]: modules/packer/custom-image/README.md
@@ -314,50 +270,46 @@ applied at boot-time.
 The following setup is in addition to the [dependencies](#dependencies) needed
 to build and run Cluster-Toolkit.
 
-Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
-this repository to ensure that all changes are validated, tested and properly
-documented before pushing code changes. The pre-commits configured
-in the Cluster Toolkit have a set of dependencies that need to be installed before
-successfully passing.
+Before you push any code changes, use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in this repository to ensure that all changes are validated, tested and properly documented. The pre-commits configured
+in Cluster Toolkit have a set of dependencies that need to be installed before they can be successfully passed.
 
-Follow these steps to install and setup pre-commit in your cloned repository:
+To install and setup pre-commit in your cloned repository, do the following:
 
 1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
-1. Install TFLint using the instructions from
-   [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
+1. Install TFLint using the instructions from [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
 
-   > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
-   > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are readily
-   > available via GitHub or package managers. Please review the [TFLint Ruleset
+   > **_NOTE:_** The version of TFLint that you install must be compatible with the Google plugin
+   > version listed in [tflint.hcl](.tflint.hcl). Versions of the plugin
+   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are
+   > available through GitHub or package managers. We recommend that you review the [TFLint Ruleset
    > for Google Release Notes][tflint-google] for up-to-date requirements.
 
 [tflint-google]: https://github.com/terraform-linters/tflint-ruleset-google/releases
 
 1. Install ShellCheck using the instructions from
    [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
-1. The other dev dependencies can be installed by running the following command
+1. The remaining dev dependencies can be installed by running the following command
    in the project root directory:
 
     ```shell
     make install-dev-deps
     ```
 
-1. Pre-commit is enabled on a repo-by-repo basis by running the following command
+1. Enable pre-commit repo-by-repo basis by running the following command
    in the project root directory:
 
     ```shell
     pre-commit install
     ```
 
-Now pre-commit is configured to automatically run before you commit.
+Pre-commit is configured to automatically run before you commit.
 
 ### Development on macOS
 
-While macOS is a supported environment for building and executing the Toolkit,
-it is not supported for Toolkit development due to GNU specific shell scripts.
+While macOS is a supported environment for building and executing with Cluster Toolkit,
+it's not supported for Cluster Toolkit development due to GNU-specific shell scripts.
 
-If developing on a mac, a workaround is to install GNU tooling by installing
+If you’re working on a Mac device, a workaround is to install GNU tooling by installing
 `coreutils` and `findutils` from a package manager such as homebrew or conda.
 
 ### Contributing
