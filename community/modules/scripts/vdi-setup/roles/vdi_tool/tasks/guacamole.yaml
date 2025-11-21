@@ -1,0 +1,1003 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+# =============================================================================
+# DOCKER SETUP (IDEMPOTENT)
+# =============================================================================
+
+- name: Check Docker service status
+  ansible.builtin.service_facts:
+
+- name: Ensure Docker service is running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: yes
+  register: docker_service_status
+
+- name: Wait for Docker daemon to be ready
+  ansible.builtin.wait_for:
+    path: /var/run/docker.sock
+    timeout: 30
+
+- name: Test Docker connectivity
+  ansible.builtin.command: docker version
+  register: docker_test
+  retries: 5
+  delay: 2
+  until: docker_test.rc == 0
+
+- name: Check if Docker images exist
+  ansible.builtin.shell: |
+    docker images | grep -E "postgres[[:space:]]+latest" && echo "postgres:latest" || echo ""
+    docker images | grep -E "guacamole/guacd[[:space:]]+latest" && echo "guacamole/guacd:latest" || echo ""
+    docker images | grep -E "guacamole/guacamole[[:space:]]+latest" && echo "guacamole/guacamole:latest" || echo ""
+  register: existing_images
+  changed_when: false
+
+- name: Pull required Docker images (only if missing)
+  ansible.builtin.command: docker pull {{ item }}
+  loop:
+  - postgres:latest
+  - guacamole/guacd:latest
+  - guacamole/guacamole:latest
+  when: item not in existing_images.stdout
+
+- name: Check if Docker network exists
+  ansible.builtin.shell: docker network ls | grep -E "guac_net" || echo ""
+  register: network_exists
+  changed_when: false
+  failed_when: false
+
+- name: Create a dedicated Docker network (only if missing)
+  ansible.builtin.command: docker network create guac_net
+  register: network_create
+  failed_when:
+  - network_create.rc != 0
+  - "'already exists' not in network_create.stderr"
+  when: "'guac_net' not in network_exists.stdout"
+
+# =============================================================================
+# CONTAINER STATUS CHECKING
+# =============================================================================
+
+- name: Check if containers are already running
+  ansible.builtin.shell: docker ps | grep -E "(guac_db|guacd|guac_app)" || echo ""
+  register: running_containers
+  changed_when: false
+  failed_when: false
+
+- name: Debug container status
+  ansible.builtin.debug:
+    msg: |
+      Container status check:
+        - running_containers: {{ running_containers.stdout_lines }}
+        - guac_db running: {{ 'guac_db' in running_containers.stdout }}
+        - guacd running: {{ 'guacd' in running_containers.stdout }}
+        - guac_app running: {{ 'guac_app' in running_containers.stdout }}
+  when: debug
+
+# =============================================================================
+# DATABASE INITIALIZATION LOGIC
+# =============================================================================
+
+- name: Ensure PostgreSQL data & init directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+  - /opt/guacamole-db/data
+  - /opt/guacamole-db/initdb
+
+- name: Debug user configuration status
+  ansible.builtin.debug:
+    msg: |
+      User configuration status:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - User hash changed: {{ not is_fresh_deployment and vdi_setup_status.user_hash is defined and vdi_setup_status.user_hash != user_hash }}
+  when: debug
+
+- name: Check if users have changed (hash-based)
+  ansible.builtin.set_fact:
+    users_changed: "{{ not is_fresh_deployment and ((new_users is defined and new_users | length > 0) or (removed_users is defined and removed_users | length > 0) or (users_needing_reset is defined and users_needing_reset | length > 0) or reset_webapp_admin_password or (users_with_port_changes is defined and users_with_port_changes | length > 0)) }}"
+
+- name: Check if database needs initialization (smart detection)
+  ansible.builtin.set_fact:
+    # Only reinitialize database for infrastructure changes, not user changes
+    db_needs_init: "{{ is_fresh_deployment or force_rerun | default(false) or infrastructure_changed }}"
+
+- name: Debug user change detection (from lock_manager)
+  ansible.builtin.debug:
+    msg: |
+      User change detection (from lock_manager):
+        - users_changed: {{ users_changed }}
+        - new_users: {{ new_users | length if new_users is defined else 0 }}
+        - removed_users: {{ removed_users | length if removed_users is defined else 0 }}
+        - new_user_names: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+        - removed_user_names: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+  when: debug and users_changed
+
+- name: Debug user change detection
+  ansible.builtin.debug:
+    msg: |
+      User change detection:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - users_changed: {{ users_changed }}
+        - infrastructure_changed: {{ infrastructure_changed }}
+        - db_needs_init: {{ db_needs_init }}
+        - will_reinitialize: {{ db_needs_init }}
+        - will_apply_targeted_updates: {{ users_changed and not db_needs_init }}
+        - users_needing_reset: {{ users_needing_reset | length }}
+        - reset_webapp_admin_password: {{ reset_webapp_admin_password }}
+        - users_with_port_changes: {{ users_with_port_changes | length if users_with_port_changes is defined else 0 }}
+        - webapp_port_changed: {{ webapp_port_changed }}
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - new_users: {{ new_users | length if new_users is defined else 0 }}
+        - removed_users: {{ removed_users | length if removed_users is defined else 0 }}
+        - new_user_names: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+        - removed_user_names: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+  when: debug
+
+# =============================================================================
+# TARGETED USER MANAGEMENT (NO CONTAINER RECREATION)
+# =============================================================================
+
+- name: Handle user changes without container recreation
+  block:
+  - name: Get enriched new users from vdi_users_updated
+    ansible.builtin.set_fact:
+      new_users_enriched: "{{ vdi_users_updated | selectattr('username', 'in', new_users | map(attribute='username') | list) | list }}"
+    when: users_changed and new_users is defined and new_users | length > 0
+  - name: Debug user update mode
+    ansible.builtin.debug:
+      msg: |
+        User changes detected - applying targeted updates (no container recreation):
+          - users_changed: {{ users_changed }}
+          - db_needs_init: {{ db_needs_init }}
+          - force_rerun: {{ force_rerun }}
+          - users_needing_reset: {{ users_needing_reset | length }}
+          - new_users: {{ new_users | length if new_users is defined else 0 }}
+          - removed_users: {{ removed_users | length if removed_users is defined else 0 }}
+          - new_user_names: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+          - removed_user_names: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+    when: debug
+
+  # =============================================================================
+  # ADD NEW USERS
+  # =============================================================================
+
+  - name: Add new users to database (without container recreation)
+    ansible.builtin.template:
+      src: guacamole/user_bootstrap.sql.j2
+      dest: "/opt/guacamole-db/initdb/02-{{ item.username }}_user.sql"
+      owner: root
+      group: root
+      mode: '0644'
+    loop: "{{ new_users_enriched | default(new_users) }}"
+    when: new_users is defined and new_users | length > 0
+    vars:
+      username: "{{ item.username }}"
+      vdi_password: "{{ item.password }}"
+
+  - name: Execute new user SQL files
+    ansible.builtin.command: docker exec guac_db psql -U guacamole_db -d guacamole_db -f /docker-entrypoint-initdb.d/02-{{ item.username }}_user.sql
+    loop: "{{ new_users_enriched | default(new_users) }}"
+    when: new_users is defined and new_users | length > 0
+
+  - name: Add new user connections to database
+    ansible.builtin.template:
+      src: guacamole/connection_bootstrap.sql.j2
+      dest: "/opt/guacamole-db/initdb/03-{{ item.username }}_connection.sql"
+      owner: root
+      group: root
+      mode: '0644'
+    loop: "{{ new_users_enriched | default(new_users) }}"
+    when: new_users is defined and new_users | length > 0
+    vars:
+      username: "{{ item.username }}"
+      port: "{{ item.port }}"
+      vnc_password: "{{ item.vncserver_password }}"
+
+  - name: Execute new connection SQL files
+    ansible.builtin.command: docker exec guac_db psql -U guacamole_db -d guacamole_db -f /docker-entrypoint-initdb.d/03-{{ item.username }}_connection.sql
+    loop: "{{ new_users_enriched | default(new_users) }}"
+    when: new_users is defined and new_users | length > 0
+
+  # =============================================================================
+  # REMOVE/DISABLE USERS
+  # =============================================================================
+
+  - name: Disable removed users in Guacamole database
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "UPDATE guacamole_user SET disabled = true WHERE entity_id IN (SELECT entity_id FROM guacamole_entity WHERE name = '{{ item }}' AND type = 'USER');"
+    loop: "{{ removed_users }}"
+    when: removed_users is defined and removed_users | length > 0
+
+  - name: Revoke connection permissions for removed users
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "DELETE FROM guacamole_connection_permission WHERE entity_id IN (SELECT entity_id FROM guacamole_entity WHERE name = '{{ item }}' AND type = 'USER');"
+    loop: "{{ removed_users }}"
+    when: removed_users is defined and removed_users | length > 0
+
+  - name: Delete connections for removed users
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "DELETE FROM guacamole_connection WHERE connection_name IN ('{{ item }}', '{{ item }} SSH');"
+    loop: "{{ removed_users }}"
+    when: removed_users is defined and removed_users | length > 0
+
+  # =============================================================================
+  # PASSWORD RESETS
+  # =============================================================================
+
+  - name: Update user passwords in database (for reset_password users)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c "UPDATE guacamole_user SET password_salt = NULL, password_hash = digest('{{ item.password }}', 'SHA-256'), password_date = now() FROM guacamole_entity WHERE guacamole_user.entity_id = guacamole_entity.entity_id AND guacamole_entity.name = '{{ item.username }}' AND guacamole_entity.type = 'USER';"
+    loop: "{{ vdi_users_updated | selectattr('reset_password', 'defined') | selectattr('reset_password', 'equalto', true) | list }}"
+    when: users_needing_reset | length > 0
+
+  # =============================================================================
+  # VNC CONNECTION PASSWORD UPDATES
+  # =============================================================================
+
+  - name: Update VNC connection passwords in database (for all users)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c "UPDATE guacamole_connection_parameter SET parameter_value = '{{ item.vncserver_password }}' FROM guacamole_connection WHERE guacamole_connection_parameter.connection_id = guacamole_connection.connection_id AND guacamole_connection.connection_name = '{{ item.username }}' AND guacamole_connection_parameter.parameter_name = 'password';"
+    loop: "{{ vdi_users_updated }}"
+    when: users_changed
+
+  # =============================================================================
+  # WEBAPP ADMIN PASSWORD RESET
+  # =============================================================================
+
+  - name: Update webapp admin password in database (if reset requested)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "UPDATE guacamole_user SET password_salt = NULL, password_hash = decode('{{ webapp_admin_hash }}', 'hex'), password_date = now() FROM guacamole_entity WHERE guacamole_user.entity_id = guacamole_entity.entity_id AND guacamole_entity.name = 'guacadmin' AND guacamole_entity.type = 'USER';"
+    when: reset_webapp_admin_password and not is_fresh_deployment
+
+  - name: Restart Guacamole webapp container (if webapp admin password reset)
+    ansible.builtin.command: docker restart guac_app
+    when: reset_webapp_admin_password and not is_fresh_deployment
+
+  - name: Wait for Guacamole webapp to be ready after restart
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: "{{ vdi_webapp_port }}"
+      delay: 5
+      timeout: 60
+    when: reset_webapp_admin_password and not is_fresh_deployment
+
+  # =============================================================================
+  # PORT CHANGES
+  # =============================================================================
+
+  - name: Update user connection ports in database (for port changes)
+    ansible.builtin.template:
+      src: guacamole/connection_port_update.sql.j2
+      dest: "/opt/guacamole-db/initdb/04-{{ item.username }}_port_update.sql"
+      owner: root
+      group: root
+      mode: '0644'
+    loop: "{{ users_with_port_changes }}"
+    when: users_with_port_changes is defined and users_with_port_changes | length > 0
+    vars:
+      username: "{{ item.username }}"
+      port: "{{ item.port }}"
+
+  - name: Execute port update SQL files
+    ansible.builtin.command: docker exec guac_db psql -U guacamole_db -d guacamole_db -f /docker-entrypoint-initdb.d/04-{{ item.username }}_port_update.sql
+    loop: "{{ users_with_port_changes }}"
+    when: users_with_port_changes is defined and users_with_port_changes | length > 0
+
+  - name: Debug targeted updates completion
+    ansible.builtin.debug:
+      msg: |
+        Targeted user updates completed:
+        - New users added: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+        - Users removed: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+        - Password resets: {{ users_needing_reset | map(attribute='username') | list if users_needing_reset is defined and users_needing_reset | length > 0 else [] }}
+        - Webapp admin password reset: {{ reset_webapp_admin_password and not is_fresh_deployment }}
+        - User port changes: {{ users_with_port_changes | map(attribute='username') | list if users_with_port_changes is defined and users_with_port_changes | length > 0 else [] }}
+    when: debug
+
+  when: users_changed and not db_needs_init
+
+# =============================================================================
+# RESOLUTION LOCKED CHANGES
+# =============================================================================
+
+- name: Update connection disable-display-resize parameter in database (for resolution locked changes)
+  ansible.builtin.command: >
+    docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+    "UPDATE guacamole_connection_parameter SET parameter_value = '{{ 'true' if vdi_resolution_locked else 'false' }}' WHERE connection_id IN (SELECT connection_id FROM guacamole_connection WHERE protocol = 'vnc') AND parameter_name = 'disable-display-resize';"
+  when: vdi_resolution_locked_changed
+
+- name: Debug resolution locked change completion
+  ansible.builtin.debug:
+    msg: |
+      Resolution locked change completed:
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - new_resolution_locked: {{ vdi_resolution_locked }}
+        - previous_resolution_locked: {{ vdi_setup_status.vdi_resolution_locked | default('unknown') }}
+  when: debug and vdi_resolution_locked_changed
+
+# =============================================================================
+# DATABASE PASSWORD RETRIEVAL (FOR CONTAINER RECREATION)
+# =============================================================================
+
+- name: Get access token for Secret Manager API (for database password)
+  ansible.builtin.uri:
+    url: "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+    method: GET
+    headers:
+      Metadata-Flavor: Google
+    return_content: true
+  register: access_token_result
+  when: webapp_port_changed or db_needs_init
+
+- name: Fetch database password from Secret Manager
+  ansible.builtin.uri:
+    url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/db-password-{{ deployment_name }}/versions/latest:access"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ access_token_result.json.access_token }}"
+      Content-Type: "application/json"
+    return_content: true
+  register: database_password_sm_result
+  when: webapp_port_changed or db_needs_init
+
+- name: Set database password from Secret Manager
+  ansible.builtin.set_fact:
+    database_password: "{{ database_password_sm_result.json.payload.data | b64decode }}"
+  when: (webapp_port_changed or db_needs_init) and database_password_sm_result.status == 200
+
+- name: Fetch webapp admin password from Secret Manager
+  ansible.builtin.uri:
+    url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/webapp-server-password-{{ deployment_name }}/versions/latest:access"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ access_token_result.json.access_token }}"
+      Content-Type: "application/json"
+    return_content: true
+  register: webapp_admin_sm_result
+  when: is_fresh_deployment or infrastructure_changed or webapp_port_changed
+
+- name: Set webapp admin password from Secret Manager
+  ansible.builtin.set_fact:
+    webapp_admin_password: "{{ webapp_admin_sm_result.json.payload.data | b64decode }}"
+  when: (is_fresh_deployment or infrastructure_changed or webapp_port_changed) and webapp_admin_sm_result.status == 200
+
+- name: Calculate webapp admin hash from password
+  ansible.builtin.set_fact:
+    webapp_admin_hash: "{{ webapp_admin_password | hash('sha256') | upper }}"
+  when: webapp_admin_password is defined
+
+- name: Debug password retrieval
+  ansible.builtin.debug:
+    msg: |
+      Password retrieval:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - infrastructure_changed: {{ infrastructure_changed }}
+        - webapp_port_changed: {{ webapp_port_changed }}
+        - database_secret_status: {{ database_password_sm_result.status if database_password_sm_result is defined else 'N/A' }}
+        - webapp_secret_status: {{ webapp_admin_sm_result.status if webapp_admin_sm_result is defined else 'N/A' }}
+        - database_password_retrieved: {{ database_password is defined }}
+        - webapp_admin_password_retrieved: {{ webapp_admin_password is defined }}
+        - database_password_length: {{ database_password | length if database_password is defined else 'N/A' }}
+        - webapp_admin_password_length: {{ webapp_admin_password | length if webapp_admin_password is defined else 'N/A' }}
+  when: debug and (is_fresh_deployment or infrastructure_changed or webapp_port_changed)
+
+# =============================================================================
+# WEBAPP PORT CHANGE HANDLING
+# =============================================================================
+
+- name: Handle webapp port changes
+  block:
+  - name: Debug webapp port change
+    ansible.builtin.debug:
+      msg: |
+        Webapp port change detected:
+          - current_port: {{ vdi_webapp_port }}
+          - previous_port: {{ vdi_setup_status.webapp_port | default('none') }}
+          - will_recreate_container: True
+          - database_password_available: {{ database_password is defined }}
+    when: debug
+
+  - name: Stop Guacamole webapp container (for port change)
+    ansible.builtin.command: docker stop guac_app
+    ignore_errors: true
+
+  - name: Remove Guacamole webapp container (for port change)
+    ansible.builtin.command: docker rm guac_app
+    ignore_errors: true
+
+  - name: Start Guacamole webapp container with new port
+    ansible.builtin.command: >
+      docker run -d --name guac_app --network guac_net
+      -p {{ vdi_webapp_port }}:8080
+      -e POSTGRES_HOSTNAME=guac_db
+      -e POSTGRES_PORT=5432
+      -e POSTGRES_DATABASE=guacamole_db
+      -e POSTGRES_USER=guacamole_db
+      -e POSTGRES_PASSWORD={{ database_password }}
+      -e POSTGRES_AUTO_CREATE_ACCOUNTS=true
+      -e GUACD_HOSTNAME=guacd
+      -e GUACD_PORT=4822
+      --restart always
+      guacamole/guacamole:latest
+
+  - name: Wait for Guacamole webapp to be ready after port change
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: "{{ vdi_webapp_port }}"
+      delay: 5
+      timeout: 60
+
+  - name: Update database user password (for port change)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "ALTER USER guacamole_db WITH PASSWORD '{{ database_password }}';"
+
+  - name: Update webapp admin password in database (for port change)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "UPDATE guacamole_user SET password_salt = NULL, password_hash = decode('{{ webapp_admin_password | hash('sha256') | upper }}', 'hex'), password_date = now() FROM guacamole_entity WHERE guacamole_user.entity_id = guacamole_entity.entity_id AND guacamole_entity.name = 'guacadmin' AND guacamole_entity.type = 'USER';"
+
+  - name: Restart Guacamole webapp container (after password update)
+    ansible.builtin.command: docker restart guac_app
+
+  - name: Wait for Guacamole webapp to be ready after restart
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: "{{ vdi_webapp_port }}"
+      delay: 5
+      timeout: 60
+
+  - name: Debug webapp port change completion
+    ansible.builtin.debug:
+      msg: |
+        Webapp port change completed:
+          - new_port: {{ vdi_webapp_port }}
+          - container_recreated: True
+          - webapp_admin_password_updated: True
+    when: debug
+
+  when: webapp_port_changed and not is_fresh_deployment
+
+# =============================================================================
+# DATABASE RE-INITIALIZATION (ONLY WHEN NECESSARY)
+# =============================================================================
+
+- name: Re-initialize database if database needs initialization
+  block:
+  - name: Enable pgcrypto extension for initdb
+    ansible.builtin.copy:
+      dest: /opt/guacamole-db/initdb/00-enable-pgcrypto.sql
+      owner: root
+      group: root
+      mode: '0644'
+      content: |
+        -- Make digest(), hmac(), etc. available
+        CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+  - name: Template per-user Guacamole user SQL
+    ansible.builtin.template:
+      src: guacamole/user_bootstrap.sql.j2
+      dest: "/opt/guacamole-db/initdb/02-{{ item.username }}_user.sql"
+      owner: root
+      group: root
+      mode: '0644'
+    loop: "{{ vdi_users_updated }}"
+    loop_control:
+      loop_var: item
+    vars:
+      username: "{{ item.username }}"
+      vdi_password: "{{ item.password }}"
+
+  - name: Template per-user SQL for Guacamole connections
+    ansible.builtin.template:
+      src: guacamole/connection_bootstrap.sql.j2
+      dest: "/opt/guacamole-db/initdb/03-{{ item.username }}_connection.sql"
+      owner: root
+      group: root
+      mode: '0644'
+    loop: "{{ vdi_users_updated }}"
+    loop_control:
+      loop_var: item
+    vars:
+      port: "{{ item.port }}"
+      username: "{{ item.username }}"
+      vnc_password: "{{ item.vncserver_password }}"
+
+  - name: Generate combined initdb.sql
+    ansible.builtin.shell: |
+      docker run --rm \
+        -v /opt/guacamole-db/initdb:/opt/guacamole-db/initdb \
+        guacamole/guacamole:latest \
+        /opt/guacamole/bin/initdb.sh --postgresql \
+        > /opt/guacamole-db/initdb/01-initdb.sql
+
+  - name: Debug hash replacement conditions
+    ansible.builtin.debug:
+      msg: |
+        Hash replacement conditions:
+          - is_fresh_deployment: {{ is_fresh_deployment }}
+          - vdi_setup_status.webapp_admin_hash is defined: {{ vdi_setup_status.webapp_admin_hash is defined }}
+          - vdi_setup_status.webapp_admin_hash: '{{ vdi_setup_status.webapp_admin_hash | default("NOT_DEFINED") }}'
+          - vdi_setup_status.webapp_admin_hash != '': {{ (vdi_setup_status.webapp_admin_hash | default('')) != '' }}
+          - vdi_setup_status.webapp_admin_hash != webapp_admin_hash: {{ (vdi_setup_status.webapp_admin_hash | default('')) != webapp_admin_hash }}
+          - webapp_admin_hash: '{{ webapp_admin_hash }}'
+          - (vdi_setup_status.webapp_admin_hash is not defined) or (vdi_setup_status.webapp_admin_hash == ''): {{ (vdi_setup_status.webapp_admin_hash is not defined) or ((vdi_setup_status.webapp_admin_hash | default('')) == '') }}
+    when: debug
+
+  - name: Update guacadmin password hash in 01-initdb.sql (initial deployment)
+    ansible.builtin.replace:
+      path: /opt/guacamole-db/initdb/01-initdb.sql
+      regexp: "decode\\('CA458A7D494E3BE824F5E1E175A1556C0F8EEF2C2D7DF3633BEC4A29C4411960', 'hex'\\)"
+      replace: "decode('{{ webapp_admin_hash }}', 'hex')"
+    when: is_fresh_deployment
+
+  - name: Update guacadmin password hash in 01-initdb.sql (force rerun)
+    ansible.builtin.replace:
+      path: /opt/guacamole-db/initdb/01-initdb.sql
+      regexp: "decode\\('{{ vdi_setup_status.webapp_admin_hash | default('CA458A7D494E3BE824F5E1E175A1556C0F8EEF2C2D7DF3633BEC4A29C4411960') }}', 'hex'\\)"
+      replace: "decode('{{ webapp_admin_hash }}', 'hex')"
+    when:
+    - not is_fresh_deployment
+    - vdi_setup_status.webapp_admin_hash is defined
+    - vdi_setup_status.webapp_admin_hash != ''
+
+  - name: Update guacadmin password hash in 01-initdb.sql (force rerun fallback)
+    ansible.builtin.replace:
+      path: /opt/guacamole-db/initdb/01-initdb.sql
+      regexp: "decode\\('CA458A7D494E3BE824F5E1E175A1556C0F8EEF2C2D7DF3633BEC4A29C4411960', 'hex'\\)"
+      replace: "decode('{{ webapp_admin_hash }}', 'hex')"
+    when:
+    - not is_fresh_deployment
+    - (vdi_setup_status.webapp_admin_hash is not defined) or (vdi_setup_status.webapp_admin_hash == '')
+
+  - name: Remove salt from guacadmin in 01-initdb.sql
+    ansible.builtin.replace:
+      path: /opt/guacamole-db/initdb/01-initdb.sql
+      regexp: "decode\\('FE24ADC5E11E2B25288D1704ABE67A79E342ECC26064CE69C5B3177795A82264', 'hex'\\)"
+      replace: "NULL"
+
+  - name: Debug webapp admin password usage
+    ansible.builtin.debug:
+      msg: |
+        Webapp admin password usage (vdi_tool):
+          - password_provided_by_secret_manager: {{ webapp_admin_password is defined }}
+          - password_length: {{ webapp_admin_password | length if webapp_admin_password is defined else 'N/A' }}
+          - hash_computed: {{ webapp_admin_hash is defined }}
+    when: debug
+
+  - name: Stop and remove existing containers
+    ansible.builtin.command: docker stop {{ item }}
+    loop:
+    - guac_app
+    - guacd
+    - guac_db
+    ignore_errors: true
+
+  - name: Remove existing containers
+    ansible.builtin.command: docker rm {{ item }}
+    loop:
+    - guac_app
+    - guacd
+    - guac_db
+    ignore_errors: true
+
+  - name: Backup existing database data
+    ansible.builtin.shell: >
+      tar -czf /opt/guacamole-db/backup-$(date +%Y%m%d-%H%M%S).tar.gz
+      -C /opt/guacamole-db data/
+    ignore_errors: true
+
+  - name: Remove existing database data
+    ansible.builtin.file:
+      path: /opt/guacamole-db/data
+      state: absent
+    ignore_errors: true
+
+  - name: Recreate database data directory
+    ansible.builtin.file:
+      path: /opt/guacamole-db/data
+      state: directory
+      owner: root
+      group: root
+      mode: '0700'
+
+  - name: Start Guacamole PostgreSQL container (re-initialized)
+    ansible.builtin.command: >
+      docker run -d --name guac_db --network guac_net
+      -e POSTGRES_USER=guacamole_db
+      -e POSTGRES_PASSWORD={{ database_password }}
+      -e POSTGRES_DB=guacamole_db
+      -v /opt/guacamole-db/data:/var/lib/postgresql/data
+      -v /opt/guacamole-db/initdb:/docker-entrypoint-initdb.d
+      --restart always
+      postgres:latest
+    register: postgres_restart
+    failed_when:
+    - postgres_restart.rc != 0
+    - "'already in use' not in postgres_restart.stderr"
+
+  - name: Wait for PostgreSQL to be ready after re-initialization
+    ansible.builtin.command: docker exec guac_db pg_isready -U guacamole_db
+    register: postgres_ready_after_restart
+    until: postgres_ready_after_restart.rc == 0
+    retries: 30
+    delay: 2
+
+  - name: Check if Guacamole tables exist
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'guacamole_%';"
+    register: table_check
+    changed_when: false
+
+  - name: Debug table check
+    ansible.builtin.debug:
+      msg: |
+        Table check results:
+          - tables_found: {{ table_check.stdout_lines | length }}
+          - table_names: {{ table_check.stdout_lines }}
+    when: debug
+
+  - name: Check if connections were created
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "SELECT connection_name FROM guacamole_connection;"
+    register: connection_check
+    changed_when: false
+
+  - name: Debug connection check
+    ansible.builtin.debug:
+      msg: |
+        Connection check results:
+          - connections_found: {{ connection_check.stdout_lines | length }}
+          - connection_names: {{ connection_check.stdout_lines }}
+    when: debug
+
+  - name: Wait for PostgreSQL via Docker exec
+    ansible.builtin.command: docker exec guac_db pg_isready -U guacamole_db
+    register: postgres_ready
+    until: postgres_ready.rc == 0
+    retries: 30
+    delay: 2
+
+  - name: Check if connections exist (non-reinitialisation case)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "SELECT connection_name FROM guacamole_connection;"
+    register: existing_connection_check
+    changed_when: false
+
+  - name: Debug existing connection check
+    ansible.builtin.debug:
+      msg: |
+        Existing VNC Connections:
+        {{ existing_connection_check.stdout }}
+    when: debug
+
+  - name: Start guacd container (force rerun or if not running)
+    ansible.builtin.command: >
+      docker run -d --name guacd --network guac_net
+      -p 4822:4822
+      --restart always
+      guacamole/guacd:latest
+    register: guacd_start
+    failed_when:
+    - guacd_start.rc != 0
+    - "'already in use' not in guacd_start.stderr"
+
+  - name: Start Guacamole webapp container (force rerun or if not running)
+    ansible.builtin.command: >
+      docker run -d --name guac_app --network guac_net
+      -p {{ vdi_webapp_port }}:8080
+      -e POSTGRES_HOSTNAME=guac_db
+      -e POSTGRES_PORT=5432
+      -e POSTGRES_DATABASE=guacamole_db
+      -e POSTGRES_USER=guacamole_db
+      -e POSTGRES_PASSWORD={{ database_password }}
+      -e POSTGRES_AUTO_CREATE_ACCOUNTS=true
+      -e GUACD_HOSTNAME=guacd
+      -e GUACD_PORT=4822
+      --restart always
+      guacamole/guacamole:latest
+    register: guac_app_start
+    failed_when:
+    - guac_app_start.rc != 0
+    - "'already in use' not in guac_app_start.stderr"
+
+  - name: Debug container status before waiting for Guacamole
+    ansible.builtin.command: docker ps
+    register: container_status_before_wait
+    changed_when: false
+
+  - name: Show container status
+    ansible.builtin.debug:
+      msg: |
+        {{ container_status_before_wait.stdout }}
+    when: debug
+
+  - name: Wait for Guacamole HTTP endpoint
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: "{{ vdi_webapp_port }}"
+    delay: 5
+    timeout: 60
+
+  # =============================================================================
+  # UPDATE PASSWORDS AFTER DATABASE REINITIALIZATION
+  # =============================================================================
+
+  - name: Update database user password (after reinitialization)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "ALTER USER guacamole_db WITH PASSWORD '{{ database_password }}';"
+
+  - name: Update webapp admin password in database (after reinitialization)
+    ansible.builtin.command: >
+      docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+      "UPDATE guacamole_user SET password_salt = NULL, password_hash = decode('{{ webapp_admin_password | hash('sha256') | upper }}', 'hex'), password_date = now() FROM guacamole_entity WHERE guacamole_user.entity_id = guacamole_entity.entity_id AND guacamole_entity.name = 'guacadmin' AND guacamole_entity.type = 'USER';"
+
+  - name: Restart Guacamole webapp container (after password update)
+    ansible.builtin.command: docker restart guac_app
+
+  - name: Wait for Guacamole webapp to be ready after password update restart
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: "{{ vdi_webapp_port }}"
+      delay: 5
+      timeout: 60
+
+  - name: Debug password update completion after reinitialization
+    ansible.builtin.debug:
+      msg: |
+        Password update completed after database reinitialization:
+          - database_password_updated: True
+          - webapp_admin_password_updated: True
+          - container_restarted: True
+    when: debug
+
+  - name: Obtain Guacamole API token to verify login
+    ansible.builtin.uri:
+      url: "http://localhost:{{ vdi_webapp_port }}/guacamole/api/tokens"
+      method: POST
+      body_format: form-urlencoded
+      body:
+        username: "guacadmin"
+        password: "{{ webapp_admin_password }}"
+      return_content: yes
+    register: guac_api_token
+    until: guac_api_token.status == 200 and guac_api_token.json.authToken is defined
+    retries: 10
+    delay: 3
+
+  - name: Debug Guacamole API token verification
+    ansible.builtin.debug:
+      msg: |
+        Guacamole API token verification:
+          - status: {{ guac_api_token.status }}
+          - success: {{ guac_api_token.status == 200 }}
+          - token_obtained: {{ guac_api_token.json.authToken is defined }}
+    when: debug
+
+  when: db_needs_init
+
+# =============================================================================
+# CONTAINER MANAGEMENT (IDEMPOTENT)
+# =============================================================================
+
+- name: Wait for PostgreSQL via Docker exec
+  ansible.builtin.command: docker exec guac_db pg_isready -U guacamole_db
+  register: postgres_ready
+  until: postgres_ready.rc == 0
+  retries: 30
+  delay: 2
+  when: "'guac_db' in running_containers.stdout"
+
+- name: Check if connections exist (non-reinitialisation case)
+  ansible.builtin.command: >
+    docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+    "SELECT connection_name, protocol FROM guacamole_connection WHERE connection_name NOT LIKE '%SSH';"
+  register: existing_connection_check
+  changed_when: false
+  when: not db_needs_init
+
+- name: Debug existing connection check
+  ansible.builtin.debug:
+    msg: |
+      Existing VNC Connections:
+      {{ existing_connection_check.stdout }}
+  when: debug and not db_needs_init
+
+- name: Start guacd container (only if not running)
+  ansible.builtin.command: >
+    docker run -d --name guacd --network guac_net
+    -p 4822:4822
+    --restart always
+    guacamole/guacd:latest
+  register: guacd_start
+  failed_when:
+  - guacd_start.rc != 0
+  - "'already in use' not in guacd_start.stderr"
+  when: db_needs_init or (not db_needs_init and "'guacd' not in running_containers.stdout")
+
+- name: Start Guacamole webapp container (only if not running)
+  ansible.builtin.command: >
+    docker run -d --name guac_app --network guac_net
+    -p {{ vdi_webapp_port }}:8080
+    -e POSTGRES_HOSTNAME=guac_db
+    -e POSTGRES_PORT=5432
+    -e POSTGRES_DATABASE=guacamole_db
+    -e POSTGRES_USER=guacamole_db
+    -e POSTGRES_PASSWORD={{ database_password }}
+    -e POSTGRES_AUTO_CREATE_ACCOUNTS=true
+    -e GUACD_HOSTNAME=guacd
+    -e GUACD_PORT=4822
+    --restart always
+    guacamole/guacamole:latest
+  register: guac_app_start
+  failed_when:
+  - guac_app_start.rc != 0
+  - "'already in use' not in guac_app_start.stderr"
+  when: db_needs_init or (not db_needs_init and "'guac_app' not in running_containers.stdout")
+
+# =============================================================================
+# VERIFICATION AND CLEANUP
+# =============================================================================
+
+- name: Debug container status before waiting for Guacamole
+  ansible.builtin.command: docker ps
+  register: container_status
+  changed_when: false
+
+- name: Show container status
+  ansible.builtin.debug:
+    msg: "{{ container_status.stdout }}"
+  when: debug
+
+- name: Wait for Guacamole HTTP endpoint
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ vdi_webapp_port }}"
+    delay: 2
+    timeout: 60
+
+- name: Check Guacamole UI is up
+  ansible.builtin.uri:
+    url: "http://localhost:{{ vdi_webapp_port }}/guacamole/"
+    status_code: 200
+    return_content: no
+  register: guac_health
+  until: guac_health.status == 200
+  retries: 10
+  delay: 3
+
+- name: Verify connections were created in database
+  ansible.builtin.command: >
+    docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+    "SELECT connection_name, protocol FROM guacamole_connection WHERE connection_name IN ({% for user in vdi_users_updated %}'{{ user.username }}'{% if not loop.last %},{% endif %}{% endfor %},{% for user in vdi_users_updated %}'{{ user.username }} SSH'{% if not loop.last %},{% endif %}{% endfor %});"
+  register: connection_verification
+  changed_when: false
+
+- name: Debug connection verification
+  ansible.builtin.debug:
+    msg: |
+      Connection verification results:
+      {{ connection_verification.stdout }}
+  when: debug
+
+- name: Verify connection permissions were created
+  ansible.builtin.command: >
+    docker exec guac_db psql -U guacamole_db -d guacamole_db -c
+    "SELECT e.name as username, c.connection_name, cp.permission
+     FROM guacamole_entity e
+     JOIN guacamole_connection_permission cp ON e.entity_id = cp.entity_id
+     JOIN guacamole_connection c ON cp.connection_id = c.connection_id
+     WHERE e.type = 'USER' AND e.name != 'guacadmin'
+     ORDER BY e.name, c.connection_name, cp.permission;"
+  register: permission_verification
+  changed_when: false
+
+- name: Debug permission verification
+  ansible.builtin.debug:
+    msg: |
+      Permission verification results:
+      {{ permission_verification.stdout }}
+  when: debug
+
+- name: Debug fresh deployment reset logic
+  ansible.builtin.debug:
+    msg: |
+      Fresh deployment detected - password reset logic skipped:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - users_needing_reset: [] (empty list)
+        - reset_password flags will be ignored
+        - reset_webapp_admin_password: {{ reset_webapp_admin_password }} (will be ignored on fresh deployment)
+  when: debug and is_fresh_deployment
+
+- name: Debug API verification logic
+  ansible.builtin.debug:
+    msg: |
+      API verification logic:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - infrastructure_changed: {{ infrastructure_changed }}
+        - webapp_port_changed: {{ webapp_port_changed }}
+        - will_verify_api: {{ is_fresh_deployment or infrastructure_changed or webapp_port_changed }}
+        - reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Infrastructure change' if infrastructure_changed else ('Webapp port change' if webapp_port_changed else 'User-only changes - API verification skipped')) }}
+  when: debug
+
+- name: Obtain Guacamole API token to verify login
+  ansible.builtin.uri:
+    url: "http://localhost:{{ vdi_webapp_port }}/guacamole/api/tokens"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "guacadmin"
+      password: "{{ webapp_admin_password }}"
+    return_content: yes
+  register: guac_api
+  until: guac_api.status == 200 and guac_api.json.authToken is defined
+  retries: 10
+  delay: 3
+  when:
+  - webapp_admin_password is defined
+  - (is_fresh_deployment or infrastructure_changed or webapp_port_changed)
+
+- name: Remove bootstrap SQL files unless debug is enabled
+  ansible.builtin.file:
+    path: /opt/guacamole-db/initdb
+    state: absent
+  when: not debug
+
+- name: VDI Tool deployment summary
+  ansible.builtin.debug:
+    msg: |
+      ================================================================================
+      VDI TOOL DEPLOYMENT SUMMARY
+      ================================================================================
+
+      DEPLOYMENT MODE:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - db_needs_init: {{ db_needs_init }}
+        - users_changed: {{ users_changed }}
+        - force_rerun: {{ force_rerun }}
+        - reset_webapp_admin_password: {{ reset_webapp_admin_password }}
+
+      TARGETED UPDATES APPLIED:
+        - New users added: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+        - Users removed: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+        - Password resets: {{ users_needing_reset | map(attribute='username') | list if users_needing_reset is defined and users_needing_reset | length > 0 else [] }}
+        - Webapp admin password reset: {{ reset_webapp_admin_password and not is_fresh_deployment }}
+
+      CONTAINER STATUS:
+        - Database container: {{ 'Running' if 'guac_db' in running_containers.stdout else 'Not running' }}
+        - Guacd container: {{ 'Running' if 'guacd' in running_containers.stdout else 'Not running' }}
+        - Webapp container: {{ 'Running' if 'guac_app' in running_containers.stdout else 'Not running' }}
+
+      ================================================================================
+  when: debug
