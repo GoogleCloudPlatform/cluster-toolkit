@@ -15,7 +15,6 @@
 ---
 tags:
 - m.filestore
-- m.DDN-EXAScaler
 - m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login

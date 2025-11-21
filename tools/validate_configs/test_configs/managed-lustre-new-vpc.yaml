@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,22 @@
 
 ---
 
-test_name: test-workstation-lustre
-deployment_name: "lustre-vm-{{ build }}"
-zone: us-central1-a
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-vm.yaml"
-network: "default"
-remote_node: "{{ deployment_name }}-rocky-0"
-post_deploy_tests:
-- test-validation/test-mounts.yml
-- test-validation/test-lustre-vm.yml
-custom_vars:
-  output_dir: /lustre/test
-  num_slurm_nodes: 1
-  mounts:
-  - /lustre
-  vm_os_types:
-  - rocky
+blueprint_name: managed-lustre-net
+
+vars:
+  project_id: hpc-toolkit-demo
+  deployment_name: network
+  region: europe-west4
+  zone: europe-west4-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
+    use: [network1]
+    settings:
+      local_mount: /lustre
