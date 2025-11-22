@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+
+unset CUDA_VISIBLE_DEVICES
+
 LOG_FILE="/var/log/slurm/chs_health_check.log"
 TMP_DCGM_OUT="/tmp/dcgm.out"
 TMP_ECC_ERRORS_OUT="/tmp/ecc_errors.out"
