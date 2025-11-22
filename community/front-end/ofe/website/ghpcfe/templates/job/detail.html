@@ -16,6 +16,8 @@
 
 {% extends "base_generic.html" %}
 
+{% load job_extras %}
+
 {% block meta %}
   {% if object.status == "p" or object.status == "q" or object.status == "d" or object.status == "r" or object.status == "u"%}
   <meta http-equiv="refresh" content="15" />
@@ -26,23 +28,80 @@
   <h2>Job Detail</h2>
   <p><b>Job ID:</b> {{ object.id }}</p>
   <p><b>Name:</b> {{ object.name }}</p>
-  <p><b>Application:</b> <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a></p>
-  <p><b>Cluster:</b> {{ object.application.cluster.name }}</p>
+
+  {% if user.is_superuser or user.has_admin_role %}
+  <p><b>User:</b> {{ object.user.username }}</p>
+  {% endif %}
+
+  <p><b>Application:</b>
+    {% if object.application %}
+      <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a>
+    {% else %}
+      {% if object.job_type == 'installation' %}
+        <span class="text-muted">Installation Job</span>
+      {% else %}
+        <span class="text-muted">External Job</span>
+      {% endif %}
+    {% endif %}
+  </p>
+  <p><b>Cluster:</b>
+    {% if object.application %}
+      {{ object.application.cluster.name }}
+    {% elif object.cluster %}
+      {{ object.cluster.name }}
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </p>
+  <p><b>Partition:</b> {{ object.partition.name }}</p>
   <p><b>Instance Type:</b> {{ object.partition.machine_type }}</p>
+
+  {% if object.application %}
   <p><b>Job Cost:</b> {% if job.status != "c" and job.status != "e" %}<={%endif%}${{ object.job_cost }}</p>
+  {% endif %}
+
+  <!-- SLURM Information -->
+  {% if object.slurm_jobid %}
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">SLURM Information</p>
+  <p><b>SLURM Job ID:</b> <span class="badge bg-info text-light">{{ object.slurm_jobid }}</span></p>
+  {% if object.slurm_status %}
+  <p><b>SLURM Status:</b>
+    <span class="badge {{ object|job_success_badge_class }} text-light">
+      {{ object|job_success_status }}
+    </span>
+  </p>
+  {% if object.slurm_exit_code %}
+  <p><b>Exit Code:</b> {{ object|job_exit_code_display }}</p>
+  {% endif %}
+  {% endif %}
+  {% if object.slurm_start_time %}
+  <p><b>SLURM Start Time:</b> {{ object.slurm_start_time }}</p>
+  {% endif %}
+  {% if object.slurm_end_time %}
+  <p><b>SLURM End Time:</b> {{ object.slurm_end_time }}</p>
+  {% endif %}
+  {% endif %}
+
   <hr>
   <p style="text-decoration: underline; font-size: large;">Job Parameters</p>
   <p><b>Submitted:</b> {{ object.date_time_submission }}</p>
+
+  {% if object.application %}
   <p><b>Number of Nodes:</b> {{ object.number_of_nodes }}</p>
   <p><b>Ranks per Node:</b> {{ object.ranks_per_node }}</p>
   <p><b>Threads per Rank:</b> {{ object.threads_per_rank }}</p>
   <p><b>Wall-clock Time Limit:</b> {{ object.wall_clock_time_limit }} minute(s)</p>
+  {% endif %}
+
   <hr>
   <p style="text-decoration: underline; font-size: large;">Job Status</p>
   {% if object.status == "c" %}
   <p class="text-success">{{ object.get_status_display }}</p>
     <p><b>Runtime:</b> {{ object.runtime }} seconds (as reported by the job scheduler)</p>
+    {% if object.application %}
     <p><b>Key performance indicator:</b> {{ object.result_value }} {{ object.result_unit }}</p>
+    {% endif %}
   {% elif object.status == "e" %}
     <p class="text-danger">{{ object.get_status_display }}</p>
   {% else %}
@@ -55,7 +114,7 @@
   {% endif %}  
 
   {% if object.status == "c" or object.status == "e" %}
-    {% if job.application.cluster.status == "r" %} 
+    {% if object.application and object.application.cluster.status == "r" %}
     <a href="{% url 'job-rerun' object.id %}" class="btn btn-primary">Run again</a>
     {% endif %}
   {% endif %}
@@ -66,7 +125,9 @@
   {% endif %}
 
   {% if object.status == "c" or object.status == "e" %}
+    {% if object.application %}
     <a href="{% url 'job-log' job.id %}" class="btn btn-primary">View Logs</a>
+    {% endif %}
   {% endif %}
 
 {% endblock %}

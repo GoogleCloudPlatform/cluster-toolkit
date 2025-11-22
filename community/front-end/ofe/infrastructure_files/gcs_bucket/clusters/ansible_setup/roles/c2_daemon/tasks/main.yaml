@@ -46,6 +46,7 @@
     - google-api-python-client
     - google-cloud-secret-manager
     - prometheus_client
+    - pyyaml
     state: present
 
 - name: Install FE C&C Daemon

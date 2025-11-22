@@ -44,8 +44,22 @@ window.onload=function(event) {
   <h2>Job Logs</h2>
   <p><b>Job ID:</b> {{ object.id }}</p>
   <p><b>Name:</b> {{ object.name }}</p>
-  <p><b>Application:</b> <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a></p>
-  <p><b>Cluster:</b> {{ object.application.cluster.name }}</p>
+  <p><b>Application:</b>
+    {% if object.application %}
+      <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a>
+    {% else %}
+      <span class="text-muted">External Job</span>
+    {% endif %}
+  </p>
+  <p><b>Cluster:</b>
+    {% if object.application %}
+      {{ object.application.cluster.name }}
+    {% elif object.cluster %}
+      {{ object.cluster.name }}
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </p>
   <p><b>Partition:</b> {{ object.partition.name }}</p> 
   <hr>
     {% for logfile in log_files %}
