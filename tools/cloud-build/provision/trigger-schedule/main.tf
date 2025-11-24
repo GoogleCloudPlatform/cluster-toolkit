@@ -15,7 +15,7 @@
 resource "google_cloud_scheduler_job" "schedule" {
   name      = "${var.trigger.name}-schedule"
   schedule  = var.schedule
-  time_zone = "America/Los_Angeles"
+  time_zone = var.time_zone
 
   attempt_deadline = "180s"
   retry_config {

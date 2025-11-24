@@ -26,6 +26,12 @@ variable "schedule" {
   type        = string
 }
 
+variable "time_zone" {
+  description = "Specifies the time zone to be used in interpreting schedule."
+  type        = string
+  default     = "Asia/Kolkata"
+}
+
 variable "retry_count" {
   description = "Number of times to retry a failed build"
   type        = number
