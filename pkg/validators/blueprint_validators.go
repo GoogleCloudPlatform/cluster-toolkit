@@ -22,7 +22,6 @@ import (
 // depend on outputs from other groups. Return a slice of errors (empty => ok).
 func ValidateBlueprint(bp config.Blueprint) []error {
 	var errs []error
-	// Only run Slurm checks on Slurm blueprints.
 	if e := checkSlurmNodeCount(bp); e != nil {
 		errs = append(errs, e)
 	}
@@ -33,9 +32,5 @@ func ValidateBlueprint(bp config.Blueprint) []error {
 		errs = append(errs, e)
 	}
 
-	// Add further checks here in the desired order, using the same pattern:
-	// if e := someOtherCheck(bp); e != nil { return []error{e} }
-
-	// No error
 	return errs
 }

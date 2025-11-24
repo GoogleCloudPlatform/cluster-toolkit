@@ -255,7 +255,7 @@ func discoverFallbackCandidatesImpl(bp config.Blueprint, modID string) []string 
 	return filterNumericRefs(bp, refs, modID)
 }
 
-func resolveModuleNumericSetting(bp config.Blueprint, mod config.Module, items map[string]cty.Value, name string, forDynamic bool) (float64, bool, error) {
+func resolveModuleNumericSetting(bp config.Blueprint, mod config.Module, items map[string]cty.Value, name string) (float64, bool, error) {
 	// 1) explicit module setting first
 	if items != nil {
 		if v, ok := items[name]; ok {

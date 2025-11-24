@@ -55,54 +55,36 @@ func validateNodeCountsForModule(bp config.Blueprint, mod config.Module) []strin
 	var errs []string
 
 	items := mod.Settings.Items()
-	staticVal, staticPresent, err := resolveModuleNumericSetting(bp, mod, items, "node_count_static", false)
+	staticVal, staticPresent, err := resolveModuleNumericSetting(bp, mod, items, "node_count_static")
 	if err != nil {
 		errs = append(errs, fmt.Sprintf("module %q: %v", mod.ID, err))
 		return errs
 	}
-	dynVal, dynPresent, err := resolveModuleNumericSetting(bp, mod, items, "node_count_dynamic_max", true)
+	dynVal, dynPresent, err := resolveModuleNumericSetting(bp, mod, items, "node_count_dynamic_max")
 	if err != nil {
 		errs = append(errs, fmt.Sprintf("module %q: %v", mod.ID, err))
 		return errs
 	}
-	state := 0
-	if staticPresent {
-		state |= 1
-	}
-	if dynPresent {
-		state |= 2
-	}
 
-	// handlers indexed by state (0..3). Each returns []string (nil or list).
-	handlers := []func() []string{
-		// 0: neither present -> no-op
-		func() []string { return nil },
-		// 1: only static present
-		func() []string {
-			if staticVal <= 0 {
-				return []string{fmt.Sprintf("in nodeset module %q, 'node_count_static' must be greater than 0", mod.ID)}
-			}
-			return nil
-		},
-		// 2: only dynamic present
-		func() []string {
-			if dynVal <= 0 {
-				return []string{fmt.Sprintf("in nodeset module %q, 'node_count_dynamic_max' must be greater than 0", mod.ID)}
-			}
-			return nil
-		},
-		// 3: both present
-		func() []string {
-			if staticVal <= 0 && dynVal <= 0 {
-				return []string{fmt.Sprintf("in nodeset module %q, at least one of 'node_count_static' or 'node_count_dynamic_max' must be greater than 0", mod.ID)}
-			}
-			return nil
-		},
+	// Simple explicit checks for the three meaningful cases.
+	switch {
+	case staticPresent && !dynPresent:
+		// only static present
+		if staticVal <= 0 {
+			return []string{fmt.Sprintf("in nodeset module %q, 'node_count_static' must be greater than 0", mod.ID)}
+		}
+	case !staticPresent && dynPresent:
+		// only dynamic present
+		if dynVal <= 0 {
+			return []string{fmt.Sprintf("in nodeset module %q, 'node_count_dynamic_max' must be greater than 0", mod.ID)}
+		}
+	case staticPresent && dynPresent:
+		// both present
+		if staticVal <= 0 && dynVal <= 0 {
+			return []string{fmt.Sprintf("in nodeset module %q, at least one of 'node_count_static' or 'node_count_dynamic_max' must be greater than 0", mod.ID)}
+		}
 	}
-
-	if state >= 0 && state < len(handlers) {
-		return handlers[state]()
-	}
+	// neither present, or validation passed
 	return nil
 }
 
