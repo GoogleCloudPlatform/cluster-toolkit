@@ -43,3 +43,9 @@ variable "wait_for_rollout" {
   type        = bool
   default     = true
 }
+
+variable "force_conflicts" {
+  description = "The force_conflicts boolean, when true, compels kubectl apply (in server-side apply mode) to forcefully take ownership and override any resource fields managed by a different entity. For more information, see [Using Server-Side Apply in a controller](https://kubernetes.io/docs/reference/using-api/server-side-apply/#using-server-side-apply-in-a-controller)"
+  type        = bool
+  default     = false
+}
