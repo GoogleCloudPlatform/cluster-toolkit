@@ -58,7 +58,7 @@ if [[ -r ${SLURM_MUX_CONF} ]]; then
 fi
 
 # Setup logging if configured and directory exists
-LOGFILE="/var/log/slurm/prolog-epilog.log"
+LOGFILE="/dev/null"
 if [[ -d ${DEBUG_SLURM_MUX_LOG_DIR} && ${DEBUG_SLURM_MUX_ENABLE_LOG} == "yes" ]]; then
 	LOGFILE="${DEBUG_SLURM_MUX_LOG_DIR}/${CMD}-${SLURM_SCRIPT_CONTEXT}-job-${SLURMD_NODENAME}.log"
 	exec >>${LOGFILE} 2>&1
