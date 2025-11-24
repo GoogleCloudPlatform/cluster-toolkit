@@ -525,3 +525,9 @@ variable "enable_external_dns_endpoint" {
   type        = bool
   default     = false
 }
+
+variable "enable_inference_gateway" {
+  description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
+  type        = bool
+  default     = false
+}

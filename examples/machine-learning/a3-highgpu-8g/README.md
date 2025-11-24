@@ -146,8 +146,7 @@ deployment file matches the name of the user-created reservation.
 > [!IMPORTANT]
 > Select one of the provisioning models : either spot vm , dws flex or reservation
 
-In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws_flex` variable in the `schedmd-slurm-gcp-v6-nodeset` module.
-For setting this variable , set the `a3_dws_flex_enabled` variable as shown below
+In order to make use of DWS Flex Start mode with SlurmGCP, set the `a3_dws_flex_enabled` variable as shown below
 
 ```yaml
   vars: 
@@ -157,9 +156,7 @@ For setting this variable , set the `a3_dws_flex_enabled` variable as shown belo
 
 To learn more about DWS Flex-Start, visit https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
 
-Similarly ,to make use of Spot VMs,
-In order to make use of Spot VMs with Slurm, you must use the `enable_spot_vm` variable in the `schedmd-slurm-gcp-v6-nodeset` module.
-For setting this variable , set the `a3_enable_spot_vm` variable as shown below
+Similarly to make use of Spot VMs with Slurm, set the `a3_enable_spot_vm` variable as shown below
 
 ```yaml
   vars: 

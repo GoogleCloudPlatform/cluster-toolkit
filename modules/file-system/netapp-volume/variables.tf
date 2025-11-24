@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "netapp_storage_pool_id" {
-  description = "The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created."
+  description = "The ID of the NetApp storage pool to use for the volume."
   type        = string
   validation {
     condition     = length(split("/", var.netapp_storage_pool_id)) == 6
@@ -34,7 +34,7 @@ variable "region" {
 }
 
 variable "volume_name" {
-  description = "The name of the volume. Leave empty to use generates name based on deployment name."
+  description = "The name of the volume. Needs to be unique within the storage pool."
   type        = string
   default     = null
 }
@@ -75,7 +75,7 @@ variable "labels" {
 }
 
 variable "local_mount" {
-  description = "Mountpoint for this volume. Note: If set to the same as the `name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md))."
+  description = "Mountpoint for this volume."
   type        = string
   default     = "/shared"
 }
@@ -93,14 +93,10 @@ variable "large_capacity" {
     EOT
   type        = bool
   default     = false
-  validation {
-    condition     = var.large_capacity == false ? true : var.capacity_gib >= 15360
-    error_message = "The minimum capacity for a large volume is 15360 GiB."
-  }
 }
 
 variable "unix_permissions" {
-  description = "UNIX permissions for root inode the volume."
+  description = "UNIX permissions for root inode in the volume."
   type        = string
   default     = "0777"
   validation {
@@ -116,10 +112,6 @@ variable "tiering_policy" {
     cooling_threshold_days = optional(number)
   })
   default = null
-  validation {
-    condition     = var.tiering_policy == null ? true : contains(["ENABLED", "PAUSED"], var.tiering_policy.tier_action)
-    error_message = "Allowed values for tier_action are 'ENABLED' or 'PAUSED'."
-  }
 }
 
 variable "export_policy_rules" {
@@ -138,8 +130,4 @@ variable "export_policy_rules" {
     access_type     = "READ_WRITE",
   }]
   nullable = true
-  validation {
-    condition     = var.export_policy_rules == null ? true : alltrue([for p in var.export_policy_rules : contains(["READ_ONLY", "READ_WRITE", "NONE"], p.access_type)])
-    error_message = "Allowed values for access_type are 'READ_ONLY', 'READ_WRITE', or 'NONE'."
-  }
 }

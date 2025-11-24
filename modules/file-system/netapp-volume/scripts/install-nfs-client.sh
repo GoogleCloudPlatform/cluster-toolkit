@@ -31,7 +31,7 @@ if [ ! "$(which mount.nfs)" ]; then
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
 		apt-get -y install nfs-common
 	else
-		echo 'Unsuported distribution'
+		echo 'Unsupported distribution'
 		return 1
 	fi
 fi

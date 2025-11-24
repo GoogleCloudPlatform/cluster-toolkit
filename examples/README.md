@@ -1645,7 +1645,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 
 ### [netapp-volumes.yaml] ![core-badge]
 
-This blueprint demonstrates how to provision NFS volumes as shares filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an  alternative to FileStore in blueprints.
+This blueprint demonstrates how to provision NFS volumes as shared filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an alternative to FileStore in blueprints.
 
 NetApp Volumes is a first-party Google service that provides NFS and/or SMB shared file-systems to VMs. It offers advanced data management capabilities and highly scalable capacity and performance.
 
@@ -1669,7 +1669,7 @@ You can provision multiple volumes in a pool. For service levels Standard, Premi
 To provision the bluebrint, please run:
 
 ```shell
-./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
 ./gcluster deploy netapp-volumes
 ```
 

@@ -33,7 +33,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.70.0"
   }
 
-  # Require Terraform version 1.9.0 or higher, since that added support
-  # for variable conditions. See https://support.hashicorp.com/hc/en-us/articles/43291233547027-Error-Invalid-reference-in-variable-validation-in-Terraform-versions-prior-to-1-9
-  required_version = ">= 1.9.0"
+  required_version = ">= 1.5.7"
 }

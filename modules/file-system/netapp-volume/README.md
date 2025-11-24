@@ -90,7 +90,7 @@ The following examples show the use of netapp-volume. They builds on top of an s
 ```
 
 ## Protocol support
-Since Cluster Toolkit is currently built to provision Linux-based compute clusters, this module  supports NFSv3 and NFSv4.1 only. SMB is blocked.
+Since Cluster Toolkit is currently built to provision Linux-based compute clusters, this module supports NFSv3 and NFSv4.1 only. SMB is blocked.
 
 ## Large volumes
 Volumes larger than 15 TiB can be created as [Large Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes). Such volumes can grow up to 3 PiB and can scale read performance up to 29 GiBps. They provide six IP addresses to the volume. They are exported via the `server_ips` output. When connecting a large volume to a client using the USE directive, cluster toolkit currently uses the first IP only. This will be improved in the future.
@@ -115,7 +115,7 @@ Example code:
     fs_type: nfs
 ```
 
-This creates a resource in Cluster Toolkit which references the specified NFS export, which will be mounted at `/home` by clients whuch USE it.
+This creates a resource in Cluster Toolkit which references the specified NFS export, which will be mounted at `/home` by clients which mount if via USE directive.
 
 Note that the `server_ip` must be known before deployment and this module does not allow
 to specify a list of IPs for large volumes.
@@ -149,7 +149,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
 
 ## Providers
@@ -177,15 +177,15 @@ No modules.
 | <a name="input_export_policy_rules"></a> [export\_policy\_rules](#input\_export\_policy\_rules) | Define NFS export policy. | <pre>list(object({<br/>    allowed_clients = optional(string)<br/>    has_root_access = optional(bool, false)<br/>    access_type     = optional(string, "READ_WRITE")<br/>    nfsv3           = optional(bool)<br/>    nfsv4           = optional(bool)<br/>  }))</pre> | <pre>[<br/>  {<br/>    "access_type": "READ_WRITE",<br/>    "allowed_clients": "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",<br/>    "has_root_access": true<br/>  }<br/>]</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NetApp volume. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_large_capacity"></a> [large\_capacity](#input\_large\_capacity) | If true, the volume will be created with large capacity.<br/>Large capacity volumes have 6 IP addresses and a minimal size of 15 TiB. | `bool` | `false` | no |
-| <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this volume. Note: If set to the same as the `name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
+| <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this volume. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"rw,hard,rsize=65536,wsize=65536,tcp"` | no |
-| <a name="input_netapp_storage_pool_id"></a> [netapp\_storage\_pool\_id](#input\_netapp\_storage\_pool\_id) | The ID of the NetApp storage pool to use for the volume. If not specified, a new storage pool will be created. | `string` | n/a | yes |
+| <a name="input_netapp_storage_pool_id"></a> [netapp\_storage\_pool\_id](#input\_netapp\_storage\_pool\_id) | The ID of the NetApp storage pool to use for the volume. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the NetApp storage pool will be created. | `string` | n/a | yes |
 | <a name="input_protocols"></a> [protocols](#input\_protocols) | The protocols that the volume supports. Currently, only NFSv3 and NFSv4 is supported. | `list(string)` | <pre>[<br/>  "NFSV3"<br/>]</pre> | no |
 | <a name="input_region"></a> [region](#input\_region) | Location for NetApp storage pool. | `string` | n/a | yes |
 | <a name="input_tiering_policy"></a> [tiering\_policy](#input\_tiering\_policy) | Define the tiering policy for the NetApp volume. | <pre>object({<br/>    tier_action            = optional(string)<br/>    cooling_threshold_days = optional(number)<br/>  })</pre> | `null` | no |
-| <a name="input_unix_permissions"></a> [unix\_permissions](#input\_unix\_permissions) | UNIX permissions for root inode the volume. | `string` | `"0777"` | no |
-| <a name="input_volume_name"></a> [volume\_name](#input\_volume\_name) | The name of the volume. Leave empty to use generates name based on deployment name. | `string` | `null` | no |
+| <a name="input_unix_permissions"></a> [unix\_permissions](#input\_unix\_permissions) | UNIX permissions for root inode in the volume. | `string` | `"0777"` | no |
+| <a name="input_volume_name"></a> [volume\_name](#input\_volume\_name) | The name of the volume. Needs to be unique within the storage pool. | `string` | `null` | no |
 
 ## Outputs
 

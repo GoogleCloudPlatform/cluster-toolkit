@@ -56,8 +56,7 @@ deployment_groups:
     source: modules/file-system/netapp-storage-pool
     use: [network, private_service_access]
     settings:
-      pool_name: "eda-pool"
-      network_id: $(network.network_id)
+      pool_name: $(vars.deployment_name)-eda-pool
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
@@ -81,7 +80,6 @@ deployment_groups:
     use: [network]
     settings:
       pool_name: "eda-pool"
-      network_id: $(network.network_id)
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
@@ -143,7 +141,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -180,7 +178,7 @@ No modules.
 | <a name="input_ldap_enabled"></a> [ldap\_enabled](#input\_ldap\_enabled) | Whether to enable LDAP for the storage pool. | `bool` | `false` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the NetApp storage pool is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link the pool will be on, required for checking private service access | `string` | n/a | yes |
-| <a name="input_pool_name"></a> [pool\_name](#input\_pool\_name) | The name of the storage pool. Leave empty to use generates name based on deployment name. | `string` | `null` | no |
+| <a name="input_pool_name"></a> [pool\_name](#input\_pool\_name) | The name of the storage pool. Leave empty to generate name based on deployment name. | `string` | `null` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the private VPC connection peering. | `string` | `"sn-netapp-prod"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the NetApp storage pool will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Location for NetApp storage pool. | `string` | n/a | yes |

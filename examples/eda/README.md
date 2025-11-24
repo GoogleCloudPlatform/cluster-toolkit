@@ -130,7 +130,7 @@ storage intact and b) you can build software before you deploy your cluster.
    Call the following gcluster command to deploy the blueprint.
 
    ```bash
-   ./gcluster deploy <blueprint> 
+   ./gcluster deploy <blueprint>
    ```
 
    The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
@@ -185,7 +185,7 @@ commands to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./gcluster destroy <blueprint> 
+./gcluster destroy <blueprint>
 ```
 
 > [!WARNING]
