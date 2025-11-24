@@ -19,13 +19,11 @@ blueprint_name: eda-hybrid-cloud
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: eda-hybrid-cloud
-  region: us-central1
-  zone: us-central1-a
-  network: default
-  rdma_net_range: 192.168.128.0/18
-
-# Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+  region:      ## Set GCP Region Here ##
+  zone:        ## Set GCP Zone Here ##
+  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
+  network: default ## Set name of existing VPC network here
+  rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
 
 deployment_groups:
 

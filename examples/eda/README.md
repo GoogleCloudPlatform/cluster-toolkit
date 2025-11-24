@@ -119,10 +119,10 @@ storage intact and b) you can build software before you deploy your cluster.
 
 1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for exiting networks, H4D instance group node limits or export paths of existing NFS volumes.
 
-1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-gybrid-cloud`) and `<project>` with the project id.
+1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-gybrid-cloud`) and `<project_id>`, `region` and `zone` with your project details.
 
    ```bash
-   ./gcluster create examples/eda/<blueprint>.yaml -w --vars project_id=<project>
+   ./gcluster create examples/eda/<blueprint>.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
    ```
 
 1. Deploy the `setup` group
