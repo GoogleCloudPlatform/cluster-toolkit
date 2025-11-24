@@ -58,7 +58,7 @@ if [[ -r ${SLURM_MUX_CONF} ]]; then
 fi
 
 # Setup logging if configured and directory exists
-LOGFILE="/var/log/slurm/prolog-epilog.log"
+LOGFILE="/dev/null"
 if [[ -d ${DEBUG_SLURM_MUX_LOG_DIR} && ${DEBUG_SLURM_MUX_ENABLE_LOG} == "yes" ]]; then
 	LOGFILE="${DEBUG_SLURM_MUX_LOG_DIR}/${CMD}-${SLURM_SCRIPT_CONTEXT}-job-${SLURMD_NODENAME}.log"
 	exec >>${LOGFILE} 2>&1
@@ -68,8 +68,8 @@ fi
 for SCRIPTLET in ${BASE}/${SLURM_SCRIPT_CONTEXT}.d/*.${SLURM_SCRIPT_CONTEXT}; do
 	if [[ -x ${SCRIPTLET} ]]; then
 		echo "Running ${SCRIPTLET}"
-		${SCRIPTLET} $@ >>${LOGFILE} 2>&1
-		echo "Running ${SCRIPTLET} returned $?"
+		"${SCRIPTLET}" "$@" >>"${LOGFILE}" 2>&1 && ret=0 || ret=$?
+		echo "Running ${SCRIPTLET} returned ${ret}" && [[ ${ret} -eq 0 ]] || exit ${ret}
 	fi
 done
 
@@ -77,8 +77,8 @@ done
 for SCRIPTLET in ${BASE}/partition-${SLURM_JOB_PARTITION}-${SLURM_SCRIPT_CONTEXT}.d/*.${SLURM_SCRIPT_CONTEXT}; do
 	if [[ -x ${SCRIPTLET} ]]; then
 		echo "Running ${SCRIPTLET}"
-		${SCRIPTLET} $@ >>${LOGFILE} 2>&1
-		echo "Running ${SCRIPTLET} returned $?"
+		"${SCRIPTLET}" "$@" >>"${LOGFILE}" 2>&1 && ret=0 || ret=$?
+		echo "Running ${SCRIPTLET} returned ${ret}" && [[ ${ret} -eq 0 ]] || exit ${ret}
 	fi
 done
 EOT
