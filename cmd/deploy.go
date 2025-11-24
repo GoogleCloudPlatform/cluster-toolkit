@@ -21,11 +21,40 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+// validateEarlyMaybeDie runs early validation checks on the blueprint.
+// This provides a fail-fast mechanism to catch simple blueprint configuration
+// errors before kicking off expensive operations like Packer builds or
+// Terraform deployments. If validation fails, it prints a detailed error
+// message and exits the program.
+func validateEarlyMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
+	logging.Info("Starting early blueprint variable validation...")
+	earlyErrs := validators.ValidateBlueprint(bp)
+	if len(earlyErrs) == 0 {
+		logging.Info("Early blueprint variable validation passed.")
+		return
+	}
+
+	// Aggregate into config.Errors so we can reuse renderError with YAML context.
+	errs := config.Errors{}
+	for _, e := range earlyErrs {
+		errs.Errors = append(errs.Errors, e)
+	}
+
+	logging.Error("%s", renderError(errs, ctx))
+	logging.Error("One or more early blueprint validation checks failed.")
+
+	// For deploy we treat early validation failures as fatal (fail-fast).
+	// This prevents running expensive operations like Packer/TF when simple
+	// blueprint mistakes exist.
+	logging.Fatal("%s", boldRed("early validation failed — aborting"))
+}
 
 func addDeployFlags(c *cobra.Command) *cobra.Command {
 	return addJsonOutputFlag(
@@ -72,6 +101,7 @@ func doDeploy(deplRoot string) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
+	validateEarlyMaybeDie(bp, *ctx)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
