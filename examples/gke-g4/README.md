@@ -56,6 +56,48 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 
    Type `a` and hit enter to create the cluster.
 
+## NCCL Tests for GKE G4
+
+This directory contains a manifest to run NVIDIA NCCL performance tests on the GKE G4 cluster.
+
+### Overview
+
+As RDMA networking and the Google gIB plugin are not supported for G4 machines, the G4 instances use standard TCP/IP networking. The NCCL tests provided here are configured to:
+
+1. **Disable InfiniBand/RDMA:** explicitly sets `NCCL_IB_DISABLE=1` to force NCCL to use TCP sockets.
+2. **Use Standard Ethernet:** sets `NCCL_SOCKET_IFNAME=eth0` to bind to the default network interface.
+3. **Build from Source:** uses the `nvidia/cuda` development image to clone and compile `nccl-tests` at runtime, ensuring the latest compatible tests are run.
+
+### Running the Test
+
+1. **Deploy the GKE G4 Cluster:**
+    Ensure you have deployed the cluster using the `gke-g4` blueprint.
+
+2. **Configure the Test Manifest:**
+   Open `nccl-test.yaml` and update the following fields to match your cluster configuration:
+   * `cloud.google.com/gke-nodepool`: Ensure this matches your deployed nodepool name (default in blueprint is `g4-standard-96-g4-pool`).
+   * `nvidia.com/gpu` (limits/requests): Set this to the number of GPUs on your node (e.g., 1, 4, 8, etc.).
+   * Command argument `-g 2`: Update the `-g` flag in the command to match the number of GPUs.
+
+3. **Apply the Job:**
+
+   ```bash
+   kubectl apply -f examples/gke-g4/nccl-test.yaml
+   ```
+
+4. **View Results:**
+   Wait for the job to complete, then check the logs:
+
+   ```bash
+   # Find the pod name
+   kubectl get pods
+    
+   # View logs
+   kubectl logs <POD_NAME>
+   ```
+
+   You should see output indicating the bus bandwidth achieved during the `all_reduce_perf` test.
+
 ## Clean Up
 To destroy all resources associated with creating the GKE cluster, run the following command:
 
