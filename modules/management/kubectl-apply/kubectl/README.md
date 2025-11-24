@@ -43,6 +43,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_content"></a> [content](#input\_content) | The YAML body to apply to gke cluster. | `string` | `null` | no |
+| <a name="input_force_conflicts"></a> [force\_conflicts](#input\_force\_conflicts) | The force\_conflicts boolean, when true, compels kubectl apply (in server-side apply mode) to forcefully take ownership and override any resource fields managed by a different entity. For more information, see [Using Server-Side Apply in a controller](https://kubernetes.io/docs/reference/using-api/server-side-apply/#using-server-side-apply-in-a-controller) | `bool` | `false` | no |
 | <a name="input_server_side_apply"></a> [server\_side\_apply](#input\_server\_side\_apply) | Allow using kubectl server-side apply method. | `bool` | `false` | no |
 | <a name="input_source_path"></a> [source\_path](#input\_source\_path) | The source for manifest(s) to apply to gke cluster. Acceptable sources are a local yaml or template (.tftpl) file path, a directory (ends with '/') containing yaml or template files, and a url for a yaml file. | `string` | `null` | no |
 | <a name="input_template_vars"></a> [template\_vars](#input\_template\_vars) | The values to populate template file(s) with. | `any` | `null` | no |
