@@ -1491,7 +1491,7 @@ class Dumper(yaml.SafeDumper):
 @dataclass(frozen=True)
 class ReservationDetails:
     project: str
-    zone: str
+    zone: Optional[str]
     name: str
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
@@ -1854,11 +1854,17 @@ class Lookup:
     def instance(self, instance_name: str) -> Optional[Instance]:
         return self.instances().get(instance_name)
 
+
     @lru_cache()
-    def _get_reservation(self, project: str, zone: str, name: str) -> Any:
+    def _get_reservation(self, project: str, name: str, zone: Optional[str] = None) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
-        return self.compute.reservations().get(
-            project=project, zone=zone, reservation=name).execute()
+        if zone:
+            return self.compute.reservations().get(
+                project=project, zone=zone, reservation=name).execute()
+        else:
+            # Shared reservation
+            return self.compute.reservations().get(
+                project=project, reservation=name).execute()
 
     @lru_cache()
     def get_mig(self, project: str, region: str, self_link:str) -> Any:
@@ -1879,8 +1885,8 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
-    def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
-        reservation = self._get_reservation(project, zone, name)
+    def get_reservation_details(self, project:str, name:str, bulk_insert_name:str, zone:Optional[str]=None) -> ReservationDetails:
+        reservation = self._get_reservation(project, name, zone=zone)
 
         # Converts policy URLs to names, e.g.:
         # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
@@ -1905,14 +1911,34 @@ class Lookup:
         assert len(zones) == 1, "Only single zone is supported if using a reservation"
         zone = zones[0]
 
-        regex = re.compile(r'^projects/(?P<project>[^/]+)/reservations/(?P<reservation>[^/]+)(/.*)?$')
-        if not (match := regex.match(nodeset.reservation_name)):
-            raise ValueError(
-                f"Invalid reservation name: '{nodeset.reservation_name}', expected format is 'projects/PROJECT/reservations/NAME'"
-            )
+        regex = re.compile(
+            r"^projects/(?P<project>[^/]+)/"
+            r"(?:zones/(?P<zone>[^/]+)/)?"
+            r"reservations/(?P<reservation>[^/]+)"
+            r"(/.*)?$"
+        )
+        match = regex.match(nodeset.reservation_name)
 
-        project, name = match.group("project", "reservation")
-        return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
+        if not match:
+            # Assume it's a short name for a zonal reservation in the default zone
+            project = self.project
+            name = nodeset.reservation_name
+            zones = list(nodeset.zone_policy_allow or [])
+            default_zone = zones[0] if zones else None
+            if not default_zone:
+                 raise ValueError(f"Zone is required for short reservation name: {name}")
+            return self.get_reservation_details(project, name, f"projects/{project}/zones/{default_zone}/reservations/{name}", zone=default_zone)
+
+        project = match.group("project")
+        name = match.group("reservation")
+        res_zone = match.group("zone")
+
+        if res_zone:
+            # Fully qualified zonal reservation
+            return self.get_reservation_details(project, name, nodeset.reservation_name, zone=res_zone)
+        else:
+            # Shared reservation
+            return self.get_reservation_details(project, name, nodeset.reservation_name, zone=None)
 
     def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:

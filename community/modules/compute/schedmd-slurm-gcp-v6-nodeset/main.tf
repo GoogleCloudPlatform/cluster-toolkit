@@ -155,14 +155,13 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)
+  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/(?:zones/(?P<zone>[a-z0-9-]+)/)?reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)
 
   res_short_name = local.res_match.name
   res_project    = coalesce(local.res_match.project, var.project_id)
-  res_prefix     = coalesce(local.res_match.prefix, "projects/${local.res_project}/reservations/")
   res_suffix     = local.res_match.suffix == null ? "" : local.res_match.suffix
 
-  reservation_name = local.res_match.whole == null ? "" : "${local.res_prefix}${local.res_short_name}${local.res_suffix}"
+  reservation_name = startswith(var.reservation_name, "projects/") ? var.reservation_name : (local.res_match.whole == null ? "" : "projects/${local.res_project}/reservations/${local.res_short_name}${local.res_suffix}")
 }
 
 locals {
@@ -182,7 +181,7 @@ data "google_compute_reservation" "reservation" {
 
   name    = local.res_short_name
   project = local.res_project
-  zone    = var.zone
+  zone    = !strcontains(local.reservation_name, "/zones/") ? var.zone : null
 
   lifecycle {
     postcondition {
