@@ -40,13 +40,8 @@ func validateEarlyMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 		logging.Info("Early blueprint variable validation passed.")
 		return
 	}
-
-	// Aggregate into config.Errors so we can reuse renderError with YAML context.
-	errs := config.Errors{}
-	for _, e := range earlyErrs {
-		errs.Errors = append(errs.Errors, e)
-	}
-
+ 
+	errs := config.Errors{Errors: earlyErrs}
 	logging.Error("%s", renderError(errs, ctx))
 	logging.Error("One or more early blueprint validation checks failed.")
 
