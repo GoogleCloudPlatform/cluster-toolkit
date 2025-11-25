@@ -24,9 +24,6 @@ vars:
   pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
   rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
 
-# Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
-
 deployment_groups:
 
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
