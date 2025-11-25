@@ -48,4 +48,4 @@ custom_vars:
   mounts:
   - /home
   - /projects
-  - /scratch
+  - /lustre
