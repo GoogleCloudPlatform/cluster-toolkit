@@ -116,6 +116,13 @@ resource "google_storage_bucket" "bucket" {
       condition     = !var.enable_versioning || !var.enable_hierarchical_namespace
       error_message = "Hierarchical namespace is not compatible with Object versioning enabled."
     }
+
+    precondition {
+      condition = var.anywhere_cache == null || alltrue([
+        for zone in var.anywhere_cache.zones : startswith(zone, var.region)
+      ])
+      error_message = "The zone for the Anywhere Cache must be within the bucket's region."
+    }
   }
 }
 
@@ -123,4 +130,19 @@ resource "google_storage_bucket_iam_binding" "viewers" {
   bucket  = google_storage_bucket.bucket.name
   role    = "roles/storage.objectViewer"
   members = var.viewers
+}
+
+resource "google_storage_anywhere_cache" "cache_instances" {
+  for_each = var.anywhere_cache != null ? toset(var.anywhere_cache.zones) : toset([])
+
+  provider = google-beta
+
+  bucket           = google_storage_bucket.bucket.name
+  zone             = each.value
+  ttl              = var.anywhere_cache.ttl
+  admission_policy = var.anywhere_cache.admission_policy
+
+  timeouts {
+    create = var.anywhere_cache_create_timeout
+  }
 }

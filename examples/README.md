@@ -1275,6 +1275,11 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 This blueprint shows how to use different storage options with GKE in the toolkit.
 
+> [!NOTE]
+> This blueprint also demonstrates support for Anywhere Cache. Anywhere Cache is a fully managed service
+that caches Cloud Storage data in Google Cloud.
+For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
+
 The blueprint contains the following:
 
 * A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
