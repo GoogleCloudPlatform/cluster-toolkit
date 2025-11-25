@@ -30,6 +30,7 @@ locals {
     "ct5lp" = "tpu-v5-lite-podslice" # TPU v5e
     "ct5p"  = "tpu-v5p-slice"        # TPU v5p
     "ct6e"  = "tpu-v6e-slice"        # TPU v6e
+    "tpu7x" = "tpu7x"                # TPU v7x
   }
 
   # Map specific GCE machine types to the number of TPU chips per node (VM).
@@ -52,6 +53,9 @@ locals {
     "ct6e-standard-1t" = 1
     "ct6e-standard-4t" = 4
     "ct6e-standard-8t" = 8
+
+    # v7x - tpu7x
+    "tpu7x-standard-4t" = 4
   }
 
   # Robustly extract the machine family prefix (e.g., "ct6e").
