@@ -17,7 +17,11 @@ tags: [dockerfile, m.pre-existing-vpc, m.vm-instance, vm]
 
 timeout: 3600s  # 1hr
 steps:
-## uses a pre-built Google Cloud image containing Docker CLI tool.
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml"
+
+# uses a pre-built Google Cloud image containing Docker CLI tool.
 - id: build-docker-image
   name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcluster', 'tools/cloud-build/images/cluster-toolkit-dockerfile/']
