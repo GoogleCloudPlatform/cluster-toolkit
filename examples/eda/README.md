@@ -19,7 +19,7 @@ Google Cloud including:
 
 - Google Compute Engine partitions
 - Google Cloud NetApp Volumes NFS-based shared storage
-- SLURM workload scheduler
+- Slurm workload scheduler
 
 Two example blueprints are provided.
 
@@ -29,9 +29,9 @@ This blueprint assumes that all compute and data resides in the cloud.
 
 ![EDA all-cloud architecture](./ClusterToolkit-EDA-AllCloud.png)
 
-In the setup deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits.
+In the setup deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. One limitation currently is that Slurm will only use the first IP of a large volume. If you need to utilize the full performance of the 6 IP addresses a large volume provides, you can instead utilize the approach with pre-existing volumes and CloudDNS mentioned in eda-hybrid-cloud blueprint description.
 
-The cluster deployment group deploys a managed instance group which is managed by SLURM.
+The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
 When scaling down the deployment, make sure to only destroy the *compute* deployment group. If you destroy the *setup* group too, all the volumes will be deleted and you will lose your data.
 
@@ -59,7 +59,7 @@ It can accelerate metadata- or throughput-heavy read workloads considerably.
 
 FlexCache and Large Volumes offer six IP addresses per volume which all provide access to the same data. Currently Cluster Toolkit only uses one of these IPs. Support for using all 6 IPs is planned for a later release. To spread your compute nodes over all IPs today, you can use CloudDNS to create an DNS record with all 6 IPs and specify that DNS name instead of individual IPs in the blueprint. CloudDNS will return one of the 6 IPs in a round-robin fashion on lookups.
 
-The cluster deployment group deploys a managed instance group which is managed by SLURM.
+The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
 ## Getting Started
 To explore the reference architecture, you should follow these steps:
