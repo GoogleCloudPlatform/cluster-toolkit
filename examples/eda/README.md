@@ -29,15 +29,15 @@ This blueprint assumes that all compute and data resides in the cloud.
 
 ![EDA all-cloud architecture](./ClusterToolkit-EDA-AllCloud.png)
 
-In the setup deploment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits.
+In the setup deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits.
 
 The cluster deployment group deploys a managed instance group which is managed by SLURM.
 
-When scaling down the deploment, make sure to only destroy the *compute* deployment group. If you destroy the *setup* group too, all the volumes will be deleted and you will lose your data.
+When scaling down the deployment, make sure to only destroy the *compute* deployment group. If you destroy the *setup* group too, all the volumes will be deleted and you will lose your data.
 
 ### Blueprint [eda-hybrid-cloud](./eda-hybrid-cloud.yaml)
 
-This blueprint assumes you are using an pre-existing Google VPC with pre-existing NFS shares on NetApp Volumes, managed outside of Cluster Toolkit.
+This blueprint assumes you are using a pre-existing Google VPC with pre-existing NFS shares on NetApp Volumes, managed outside of Cluster Toolkit.
 
 ![EDA hybrid-cloud architecture](./ClusterToolkit-EDA-Hybrid.png)
 
@@ -57,12 +57,12 @@ FlexCache offers the following features which enable bursting on-premises worklo
 It can accelerate metadata- or throughput-heavy read workloads considerably.
 It can accelerate metadata- or throughput-heavy read workloads considerably.
 
-FlexCache and Large Volumes offer six IP addresses per volume which all provide access to the same data. Currently Cluster Toolkit only uses one of these IPs. Support for using all 6 IPs is planned for a later release. To spread you compute nodes over all IPs today, you can use CloudDNS to create an DNS record with all 6 IPs and specify that DNS name instead of individual IPs in the blueprint. CloudDNS will return one of the 6 IPs in a round-robin fashion on lookups.
+FlexCache and Large Volumes offer six IP addresses per volume which all provide access to the same data. Currently Cluster Toolkit only uses one of these IPs. Support for using all 6 IPs is planned for a later release. To spread your compute nodes over all IPs today, you can use CloudDNS to create an DNS record with all 6 IPs and specify that DNS name instead of individual IPs in the blueprint. CloudDNS will return one of the 6 IPs in a round-robin fashion on lookups.
 
 The cluster deployment group deploys a managed instance group which is managed by SLURM.
 
 ## Getting Started
-To explore the reference architecture, you should follow the these steps:
+To explore the reference architecture, you should follow these steps:
 
 Before you start, make sure your prerequisites and dependencies are set up:
 [Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
@@ -117,9 +117,9 @@ storage intact and b) you can build software before you deploy your cluster.
    make
    ```
 
-1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for exiting networks, H4D instance group node limits or export paths of existing NFS volumes.
+1. Change parameters in your blueprint file to reflect your requirements. Examples are VPC names for existing networks, H4D instance group node limits or export paths of existing NFS volumes.
 
-1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-gybrid-cloud`) and `<project_id>`, `region` and `zone` with your project details.
+1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-hybrid-cloud`) and `<project_id>`, `region` and `zone` with your project details.
 
    ```bash
    ./gcluster create examples/eda/<blueprint>.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
@@ -160,7 +160,7 @@ storage intact and b) you can build software before you deploy your cluster.
    > By default, this deployment group is disabled in the reference design. See
    > [Software Installation Patterns](#software-installation-patterns) for more information.
 
-   If this deployment group is used (needs to be uncomment in the blueprint first),
+   If this deployment group is used (needs to be uncommented in the blueprint first),
    you can return to the gcluster command which will ask you to **display**, **apply**,
    **stop**, or **continue** without applying the `software_installation` group.
    Select 'apply'.
@@ -201,11 +201,11 @@ Depending on the software you want to use, different installation paths may be r
 
 - **Installation with binary**
   Commercial-off-the-shelf applications typically come with precompiled binaries which
-  are provided by the ISV. If you not share them using the toolsfs or libraryfs shares,
+  are provided by the ISV. If you do not share them using the toolsfs or libraryfs shares,
   you can install software using the following method.
 
   In general, you need to bring the binaries to your EDA cluster for which it is
-  useful to use a Google Clouds Storage bucket, which is accessible from any machine using the
+  useful to use a Google Cloud Storage bucket, which is accessible from any machine using the
   gsutil command and which can be mounted in the cluster.
 
   As this installation process only needs to be done once and at the same time may require time,
@@ -216,7 +216,7 @@ Depending on the software you want to use, different installation paths may be r
   ``` {.yaml}
   - id: sw-installer-vm
     source: modules/compute/vm-instance
-    use: [network1, appsfs]
+    use: [network1, toolsfs]
     settings:
       name_prefix: sw-installer
       add_deployment_name_before_prefix: true
@@ -228,7 +228,7 @@ Depending on the software you want to use, different installation paths may be r
   [startup-script](../../modules/scripts/startup-scripts/README.md) module, the process
   can be automated.
 
-  Once that is completed, the software will persist on the NFS Filestore share for as long as you
+  Once that is completed, the software will persist on the NetApp Volumes share for as long as you
   do not destroy the `setup` stage.
 
 - **Installation from source/with package manager**
@@ -245,5 +245,5 @@ Depending on the software you want to use, different installation paths may be r
   Please also see the [OpenFOAM](../../docs/tutorials/openfoam/spack-openfoam.md) example
   for how this can be used to install the OpenFOAM software.
 
-  Once that is completed, the software will persist on the NFS Filestore share for as long as you
+  Once that is completed, the software will persist on the NetApp Volumes share for as long as you
   do not destroy the `setup` stage.

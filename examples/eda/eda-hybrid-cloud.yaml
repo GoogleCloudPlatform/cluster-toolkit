@@ -102,7 +102,7 @@ deployment_groups:
       remote_mount: # Set exported path of NFS share here
       local_mount: /tools
       fs_type: nfs
-      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
 
   - id: libraryfs
@@ -112,7 +112,7 @@ deployment_groups:
       remote_mount: # Set exported path of NFS share here
       local_mount: /library
       fs_type: nfs
-      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
 
   - id: homefs

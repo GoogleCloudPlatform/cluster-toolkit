@@ -76,7 +76,7 @@ deployment_groups:
       pool_name: "eda-pool"
       network_id: $(frontend-network.network_id)
       capacity_gib: 4096
-      service_level: "EXTREME"
+      service_level: $(vars.pool_service_level)
       region: $(vars.region)
       # allow_auto_tiering: true
 
@@ -92,7 +92,7 @@ deployment_groups:
       local_mount: "/tools"
       protocols: ["NFSV3"]
       unix_permissions: "0777"
-      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
 
   # NFS volume for shared libraries
@@ -107,7 +107,7 @@ deployment_groups:
       local_mount: "/library"
       protocols: ["NFSV3"]
       unix_permissions: "0777"
-      # Mount options are optimized for aggressive caching, assuming rare changes oon the volume
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
       mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
 
   # NFS volume for home directories
@@ -121,7 +121,7 @@ deployment_groups:
       large_capacity: false
       local_mount: "/home"
       protocols: ["NFSV3"]
-      unix_permissions: "0777"
+      unix_permissions: "0755"
 
   # NFS volume for scratch space
   - id: scratchfs
