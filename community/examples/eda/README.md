@@ -27,21 +27,17 @@ Two example blueprints are provided.
 
 This blueprint assumes that all compute and data resides in the cloud.
 
-![EDA all-cloud architecture](./ClusterToolkit-EDA-AllCloud.png)
-
-In the setup deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. One limitation currently is that Slurm will only use the first IP of a large volume. If you need to utilize the full performance of the 6 IP addresses a large volume provides, you can instead utilize the approach with pre-existing volumes and CloudDNS mentioned in eda-hybrid-cloud blueprint description.
+In the base deployment group (see [deployment stages](#deployment_stages)) it provisions a new network and multiple NetApp Volumes volumes to store your data. Adjust the volume sizes to suit your requirements before deployment. If your volumes are larger than 15 TiB, creating them as [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) adds performance benefits. One limitation currently is that Slurm will only use the first IP of a large volume. If you need to utilize the full performance of the 6 IP addresses a large volume provides, you can instead utilize the approach with pre-existing volumes and CloudDNS mentioned in eda-hybrid-cloud blueprint description.
 
 The cluster deployment group deploys a managed instance group which is managed by Slurm.
 
-When scaling down the deployment, make sure to only destroy the *compute* deployment group. If you destroy the *setup* group too, all the volumes will be deleted and you will lose your data.
+When scaling down the deployment, make sure to only destroy the *compute* deployment group. If you destroy the *base* group too, all the volumes will be deleted and you will lose your data.
 
 ### Blueprint [eda-hybrid-cloud](./eda-hybrid-cloud.yaml)
 
-This blueprint assumes you are using a pre-existing Google VPC with pre-existing NFS shares on NetApp Volumes, managed outside of Cluster Toolkit.
+This blueprint assumes you are using NetApp Volumes [FlexCache](https://docs.cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) to enable a [hybrid cloud EDA](https://community.netapp.com/t5/Tech-ONTAP-Blogs/NetApp-FlexCache-Enhancing-hybrid-EDA-with-Google-Cloud-NetApp-Volumes/ba-p/462768) environment.
 
-![EDA hybrid-cloud architecture](./ClusterToolkit-EDA-Hybrid.png)
-
-The setup deployment group (see [deployment stages](#deployment_stages)) connects to an existing network and mounts multiple NetApp Volumes volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, update `server_ip` and `remote_mount` parameters of the respective volumes in the blueprint declarations to reflect the actual IP and export path of your existing volumes. Using existing volumes also avoids the danger of being deleted accidentally when deleting the setup deployment group.
+The base deployment group (see [deployment stages](#deployment_stages)) connects to an existing network and mounts multiple NetApp Volumes volumes. This blueprint assumes you have pre-existing volumes for "tools", "libraries", "home" and "scratch". Before deployment, update `server_ip` and `remote_mount` parameters of the respective volumes in the blueprint declarations to reflect the actual IP and export path of your existing volumes. Using existing volumes also avoids the danger of being deleted accidentally when deleting the base deployment group.
 
 The volumes used can be regular NetApp Volume [volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview), [large volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview#large-capacity-volumes) or [FlexCache volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview).
 
@@ -74,7 +70,7 @@ For deploying the EDA reference blueprint follow the
 
 This blueprint has the following deployment groups:
 
-- `setup`: Setup backbone infrastructure such as networking and file systems
+- `base`: Setup backbone infrastructure such as networking and file systems
 - `software_installation`(_optional_): This deployment group is a stub for
   custom software installation on the network storage before the cluster is brought up
 - `cluster`: Deploys an auto-scaling cluster
@@ -122,10 +118,10 @@ storage intact and b) you can build software before you deploy your cluster.
 1. Generate the deployment folder after replacing `<blueprint>` with the name of the blueprint (`eda-all-cloud` or `eda-hybrid-cloud`) and `<project_id>`, `region` and `zone` with your project details.
 
    ```bash
-   ./gcluster create examples/eda/<blueprint>.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
+   ./gcluster create community/examples/eda/<blueprint>.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
    ```
 
-1. Deploy the `setup` group
+1. Deploy the `base` group
 
    Call the following gcluster command to deploy the blueprint.
 
@@ -134,7 +130,7 @@ storage intact and b) you can build software before you deploy your cluster.
    ```
 
    The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
-   **continue** without applying the `setup` group. Select 'apply'.
+   **continue** without applying the `base` group. Select 'apply'.
 
    This group will create a network and file systems to be used by the cluster.
 
@@ -180,7 +176,7 @@ storage intact and b) you can build software before you deploy your cluster.
 
 When you would like to tear down the deployment, each stage must be destroyed.
 Since the `software_installation` and `cluster` depend on the network deployed
-in the `setup` stage, they must be destroyed first. You can use the following
+in the `base` stage, they must be destroyed first. You can use the following
 commands to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
@@ -229,7 +225,7 @@ Depending on the software you want to use, different installation paths may be r
   can be automated.
 
   Once that is completed, the software will persist on the NetApp Volumes share for as long as you
-  do not destroy the `setup` stage.
+  do not destroy the `base` stage.
 
 - **Installation from source/with package manager**
   For open source software, you may want to compile the software from scratch or use a
@@ -246,4 +242,4 @@ Depending on the software you want to use, different installation paths may be r
   for how this can be used to install the OpenFOAM software.
 
   Once that is completed, the software will persist on the NetApp Volumes share for as long as you
-  do not destroy the `setup` stage.
+  do not destroy the `base` stage.

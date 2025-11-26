@@ -21,7 +21,6 @@ vars:
   deployment_name: eda-hybrid-cloud
   region:      ## Set GCP Region Here ##
   zone:        ## Set GCP Zone Here ##
-  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
   network: default ## Set name of existing VPC network here
   rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
 
@@ -34,10 +33,10 @@ deployment_groups:
 #
 # Sets up VPC network, persistent NFS shares
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-- group: setup
+- group: base
   modules:
   # Frontend network for GCE, NetApp Volumes and other services. Make sure it has internet access.
-  - id: frontend-network
+  - id: eda-net
     source: modules/network/pre-existing-vpc
     settings:
       project_id: $(vars.project_id)
@@ -47,15 +46,15 @@ deployment_groups:
   - id: firewall-rule-frontend
     source: modules/network/firewall-rules
     use:
-    - frontend-network
+    - eda-net
     settings:
       ingress_rules:
       - name: $(vars.deployment_name)-allow-internal-traffic
         description: Allow internal traffic
         destination_ranges:
-        - $(frontend-network.subnetwork_address)
+        - $(eda-net.subnetwork_address)
         source_ranges:
-        - $(frontend-network.subnetwork_address)
+        - $(eda-net.subnetwork_address)
         allow:
         - protocol: tcp
           ports:
@@ -67,7 +66,7 @@ deployment_groups:
       - name: $(vars.deployment_name)-allow-iap-ssh
         description: Allow IAP-tunneled SSH connections
         destination_ranges:
-        - $(frontend-network.subnetwork_address)
+        - $(eda-net.subnetwork_address)
         source_ranges:
         - 35.235.240.0/20
         allow:
@@ -169,7 +168,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use:
     - h4d_startup
-    - frontend-network
+    - eda-net
     - homefs
     - toolsfs
     - libraryfs
@@ -212,7 +211,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [frontend-network]
+    use: [eda-net]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
@@ -220,7 +219,7 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - frontend-network
+    - eda-net
     - h4d_partition
     - slurm_login
     - homefs

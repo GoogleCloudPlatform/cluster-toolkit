@@ -1698,23 +1698,23 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
 
-### [eda-all-on-cloud] ![core-badge]
+### [eda-all-on-cloud] ![community-badge]
 
 Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, one frontend network which connects VMs, Slurm and storage and the other for fast RDMA networking between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/libraries` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
-The deployment instructions can be found in the [README](/examples/eda/README.md).
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
-[eda-all-on-cloud]: ../examples/eda/eda-all-on-cloud.yaml
+[eda-all-on-cloud]: ../community/examples/eda/eda-all-on-cloud.yaml
 
-### [eda-hybrid-cloud] ![core-badge]
+### [eda-hybrid-cloud] ![community-badge]
 
 Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing frontend network which connects VMs, Slurm and storage and creates a new RDMA network for low latency communication between the compute nodes. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
 Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/libraries` and `/scratch`. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
 
-The deployment instructions can be found in the [README](/examples/eda/README.md).
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
 
-[eda-hybrid-cloud]: ../examples/eda/eda-hybrid-cloud.yaml
+[eda-hybrid-cloud]: ../community/examples/eda/eda-hybrid-cloud.yaml
 
 ## Blueprint Schema
 
