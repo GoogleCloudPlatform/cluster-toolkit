@@ -43,8 +43,8 @@ locals {
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
       gpu_direct_manifests = [
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/39308db7574925ea3c14f9113fcf87f70a6fcc26/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.8-1 for tcpxo
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/39308db7574925ea3c14f9113fcf87f70a6fcc26/nri_device_injector/nri-device-injector.yaml", # nri_plugin
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/bd4a7491672b48dfec28f3679b679a614f6cbbc7/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.8-1 for tcpxo
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/bd4a7491672b48dfec28f3679b679a614f6cbbc7/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
       updated_workload_path   = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
       rxdm_version            = "v1.0.14" # matching nccl-tcpxo-installer version v1.0.8-1
