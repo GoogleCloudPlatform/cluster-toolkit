@@ -89,6 +89,7 @@ deployment_groups:
       k8s_network_names:
         gvnic_prefix: vpc
         gvnic_start_index: 1
+      version_prefix: 1.33.5-gke.1308000
     outputs: [instructions]
 
   - id: a3_highgpu_pool

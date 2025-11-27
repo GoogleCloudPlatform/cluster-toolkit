@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,16 @@
   ansible.builtin.shell: |
     gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
 
+- name: Get GKE cluster version
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container clusters describe {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --format="value(currentMasterVersion)"
+  register: gke_version_info
+
+- name: Print GKE cluster version
+  ansible.builtin.debug:
+    msg: "GKE Cluster Version: {{ gke_version_info.stdout }}"
+
 - name: Download NCCL test file
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -33,7 +43,7 @@
 
 - name: Display NCCL test file
   debug:
-    msg: "{{nccl_test_file_contents.stdout}}"
+    msg: "{{ nccl_test_file_contents.stdout }}"
 
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
@@ -58,7 +68,7 @@
 
 - name: Print the NCCL test logs
   debug:
-    msg: "{{nccl_test_logs.stdout}}"
+    msg: "{{ nccl_test_logs.stdout }}"
 
 - name: Ensure average bus bandwidth is >= 25 GB/s
   delegate_to: localhost
@@ -70,5 +80,4 @@
 - name: Clean up
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl delete pod --all -v=9
-    kubectl delete service --all -v=9
+    kubectl delete -f {{ workspace }}/examples/nccl-test.yaml
