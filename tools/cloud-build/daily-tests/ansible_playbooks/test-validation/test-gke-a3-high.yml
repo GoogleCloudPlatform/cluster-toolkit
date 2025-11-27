@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,9 +31,19 @@
     cat {{ workspace }}/examples/nccl-test.yaml
   register: nccl_test_file_contents
 
-- name: Display NCCL test file
-  debug:
-    msg: "{{nccl_test_file_contents.stdout}}"
+- name: Inject privileged mode into nccl-test container
+  delegate_to: localhost
+  ansible.builtin.replace:
+    path: "{{ workspace }}/examples/nccl-test.yaml"
+    regexp: '(\s+)securityContext:\n\s+capabilities:\n\s+add:\n\s+- IPC_LOCK'
+    replace: '\1securityContext:\n\1  privileged: true\n\1  capabilities:\n\1    add:\n\1      - IPC_LOCK'
+
+- name: Display modified NCCL test file
+  delegate_to: localhost
+  ansible.builtin.command: cat {{ workspace }}/examples/nccl-test.yaml
+  register: modified_nccl_test_file
+- debug:
+    msg: "{{ modified_nccl_test_file.stdout }}"
 
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
@@ -49,6 +59,17 @@
   retries: 20
   delay: 10
 
+- name: Run tuning script on all nccl-test pods
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl exec --stdin --tty -c nccl-test nccl-test-host-1 -- /scripts/tune_net.sh
+    kubectl exec --stdin --tty -c nccl-test nccl-test-host-2 -- /scripts/tune_net.sh
+  register: tuning_script_output
+
+- name: Display tuning script output
+  ansible.builtin.debug:
+    msg: "{{ tuning_script_output.stdout }}"
+
 - name: Trigger all-gather NCCL test
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -58,7 +79,7 @@
 
 - name: Print the NCCL test logs
   debug:
-    msg: "{{nccl_test_logs.stdout}}"
+    msg: "{{ nccl_test_logs.stdout }}"
 
 - name: Ensure average bus bandwidth is >= 25 GB/s
   delegate_to: localhost
@@ -70,5 +91,4 @@
 - name: Clean up
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl delete pod --all -v=9
-    kubectl delete service --all -v=9
+    kubectl delete -f {{ workspace }}/examples/nccl-test.yaml
