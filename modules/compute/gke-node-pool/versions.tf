@@ -30,7 +30,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.73.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.73.1"
   }
   provider_meta "google-beta" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.45.0"
