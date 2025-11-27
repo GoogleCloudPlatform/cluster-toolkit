@@ -21,7 +21,12 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-## Test chrome-remote-desktop module
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/chrome-remote-desktop.yaml"
+
+# Test chrome-remote-desktop module
 - id: chrome-remote-desktop
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
