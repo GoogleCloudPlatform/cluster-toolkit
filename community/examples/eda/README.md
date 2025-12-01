@@ -126,8 +126,11 @@ storage intact and b) you can build software before you deploy your cluster.
    Call the following gcluster command to deploy the blueprint.
 
    ```bash
-   ./gcluster deploy <blueprint>
+   ./gcluster deploy CLUSTER-NAME
    ```
+
+   Replace `CLUSTER-NAME` with the deployment_name (`eda-all-on-cloud` or
+   `eda-hybrid-cloud`) used in the blueprint vars block.
 
    The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
    **continue** without applying the `base` group. Select 'apply'.
@@ -181,8 +184,11 @@ commands to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./gcluster destroy <blueprint>
+./gcluster destroy CLUSTER-NAME
 ```
+
+Replace `CLUSTER-NAME` with the deployment_name (`eda-all-on-cloud` or
+`eda-hybrid-cloud`) used in the blueprint vars block.
 
 > [!WARNING]
 > If you do not destroy all three deployment groups then there may be continued

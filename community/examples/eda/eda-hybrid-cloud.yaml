@@ -75,7 +75,7 @@ deployment_groups:
           - 22
 
   # Backend RDMA network for GCE instances with RDMA capabilities
-  - id: backend-network
+  - id: eda-rdma-net
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net-0
@@ -185,7 +185,7 @@ deployment_groups:
         $(concat(
           [{
             network=null,
-            subnetwork=backend-network.subnetwork_self_link,
+            subnetwork=eda-rdma-net.subnetwork_self_link,
             subnetwork_project=vars.project_id,
             nic_type="IRDMA",
             queue_count=null,
