@@ -1701,6 +1701,12 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
 
+### [gke-tpu-7x] ![core-badge]
+
+This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
+
+[gke-tpu-7x]: ../examples/gke-tpu-7x
+
 ### [eda-all-on-cloud.yaml] ![community-badge]
 
 Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/libraries` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
