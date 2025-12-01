@@ -65,6 +65,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
+  * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
