@@ -20,6 +20,11 @@ tags:
 
 timeout: 3600s  # 1hr
 steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/e2e.yaml"
+
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   automapSubstitutions: true
   script: |

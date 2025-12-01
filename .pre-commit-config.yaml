@@ -74,6 +74,15 @@ repos:
     files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
     pass_filenames: false
     require_serial: true
+  - id: validate-daily-test-builds
+    name: validate-daily-test-builds
+    entry: tools/cloud-build/daily-tests/validate_daily_test_builds.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['pyyaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.(yaml|yml)'
+    pass_filenames: true
+    require_serial: true
   - id: pytest-check
     name: pytest-check
     entry: python -m pytest
