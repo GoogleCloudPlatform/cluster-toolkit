@@ -55,9 +55,9 @@ type MetadataGhpc struct {
 
 // NEW: Define the struct for a single validation rule
 type ValidationRule struct {
-	ErrorMessage string `yaml:"error_message"`
-	Type         string `yaml:"type"` // e.g., "regex", "onlyOneOf", "min", "max"
-	Vars         []string `yaml:"vars"` // List of variable names to apply this rule to
+	ErrorMessage string                 `yaml:"error_message"`
+	Type         string                 `yaml:"type"`   // e.g., "regex", "onlyOneOf", "min", "max"
+	Vars         []string               `yaml:"vars"`   // List of variable names to apply this rule to
 	Params       map[string]interface{} `yaml:"params"` // Flexible parameters for the rule (e.g., pattern for regex)
 }
 
