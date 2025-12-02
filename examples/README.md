@@ -65,6 +65,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
+  * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1697,6 +1698,12 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 [service-levels]: https://cloud.google.com/netapp/volumes/docs/discover/service-levels
 [auto-tiering]: https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering
 [netapp-volumes.yaml]: ../examples/netapp-volumes.yaml
+
+### [gke-tpu-7x] ![core-badge]
+
+This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
+
+[gke-tpu-7x]: ../examples/gke-tpu-7x
 
 ## Blueprint Schema
 
