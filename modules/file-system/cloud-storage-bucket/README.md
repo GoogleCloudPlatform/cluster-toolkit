@@ -12,7 +12,7 @@ where `xxxxxxxx` is a randomly generated id.
 
 ```yaml
   - id: bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: simulation-results
       random_suffix: true
@@ -73,7 +73,7 @@ following example:
 
 ```yaml
   - id: bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings: {local_mount: /data}
 
   - id: mount-at-startup
