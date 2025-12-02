@@ -1,0 +1,137 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.project is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Get cluster nodes to verify connection and see node status
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get nodes -o wide
+  register: nodes_status
+
+- name: Print node status
+  ansible.builtin.debug:
+    msg: "{{ nodes_status.stdout_lines }}"
+
+- name: Run the NCCL test
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl create -f {{ workspace }}/examples/gke-a4x/nccl-jobset-example.yaml -v=9
+  args:
+    executable: /bin/bash
+
+- name: Get JobSet status after creation
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    sleep 10 # Wait a moment for the jobset to be fully recognized
+    kubectl get jobset --show-labels
+  register: jobset_status
+
+- name: Print JobSet status
+  ansible.builtin.debug:
+    msg: "{{ jobset_status.stdout_lines }}"
+
+- name: Block to wait for job completion and capture failures
+  block:
+  - name: Wait for Job to hit 2/2 completions
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get job --field-selector status.successful=2 -v=9
+    register: job_completion
+    until: job_completion.stdout_lines | length > 1
+    retries: 20
+    delay: 60
+  rescue:
+  - name: "FAILURE: Job did not complete in time. Capturing debug info."
+    ansible.builtin.debug:
+      msg: "The JobSet failed to complete within the expected time. See debug output below."
+
+  - name: Get all pods status on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -o wide
+    register: pods_on_failure
+
+  - name: Print all pods status on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_on_failure.stdout_lines }}"
+
+  - name: Describe JobSet on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe jobset nccl-all
+    register: jobset_describe_on_failure
+
+  - name: Print JobSet description on failure
+    ansible.builtin.debug:
+      msg: "{{ jobset_describe_on_failure.stdout_lines }}"
+
+  - name: Describe pods on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe pods --selector=jobset.x-k8s.io/jobset-name=nccl-all
+    register: pods_describe_on_failure
+
+  - name: Print pod description on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_describe_on_failure.stdout_lines }}"
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "NCCL JobSet did not complete successfully."
+
+- name: "SUCCESS: Job completed. Fetching logs for validation."
+  ansible.builtin.debug:
+    msg: "JobSet completed successfully. Now fetching logs to validate bandwidth."
+
+- name: Fetch logs from the 0-0 pod and save to pod_logs.txt
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    pod_0_0_name="$(kubectl get pods --no-headers -o custom-columns="Name:.metadata.name" | awk '{if ($1 ~ "0-0") print $0}')"
+    kubectl logs ${pod_0_0_name} > pod_logs.txt
+    cat pod_logs.txt
+  register: nccl_test_logs
+
+- name: Print the NCCL test logs from 0-0 pod
+  debug:
+    msg: "{{nccl_test_logs.stdout}}"
+
+- name: Ensure average bus bandwidth is >= 100 GB/s
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
+  register: avg_bus_bandwidth
+  failed_when: avg_bus_bandwidth.stdout | float < 100
+
+- name: "SUCCESS: Bandwidth validation passed. Cleaning up resources."
+  ansible.builtin.debug:
+    msg: "Average bus bandwidth is >= 100 GB/s. Test passed. Cleaning up JobSet."
+
+- name: Clean up
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl delete jobset --all -v=9
+
+- name: "Cleanup complete."
+  ansible.builtin.debug:
+    msg: "JobSet has been deleted."

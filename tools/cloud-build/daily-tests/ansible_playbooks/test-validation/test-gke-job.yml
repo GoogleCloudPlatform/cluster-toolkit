@@ -31,14 +31,80 @@
     executable: /bin/bash
   changed_when: False
 
-- name: Wait for job to complete
-  delegate_to: localhost
-  ansible.builtin.command: |
-    kubectl get job --field-selector  status.successful=1 -v=9
-  register: job_completion
-  until: job_completion.stdout_lines | length > 1
-  retries: 40
-  delay: 15
+- name: Block to wait for job completion and capture failures
+  block:
+  - name: Wait for job to complete
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      JOB_NAME=$(kubectl get job -o jsonpath='{.items[0].metadata.name}')
+      kubectl wait --for=condition=complete "job/${JOB_NAME}" --timeout=10m
+    args:
+      executable: /bin/bash
+  rescue:
+  - name: "FAILURE: Job did not complete. Capturing debug info."
+    ansible.builtin.debug:
+      msg: "The Job failed to complete within the expected time. See debug output below."
+
+  - name: Get all pods status on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -o wide
+    register: pods_on_failure
+    changed_when: false
+
+  - name: Print all pods status on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_on_failure.stdout_lines }}"
+
+  - name: Describe the job on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe job
+    register: job_describe_on_failure
+    changed_when: false
+
+  - name: Print job description on failure
+    ansible.builtin.debug:
+      msg: "{{ job_describe_on_failure.stdout_lines }}"
+
+  - name: Get pod name on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods --selector=job-name --no-headers -o custom-columns=":metadata.name"
+    register: pod_name_on_failure
+    changed_when: false
+
+  - name: Describe the pod on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe pod {{ item }}
+    loop: "{{ pod_name_on_failure.stdout_lines }}"
+    register: pod_describe_on_failure
+    changed_when: false
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Print pod description on failure
+    ansible.builtin.debug:
+      msg: "{{ pod_describe_on_failure.results }}"
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Get logs from the pod on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl logs {{ item }}
+    loop: "{{ pod_name_on_failure.stdout_lines }}"
+    register: pod_logs_on_failure
+    changed_when: false
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Print pod logs on failure
+    ansible.builtin.debug:
+      msg: "{{ pod_logs_on_failure.results }}"
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "GKE Job did not complete successfully."
 
 - name: Print job_completion debug output
   ansible.builtin.debug:

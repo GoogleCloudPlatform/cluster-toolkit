@@ -1,0 +1,71 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.vpc
+- m.gpu-rdma-vpc
+- m.service-account
+- m.gke-cluster
+- m.resource-policy
+- m.gke-node-pool
+- m.kubectl-apply
+- m.gke-job-template
+- gke
+
+timeout: 7200s
+
+steps:
+- id: gke-a4x
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    EXAMPLE_BP=examples/gke-a4x/gke-a4x.yaml
+
+    # Adding vm to act as remote node
+    echo '  - id: remote-node'                                 >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'             >> $${EXAMPLE_BP}
+    echo '    use: [gke-a4x-net-0]'                            >> $${EXAMPLE_BP}
+    echo '    settings:'                                       >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'                   >> $${EXAMPLE_BP}
+    echo '      name_prefix: remote-node'                      >> $${EXAMPLE_BP}
+    echo '      add_deployment_name_before_prefix: true'       >> $${EXAMPLE_BP}
+    echo ''
+    echo '  - id: job_template_test'                           >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/gke-job-template'        >> $${EXAMPLE_BP}
+    echo '    use: [a4x-pool]'                                 >> $${EXAMPLE_BP}
+    echo '    settings:'                                       >> $${EXAMPLE_BP}
+    echo '      image: nvidia/cuda:12.8.0-runtime-ubuntu24.04' >> $${EXAMPLE_BP}
+    echo '      command:'                                      >> $${EXAMPLE_BP}
+    echo '      - nvidia-smi'                                  >> $${EXAMPLE_BP}
+    echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
+    echo '      tolerations:'                                  >> $${EXAMPLE_BP}
+    echo '      - key: kubernetes.io/arch'                     >> $${EXAMPLE_BP}
+    echo '        operator: Equal'                             >> $${EXAMPLE_BP}
+    echo '        value: arm64'                                >> $${EXAMPLE_BP}
+    echo '        effect: NoSchedule'                          >> $${EXAMPLE_BP}
+    echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a4x.yml"

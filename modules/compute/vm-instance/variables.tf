@@ -323,10 +323,9 @@ variable "placement_policy" {
   })  
   default = null
   validation {
-    condition     = var.placement_policy == null ? true : try(keys(var.placement_policy), null) != null
+    condition     = var.placement_policy == null || length([for v in values(var.placement_policy) : v if v != null]) > 0
     error_message = <<-EOT
-    The var.placement_policy should be either unset/null or be a map/object with
-    fields: vm_count (number), availability_domain_count (number), collocation (string), max_distance (number), gpu_topology (string).
+    The var.placement_policy should be either unset/null or be an object with at least one non-null field. Supported fields are: vm_count, availability_domain_count, collocation, max_distance, gpu_topology.
     EOT
   }
 

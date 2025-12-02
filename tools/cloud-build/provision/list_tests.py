@@ -49,7 +49,8 @@ TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     (("ml-a4-highgpu-slurm", "gke-a4"), 2*60),
     (("ml-a3-ultragpu-slurm", "ml-a3-ultragpu-jbvms", "gke-a3-ultragpu"), 1*60),
-    (("ml-a3-megagpu-slurm", "ml-a3-megagpu-slurm-ubuntu", "gke-a3-megagpu"), 1*60),
+    (("ml-a3-megagpu-slurm-ubuntu", "gke-a3-megagpu"), 1*60),
+    (("ml-a3-highgpu-slurm", "gke-a3-highgpu"), 1*60),
 ]
 # TODO:
 # * Consider defining constraints (e.g. reservations used) as a tags within tests yamls
@@ -106,5 +107,3 @@ if __name__ == "__main__":
 
     print(f"Failed to find valid schedule after {MAX_TRIES} tries", file=sys.stderr)
     sys.exit(1)
-
-    

@@ -1,0 +1,43 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+test_name: gke-a4x
+deployment_name: gke-a4x-{{ build }}
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/gke-a4x/gke-a4x.yaml"
+region: us-west8
+zone: us-west8-a
+network: "{{ deployment_name }}-net-0"
+remote_node: "{{ deployment_name }}-remote-node-0"
+extended_reservation: nvidia-gb200-uyrez5en64cu7
+static_node_count: 2
+instance_type: a4x
+accelerator_type: nvidia-gb200
+num_gpus: 8
+k8s_service_account_name: workload-identity-k8s-sa
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  static_node_count: "{{ static_node_count }}"
+  reservation: "{{ extended_reservation }}"
+  authorized_cidr: "{{ build_ip.stdout }}/32"
+  gcp_public_cidrs_access_enabled: true
+  k8s_service_account_name: "{{ k8s_service_account_name}}"
+custom_vars:
+  project: "{{ project }}"
+post_deploy_tests:
+- test-validation/test-gke-job.yml
+- test-validation/test-gke-a4x.yml
+- test-validation/test-gke-a4x-kueue-config.yml

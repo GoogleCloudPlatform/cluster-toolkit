@@ -25,6 +25,8 @@ spec:
       k8s-app: nccl-rdma-installer
   updateStrategy:
     type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: ${yamlencode(max_unavailable)}
   template:
     metadata:
       labels:
@@ -34,17 +36,7 @@ spec:
       priorityClassName: system-node-critical
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: cloud.google.com/gke-accelerator
-                    operator: In
-                    values:
-                      - nvidia-gb200
-                  - key: kubernetes.io/arch
-                    operator: In
-                    values:
-                      - arm64
+          ${indent(10, yamlencode(node_affinity))}
       tolerations:
         - operator: "Exists"
       hostNetwork: true
@@ -62,7 +54,7 @@ spec:
             path: /home/kubernetes/bin/nvidia
             type: Directory
       initContainers:
-        - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64:v1.0.7
+        - image: ${image}:${version}
           name: nccl-rdma-installer
           resources:
             requests:

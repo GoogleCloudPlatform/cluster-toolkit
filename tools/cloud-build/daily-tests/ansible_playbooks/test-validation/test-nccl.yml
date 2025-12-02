@@ -29,7 +29,7 @@
 
 - name: Wait for aperture devices on compute nodes
   shell: |
-    srun -N 2 --partition=a3mega --pty bash -c '
+    srun -N 2 --partition={{ custom_vars.gpu_partition }} --pty bash -c '
       max_attempts=60 # Wait for up to 5 minute
       attempt=0
       while [ -z "$(ls -A /dev/aperture_devices 2>/dev/null)" ]; do
@@ -46,6 +46,7 @@
   args:
     chdir: "{{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}"
     executable: /bin/bash
+  when: custom_vars.gpu_partition == 'a3mega'
 
 - name: Submit NCCL test job and get job ID
   shell: "sbatch run-nccl-tests.sh | awk '{print $4}'"

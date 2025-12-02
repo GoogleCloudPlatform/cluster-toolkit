@@ -69,6 +69,7 @@ for SCRIPTLET in ${BASE}/${SLURM_SCRIPT_CONTEXT}.d/*.${SLURM_SCRIPT_CONTEXT}; do
 	if [[ -x ${SCRIPTLET} ]]; then
 		echo "Running ${SCRIPTLET}"
 		${SCRIPTLET} $@ >>${LOGFILE} 2>&1
+		echo "Running ${SCRIPTLET} returned $?"
 	fi
 done
 
@@ -77,6 +78,7 @@ for SCRIPTLET in ${BASE}/partition-${SLURM_JOB_PARTITION}-${SLURM_SCRIPT_CONTEXT
 	if [[ -x ${SCRIPTLET} ]]; then
 		echo "Running ${SCRIPTLET}"
 		${SCRIPTLET} $@ >>${LOGFILE} 2>&1
+		echo "Running ${SCRIPTLET} returned $?"
 	fi
 done
 EOT

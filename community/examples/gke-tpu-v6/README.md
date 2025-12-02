@@ -248,3 +248,48 @@ Once deployed, the `Lustre` filesystem is available to the cluster as a `Persist
     ```
 
 The pod will start, and the Managed Lustre filesystem will be available inside the container at `/mnt/lustre`.
+
+### Understanding Hyperdisk Balanced Integration
+The blueprint also supports [Hyperdisk Balanced](https://docs.cloud.google.com/compute/docs/disks/hyperdisks), Google Cloud's high-performance, persistent block storage solution.
+
+To enable Hyperdisk Balanced integration, you must make these changes before deploying:
+
+1. Ensure the GKE cluster is configured to support standard Persistent Disks (the Hyperdisk CSI driver runs automatically once enabled). Verify the `gke-tpu-v6-cluster` module setting `enable_persistent_disk_csi: true` is present.
+
+2. Find the section commented `--- HYPERDISK BALANCED ADDITIONS ---`. Uncomment the entire block containing the following two modules:
+   * `hyperdisk-balanced-setup`: This module creates a **StorageClass** and a **PersistentVolumeClaim (PVC)** that will dynamically provision a Hyperdisk Balanced volume in your cluster.
+   * `fio-bench-job-hyperdisk`: This job is pre-configured to mount the Hyperdisk volume and run performance tests.
+
+After making these changes, run the `gcluster deploy` command as usual.
+
+#### Testing the Hyperdisk Balanced Mount
+
+1. Connect to your cluster:
+
+    ```sh
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    ```
+
+    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
+2. Apply the generated FIO Job manifest, whose path is provided in the final deployment instructions.
+
+    ```sh
+    kubectl apply -f <path/to/fio-benchmark.yaml>
+    ```
+
+    The job created in the cluster will be named `fio-benchmark`.
+  
+3. Monitor the job until it completes and obtain the list of pods:
+
+    ```bash
+    kubectl get jobs 
+    kubectl get pods
+    ```
+
+4. View the logs of the completed pod to check the benchmark results:
+
+    ```bash
+    kubectl logs <pod-name>
+    ```
+
+The logs of the pod verifies the disk is mounted successfully and performs a mixed I/O test to validate the disk's provisioned performance.

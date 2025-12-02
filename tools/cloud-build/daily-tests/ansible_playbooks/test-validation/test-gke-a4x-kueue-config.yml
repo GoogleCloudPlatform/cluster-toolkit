@@ -1,0 +1,243 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Kueue Configuration and Verification Tasks
+  block:
+  - name: Assert variables are defined
+    ansible.builtin.assert:
+      that:
+      - region is defined
+      - custom_vars.project is defined
+
+  - name: Get cluster credentials for kubectl
+    delegate_to: localhost
+    ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+  - name: Create the host topology kueue job
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      TEMPLATE_PATH="{{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml"
+      OUTPUT_PATH="/tmp/host-topology-job.yaml"
+      sed -e 's|image:.*|image: busybox|' \
+          -e 's|args:.*|command: ["sleep", "10s"]|' \
+          -e "s/tas-user-queue/{{ instance_type }}/g" \
+          "${TEMPLATE_PATH}" > "${OUTPUT_PATH}"
+      kubectl create -f "${OUTPUT_PATH}" -v=9
+    args:
+      executable: /bin/bash
+    changed_when: False
+
+  - name: Verify Kueue Topology a4x-default exists with correct levels
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      # Get the YAML for the Topology and check for specific lines
+      kubectl get topology a4x-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-block" &&
+      kubectl get topology a4x-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-subblock" &&
+      kubectl get topology a4x-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gke-nodepool" &&
+      kubectl get topology a4x-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-host" &&
+      kubectl get topology a4x-default -o yaml | grep -q -E "nodeLabel: kubernetes.io/hostname"
+    register: topology_validation
+    until: topology_validation.rc == 0
+    retries: 5
+    delay: 5
+  - name: Debug Topology Validation Output
+    ansible.builtin.debug:
+      msg: "Topology Validation Failed. Output: {{ topology_validation.stdout }}"
+    when: topology_validation.rc != 0
+
+  - name: Verify Kueue ResourceFlavor exists with correct properties
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      # Get the YAML for the ResourceFlavor and check for key properties
+      kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "topologyName: a4x-default" &&
+      kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "cloud.google.com/gke-accelerator: {{ accelerator_type }}" &&
+      kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "key: nvidia.com/gpu"
+    register: resourceflavor_validation
+    until: resourceflavor_validation.rc == 0
+    retries: 5
+    delay: 5
+  - name: Debug ResourceFlavor Validation Output
+    ansible.builtin.debug:
+      msg: "ResourceFlavor Validation Failed. Output: {{ resourceflavor_validation.stdout }}"
+    when: resourceflavor_validation.rc != 0
+
+  - name: Verify Kueue ClusterQueue exists with correct quota and covered resources
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      # Get the YAML for the ClusterQueue and check for key properties
+      kubectl get clusterqueue {{instance_type}} -o yaml | grep -q -E "nominalQuota: \"{{ num_gpus }}\""
+    register: clusterqueue_validation
+    until: clusterqueue_validation.rc == 0
+    retries: 5
+    delay: 5
+  - name: Debug ClusterQueue Validation Output
+    ansible.builtin.debug:
+      msg: "ClusterQueue Validation Failed. Output: {{ clusterqueue_validation.stdout }}"
+    when: clusterqueue_validation.rc != 0
+
+  - name: Verify Kueue LocalQueue {{instance_type}} exists and links to ClusterQueue
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      # Get the YAML for the LocalQueue and check its clusterQueue link
+      kubectl get localqueue {{instance_type}} -n default -o yaml | grep -q -E "clusterQueue: {{instance_type}}"
+    register: localqueue_validation
+    until: localqueue_validation.rc == 0
+    retries: 5
+    delay: 5
+  - name: Debug LocalQueue Validation Output
+    ansible.builtin.debug:
+      msg: "LocalQueue Validation Failed. Output: {{ localqueue_validation.stdout }}"
+    when: localqueue_validation.rc != 0
+
+  - name: Check for host topologyAssignment in workloads
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+    register: tas_check_host
+    until: tas_check_host.stdout | length > 0
+    retries: 20
+    delay: 5
+    changed_when: false
+
+  - name: Print the topologyAssignment details
+    ansible.builtin.debug:
+      msg: "Found topologyAssignment in workload status:\n{{ tas_check_host.stdout }}"
+
+  - name: Ensure all pods are on the same host
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -v=9 \
+      -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-host" | \
+      sort -k2 | uniq -f 1 | wc -l
+    register: unique_host_count
+    until: unique_host_count.stdout | int == 2
+    retries: 10
+    delay: 10
+
+  - name: Delete the host topology kueue job
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete --all jobs -v=9
+    args:
+      executable: /bin/bash
+    changed_when: False
+
+  - name: Create the rack topology kueue job
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      TEMPLATE_PATH="{{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/rack-topology-tas-small-job.yaml"
+      OUTPUT_PATH="/tmp/rack-topology-job.yaml"
+      sed -e 's|image:.*|image: busybox|' \
+          -e 's|args:.*|command: ["sleep", "10s"]|' \
+          -e "s/tas-user-queue/{{ instance_type }}/g" \
+          "${TEMPLATE_PATH}" > "${OUTPUT_PATH}"
+      kubectl create -f "${OUTPUT_PATH}" -v=9
+    args:
+      executable: /bin/bash
+    changed_when: False
+
+  - name: Check for rack topologyAssignment in workloads
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+    register: tas_check_rack
+    until: tas_check_rack.stdout | length > 0
+    retries: 20
+    delay: 5
+    changed_when: false
+
+  - name: Print the topologyAssignment details
+    ansible.builtin.debug:
+      msg: "Found topologyAssignment in workload status:\n{{ tas_check_rack.stdout }}"
+
+  - name: Ensure all pods are on the same rack
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -v=9 \
+      -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-subblock" | \
+      sort -k2 | uniq -f 1 | wc -l
+    register: unique_host_count
+    until: unique_host_count.stdout | int == 2
+    retries: 10
+    delay: 10
+
+  - name: Delete the rack topology kueue job
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete --all jobs -v=9
+    args:
+      executable: /bin/bash
+    changed_when: False
+
+  - name: Create the block topology kueue job
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      TEMPLATE_PATH="{{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/block-topology-tas-small-job.yaml"
+      OUTPUT_PATH="/tmp/block-topology-job.yaml"
+      sed -e 's|image:.*|image: busybox|' \
+          -e 's|args:.*|command: ["sleep", "10s"]|' \
+          -e "s/tas-user-queue/{{ instance_type }}/g" \
+          "${TEMPLATE_PATH}" > "${OUTPUT_PATH}"
+      kubectl create -f "${OUTPUT_PATH}" -v=9
+    args:
+      executable: /bin/bash
+    changed_when: False
+
+  - name: Check for block topologyAssignment in workloads
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+    register: tas_check_block
+    until: tas_check_block.stdout | length > 0
+    retries: 20
+    delay: 5
+    changed_when: false
+
+  - name: Print the topologyAssignment details
+    ansible.builtin.debug:
+      msg: "Found topologyAssignment in workload status:\n{{ tas_check_block.stdout }}"
+
+  - name: Ensure all pods are on the same block
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -v=9 \
+      -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-block" | \
+      sort -k2 | uniq -f 1 | wc -l
+    register: unique_host_count
+    until: unique_host_count.stdout | int == 2
+    retries: 10
+    delay: 10
+
+  - name: Wait for job to complete
+    delegate_to: localhost
+    ansible.builtin.command: |
+      kubectl get job --field-selector status.successful=2
+    register: job_completion
+    until: job_completion.stdout_lines | length > 1
+    retries: 10
+    delay: 5
+
+  - name: Print job_completion debug output
+    ansible.builtin.debug:
+      var: job_completion.stdout_lines
+  always:
+  - name: Clean up temporary job files (always run)
+    delegate_to: localhost
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: absent
+    with_items:
+    - "/tmp/host-topology-job.yaml"
+    - "/tmp/rack-topology-job.yaml"
+    - "/tmp/block-topology-job.yaml"

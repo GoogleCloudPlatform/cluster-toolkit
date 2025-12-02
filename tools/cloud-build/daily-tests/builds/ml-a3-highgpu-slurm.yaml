@@ -14,13 +14,20 @@
 
 ---
 tags:
-- m.custom-image
-- m.pre-existing-vpc
 - slurm6
-
+- m.filestore
+- m.multivpc
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.service-account
+- m.startup-script
+- m.vpc
+- m.custom-image
 timeout: 14400s  # 4hr
 steps:
-- id: ml-a3-highgpu-slurm-image
+- id: ml-a3-highgpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -33,59 +40,20 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-image.yml"
-    IMAGE_NAME=$(gcloud compute images list --project "${PROJECT_ID}" \
-        --no-standard-images --filter="labels.ghpc_deployment~$${BUILD_ID_SHORT}" \
-        --format='get(name)' --limit=1)
-
-    echo $${IMAGE_NAME} > /persistent_volume/image_name
-  volumes:
-  - name: 'persistent_volume'
-    path: '/persistent_volume'
-- id: ml-a3-highgpu-slurm-cluster
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
-  entrypoint: /bin/bash
-  env:
-  - "ANSIBLE_HOST_KEY_CHECKING=false"
-  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  args:
-  - -c
-  - |
-    set -x -e
-    cd /workspace && make
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    NFS_DEPLOYMENT_NAME="a3hnfs$${BUILD_ID_SHORT}"
-
-    destroy_on_exit() {
-        ./gcluster destroy "$${NFS_DEPLOYMENT_NAME}" --auto-approve
-        cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
-    }
-
     REGION=us-west1
     ZONE=us-west1-a
-
-    trap 'destroy_on_exit' EXIT
-    ./gcluster deploy \
-        --vars region="$${REGION}" \
-        --vars zone="$${ZONE}" \
-        --vars project_id="${PROJECT_ID}" \
-        --vars deployment_name="$${NFS_DEPLOYMENT_NAME}" \
-        tools/cloud-build/daily-tests/blueprints/nfs-server-homefs.yaml \
-        --auto-approve
-
-    NFS_IP=$(gcloud compute instances list --project "${PROJECT_ID}" \
-        --filter="labels.ghpc_module=nfs-server and labels.ghpc_deployment=$${NFS_DEPLOYMENT_NAME}" \
-        --format='get(networkInterfaces[0].networkIP)')
-
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
-      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} nfs_ip=$${NFS_IP}" \
-      --extra-vars="region=$${REGION} zone=$${ZONE} remote_mount_homefs=/exports/home" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-cluster.yml"
-  volumes:
-  - name: 'persistent_volume'
-    path: '/persistent_volume'
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
+      --extra-vars="region=$${REGION} zone=$${ZONE} "\
+      --extra-vars="tcpx_kernel_login=$${TCPX_KERNEL_LOGIN} tcpx_kernel_password=$${TCPX_KERNEL_PASSWORD} keyserver_ubuntu_key=$${KEYSERVER_UBUNTU_KEY} "\
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm.yml"
+  secretEnv: ['TCPX_KERNEL_LOGIN', 'TCPX_KERNEL_PASSWORD', 'KEYSERVER_UBUNTU_KEY']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-login/versions/latest
+    env: 'TCPX_KERNEL_LOGIN'
+  - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-password/versions/latest
+    env: 'TCPX_KERNEL_PASSWORD'
+  - versionName: projects/${PROJECT_ID}/secrets/keyserver-ubuntu-key/versions/latest
+    env: 'KEYSERVER_UBUNTU_KEY'

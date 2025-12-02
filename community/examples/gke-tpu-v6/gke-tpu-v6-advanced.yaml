@@ -170,6 +170,7 @@ deployment_groups:
       configure_workload_identity_sa: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true
+      enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
@@ -397,3 +398,75 @@ deployment_groups:
         rm -rf /{training,checkpoint}-data/fio-benchmarks-${TAG}
 
     outputs: [instructions]
+
+  # # --- HYPERDISK BALANCED ADDITIONS ---
+  # # To enable Hyperdisk-balanced support please uncomment this hyperdisk-balanced-setup and fio-bench-job-template module.
+  # # Set up storage class and persistent volume claim for Hyperdisk
+  # - id: hyperdisk-balanced-setup
+  #   source: modules/file-system/gke-storage
+  #   use: [gke-tpu-v6-cluster]
+  #   settings:
+  #     storage_type: Hyperdisk-balanced
+  #     access_mode: ReadWriteOnce
+  #     sc_volume_binding_mode: Immediate
+  #     sc_reclaim_policy: Delete
+  #     sc_topology_zones: [$(vars.zone)]
+  #     pvc_count: 1
+  #     capacity_gb: 100
+
+  # # This is an example job that will install and run an `fio`benchmark against the hyperdisk volumes.
+  # # For more FIO tests, see https://cloud.google.com/compute/docs/disks/benchmark-hyperdisk-performance
+  # - id: fio-bench-job-hyperdisk
+  #   source: modules/compute/gke-job-template
+  #   use:
+  #   - gke-tpu-v6-pool
+  #   - hyperdisk-balanced-setup
+  #   settings:
+  #     name: fio-benchmark
+  #     image: ubuntu:latest
+  #     security_context:  # to make sure the job have enough access to install the fio packages
+  #     - key: runAsUser
+  #       value: 0
+  #     - key: runAsGroup
+  #       value: 100
+  #     - key: fsGroup
+  #       value: 100
+  #     command:
+  #     - bash
+  #     - -c
+  #     - |
+
+  #       set -eux
+
+  #       cleanup() {
+  #         # This function will be called on script exit
+  #         if [ -n "${TAG:-}" ]; then
+  #           echo "--- Cleaning up temporary directories for tag ${TAG} ---"
+  #           rm -rf "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+  #         fi
+  #         }
+  #       trap cleanup EXIT
+
+  #       export DEBIAN_FRONTEND=noninteractive
+
+  #       # Install fio
+  #       apt update -y && apt install -y fio
+
+  #       # Use a tag to create a unique path for tests
+  #       TAG=`date +%s`
+
+  #       # Verify mountpoints
+  #       df -h
+  #       mountpoint /data/hyperdisk-balanced-pvc-0
+
+  #       # Create temporary directory for fio benchmarks
+  #       mkdir -p "/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}"
+
+  #       # Perform hyperdisk balanced performance (Mixed IOPS) test
+  #       fio --name=hyperdisk-balanced-iops --ioengine=libaio --iodepth=256 --rw=randrw \
+  #       --bs=4k --direct=1 --size=10G --numjobs=16 --group_reporting --time_based --runtime=300s \
+  #       --ramp_time=10s --iodepth_batch_submit=256 --iodepth_batch_complete_max=256 \
+  #       --directory="/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-balanced-iops
+  #     node_count: 1
+
+  #   outputs: [instructions]
