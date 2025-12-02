@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -72,6 +73,7 @@ func doDeploy(deplRoot string) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
+	checkErr(validateBlueprintWithMetadata(bp), ctx)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
@@ -159,4 +161,35 @@ func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior sh
 		return err
 	}
 	return shell.ExportOutputs(tf, artifactsDir, applyBehavior, outputFormat)
+}
+
+// validateBlueprintWithMetadata runs metadata-based validations.
+func validateBlueprintWithMetadata(bp config.Blueprint) error {
+	for _, group := range bp.Groups {
+		for j, mod := range group.Modules {
+			if mod.Kind != config.TerraformKind {
+				continue
+			}
+
+			mtd := mod.InfoOrDie().Metadata
+			if len(mtd.Ghpc.Validations) == 0 {
+				continue
+			}
+
+			for _, rule := range mtd.Ghpc.Validations {
+				validator, found := validators.Registry[rule.Type]
+				if !found {
+					// This could be a warning in the future if we want to allow for
+					// optional validators or validators from different versions.
+					continue
+				}
+
+				if err := validator.Validate(bp, mod, rule, group, j); err != nil {
+					// The validator is responsible for creating a BpError with the correct path.
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
