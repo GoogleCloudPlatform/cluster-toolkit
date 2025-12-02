@@ -116,7 +116,7 @@ deployment_groups:
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.34."
-      release_channel: STABLE
+      release_channel: RAPID
     outputs: [instructions]
 
   - id: workload_policy
