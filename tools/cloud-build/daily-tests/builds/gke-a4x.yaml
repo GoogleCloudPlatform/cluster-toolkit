@@ -23,6 +23,9 @@ tags:
 - m.kubectl-apply
 - m.gke-job-template
 - gke
+- m.cloud-storage-bucket
+- m.gke-persistent-volume
+- m.pre-existing-network-storage
 
 timeout: 7200s
 
