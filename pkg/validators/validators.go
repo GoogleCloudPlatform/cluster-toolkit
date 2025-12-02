@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
@@ -228,4 +229,9 @@ func validators(bp config.Blueprint) []config.Validator {
 		}
 	}
 	return vs
+}
+
+// Validator is the interface that all validation patterns must implement.
+type Validator interface {
+	Validate(bp config.Blueprint, mod config.Module, rule modulereader.ValidationRule, group config.Group, modIdx int) error
 }

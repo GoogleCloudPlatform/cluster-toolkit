@@ -18,3 +18,10 @@ spec:
     services:
     - notebooks.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validations:
+  - error_message: "deployment_name must contain only lowercase letters and numbers, start with a letter, and be 1-7 characters long."
+    type: regex
+    vars: [deployment_name]
+    params:
+      pattern: "^[a-z](?:[a-z0-9]{0,6})$"

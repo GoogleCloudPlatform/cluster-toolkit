@@ -84,6 +84,17 @@ func (g *Group) Clone() Group {
 	return c
 }
 
+// ModuleIndex returns the index of the input module in the group
+// return -1 if not found
+func (g Group) ModuleIndex(id ModuleID) int {
+	for i, m := range g.Modules {
+		if m.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // Kind returns the kind of all the modules in the group.
 // If the group contains modules of different kinds, it returns UnknownKind
 func (g Group) Kind() ModuleKind {
