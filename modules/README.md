@@ -236,6 +236,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   software build using [Spack](https://github.com/spack/spack).
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
+* **[gcloud]** ![community-badge] ![experimental-badge] : Executes arbitrary `gcloud` commands with create/destroy lifecycle.
 
 [startup-script]: scripts/startup-script/README.md
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
@@ -246,6 +247,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+[gcloud]: ../community/modules/scripts/gcloud/README.md
 
 ## Module Fields
 
