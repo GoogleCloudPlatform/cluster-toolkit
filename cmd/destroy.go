@@ -22,12 +22,14 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"golang.org/x/net/context"
+	"context"
+
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
@@ -60,6 +62,10 @@ var (
 	}
 )
 
+var (
+	destroyGroupsFunc = destroyGroups
+)
+
 func runDestroyCmd(cmd *cobra.Command, args []string) {
 	deplRoot := args[0]
 	artifactsDir := getArtifactsDir(deplRoot)
@@ -72,6 +78,10 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
+	destroyRunner(deplRoot, artifactsDir, bp, ctx)
+}
+
+func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) {
 	maxRetries := 1
 	if robustDestroy {
 		maxRetries = 3
@@ -80,7 +90,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		logging.Info("Destroy attempt %d of %d", attempt, maxRetries)
 
-		destroyFailed, packerManifests := destroyGroups(deplRoot, artifactsDir, bp, ctx)
+		destroyFailed, packerManifests := destroyGroupsFunc(deplRoot, artifactsDir, bp, ctx)
 
 		if !destroyFailed {
 			logging.Info("Successfully destroyed all selected groups.")
@@ -119,8 +129,12 @@ func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 			projectID, deploymentName, err := getProjectAndDeploymentVars(bp.Vars)
 			if err != nil {
 				logging.Error("Skipping firewall cleanup: could not get required variables. %v", err)
+				destroyFailed = true
+				break
 			} else if err := cleanupFirewallRules(projectID, deploymentName, group); err != nil {
 				logging.Error("Failed to cleanup firewall rules for group %s: %v", group.Name, err)
+				destroyFailed = true
+				break
 			}
 		}
 
@@ -228,47 +242,10 @@ func cleanupFirewallRules(projectID string, deploymentName string, group config.
 		return fmt.Errorf("failed to create compute service: %v", err)
 	}
 
-	// Determine potential network names by mimicking terraform logic
-	potentialNetworkNames := map[string]bool{}
-	for _, module := range group.Modules {
-		source := module.Source
-		settings := module.Settings
-
-		if strings.HasPrefix(source, "modules/network/") || strings.HasPrefix(source, "community/modules/network/") {
-			// Special case for multivpc's unique naming convention
-			if strings.Contains(source, "multivpc") {
-				prefixVal := settings.Get("network_name_prefix")
-				countVal := settings.Get("network_count")
-
-				prefix := deploymentName
-				if !prefixVal.IsNull() && prefixVal.Type() == cty.String && prefixVal.AsString() != "" {
-					prefix = prefixVal.AsString()
-				}
-
-				if !countVal.IsNull() && countVal.Type().IsPrimitiveType() {
-					var count int64
-					if countVal.Type() == cty.Number {
-						count, _ = countVal.AsBigFloat().Int64()
-					} else if countVal.Type() == cty.String {
-						count, _ = strconv.ParseInt(countVal.AsString(), 10, 64)
-					}
-
-					for i := 0; i < int(count); i++ {
-						potentialNetworkNames[fmt.Sprintf("%s-%d", prefix, i)] = true
-					}
-				}
-			} else { // Generic handling for all other network modules
-				if val := settings.Get("network_name"); !val.IsNull() && val.Type() == cty.String && val.AsString() != "" {
-					potentialNetworkNames[val.AsString()] = true
-				} else if strings.Contains(source, "modules/network/vpc") {
-					// Fallback to default naming convention ONLY for the standard vpc module
-					defaultName := strings.ReplaceAll(deploymentName, "_", "-") + "-net"
-					potentialNetworkNames[defaultName] = true
-				}
-			}
-		}
+	potentialNetworkNames, err := getNetworkNamesFromBlueprint(deploymentName, group)
+	if err != nil {
+		return err
 	}
-
 	if len(potentialNetworkNames) == 0 {
 		logging.Info("No network modules found or network names identified in group %s, skipping firewall cleanup.", group.Name)
 		return nil
@@ -292,13 +269,9 @@ func cleanupFirewallRules(projectID string, deploymentName string, group config.
 		return nil
 	}
 
-	var firewallsToDelete []*compute.Firewall
-	for _, network := range networks.Items {
-		fwList, err := computeService.Firewalls.List(projectID).Filter(fmt.Sprintf("network=\"%s\"", network.SelfLink)).Do()
-		if err != nil {
-			return fmt.Errorf("failed to list firewall rules for network %s: %v", network.Name, err)
-		}
-		firewallsToDelete = append(firewallsToDelete, fwList.Items...)
+	firewallsToDelete, err := listAssociatedFirewallRules(projectID, computeService, networks.Items)
+	if err != nil {
+		return err
 	}
 
 	if len(firewallsToDelete) == 0 {
@@ -306,6 +279,32 @@ func cleanupFirewallRules(projectID string, deploymentName string, group config.
 		return nil
 	}
 
+	return confirmAndDeleteFirewallRules(projectID, deploymentName, &computeServiceWrapper{computeService}, firewallsToDelete)
+}
+
+type computeServiceWrapper struct {
+	*compute.Service
+}
+
+func (w *computeServiceWrapper) FirewallsDelete(projectID string, firewall string) (*compute.Operation, error) {
+	return w.Firewalls.Delete(projectID, firewall).Do()
+}
+
+// listAssociatedFirewallRules lists firewall rules associated with a given set of networks.
+func listAssociatedFirewallRules(projectID string, computeService *compute.Service, networks []*compute.Network) ([]*compute.Firewall, error) {
+	var firewallsToDelete []*compute.Firewall
+	for _, network := range networks {
+		fwList, err := computeService.Firewalls.List(projectID).Filter(fmt.Sprintf("network=\"%s\"", network.SelfLink)).Do()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list firewall rules for network %s: %v", network.Name, err)
+		}
+		firewallsToDelete = append(firewallsToDelete, fwList.Items...)
+	}
+	return firewallsToDelete, nil
+}
+
+// confirmAndDeleteFirewallRules confirms with the user and then deletes the specified firewall rules.
+func confirmAndDeleteFirewallRules(projectID string, deploymentName string, computeService firewallDeleter, firewallsToDelete []*compute.Firewall) error {
 	var firewallNames []string
 	for _, fw := range firewallsToDelete {
 		firewallNames = append(firewallNames, fw.Name)
@@ -321,17 +320,93 @@ func cleanupFirewallRules(projectID string, deploymentName string, group config.
 	}
 
 	// Delete firewall rules
+	var deletionErrors []string
 	for _, fwName := range firewallNames {
 		logging.Info("Deleting firewall rule %s...", fwName)
-		_, err := computeService.Firewalls.Delete(projectID, fwName).Do()
+		_, err := computeService.FirewallsDelete(projectID, fwName)
 		if err != nil {
 			// Log non-critical errors and continue trying to delete other rules
-			logging.Error("Failed to delete firewall rule %s: %v", fwName, err)
+			msg := fmt.Sprintf("Failed to delete firewall rule %s: %v", fwName, err)
+			logging.Error("error deleting firewall rule: %s", msg)
+			deletionErrors = append(deletionErrors, msg)
 		}
+	}
+
+	if len(deletionErrors) > 0 {
+		return fmt.Errorf("encountered errors while deleting firewall rules:\n%s", strings.Join(deletionErrors, "\n"))
 	}
 
 	logging.Info("Successfully submitted deletion requests for firewall rules.")
 	return nil
+}
+
+type firewallDeleter interface {
+	FirewallsDelete(projectID string, firewall string) (*compute.Operation, error)
+}
+
+// getNetworkNamesFromBlueprint determines potential network names by mimicking terraform logic
+func getNetworkNamesFromBlueprint(deploymentName string, group config.Group) (map[string]bool, error) {
+	potentialNetworkNames := map[string]bool{}
+	for _, module := range group.Modules {
+		source := module.Source
+		settings := module.Settings
+
+		if strings.Contains(source, "modules/network/vpc") {
+			if val := settings.Get("network_name"); !val.IsNull() && val.Type() == cty.String && val.AsString() != "" {
+				potentialNetworkNames[val.AsString()] = true
+			} else {
+				defaultName := strings.ReplaceAll(deploymentName, "_", "-") + "-net"
+				potentialNetworkNames[defaultName] = true
+			}
+		} else if strings.Contains(source, "modules/network/multivpc") {
+			names, err := getMultivpcNetworkNamesFromSettings(deploymentName, settings)
+			if err != nil {
+				return nil, err
+			}
+			for name := range names {
+				potentialNetworkNames[name] = true
+			}
+		}
+	}
+	return potentialNetworkNames, nil
+}
+
+// getMultivpcNetworkNamesFromSettings extracts network names for multivpc modules.
+func getMultivpcNetworkNamesFromSettings(deploymentName string, settings config.Dict) (map[string]bool, error) {
+	multiVpcNames := map[string]bool{}
+	prefixVal := settings.Get("network_name_prefix")
+	countVal := settings.Get("network_count")
+
+	prefix := deploymentName
+	if !prefixVal.IsNull() && prefixVal.Type() == cty.String && prefixVal.AsString() != "" {
+		prefix = prefixVal.AsString()
+	}
+
+	if !countVal.IsNull() && countVal.Type().IsPrimitiveType() {
+		var count int64
+		if countVal.Type() == cty.Number {
+			bf := countVal.AsBigFloat()
+			if !bf.IsInt() {
+				return nil, fmt.Errorf("network_count must be an integer, but got %s", countVal.GoString())
+			}
+			var acc big.Accuracy
+			count, acc = bf.Int64()
+			if acc != big.Exact {
+				return nil, fmt.Errorf("network_count %s is out of range for int64", countVal.GoString())
+			}
+		} else if countVal.Type() == cty.String {
+			var err error
+			count, err = strconv.ParseInt(countVal.AsString(), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse network_count string %q: %w", countVal.AsString(), err)
+			}
+		}
+
+		for i := 0; i < int(count); i++ {
+			multiVpcNames[fmt.Sprintf("%s-%d", prefix, i)] = true
+		}
+	}
+	return multiVpcNames, nil
 }
 
 func destroyChoice(nextGroup config.GroupName) bool {
