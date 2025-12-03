@@ -46,7 +46,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   service                 = var.service_name
   reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
   deletion_policy         = var.deletion_policy
-  update_on_creation_fail = var.deletion_policy == "ABANDON" ? true : null
+  update_on_creation_fail = true
 }
 
 # Google Cloud NetApp Volumes need enablement of custom_route import and export
