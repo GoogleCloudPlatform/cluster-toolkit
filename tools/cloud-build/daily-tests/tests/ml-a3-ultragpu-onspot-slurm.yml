@@ -15,15 +15,13 @@
 ---
 
 # region, zone must be defined in build file with --extra-vars flag!
-test_name: a4h-slurm-flex
-deployment_name: a4h-slurm-flex-{{ build }}
-slurm_cluster_name: "a4hf{{ build[0:4] }}"
+test_name: a3u-onspot-slurm
+deployment_name: a3u-onspot-slurm-{{ build }}
+slurm_cluster_name: "a3usp{{ build[0:5] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-region: us-central1
-zone: us-central1-b
 network: "{{ test_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -35,17 +33,21 @@ post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
   gpu_count: 8
-  gpu_partition: a4high
+  gpu_partition: a3ultra
   test_persistenced: true
   partitions:
-  - a4high
+  - a3ultra
   mounts:
   - /home
+  - /gcs
+  instance_labels:
+    a3ultra_onspot: true
+  enable_spot: true
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   disk_size_gb: 200
-  a4h_cluster_size: 2
+  a3u_cluster_size: 2
   base_network_name: "{{ test_name }}"
-  a4h_dws_flex_enabled: true
+  a3u_enable_spot_vm: true

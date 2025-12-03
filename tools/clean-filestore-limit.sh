@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 
 set -e -o pipefail
 
+# shellcheck disable=SC2329
 function enable_filestore_api() {
 	status=$?
 	echo "Re-enabling Filestore API..."
@@ -38,7 +39,9 @@ if [[ -n "$ACTIVE_FILESTORE" ]]; then
 	while read -r row; do
 		# get first two columns: INSTANCE_NAME and LOCATION
 		read -ra cols <<<"$row"
-		echo "Deleting ${cols[0]} at ${cols[0]}"
+		echo "Disabling deletion protection for ${cols[0]} at ${cols[1]}"
+		gcloud --project "${PROJECT_ID}" filestore instances update "${cols[0]}" --location="${cols[1]}" --no-deletion-protection --quiet || true
+		echo "Deleting ${cols[0]} at ${cols[1]}"
 		gcloud --project "${PROJECT_ID}" filestore instances delete --force --quiet --location="${cols[1]}" "${cols[0]}"
 	done <<<"$ACTIVE_FILESTORE"
 fi

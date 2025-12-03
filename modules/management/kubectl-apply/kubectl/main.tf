@@ -81,4 +81,12 @@ resource "kubectl_manifest" "apply_doc" {
   yaml_body         = each.value
   server_side_apply = var.server_side_apply
   wait_for_rollout  = var.wait_for_rollout
+  force_conflicts   = var.force_conflicts
+
+  lifecycle {
+    precondition {
+      condition     = !var.force_conflicts || var.server_side_apply
+      error_message = "The 'force_conflicts' variable can only be set to true when 'server_side_apply' is also true."
+    }
+  }
 }

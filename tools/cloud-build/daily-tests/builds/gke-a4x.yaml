@@ -23,10 +23,18 @@ tags:
 - m.kubectl-apply
 - m.gke-job-template
 - gke
+- m.cloud-storage-bucket
+- m.gke-persistent-volume
+- m.pre-existing-network-storage
 
 timeout: 7200s
 
 steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-a4x.yaml"
+
 - id: gke-a4x
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
