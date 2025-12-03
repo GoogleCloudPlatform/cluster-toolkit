@@ -1,0 +1,57 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.custom-image
+- m.startup-script
+- slurm6
+- m.filestore
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.vpc
+- m.cloud-storage-bucket
+- m.multivpc
+- m.private-service-access
+
+timeout: 14400s  # 4hr
+steps:
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "/workspace/tools/cloud-build/check_running_build.sh /workspace/tools/cloud-build/daily-tests/builds/ml-a3-megagpu-onspot-slurm-ubuntu.yaml"
+
+- id: ml-a3-megagpu-slurm
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  # General Ansible configuration
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+
+  # Configuration Variables for the A3-MegaGPU Test.
+  - "MACHINE_TYPE=a3-megagpu-8g"
+  - "IMAGE_FAMILY=slurm-a3mega"
+  - "NUM_NODES=4"
+  - "BLUEPRINT_PATH=/workspace/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
+  - "TEST_VARS_FILE=@tools/cloud-build/daily-tests/tests/ml-a3-megagpu-onspot-slurm-ubuntu.yml"
+  - "INSTANCE_PREFIX=a3msp"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "BUILD_ID=$BUILD_ID"
+  args:
+  - -c
+  - |
+    set -x
+    /workspace/tools/cloud-build/test_spot_vm.sh

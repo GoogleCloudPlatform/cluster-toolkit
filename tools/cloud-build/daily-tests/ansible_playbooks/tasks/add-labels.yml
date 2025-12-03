@@ -1,0 +1,51 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Check if instance_labels are provided and are a dictionary
+  ansible.builtin.assert:
+    that:
+    - custom_vars.instance_labels is defined
+    - custom_vars.instance_labels is mapping
+    - custom_vars.instance_labels | length > 0
+    fail_msg: "custom_vars.instance_labels must be a non-empty dictionary."
+
+# Creates label string of the form "key1=value1,key2=value2" to add to the instances created during the test.
+# Also, transforms key and value to lowercase to be compliant with the gcloud command.
+- name: Prepare label string
+  ansible.builtin.set_fact:
+    labels_string: "{{ custom_vars.instance_labels.items() | map(attribute=0) | map('string') | map('lower') | zip(custom_vars.instance_labels.items() | map(attribute=1) | map('string') | map('lower')) | map('join', '=') | join(',') }}"
+
+- name: Gather instance information
+  ansible.builtin.import_tasks: tasks/get_instance_ids.yml
+
+- name: Report if no instances found
+  ansible.builtin.debug:
+    msg: "No instances found with label ghpc_deployment={{ deployment_name }} in project {{ project }}."
+  when: instances | length == 0
+
+- name: Set up variable for instances found
+  ansible.builtin.set_fact:
+    gce_instances_list: "{{ instances.stdout | default('[]') | from_json }}"
+
+# Updates labels on instances created during the build to monitor metrics such as cost, etc.
+- name: Add spot label to each node
+  ansible.builtin.command: >-
+    gcloud compute instances update {{ item.name }}
+      --project={{ project }}
+      --zone={{ item.zone | basename }}
+      --update-labels={{ labels_string }}
+  loop: "{{ gce_instances_list }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.zone | basename }})"
+  when: gce_instances_list | length > 0
