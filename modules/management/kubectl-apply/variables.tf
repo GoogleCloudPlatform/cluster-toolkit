@@ -18,7 +18,10 @@ locals {
   # This list defines the Kueue Helm chart versions that are officially tested and supported by this toolkit, based on the official changelog.
   # The list should be updated as new versions are tested and approved.
   # Refer https://github.com/kubernetes-sigs/kueue/tree/main/CHANGELOG
-  kueue_supported_versions = ["0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+
+  # Note: The apiVersion associated with the Topology kind should be
+  # kueue.x-k8s.io/v1beta1 when using v0.14.0 or higher. Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.14.md#api-change
+  kueue_supported_versions = ["0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases

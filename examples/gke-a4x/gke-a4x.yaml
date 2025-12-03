@@ -336,6 +336,7 @@ deployment_groups:
       target_architecture: "arm64"
       kueue:
         install: true
+        version: "0.14.4"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
