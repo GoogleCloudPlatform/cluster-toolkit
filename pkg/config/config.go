@@ -273,10 +273,10 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 // unless it has been set to a non-default value; the implementation as an
 // integer is primarily for internal purposes even if it can be set in blueprint
 type Blueprint struct {
-	BlueprintName            string         `yaml:"blueprint_name"`
-	GhpcVersion              string         `yaml:"ghpc_version,omitempty"`
-	Validators               []Validator   `yaml:"validators,omitempty"`
-	ValidationLevel          int            `yaml:"validation_level,omitempty"`
+	BlueprintName            string      `yaml:"blueprint_name"`
+	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
+	Validators               []Validator `yaml:"validators,omitempty"`
+	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
 	Groups                   []Group                      `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
