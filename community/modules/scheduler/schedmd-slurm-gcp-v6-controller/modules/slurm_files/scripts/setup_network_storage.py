@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Optional
 
 import os
 import sys
@@ -154,7 +154,7 @@ def setup_network_storage():
 
 def mount_fstab(mounts: list[NSMount], log):
     """Wait on each mount, then make sure all fstab is mounted"""
-    def mount_path(path: Path):
+    def mount_path(path: Path, mount_owner: Optional[str], mount_perm: Optional[str]):
         log.info(f"Waiting for '{path}' to be mounted...")
         try:
             run(f"mount {path}", timeout=120)
@@ -163,6 +163,20 @@ def mount_fstab(mounts: list[NSMount], log):
             log.error(f"mount of path '{path}' failed: {exc_type}: {e}")
             raise e
         log.info(f"Mount point '{path}' was mounted.")
+        if mount_owner and ":" in mount_owner:
+            user, group = mount_owner.split(":", 2)
+            try:
+                shutil.chown(path, user=user, group=group)
+                log.info(f"Mount point '{path}' changed owner to {user}:{group}.")
+            except LookupError:
+                # allow providing uid / gid, instead of username, password and handle: LookupError: no such user/group
+                os.chown(path, uid=int(user), gid=int(group))
+                log.info(f"Mount point '{path}' changed owner to uid/gid {user}:{group}.")
+
+        if mount_perm:
+            mount_perm_int = int(mount_perm, 8)
+            os.chmod(path, mount_perm_int)
+            log.info(f"Mount point '{path}' changed mode to {mount_perm}.")
 
     MAX_MOUNT_TIMEOUT = 60 * 5
     future_list = []
@@ -173,7 +187,7 @@ def mount_fstab(mounts: list[NSMount], log):
         retry_policy=retry_policy
     ) as exe:
         for m in mounts:
-            future = exe.submit(mount_path, m.local_mount)
+            future = exe.submit(mount_path, m.local_mount, m.local_mount_owner, m.local_mount_permissions)
             future_list.append(future)
 
         # Iterate over futures, checking for exceptions
