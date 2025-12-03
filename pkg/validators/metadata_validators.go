@@ -129,7 +129,6 @@ func (v *RegexValidator) Validate(
 		vars = append(vars, s)
 	}
 
-
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return config.BpError{
