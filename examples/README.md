@@ -29,7 +29,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
   * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
-  * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]  
+  * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -60,7 +60,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
+  * [gke-tpu-v6](#gke-tpu-v6-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
@@ -789,7 +789,7 @@ providing a high-performance file system for demanding workloads.
      volumes:
      - name: lustre-volume
        persistentVolumeClaim:
-         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name  
+         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name
    ```
 
    Note: This is just an example job using busybox image.
@@ -1175,7 +1175,7 @@ to the cluster using `kubectl` and will run on the specified node pool.
     1. The output of the `./gcluster deploy` on CLI includes a `kubectl create` command to create the job.
 
        ```sh
-       kubectl create -f <job-yaml-path> 
+       kubectl create -f <job-yaml-path>
        ```
 
        This command creates a job that uses busybox image and prints `Hello World`. This result can be viewed by looking at the pod logs.
@@ -1580,11 +1580,11 @@ deployment_groups:
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
-### [gke-tpu-v6] ![community-badge] ![experimental-badge]
+### [gke-tpu-v6] ![core-badge]
 
-This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v6/README.md).
+This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-v6/README.md).
 
-[gke-tpu-v6]: ../community/examples/gke-tpu-v6
+[gke-tpu-v6]: ../examples/gke-tpu-v6
 
 ### [xpk-n2-filestore] ![community-badge] ![experimental-badge]
 
