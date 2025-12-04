@@ -52,3 +52,5 @@
   loop_control:
     label: "{{ item.name }}"
   when: gce_instances_list | length > 0
+  environment:
+    CLOUDSDK_CONFIG: /workspace/.config/gcloud

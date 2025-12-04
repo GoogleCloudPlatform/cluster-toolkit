@@ -40,6 +40,8 @@
         AND ({{ instance_id_filter }})
       ' --project={{ project }} --freshness=4h --format="json"
     register: preemption_logs
+    environment:
+      CLOUDSDK_CONFIG: /workspace/.config/gcloud
 
   - name: Display Instance Names being checked
     ansible.builtin.debug:
