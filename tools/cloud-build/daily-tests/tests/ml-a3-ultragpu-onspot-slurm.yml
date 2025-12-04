@@ -15,7 +15,7 @@
 ---
 
 # region, zone must be defined in build file with --extra-vars flag!
-test_name: a3u-onspot-slurm
+test_name: a3u-nofix-onspot-slurm
 deployment_name: a3u-onspot-slurm-{{ build }}
 slurm_cluster_name: "a3usp{{ build[0:5] }}"
 workspace: /workspace
