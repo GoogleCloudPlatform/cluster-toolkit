@@ -51,4 +51,9 @@
   loop: "{{ gce_instances_list }}"
   loop_control:
     label: "{{ item.name }}"
+  register: update_result
+  until: update_result.rc == 0
+  retries: 5
+  delay: 10
   when: gce_instances_list | length > 0
+  delegate_to: localhost
