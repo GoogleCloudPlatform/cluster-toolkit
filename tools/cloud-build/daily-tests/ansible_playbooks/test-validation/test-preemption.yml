@@ -40,6 +40,10 @@
         AND ({{ instance_id_filter }})
       ' --project={{ project }} --freshness=4h --format="json"
     register: preemption_logs
+    delegate_to: localhost
+    retries: 5
+    delay: 10
+    until: preemption_logs.rc == 0
 
   - name: Display Instance Names being checked
     ansible.builtin.debug:
