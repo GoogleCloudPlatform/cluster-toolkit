@@ -470,7 +470,7 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
 
     nodelist = util.to_hostlist(nodes)
     log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+    run(f"{lookup().scontrol} update nodename={nodelist} state=POWER_DOWN reason={reason_quoted}", check=False)
     
     
 
