@@ -632,12 +632,8 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_log_dir = dirs.log
     if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
-    if not cfg.slurm_control_host:
-        try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
-            cfg.slurm_control_host = control_dns_name
-        except MetadataNotFoundError:
-            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+    if not cfg.slurm_control_hosts:
+        raise DeffetiveStoredConfigError("No controllers defined in config")
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
     return cfg
@@ -1556,11 +1552,15 @@ class Lookup:
 
     @property
     def control_host(self):
-        return self.cfg.slurm_control_host
+        return self.cfg.slurm_control_hosts[0]
+    
+    @cached_property
+    def control_hosts(self):
+        return self.cfg.slurm_control_hosts
 
     @cached_property
     def control_host_addr(self):
-        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or host_lookup(self.cfg.slurm_control_hosts[0])
 
     @property
     def control_host_port(self):
@@ -1590,7 +1590,9 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
-
+    @property
+    def is_primary_controller(self):
+        return self.hostname == self.cfg.slurm_control_hosts[0]
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
@@ -1604,6 +1606,8 @@ class Lookup:
 
     @cached_property
     def hostname(self):
+        if self.instance_role == "controller":
+            return instance_metadata("attributes/hostname")
         return socket.gethostname()
 
     @cached_property
