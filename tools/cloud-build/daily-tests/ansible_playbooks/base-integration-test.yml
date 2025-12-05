@@ -181,6 +181,10 @@
       vars:
         timeout_seconds: "{{ startup_timeout_seconds }}"
 
+    - name: Add instance labels for spot instances
+      ansible.builtin.include_tasks: tasks/add-instance-labels.yml
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
@@ -190,6 +194,19 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
+
+    rescue:
+    - name: Display test failure message
+      ansible.builtin.debug:
+        msg: "A task within the integration tests failed. Conditional preemption check will run for spot instances."
+
+    - name: Check for recent preemptions for spot instances
+      ansible.builtin.include_tasks: test-validation/test-preemption.yml
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+
+    - name: Propagate original failure after rescue tasks
+      ansible.builtin.fail:
+        msg: "Integration tests failed. Rescue tasks were executed."
 
     always:
     - name: Cleanup firewall and infrastructure
