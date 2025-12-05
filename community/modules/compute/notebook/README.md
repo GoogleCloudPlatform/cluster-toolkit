@@ -12,7 +12,7 @@ This is a simple usage, using the default network:
 
 ```yaml
   - id: bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings: 
       name_prefix: my-bucket
       local_mount: /home/jupyter/my-bucket
@@ -30,7 +30,7 @@ If the user wants do specify a custom subnetwork, or specific external IP restri
 
 ```yaml
   - id: bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings: 
       name_prefix: my-bucket
       local_mount: /home/jupyter/my-bucket

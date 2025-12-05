@@ -28,12 +28,12 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - id: bucket-w-suffix
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       random_suffix: true
 
   - id: bucket-wo-suffix
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: simulation-results
       use_deployment_name_in_bucket_name: false

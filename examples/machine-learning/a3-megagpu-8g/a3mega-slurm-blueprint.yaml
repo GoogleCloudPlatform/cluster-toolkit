@@ -375,7 +375,7 @@ deployment_groups:
   modules:
   # if an existing bucket is desired, follow modules/file-system/pre-existing-network-storage/README.md
   - id: data-bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /gcs
       mount_options: defaults,rw,_netdev,implicit_dirs,allow_other,implicit_dirs,file_mode=777,dir_mode=777

@@ -161,7 +161,7 @@ deployment_groups:
       - container.admin
 
   - id: training_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /training-data
       name_prefix: training
@@ -170,7 +170,7 @@ deployment_groups:
       enable_hierarchical_namespace: true
 
   - id: checkpoint_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /checkpoint-data
       name_prefix: checkpoint

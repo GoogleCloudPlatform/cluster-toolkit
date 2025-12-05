@@ -54,7 +54,7 @@ module "health_check_firewall_rule" {
 }
 
 module "htcondor_bucket" {
-  source = "../../../../community/modules/file-system/cloud-storage-bucket"
+  source = "../../../../modules/file-system/cloud-storage-bucket"
 
   project_id      = var.project_id
   deployment_name = var.deployment_name

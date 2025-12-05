@@ -45,7 +45,7 @@ deployment_groups:
   modules:
 
   - id: fsi_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: fsi_bucket
       random_suffix: true

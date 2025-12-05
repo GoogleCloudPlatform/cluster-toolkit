@@ -37,7 +37,7 @@ deployment_groups:
       local_mounts: [/home]
 
   - id: bucket-for-startup-script
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
 
   - id: startup-ops
     source: modules/scripts/startup-script

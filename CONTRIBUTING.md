@@ -3,6 +3,15 @@
 We'd love to accept your patches and contributions to this project. There are
 just a few small guidelines you need to follow.
 
+## Branching Strategy
+To maintain a stable release history, this repository follows a specific branching workflow:
+
+`main`: Contains the latest stable release. This branch is only updated during a new release cycle.
+
+`develop`: The active development branch. All new features, bug fixes, and community contributions are merged here first.
+
+**Important**: All Pull Requests must be targeted at the `develop` branch. PRs targeting `main` will be closed or redirected.
+
 ## Contributor License Agreement
 
 Contributions to this project must be accompanied by a Contributor License

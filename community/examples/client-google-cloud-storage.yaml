@@ -31,7 +31,7 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: new-bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: new-bucket
       random_suffix: true

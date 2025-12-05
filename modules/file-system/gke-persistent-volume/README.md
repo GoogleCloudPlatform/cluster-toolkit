@@ -56,7 +56,7 @@ The following example creates a GCS bucket and then uses the
         cidr_block: <your-ip-address>/32
 
   - id: data-bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /data
 

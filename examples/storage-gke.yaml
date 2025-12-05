@@ -88,7 +88,7 @@ deployment_groups:
   ### Google Cloud Storage ###
 
   - id: data-bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /data
       random_suffix: true
