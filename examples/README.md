@@ -66,6 +66,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-g4](#gke-g4-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
+  * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
+  * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1704,6 +1706,24 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
+
+### [eda-all-on-cloud.yaml] ![community-badge]
+
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/libraries` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
+
+[eda-all-on-cloud.yaml]: ../community/examples/eda/eda-all-on-cloud.yaml
+
+### [eda-hybrid-cloud.yaml] ![community-badge]
+
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called `eda-rdma-net` for low latency communication between the compute nodes. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+
+Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/libraries` and `/scratch`. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
+
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
+
+[eda-hybrid-cloud.yaml]: ../community/examples/eda/eda-hybrid-cloud.yaml
 
 ## Blueprint Schema
 
