@@ -77,13 +77,13 @@ deployment_groups:
         destination: /tmp/tune-mpi.sh
 
   - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
 
   - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
     - network1
     - homefs
@@ -94,7 +94,7 @@ deployment_groups:
       is_default: true
 
   - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     settings:
       bandwidth_tier: "gvnic_enabled"
       disable_public_ips: false
@@ -102,7 +102,7 @@ deployment_groups:
       node_count_dynamic_max: 20
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
     - network1
     - homefs
@@ -112,7 +112,7 @@ deployment_groups:
       partition_name: compute
 
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
     - debug_partition
@@ -122,7 +122,7 @@ deployment_groups:
       disable_controller_public_ips: true
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use:
     - network1
     - slurm_controller
