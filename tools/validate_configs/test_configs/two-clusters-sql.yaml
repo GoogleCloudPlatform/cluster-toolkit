@@ -55,7 +55,7 @@ deployment_groups:
 
 - group: cluster1
   modules:
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     kind: terraform
     id: c1partition_0
     use:
@@ -66,7 +66,7 @@ deployment_groups:
       enable_placement: False
       exclusive: False
 
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     id: c1partition_0_group
     use:
     settings:
@@ -85,7 +85,7 @@ deployment_groups:
       tier: "db-g1-small"
 
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     kind: terraform
     id: c1slurm_controller
     settings:
@@ -104,7 +104,7 @@ deployment_groups:
     - c1partition_0
     - c1slurm_sql
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     kind: terraform
     id: c1slurm_login
     use: [c1slurm_controller, hpc_network]
@@ -116,7 +116,7 @@ deployment_groups:
 
 - group: cluster2
   modules:
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     kind: terraform
     id: c2partition_0
     use: [c2partition_0_group, hpc_network]
@@ -125,7 +125,7 @@ deployment_groups:
       enable_placement: False
       exclusive: False
 
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     id: c2partition_0_group
     settings:
       machine_type: c2-standard-60
@@ -143,7 +143,7 @@ deployment_groups:
       tier: "db-g1-small"
 
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     kind: terraform
     id: c2slurm_controller
     use: [hpc_network, c2partition_0, c2slurm_sql]
@@ -160,7 +160,7 @@ deployment_groups:
       slurm_cluster_name: cluster2
 
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     kind: terraform
     id: c2slurm_login
     use: [c2slurm_controller, hpc_network]
