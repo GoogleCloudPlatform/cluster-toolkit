@@ -67,3 +67,10 @@ output "gcs_bucket_name" {
   description = "Bucket name."
   value       = google_storage_bucket.bucket.name
 }
+
+output "anywhere_cache_ids" {
+  description = "The IDs of the created Anywhere Cache instances."
+  value = [
+    for instance in google_storage_anywhere_cache.cache_instances : instance.id
+  ]
+}
