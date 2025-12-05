@@ -18,3 +18,9 @@ spec:
     services: []
 ghpc:
   has_to_be_used: true
+  validators:
+  - validator: regex
+    inputs:
+      vars: [partition_name]
+      pattern: "^[a-z](?:[a-z0-9]*)$"
+    error_message: "'partition_name' must start with a lowercase letter and can only contain lowercase letters and numbers."
