@@ -25,6 +25,7 @@ import time
 import yaml
 from pathlib import Path
 import functools
+import base64
 
 import util
 from util import (
@@ -208,16 +209,24 @@ def mount_save_state_disk():
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
-    if jwt_key.exists():
-        log.info("JWT key already exists. Skipping key generation.")
+    if lookup().cfg.jwt_key:
+        encoded = util.decrypt(lookup().cfg.kms_key, lookup().cfg.jwt_key)
+        with jwt_key.open('wb') as f:
+            f.write(base64.b64decode(encoded))
     else:
-        run("dd if=/dev/urandom bs=32 count=1 > " + str(jwt_key), shell=True)
+        util.run("dd if=/dev/urandom bs=32 count=1 >"+str(jwt_key), shell=True)
 
     util.chown_slurm(jwt_key, mode=0o400)
 
 
 def _generate_key(p: Path) -> None:
-    run(f"dd if=/dev/random of={p} bs=1024 count=1")
+
+    if lookup().cfg.munge_key:
+        encoded = util.decrypt(lookup().cfg.kms_key, lookup().cfg.munge_key)   
+        with p.open('wb') as f:
+            f.write(base64.b64decode(encoded))
+    else:
+        run(f"dd if=/dev/random of={p} bs=1024 count=1")
 
 
 def setup_key(lkp: util.Lookup) -> None:
