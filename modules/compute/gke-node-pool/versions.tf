@@ -33,6 +33,6 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.74.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.45.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.74.0"
   }
 }
