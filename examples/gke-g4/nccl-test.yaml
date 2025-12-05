@@ -19,7 +19,8 @@ metadata:
   labels:
     app: nccl-test
 spec:
-  ttlSecondsAfterFinished: 600
+  ttlSecondsAfterFinished: 1200
+  suspend: False
   template:
     metadata:
       labels:
