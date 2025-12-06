@@ -1,0 +1,45 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This blueprint demonstrates the use of the gcloud community module to create a network, subnet, and VM.
+
+blueprint_name: gcloud-example
+
+vars:
+  project_id: # Set Your Project ID
+  region: us-central1
+  zone: us-central1-a
+  deployment_name: gcloud-test
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gcloud_commands
+    source: community/modules/scripts/gcloud
+    settings:
+      commands:
+      - create: "gcloud compute networks create $(vars.deployment_name)-net --project=$(vars.project_id) --subnet-mode=custom"
+        delete: "gcloud compute networks delete $(vars.deployment_name)-net --project=$(vars.project_id) --quiet"
+      - create: "gcloud compute networks subnets create $(vars.deployment_name)-subnet --project=$(vars.project_id) --network=$(vars.deployment_name)-net --range=10.10.0.0/24 --region=$(vars.region)"
+        delete: "gcloud compute networks subnets delete $(vars.deployment_name)-subnet --project=$(vars.project_id) --region=$(vars.region) --quiet"
+      - create: >-
+          gcloud compute instances create $(vars.deployment_name)-vm
+          --project=$(vars.project_id)
+          --zone=$(vars.zone)
+          --network=$(vars.deployment_name)-net
+          --subnet=$(vars.deployment_name)-subnet
+          --machine-type=e2-micro
+          --image-family=debian-11
+          --image-project=debian-cloud
+        delete: "gcloud compute instances delete $(vars.deployment_name)-vm --project=$(vars.project_id) --zone=$(vars.zone) --quiet"
