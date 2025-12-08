@@ -42,8 +42,6 @@ steps:
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=4"
-  - "IMAGE_PROJECT=ubuntu-os-accelerator-images"
-  - "IMAGE_NAME=ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722"
   - "MACHINE_TYPE=a3-ultragpu-8g"
   - "INSTANCE_PREFIX=a3usp"
   - "BUILD_ID=$BUILD_ID"

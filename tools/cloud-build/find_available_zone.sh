@@ -73,38 +73,16 @@ for ZONE in "${ZONES_ARRAY[@]}"; do
 	readarray -t INSTANCE_NAMES_ARRAY < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
 
 	declare -a GCLOUD_CMD
-	COMMON_FLAGS=(
+	GCLOUD_CMD=(
+		gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}"
 		--project="${PROJECT_ID}"
 		--zone="${ZONE}"
 		--machine-type="${MACHINE_TYPE}"
-		--image-project="${IMAGE_PROJECT}"
 		--provisioning-model="${PROVISIONING_MODEL}"
 		--instance-termination-action="${TERMINATION_ACTION}"
+		--no-address
 		--quiet
 	)
-
-	if [[ "${MACHINE_TYPE}" == "a3-ultragpu-8g" ]]; then
-		if [[ -z "${IMAGE_NAME}" ]]; then
-			echo "ERROR: IMAGE_NAME must be set for a3-ultragpu-8g" >&2
-			exit 1
-		fi
-		GCLOUD_CMD=(
-			gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}"
-			"${COMMON_FLAGS[@]}"
-			--image="${IMAGE_NAME}"
-		)
-	else
-		if [[ -z "${IMAGE_FAMILY}" ]]; then
-			echo "ERROR: IMAGE_FAMILY must be set for ${MACHINE_TYPE}" >&2
-			exit 1
-		fi
-		GCLOUD_CMD=(
-			gcloud compute instances create "${INSTANCE_NAMES_ARRAY[@]}"
-			"${COMMON_FLAGS[@]}"
-			--image-family="${IMAGE_FAMILY}"
-			--no-address
-		)
-	fi
 	if CREATE_OUTPUT=$("${GCLOUD_CMD[@]}" 2>&1); then
 		cleanup_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 		SELECTED_ZONE="${ZONE}"
