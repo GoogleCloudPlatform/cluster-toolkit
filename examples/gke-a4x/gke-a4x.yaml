@@ -179,7 +179,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: training_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /training-data
       name_prefix: training
@@ -188,7 +188,7 @@ deployment_groups:
       enable_hierarchical_namespace: true
 
   - id: checkpoint_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /checkpoint-data
       name_prefix: checkpoint
@@ -336,6 +336,7 @@ deployment_groups:
       target_architecture: "arm64"
       kueue:
         install: true
+        version: "0.14.4"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
