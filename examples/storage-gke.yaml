@@ -75,7 +75,7 @@ deployment_groups:
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
-    outputs: [instructions]
+    outputs: [instructions, k8s_service_account_name]
 
   - id: debug_pool
     source: modules/compute/gke-node-pool
@@ -93,6 +93,11 @@ deployment_groups:
       local_mount: /data
       random_suffix: true
       force_destroy: true
+      anywhere_cache:
+        zones: [$(vars.zone)]
+        ttl: "86400s"
+        admission_policy: "admit-on-first-miss"
+    outputs: [gcs_bucket_name]
 
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume
