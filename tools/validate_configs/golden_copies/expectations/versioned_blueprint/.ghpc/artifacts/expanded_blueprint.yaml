@@ -33,6 +33,7 @@ vars:
     - us-central1-c
     - us-central1-f
   instance_image_custom: false
+  lustre_instance_id: lustre-instance
   labels:
     ghpc_blueprint: versioned
     ghpc_deployment: ((var.deployment_name))
@@ -63,6 +64,13 @@ deployment_groups:
       - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/vpc?ref=v1.38.0&depth=1
         kind: terraform
         id: network
+        settings:
+          deployment_name: ((var.deployment_name))
+          project_id: ((var.project_id))
+          region: ((var.region))
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/network/private-service-access?ref=v1.38.0&depth=1
+        kind: terraform
+        id: private_service_access
         settings:
           deployment_name: ((var.deployment_name))
           project_id: ((var.project_id))
@@ -129,15 +137,19 @@ deployment_groups:
           project_id: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.49.0&depth=1
         kind: terraform
         id: managed-lustre
         use:
           - network
+          - private_service_access
         settings:
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
+          lustre_instance_id: ((var.lustre_instance_id)
           local_mount: /lustre
+          remote_mount: lustrefs
+          size_gib: 36000
           network_self_link: ((module.network.network_self_link))
           network_id: ((module.network.network_id))
           project_id: ((var.project_id))

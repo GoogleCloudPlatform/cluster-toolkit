@@ -27,10 +27,6 @@ post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-managed-lustre-vm.yml
 custom_vars:
-  output_dir: /lustre/test
   num_slurm_nodes: 1
   mounts:
   - /lustre
-  vm_os_types:
-  - ubuntu
-

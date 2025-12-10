@@ -53,7 +53,7 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 		},
 		"modules/file-system/managed-lustre": {
-		        "lustre.googleapis.com",
+			"lustre.googleapis.com",
 		},
 		"modules/project/service-account": {
 			"iam.googleapis.com",
