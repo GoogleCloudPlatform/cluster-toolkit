@@ -37,5 +37,6 @@ cli_deployment_vars:
   reservation: "{{ extended_reservation }}"
 custom_vars:
   project: "{{ project }}"
+  expected_tpu_count: 8
 post_deploy_tests:
-- test-validation/test-gke-job.yml
+- test-validation/test-gke-tpu.yml
