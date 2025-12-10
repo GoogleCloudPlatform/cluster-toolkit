@@ -100,9 +100,9 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | ../../../../community/modules/project/service-account | n/a |
-| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | ../../../../community/modules/project/service-account | n/a |
-| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | ../../../../community/modules/project/service-account | n/a |
+| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | ../../../../modules/project/service-account | n/a |
+| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | ../../../../modules/project/service-account | n/a |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | ../../../../modules/project/service-account | n/a |
 
 ## Resources
 

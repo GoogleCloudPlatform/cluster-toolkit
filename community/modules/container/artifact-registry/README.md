@@ -23,7 +23,7 @@ You will need to enable the relevant APIs and create a Service Account for your 
         - cloudbuild.googleapis.com
         - artifactregistry.googleapis.com
 
-  - source: community/modules/project/service-account
+  - source: modules/project/service-account
     kind: terraform
     id: hpc_service_account
     settings:
