@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hpc-slurm-ubuntu2004-v6
+blueprint_name: hpc-slurm-ubuntu2204-v6
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
