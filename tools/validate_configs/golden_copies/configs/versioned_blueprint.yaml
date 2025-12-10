@@ -16,7 +16,7 @@
 
 blueprint_name: versioned
 toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: v1.38.0
+toolkit_modules_version: v1.49.0
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
@@ -31,6 +31,7 @@ vars:
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false
+  lustre_instance_id: lustre-instance
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
@@ -50,6 +51,10 @@ deployment_groups:
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
   - id: network
     source: modules/network/vpc
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
 
   - id: controller_sa
     source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.37.0&depth=1
@@ -96,9 +101,12 @@ deployment_groups:
   # This file system has an associated license cost.
   - id: managed-lustre
     source: modules/file-system/managed-lustre
-    use: [network]
+    use: [network, private_service_access]
     settings:
+      name: $(vars.lustre_instance_id)
       local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 36000
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset

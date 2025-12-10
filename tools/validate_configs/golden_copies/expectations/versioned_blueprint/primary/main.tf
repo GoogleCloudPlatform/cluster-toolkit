@@ -21,6 +21,13 @@ module "network" {
   region          = var.region
 }
 
+module "private_service_access" {
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/network/private-service-access?ref=v1.38.0&depth=1"
+  deployment_name = var.deployment_name
+  project_id      = var.project_id
+  region          = var.region
+}
+
 module "controller_sa" {
   source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.37.0&depth=1"
   deployment_name = var.deployment_name
@@ -68,10 +75,13 @@ module "projectsfs" {
 }
 
 module "managed-lustre" {
-  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.38.0&depth=1"
+  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.49.0&depth=1"
   deployment_name      = var.deployment_name
   labels               = var.labels
+  lustre_instance_id   = var.lustre_instance_id
   local_mount          = "/lustre"
+  remote_mount         = "lustrefs"
+  size_gib             = 36000
   network_self_link    = module.network.network_self_link
   network_id           = module.network.network_id
   project_id           = var.project_id
