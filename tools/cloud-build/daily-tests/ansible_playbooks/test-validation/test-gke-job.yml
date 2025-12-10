@@ -40,6 +40,10 @@
       kubectl wait --for=condition=complete "job/${JOB_NAME}" --timeout=10m
     args:
       executable: /bin/bash
+    register: job_completion
+    until: job_completion.rc == 0
+    retries: 5
+    delay: 10
   rescue:
   - name: "FAILURE: Job did not complete. Capturing debug info."
     ansible.builtin.debug:

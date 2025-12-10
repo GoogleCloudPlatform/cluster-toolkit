@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,21 +11,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
-test_name: storage-gke
-deployment_name: gke-storage-{{ build }}
-region: us-central1
-zone: us-central1-a  # for remote node
+
+# region, zone must be defined
+# in build file with --extra-vars flag!
+test_name: gke-a3u-spot
+deployment_name: gke-a3u-spot-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/storage-gke.yaml"
-network: "{{ test_name }}-net"
-remote_node: "{{ deployment_name }}-0"
-post_deploy_tests:
-- test-validation/test-anywhere-cache.yml
+blueprint_yaml: "{{ workspace }}/examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"
+network: "{{ deployment_name }}-net-0"
+remote_node: "{{ deployment_name }}-remote-node-0"
+static_node_count: 2
+instance_type: a3-ultra
+accelerator_type: nvidia-h200-141gb
+num_gpus: 16
 cli_deployment_vars:
   region: "{{ region }}"
-  network_name: "{{ network }}"
+  zone: "{{ zone }}"
+  static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
 custom_vars:
   project: "{{ project }}"
+  instance_labels:
+    a3ultra_onspot: true
+  enable_spot: true
+post_deploy_tests:
+- test-validation/test-gke-job.yml
+- test-validation/test-gke-a3-ultra.yml
+- test-validation/test-gke-kueue-config.yml

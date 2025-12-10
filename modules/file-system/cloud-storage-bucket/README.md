@@ -128,6 +128,7 @@ No modules.
 
 | Name | Type |
 |------|------|
+| [google-beta_google_storage_anywhere_cache.cache_instances](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_anywhere_cache) | resource |
 | [google-beta_google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
@@ -136,6 +137,8 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_anywhere_cache"></a> [anywhere\_cache](#input\_anywhere\_cache) | Anywhere Cache configurations.<br/>When you create a cache for a bucket, the cache must be created in a zone within the location of your bucket.<br/>For example, if your bucket is located in the us-east1 region, you can create a cache in us-east1-b but not us-central1-c.<br/>If your bucket is located in the ASIA dual-region, you can create a cache in any zones that make up the asia-east1 and asia-southeast1 regions.<br/>This validation only works for single regions. | <pre>object({<br/>    zones            = list(string)<br/>    ttl              = optional(string, "86400s")<br/>    admission_policy = optional(string, "admit-on-first-miss")<br/>  })</pre> | `null` | no |
+| <a name="input_anywhere_cache_create_timeout"></a> [anywhere\_cache\_create\_timeout](#input\_anywhere\_cache\_create\_timeout) | Timeout for Anywhere Cache creation operations. Can be set to a duration like '1h' or '30m'.<br/>The maximum documented creation time is 48 hours. Please refer to the official documentation for more details on timeouts:<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_anywhere_cache#timeouts | `string` | `"240m"` | no |
 | <a name="input_autoclass"></a> [autoclass](#input\_autoclass) | Configure bucket autoclass setup<br/><br/>The autoclass config supports automatic transitions of objects in the bucket to appropriate storage classes based on each object's access pattern.<br/><br/>The terminal storage class defines that objects in the bucket eventually transition to if they are not read for a certain length of time. <br/>Supported values include: 'NEARLINE', 'ARCHIVE' (Default 'NEARLINE')<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/storage/docs/autoclass | <pre>object({<br/>    enabled                = optional(bool, false)<br/>    terminal_storage_class = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the GCS bucket. | `string` | n/a | yes |
 | <a name="input_enable_hierarchical_namespace"></a> [enable\_hierarchical\_namespace](#input\_enable\_hierarchical\_namespace) | If true, enables hierarchical namespace for the bucket. This option must be configured during the initial creation of the bucket. | `bool` | `false` | no |
@@ -162,6 +165,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_anywhere_cache_ids"></a> [anywhere\_cache\_ids](#output\_anywhere\_cache\_ids) | The IDs of the created Anywhere Cache instances. |
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use gcs fuse. |
 | <a name="output_gcs_bucket_name"></a> [gcs\_bucket\_name](#output\_gcs\_bucket\_name) | Bucket name. |
 | <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | The gsutil bucket path with format of `gs://<bucket-name>`. |

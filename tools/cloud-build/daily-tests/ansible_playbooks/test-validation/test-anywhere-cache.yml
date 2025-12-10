@@ -1,0 +1,59 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Get outputs from primary group
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: terraform output -json
+    chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+  register: outputs
+  changed_when: false
+
+- name: Set necessary facts
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    bucket_name: "{{ (outputs.stdout | from_json)['gcs_bucket_name_data-bucket']['value'] }}"
+    k8s_service_account_name: "{{ (outputs.stdout | from_json)['k8s_service_account_name_gke_cluster']['value'] }}"
+    cache_zone: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['zone'] }}"
+
+- name: Get GKE cluster credentials
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region={{ region }} --project {{ custom_vars.project }} --verbosity=debug
+  changed_when: false
+
+- name: Create test file
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "hello world"
+    dest: "/tmp/testfile.txt"
+
+- name: Upload test file to GCS bucket
+  delegate_to: localhost
+  ansible.builtin.command: gcloud storage cp /tmp/testfile.txt gs://{{ bucket_name }}/testfile.txt
+  changed_when: false
+
+- name: Read file from GCS bucket
+  delegate_to: localhost
+  ansible.builtin.command: "kubectl run gcs-reader-{{ build }} --image=google/cloud-sdk:slim --rm -i --restart=Never --overrides='{\"spec\":{\"serviceAccountName\": \"{{ k8s_service_account_name }}\"}}' -- /bin/bash -c \"gcloud storage cat gs://{{ bucket_name }}/testfile.txt > /dev/null\""
+  changed_when: false
+
+- name: Wait for cache creation
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud alpha storage operations list gs://{{ bucket_name }} --format=json | jq -e '.[] | select(.metadata.commonMetadata.type == "create-anywhere-cache" and .done == true and (has("error") | not))'
+  register: cache_operation
+  until: cache_operation.rc == 0
+  retries: 6
+  delay: 10
+  changed_when: false

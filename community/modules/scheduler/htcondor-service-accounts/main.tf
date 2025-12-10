@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-# NB: the community/modules/project/service-account module will not output the
+# NB: the modules/project/service-account module will not output the
 # service account e-mail address until all IAM bindings have been created; if
 # underlying implementation changes, this module should declare explicit
 # depends_on the IAM bindings to prevent race conditions for services that
 # require them
 
 module "access_point_service_account" {
-  source = "../../../../community/modules/project/service-account"
+  source = "../../../../modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Access Point"
@@ -31,7 +31,7 @@ module "access_point_service_account" {
 }
 
 module "execute_point_service_account" {
-  source = "../../../../community/modules/project/service-account"
+  source = "../../../../modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Execute Point"
@@ -41,7 +41,7 @@ module "execute_point_service_account" {
 }
 
 module "central_manager_service_account" {
-  source = "../../../../community/modules/project/service-account"
+  source = "../../../../modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Central Manager"
