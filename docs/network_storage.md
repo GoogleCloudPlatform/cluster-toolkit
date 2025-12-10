@@ -107,7 +107,7 @@ nfs-server | via USE | via USE | via USE | via STARTUP | via USE | via USE
 cloud-storage-bucket (GCS)| via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre | via USE | via USE | via USE | Needs Testing | via USE | via USE
 Managed Lustre | via USE | Needs Testing | via USE | Needs Testing | Needs Testing |  Needs Testing
-netapp-volume | Needs Testing | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
+netapp-volume | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
   |  |   |   |   |   |  
 filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
