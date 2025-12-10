@@ -76,7 +76,7 @@ deployment_groups:
 ###### GKE Setup ######
 
   - id: gke_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: slinky-gke-sa
       project_roles:
