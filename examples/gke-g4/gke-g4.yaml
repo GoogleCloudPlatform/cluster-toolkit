@@ -190,6 +190,7 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        wait: true
       jobset:
         install: true
 
