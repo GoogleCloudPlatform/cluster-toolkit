@@ -14,51 +14,51 @@
 package validators
 
 import (
-    "hpc-toolkit/pkg/config"
-    "hpc-toolkit/pkg/modulereader"
-    "testing"
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
+	"testing"
 
-    "github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestRegexValidator(t *testing.T) {
-    // Fake blueprint for testing
-    bp := config.Blueprint{
-        BlueprintName: "test-bp",
-        Groups: []config.Group{
-            {
-                Name: "primary",
-                Modules: []config.Module{
-                    {
-                        ID:     "test-module",
-                        Source: "test/module",
-                        Settings: config.NewDict(map[string]cty.Value{
-                            "name": cty.StringVal("Invalid-Name"),
-                        }),
-                    },
-                },
-            },
-        },
-    }
+	// Fake blueprint for testing
+	bp := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"name": cty.StringVal("Invalid-Name"),
+						}),
+					},
+				},
+			},
+		},
+	}
 
-    // Validation rule from metadata.yaml
-    rule := modulereader.ValidationRule{
-        Validator:    "regex",
-        ErrorMessage: "'name' must be lowercase and start with a letter.",
-        Inputs: map[string]interface{}{
-            "vars":    []interface{}{"name"},
-            "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
-        },
-    }
+	// Validation rule from metadata.yaml
+	rule := modulereader.ValidationRule{
+		Validator:    "regex",
+		ErrorMessage: "'name' must be lowercase and start with a letter.",
+		Inputs: map[string]interface{}{
+			"vars":    []interface{}{"name"},
+			"pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
+		},
+	}
 
-    validator := RegexValidator{}
-    err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-    if err == nil {
-        t.Errorf("Expected validation error, but got nil")
-    }
+	validator := RegexValidator{}
+	err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+	if err == nil {
+		t.Errorf("Expected validation error, but got nil")
+	}
 
-    expectedError := "deployment_groups[0].modules[0].settings.name: 'name' must be lowercase and start with a letter."
-    if err.Error() != expectedError {
-        t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
-    }
+	expectedError := "deployment_groups[0].modules[0].settings.name: 'name' must be lowercase and start with a letter."
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', but got '%s'", expectedError, err.Error())
+	}
 }
