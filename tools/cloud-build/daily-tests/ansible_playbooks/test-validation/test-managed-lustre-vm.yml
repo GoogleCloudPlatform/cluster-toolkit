@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,49 @@
 # limitations under the License.
 
 ---
-- name: Ensure a file exists for each OS type
-  with_items: "{{ custom_vars.vm_os_types }}"
-  ansible.builtin.shell: |
-    test $(cat {{ custom_vars.output_dir }}/{{ item }}.txt) == '{{ item }}'
-  args:
-    executable: /bin/bash
+- name: Lustre Integration Test
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    mount_point: "/lustre"
+    test_content: "Lustre Write Test is Successful"
+    expected_fs_type: "lustre"
+  tasks:
+  - name: Verify Mount Point Exists and is Lustre Type
+    ansible.builtin.command: stat -f -c %T "{{ mount_point }}"
+    register: fs_type
+    changed_when: false
+    failed_when: fs_type.stdout | trim != expected_fs_type
+    vars:
+      ansible_failed_result:
+        msg: "Filesystem at {{ mount_point }} is not '{{ expected_fs_type }}'. Found: {{ fs_type.stdout | trim }}"
+
+  - name: Set Unique Test Filename
+    ansible.builtin.set_fact:
+      test_file: "{{ mount_point }}/ansible_test_{{ 999 | random }}.txt"
+
+  - name: Write Canary File to Lustre
+    ansible.builtin.copy:
+      content: "{{ test_content }}"
+      dest: "{{ test_file }}"
+    become: yes
+
+  - name: Read Canary File
+    ansible.builtin.slurp:
+        src: "{{ test_file }}"
+    register: file_content
+    become: yes
+
+  - name: Verify Content
+    ansible.builtin.assert:
+      that:
+        - (file_content.content | b64decode) == test_content
+      fail_msg: "Content mismatch! Expected: '{{ test_content }}', Found: '{{ file_content.content | b64decode }}'"
+      quiet: yes
+
+  - name: Remove Canary File (Clean Up)
+    ansible.builtin.file:
+      path: "{{ test_file }}"
+      state: absent
+    become: yes
