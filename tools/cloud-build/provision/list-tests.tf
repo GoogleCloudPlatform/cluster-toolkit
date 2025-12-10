@@ -14,5 +14,5 @@
 # limitations under the License.
 
 data "external" "list_tests_midnight" {
-  program = ["./list_tests.py", "30", "300"] # 00:30 - 05:00
+  program = ["./list_tests.py", "30", "390"] # 00:30 - 06:30
 }
