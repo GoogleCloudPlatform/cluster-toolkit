@@ -269,6 +269,6 @@ func validators(bp config.Blueprint) []config.Validator {
 }
 
 // Validator is the interface that all validation patterns must implement.
-type Validators interface {
+type RuleValidator interface {
 	Validate(bp config.Blueprint, mod config.Module, rule modulereader.ValidationRule, group config.Group, modIdx int) error
 }

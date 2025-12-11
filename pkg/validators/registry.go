@@ -15,6 +15,6 @@
 package validators
 
 // Registry maps validation type strings to their corresponding validator implementation.
-var Registry = map[string]Validators{
+var Registry = map[string]RuleValidator{
 	"regex": &RegexValidator{},
 }
