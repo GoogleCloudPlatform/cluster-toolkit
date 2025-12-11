@@ -137,7 +137,6 @@ deployment_groups:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
       instance_image: $(vars.slurm_image)
-      bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
       allow_automatic_updates: false
