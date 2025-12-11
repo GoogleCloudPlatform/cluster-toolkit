@@ -115,6 +115,27 @@ The process is nearly identical to the basic deployment.
 
 1. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
 
+## Advanced Scheduling with Kueue
+
+This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native system for managing quotas and job queuing. This is enabled by default in the advanced blueprint (`gke-tpu-v6-advanced.yaml`).
+
+### Usage
+
+1. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue` matching the total static TPU capacity of your cluster (slices x nodes x chips).
+2. **Submit a Job:** To submit a job to the queue, add the label `kueue.x-k8s.io/queue-name: user-queue` to your Job or JobSet manifest.
+
+    A sample job file is provided: `kueue-job-sample.yaml`.
+
+    ```sh
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6/kueue-job-sample.yaml
+    ```
+
+3. **Validation:** Check the status of your workload.
+
+    ```sh
+    kubectl get workloads
+    ```
+
 ## Run the sample job
 
 The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6/tpu-multislice.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.

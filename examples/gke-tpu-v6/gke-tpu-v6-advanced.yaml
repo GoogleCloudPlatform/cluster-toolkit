@@ -53,6 +53,9 @@ vars:
   v6e_node_pool_disk_size_gb: 100
   version_prefix: "1.33."
 
+  # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # # Managed Lustre is only supported in specific regions and zones
@@ -285,6 +288,12 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-v6-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6-pool.tpu_accelerator_type)
       jobset:
         install: true
 
