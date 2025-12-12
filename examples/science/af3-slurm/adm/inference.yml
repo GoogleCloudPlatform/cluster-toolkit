@@ -17,12 +17,12 @@
   become: true
 
   vars:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
 
   tasks:
-  - name: Create local jax_compilation_cache_path
+  - name: Create local jax_compilation_cache_dir
     ansible.builtin.file:
-      path: "{{ jax_compilation_cache_path }}"
+      path: "{{ jax_compilation_cache_dir }}"
       state: directory
       mode: '0777'
-    when: jax_compilation_cache_path != ""
+    when: jax_compilation_cache_dir != ""
