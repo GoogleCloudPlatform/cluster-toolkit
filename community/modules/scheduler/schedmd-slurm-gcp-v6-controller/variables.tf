@@ -394,10 +394,12 @@ EOD
 
 variable "controller_state_disk" {
   description = <<EOD
-  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  A regional (high-availability) disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
 
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  
+  -When using more than one controller (HA setup), this disk is required and must be of type "hyperdisk-balanced-high-availability".
   EOD
   type = object({
     type = string
@@ -405,8 +407,27 @@ variable "controller_state_disk" {
   })
 
   default = {
-    type = "pd-ssd"
+    type = "hyperdisk-balanced-high-availability"
     size = 50
+  }
+
+  validation {
+    condition = (
+      var.nb_controllers <= 1 ||
+      (
+        var.controller_state_disk != null &&
+        (
+          try(var.controller_state_disk.type, "") == "hyperdisk-balanced-high-availability"
+        )
+      )
+    )
+
+    error_message = <<EOF
+Invalid 'controller_state_disk' configuration:
+- When using more than one controller (HA setup), you must define a non-null 'controller_state_disk'.
+- The 'type' field must be set to 'hyperdisk-balanced-high-availability'.
+- Do not set this variable to null in HA mode.
+EOF
   }
 }
 
