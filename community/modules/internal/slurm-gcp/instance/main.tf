@@ -34,6 +34,7 @@ locals {
         alias_ip_range     = []
         ipv6_access_config = []
         network            = var.network
+        network_attachment = null
         network_ip         = length(var.static_ips) == 0 ? "" : element(local.static_ips, index)
         nic_type           = null
         queue_count        = null
@@ -106,6 +107,7 @@ resource "google_compute_instance_from_template" "slurm_instance" {
         }
       }
       network            = nic.value.network
+      network_attachment = nic.value.network_attachment
       network_ip         = nic.value.network_ip
       nic_type           = nic.value.nic_type
       queue_count        = nic.value.queue_count
