@@ -13,13 +13,8 @@
 # limitations under the License.
 
 locals {
-  auto_approved_pr_tests = [
-    "slurm-gcp-v6-simple-job-completion"
-  ]
+  auto_approved_pr_tests = []
 
-  no_auto_trigger_tests = [
-    "slurm-gcp-v6-simple-job-completion"
-  ]
 }
 
 
@@ -37,7 +32,7 @@ resource "google_cloudbuild_trigger" "pr_test" {
     owner = "GoogleCloudPlatform"
     name  = "cluster-toolkit"
     pull_request {
-      branch          = contains(local.no_auto_trigger_tests, each.key) ? "no-auto-trigger" : ".*"
+      branch          = ".*"
       comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
