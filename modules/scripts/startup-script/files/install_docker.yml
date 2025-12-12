@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,32 +21,80 @@
     docker_daemon_config: ''
     enable_docker_world_writable: false
   tasks:
+  - name: Gather distribution facts
+    ansible.builtin.setup:
+      gather_subset: platform
+
   - name: Check if docker is installed
     ansible.builtin.stat:
       path: /usr/bin/docker
     register: docker_binary
-  - name: Download Docker Installer
-    ansible.builtin.get_url:
-      url: https://get.docker.com
-      dest: /tmp/get-docker.sh
-      owner: root
-      group: root
-      mode: '0644'
-    when: not docker_binary.stat.exists
-  - name: Install Docker
-    ansible.builtin.command: sh /tmp/get-docker.sh
-    register: docker_installed
-    changed_when: docker_installed.rc != 0
-    when: not docker_binary.stat.exists
+
+  # Rocky Linux specific installation
+  - name: Install Docker on Rocky Linux
+    when:
+    - ansible_distribution == "Rocky"
+    - not docker_binary.stat.exists
+    block:
+    - name: Add Docker GPG key
+      ansible.builtin.rpm_key:
+        state: present
+        key: https://download.docker.com/linux/rhel/gpg
+      register: add_docker_key
+      retries: 30
+      delay: 10
+      until: add_docker_key is succeeded
+
+    - name: Add Docker repository for Rocky Linux
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/rhel/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: '0644'
+        owner: root
+        group: root
+
+    - name: Install Docker Engine Community Edition
+      ansible.builtin.dnf:
+        name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin
+        - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+  # Other distributions installation
+  - name: Install Docker on other distributions
+    when:
+    - ansible_distribution != "Rocky"
+    - not docker_binary.stat.exists
+    block:
+    - name: Download Docker Installer
+      ansible.builtin.get_url:
+        url: https://get.docker.com
+        dest: /tmp/get-docker.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install Docker Engine Community Edition
+      ansible.builtin.command: sh /tmp/get-docker.sh
+      register: docker_installed
+      changed_when: docker_installed.rc == 0
+      failed_when: docker_installed.rc != 0
+
+  # Common tasks for all distributions
   - name: Create Docker daemon configuration
     ansible.builtin.copy:
       dest: /etc/docker/daemon.json
+      content: "{{ docker_daemon_config }}"
+      owner: root
+      group: root
       mode: '0644'
-      content: '{{ docker_daemon_config }}'
       validate: /usr/bin/dockerd --validate --config-file %s
-    when: docker_daemon_config
-    notify:
-    - Restart Docker
+    when: docker_daemon_config | length > 0
+
   - name: Create Docker service override directory
     ansible.builtin.file:
       path: /etc/systemd/system/docker.service.d
@@ -54,6 +102,7 @@
       owner: root
       group: root
       mode: '0755'
+
   - name: Create Docker service override configuration
     ansible.builtin.copy:
       dest: /etc/systemd/system/docker.service.d/data-root.conf
@@ -64,25 +113,29 @@
         RequiresMountsFor={{ docker_data_root }}
         {% endif %}
         After=mount-localssd-raid.service
-  - name: Create Docker socket override directory
-    ansible.builtin.file:
-      path: /etc/systemd/system/docker.socket.d
-      state: directory
-      owner: root
-      group: root
-      mode: '0755'
-    when: enable_docker_world_writable
-  - name: Create Docker socket override configuration
-    ansible.builtin.copy:
-      dest: /etc/systemd/system/docker.socket.d/world-writable.conf
-      mode: '0644'
-      content: |
-        [Socket]
-        SocketMode=0666
-    when: enable_docker_world_writable
-    notify:
-    - Reload SystemD
-    - Recreate Docker socket
+    notify: Reload SystemD
+
+  - when: enable_docker_world_writable
+    block:
+    - name: Create Docker socket override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.socket.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create Docker socket override configuration
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.socket.d/world-writable.conf
+        mode: '0644'
+        content: |
+          [Socket]
+          SocketMode=0666
+      notify:
+      - Reload SystemD
+      - Recreate Docker socket
+
   - name: Delete Docker socket override configuration
     ansible.builtin.file:
       path: /etc/systemd/system/docker.socket.d/world-writable.conf
@@ -100,14 +153,10 @@
     ansible.builtin.service:
       name: docker.socket
       state: restarted
+
+  post_tasks:
   - name: Restart Docker
     ansible.builtin.service:
       name: docker.service
       state: restarted
-
-  post_tasks:
-  - name: Start Docker
-    ansible.builtin.service:
-      name: docker.service
-      state: started
       enabled: true
