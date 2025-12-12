@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
@@ -115,7 +116,44 @@ func Execute(bp config.Blueprint) error {
 			}
 		}
 	}
+
+	// Run module-metadata-based validators
+	if err := validateBlueprintWithMetadata(bp); err != nil {
+		errs.Add(err)
+	}
+
 	return errs.OrNil()
+}
+
+// validateBlueprintWithMetadata runs metadata-based validations.
+func validateBlueprintWithMetadata(bp config.Blueprint) error {
+	for _, group := range bp.Groups {
+		for j, mod := range group.Modules {
+			if mod.Kind != config.TerraformKind {
+				continue
+			}
+
+			mtd := mod.InfoOrDie().Metadata
+			if len(mtd.Ghpc.Validators) == 0 {
+				continue
+			}
+
+			for _, rule := range mtd.Ghpc.Validators {
+				validator, found := Registry[rule.Validator]
+				if !found {
+					// This could be a warning in the future if we want to allow for
+					// optional validators or validators from different versions.
+					continue
+				}
+
+				if err := validator.Validate(bp, mod, rule, group, j); err != nil {
+					// The validator is responsible for creating a BpError with the correct path.
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func checkInputs(inputs config.Dict, required []string) error {
@@ -228,4 +266,9 @@ func validators(bp config.Blueprint) []config.Validator {
 		}
 	}
 	return vs
+}
+
+// Validator is the interface that all validation patterns must implement.
+type RuleValidator interface {
+	Validate(bp config.Blueprint, mod config.Module, rule modulereader.ValidationRule, group config.Group, modIdx int) error
 }

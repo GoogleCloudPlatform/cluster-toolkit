@@ -49,6 +49,16 @@ type MetadataGhpc struct {
 	InjectModuleId string `yaml:"inject_module_id"`
 	// If set to true, the creation will fail if the module is not used.
 	HasToBeUsed bool `yaml:"has_to_be_used"`
+	// NEW: Add a slice to hold validation rules
+	Validators []ValidationRule `yaml:"validators"`
+}
+
+// NEW: Define the struct for a single validation rule
+type ValidationRule struct {
+	Validator string                 `yaml:"validator"` // e.g., "regex", "onlyOneOf", "min", "max"
+	Inputs    map[string]interface{} `yaml:"inputs"`    // Flexible parameters for the rule (e.g., pattern, vars)
+
+	ErrorMessage string `yaml:"error_message"`
 }
 
 // GetMetadata reads and parses `metadata.yaml` from module root.
