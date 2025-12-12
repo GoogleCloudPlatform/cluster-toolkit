@@ -115,8 +115,10 @@ variable "maintenance_exclusions" {
   default = []
   validation {
     condition = alltrue([
-      for x in var.maintenance_exclusions :
-      (x.end_time != null && length(trimspace(x.end_time)) > 0) != (x.exclusion_end_time_behavior != null)
+      for x in var.maintenance_exclusions : (
+        ((x.end_time != null) != (x.exclusion_end_time_behavior != null)) &&
+        (x.end_time == null || length(trimspace(x.end_time)) > 0)
+      )
     ])
     error_message = "For each maintenance exclusion, exactly one of 'end_time' or 'exclusion_end_time_behavior' must be specified. If 'end_time' is provided, it cannot be an empty string."
   }
