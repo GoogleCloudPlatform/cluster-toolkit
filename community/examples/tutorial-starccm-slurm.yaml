@@ -17,6 +17,8 @@
 blueprint_name: starccm-on-slurm
 toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
 toolkit_modules_version: v1.41.0
+# NOTE: This blueprint uses the now-deprecated schedmd-slurm-gcp-v5 modules and is no longer
+# actively maintained or supported.
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
