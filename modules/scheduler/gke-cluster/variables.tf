@@ -104,12 +104,13 @@ variable "maintenance_start_time" {
 }
 
 variable "maintenance_exclusions" {
-  description = "List of maintenance exclusions. A cluster can have up to three."
+  description = "List of maintenance exclusions. A cluster can have up to three. exclusion_end_time_behavior is the exclusion window end time behavior. One of 'UNTIL_END_OF_SUPPORT' end_time_behavior or end_time should be specified."
   type = list(object({
-    name            = string
-    start_time      = string
-    end_time        = string
-    exclusion_scope = string
+    name                        = string
+    start_time                  = string
+    end_time                    = string
+    exclusion_scope             = string
+    exclusion_end_time_behavior = optional(string)
   }))
   default = []
   validation {
