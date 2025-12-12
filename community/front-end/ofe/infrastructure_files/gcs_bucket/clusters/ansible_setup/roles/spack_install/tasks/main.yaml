@@ -76,3 +76,19 @@
 - name: Set MPICH default options
   ansible.builtin.command: "{{ spack_dir }}/bin/spack config --scope site add packages:mpich:variants:'+slurm netmod=tcp'"
   when: True
+
+- name: Configure Python warnings to suppress tarfile extraction warnings
+  ansible.builtin.lineinfile:
+    path: /etc/environment
+    line: 'PYTHONWARNINGS="ignore"'
+    state: present
+    create: yes
+  when: True
+
+- name: Add Python warnings to Spack profile
+  ansible.builtin.lineinfile:
+    path: "{{ spack_dir }}/share/spack/setup-env.sh"
+    line: 'export PYTHONWARNINGS="ignore"'
+    insertafter: '^#.*spack.*setup'
+    state: present
+  when: True

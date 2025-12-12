@@ -23,7 +23,29 @@
     {% csrf_token %}
     <br/>
     <p>Are you sure you want to delete <b>{{ object }}</b>?</p>
-    <input type="submit" value="Confirm" class="btn btn-danger">
+
+    {% if has_active_jobs %}
+    <div class="alert alert-warning" role="alert">
+      <h5><i class="fas fa-exclamation-triangle"></i> Warning: Active Jobs Detected</h5>
+      <p>This cluster currently has <strong>{{ active_jobs }} active job(s)</strong>:</p>
+      <ul>
+        <li><strong>SLURM Status:</strong> {{ slurm_summary }}</li>
+        <li><strong>Cluster Status:</strong> {{ object.get_status_display }}</li>
+      </ul>
+      <p><strong>Deleting this cluster will terminate all running jobs and may result in data loss.</strong></p>
+      <p>Consider waiting for jobs to complete or manually cancelling them before deletion.</p>
+    </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+      <p><i class="fas fa-info-circle"></i> No active jobs detected. Safe to delete.</p>
+    </div>
+    {% endif %}
+
+    <div class="alert alert-danger" role="alert">
+      <p><strong>This action cannot be undone.</strong> All cluster resources will be permanently deleted.</p>
+    </div>
+
+    <input type="submit" value="Confirm Delete" class="btn btn-danger">
     <a href="javascript:history.go(-1)" class="btn btn-outline-secondary">Cancel</a>    
   </form>
 

@@ -46,6 +46,7 @@ from ..serializers import VirtualNetworkSerializer, VirtualSubnetSerializer
 from ..permissions import SuperUserRequiredMixin
 from collections import defaultdict
 import json
+from ..cluster_manager import utils
 
 import logging
 
@@ -82,6 +83,7 @@ class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
         context["navtab"] = "vpc"
+        context["is_local_mode"] = utils.is_local_mode()
         context["subnets"] = VirtualSubnet.objects.filter(vpc=self.kwargs["pk"])
         vpc = get_object_or_404(VirtualNetwork, pk=self.kwargs["pk"])
 
@@ -115,6 +117,7 @@ class VPCCreateView1(SuperUserRequiredMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["is_local_mode"] = utils.is_local_mode()
         context["navtab"] = "vpc"
         return context
 
@@ -180,6 +183,7 @@ class VPCCreateView2(SuperUserRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
+        context["is_local_mode"] = utils.is_local_mode()
         context["navtab"] = "vpc"
         return context
 
@@ -336,6 +340,7 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
         context["navtab"] = "vpc"
+        context["is_local_mode"] = utils.is_local_mode()
         return context
 
     def get_success_url(self):
@@ -353,6 +358,7 @@ class VPCDeleteView(SuperUserRequiredMixin, DeleteView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "vpc"
+        context["is_local_mode"] = utils.is_local_mode()
         return context
 
     def delete(self, *args, **kwargs):
@@ -394,6 +400,7 @@ class VPCDestroyView(SuperUserRequiredMixin, generic.DetailView):
         subnets = VirtualSubnet.objects.filter(vpc=context["virtualnetwork"].id)
         context["subnets"] = subnets
         context["navtab"] = "vpc"
+        context["is_local_mode"] = utils.is_local_mode()
         return context
 
 
@@ -483,6 +490,7 @@ class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "vpc"
+        context["is_local_mode"] = utils.is_local_mode()
         return context
 
 
@@ -509,8 +517,14 @@ class BackendCreateVPC(BackendAsyncView):
             return redirect_to_login(request.get_full_path)
         await self.test_user_is_cluster_admin(request.user)
 
-        args = await self.get_orm(pk)
-        await self.create_task("Create VPC", *args)
+        if utils.is_local_mode():
+            # In local mode create the VPC directly
+            vpc = await sync_to_async(VirtualNetwork.objects.get)(pk=pk)
+            await sync_to_async(create_vpc)(vpc)
+        else:
+            args = await self.get_orm(pk)
+            await self.create_task("Create VPC", *args)
+
         return HttpResponseRedirect(reverse("vpc-detail", kwargs={"pk": pk}))
 
 
@@ -536,8 +550,18 @@ class BackendStartVPC(BackendAsyncView):
             return redirect_to_login(request.get_full_path)
         await self.test_user_is_cluster_admin(request.user)
 
-        args = await self.get_orm(pk)
-        await self.create_task("Start VPC", *args)
+        if utils.is_local_mode():
+            # In local mode start the VPC directly
+            vpc = await sync_to_async(VirtualNetwork.objects.get)(pk=pk)
+            vpc.cloud_state = "cm"
+            await sync_to_async(vpc.save)()
+            await sync_to_async(start_vpc)(vpc)
+            vpc.cloud_state = "m"
+            await sync_to_async(vpc.save)()
+        else:
+            args = await self.get_orm(pk)
+            await self.create_task("Start VPC", *args)
+
         return HttpResponseRedirect(reverse("vpc-detail", kwargs={"pk": pk}))
 
 

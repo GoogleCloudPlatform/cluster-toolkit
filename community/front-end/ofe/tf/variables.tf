@@ -103,9 +103,38 @@ variable "deployment_key" {
   description = "Name to identify resources from this deployment"
 }
 
-
 variable "extra_labels" {
   type        = map(any)
   default     = {}
   description = "Extra labels to apply to created GCP resources."
+}
+
+variable "oauth_attach_existing" {
+  type        = bool
+  default     = false
+  description = "Whether to attach to an existing IAP brand. Required when an IAP brand already exists in the project."
+}
+
+variable "oauth_project_id" {
+  type        = string
+  default     = ""
+  description = "Project ID where OAuth/IAP brand should be created or exists. If not provided, will use the main project_id."
+}
+
+variable "oauth_support_email" {
+  type        = string
+  default     = ""
+  description = "Support email for OAuth/IAP brand. If not provided, will use django_su_email."
+}
+
+variable "oauth_application_title" {
+  type        = string
+  default     = ""
+  description = "Application title for OAuth/IAP brand. If not provided, will use 'deployment_name - webserver_hostname'."
+}
+
+variable "oauth_client_display_name" {
+  type        = string
+  default     = ""
+  description = "Display name for OAuth/IAP client. If not provided, will use 'deployment_name OAuth Client'."
 }

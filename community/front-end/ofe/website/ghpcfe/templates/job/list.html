@@ -16,15 +16,153 @@
 
 {% extends "base_generic.html" %}
 
+{% load job_extras %}
+
 {% block meta %}
   {% if loading == 1 %}
-  <meta http-equiv="refresh" content="15" />
+  <script>
+    // Preserve current page and filters during auto-refresh
+    function getCurrentPageUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // Build the base URL with all current parameters
+      let refreshUrl = '{% url "jobs" %}?';
+      const params = [];
+
+      // Add all current parameters
+      for (const [key, value] of urlParams.entries()) {
+        if (key !== 'page' || value !== '1') {  // Don't add page=1 to avoid redundancy
+          params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+        }
+      }
+
+      // Ensure we have at least a page parameter
+      if (!urlParams.has('page')) {
+        params.unshift('page=1');
+      }
+
+      return refreshUrl + params.join('&');
+    }
+
+    // Set up auto-refresh with preserved page and filters
+    setTimeout(function() {
+      window.location.href = getCurrentPageUrl();
+    }, 15000);
+  </script>
   {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script src="{% static 'js/jquery.cookie.js' %}"></script>
+<style>
+.dropdown-item.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.dropdown-item.btn-warning.disabled {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+/* Bootstrap 4 compatible close button */
+.alert-dismissible .close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    padding: 0.75rem 1.25rem;
+    color: inherit;
+}
+</style>
 {% endblock %}
 
 {% block content %}
 
-  <h2>Job List</h2>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Job List</h2>
+    <a href="{% url 'applications' %}" class="btn btn-primary">
+      <i class="fas fa-plus"></i> New Job
+    </a>
+  </div>
+
+  <!-- Auto-refresh status indicator -->
+  {% if loading == 1 %}
+  <div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="fas fa-sync-alt fa-spin"></i>
+    <strong>Auto-refreshing every 15 seconds</strong>
+    {% if active_job_count > 0 %}
+      - {{ active_job_count }} active job(s) being monitored
+    {% elif recent_job_count > 0 %}
+      - Monitoring for new jobs ({{ recent_job_count }} recent jobs)
+    {% endif %}
+    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  </div>
+  {% else %}
+  <div class="alert alert-light alert-dismissible fade show" role="alert">
+    <i class="fas fa-info-circle"></i>
+    <strong>Manual refresh mode</strong> - All jobs are completed or older than 24 hours
+    <a href="{% url 'jobs' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-sm btn-outline-primary ml-2">
+      <i class="fas fa-sync-alt"></i> Refresh Now
+    </a>
+    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  </div>
+  {% endif %}
+
+  <!-- Search and Filter Form -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <form method="get">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label for="status-filter" class="form-label">Status:</label>
+            <select class="form-control" id="status-filter" name="status">
+              <option value="">All Statuses</option>
+              {% for status_code, status_name in status_choices %}
+                <option value="{{ status_code }}" {% if status_filter == status_code %}selected{% endif %}>{{ status_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="cluster-filter" class="form-label">Cluster:</label>
+            <select class="form-control" id="cluster-filter" name="cluster">
+              <option value="">All Clusters</option>
+              {% for cluster in available_clusters %}
+                <option value="{{ cluster.id }}" {% if cluster_filter == cluster.id|stringformat:"s" %}selected{% endif %}>{{ cluster.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if user.has_admin_role %}
+          <div class="col-md-3">
+            <label for="job-type-filter" class="form-label">Job Type:</label>
+            <select class="form-control" id="job-type-filter" name="job_type">
+              <option value="">All Job Types</option>
+              {% for job_type_code, job_type_name in job_type_choices %}
+                <option value="{{ job_type_code }}" {% if job_type_filter == job_type_code %}selected{% endif %}>{{ job_type_name|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="col-md-3">
+            <label for="search-input" class="form-label">Search:</label>
+            <input type="text" class="form-control" id="search-input" name="search" value="{{ search_query }}" placeholder="Job name, app, cluster, SLURM ID...">
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-12">
+            <button type="submit" class="btn btn-primary mr-2">Filter</button>
+            <a href="{% url 'jobs' %}" class="btn btn-secondary">Clear</a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   {% if job_list %}
   <div class="table-responsive" style="min-height:20em;">
   <table class="table align-middle">
@@ -33,8 +171,14 @@
         <th scope="col">#</th>
         <th scope="col">Name</th>
         <th scope="col">Submitted at</th>
+        {% if user.is_superuser or user.has_admin_role %}
+        <th scope="col">User</th>
+        {% endif %}
         <th scope="col">Cluster</th>
+        <th scope="col">Partition</th>
         <th scope="col">Application</th>
+        <th scope="col">SLURM ID</th>
+        <th scope="col">SLURM Status</th>
         <th scope="col">Instance Type</th>
         <th scope="col"># nodes</th>
         <th scope="col">Ranks / node</th>
@@ -50,12 +194,79 @@
         <th>{{ job.id }}</th>
         <td><a href="{% url 'job-detail' job.id %}">{{ job.name }}</a></td>
         <td>{{ job.date_time_submission }}</td>
-        <td>{{ job.application.cluster.name }}</td>
-        <td><a href="{% url 'application-detail' job.application.id %}">{{ job.application.name }}</a></td>
+        {% if user.is_superuser or user.has_admin_role %}
+        <td>{{ job.user.username }}</td>
+        {% endif %}
+        <td>
+          {% if job.application %}
+            {{ job.application.cluster.name }}
+          {% elif job.cluster %}
+            {{ job.cluster.name }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>{{ job.partition.name }}</td>
+        <td>
+          {% if job.application %}
+            <a href="{% url 'application-detail' job.application.id %}">{{ job.application.name }}</a>
+          {% else %}
+            {% if job.job_type == 'installation' %}
+              <span class="text-muted">Installation Job</span>
+            {% else %}
+              <span class="text-muted">External Job</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          {% if job.slurm_jobid %}
+            <span class="badge bg-info text-light">{{ job.slurm_jobid }}</span>
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if job.slurm_status %}
+            <span class="badge {{ job|job_success_badge_class }} text-light">
+              {{ job|job_success_status }}
+            </span>
+            {% if job.slurm_additional_states %}
+              <br>
+              {% for state in job.slurm_additional_states %}
+                <span class="badge bg-secondary text-light" style="font-size: 0.7em; margin-top: 2px;">
+                  {{ state }}
+                </span>
+              {% endfor %}
+            {% endif %}
+            {% if job.slurm_exit_code and job.slurm_status == 'COMPLETED' %}
+              <br><small class="text-muted">{{ job|job_exit_code_display }}</small>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
         <td>{{ job.partition.machine_type }}</td>
-        <td>{{ job.number_of_nodes }}</td>
-        <td>{{ job.ranks_per_node }}</td>
-        <td>{{ job.threads_per_rank }}</td>
+        <td>
+          {% if job.application %}
+            {{ job.number_of_nodes }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if job.application %}
+            {{ job.ranks_per_node }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if job.application %}
+            {{ job.threads_per_rank }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
         <td>
           {% if job.status == "p" or job.status == "q" or job.status == "d" or job.status == "r" or job.status == "u" %}
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">
@@ -71,7 +282,13 @@
           {% endif %}
           {{ job.get_status_display }}
         </td>
-	<td>{% if job.status != "c" and job.status != "e" %}<={% endif %}${{ job.job_cost }}</td>
+        <td>
+          {% if not job.application %}
+            <span class="text-muted">N/A</span>
+          {% else %}
+            {% if job.status != "c" and job.status != "e" %}<={% endif %}${{ job.job_cost }}
+          {% endif %}
+        </td>
         <td>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -79,7 +296,7 @@
             </button>
             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-detail' job.id %}">Detail</a>
-              {% if job.application.cluster.status == "r" %}
+              {% if job.application and job.application.cluster.status == "r" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-rerun' job.id %}">Run again</a>
               {% endif %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-delete' job.id %}">Delete</a>
@@ -91,8 +308,82 @@
     </tbody>
   </table>
   </div>
+
+  <!-- Pagination -->
+  {% if is_paginated %}
+  <nav aria-label="Job pagination">
+    <ul class="pagination justify-content-center">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="{% pagination_url 1 %}">&laquo; First</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="{% pagination_url page_obj.previous_page_number %}">Previous</a>
+        </li>
+      {% endif %}
+
+      <!-- Page numbers -->
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <li class="page-item active">
+            <span class="page-link">{{ num }}</span>
+          </li>
+        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+          <li class="page-item">
+            <a class="page-link" href="{% pagination_url num %}">{{ num }}</a>
+          </li>
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{% pagination_url page_obj.next_page_number %}">Next</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="{% pagination_url page_obj.paginator.num_pages %}">Last &raquo;</a>
+        </li>
+      {% endif %}
+    </ul>
+
+    <!-- Page info -->
+    <div class="text-center mt-2">
+      <small class="text-muted">
+        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} jobs
+      </small>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <div class="mt-2">
+          <form method="get" class="d-inline-block" style="max-width: 200px;">
+            <!-- Preserve all current filters -->
+            {% if search_query %}
+              <input type="hidden" name="search" value="{{ search_query }}">
+            {% endif %}
+            {% if status_filter %}
+              <input type="hidden" name="status" value="{{ status_filter }}">
+            {% endif %}
+            {% if cluster_filter %}
+              <input type="hidden" name="cluster" value="{{ cluster_filter }}">
+            {% endif %}
+            {% if job_type_filter %}
+              <input type="hidden" name="job_type" value="{{ job_type_filter }}">
+            {% endif %}
+
+            <div class="input-group input-group-sm">
+              <input type="number" class="form-control" name="page" min="1" max="{{ page_obj.paginator.num_pages }}" 
+                     value="{{ page_obj.number }}" style="width: 60px;">
+              <div class="input-group-append">
+                <button class="btn btn-outline-secondary" type="submit">Go</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
+
   {% else %}
-    <p>No jobs have been set up yet. Create one from the Application Page!</p>
+    <p>No jobs found. {% if search_query or status_filter or cluster_filter %}<a href="{% url 'jobs' %}">Clear filters</a> to see all jobs.{% endif %}</p>
   {% endif %}
 
   <br/>

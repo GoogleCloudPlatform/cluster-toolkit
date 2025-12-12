@@ -18,6 +18,9 @@
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from .models import AuthorisedUser
+from django.contrib.sites.models import Site
+from allauth.socialaccount.models import SocialApp
+from ghpcfe.cluster_manager import utils
 
 import logging
 
@@ -52,3 +55,13 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                 "User %s not authorised to access this system.", u.email
             )
         return ret
+
+    def get_app(self, request, provider, client_id=None, **kwargs):
+        # Always first try to pull an existing SocialApp record for this site
+        site = Site.objects.get_current()
+        apps = SocialApp.objects.filter(provider=provider, sites=site)
+        if apps.exists():
+            return apps.first()
+        # If none is found, fall back to the base behaviour (may still raise
+        # if you truly meant to require one)
+        return super().get_app(request, provider, client_id=client_id, **kwargs)

@@ -40,11 +40,37 @@
     {% for job in jobs %}
       <tr>
         <td>{{ job.date_time_submission }}</td>
-        <td>{{ job.application.cluster.name }}</td>
+        <td>
+          {% if job.application %}
+            {{ job.application.cluster.name }}
+          {% elif job.cluster %}
+            {{ job.cluster.name }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
         <td>{{ job.instance_type }}</td>
-        <td>{{ job.number_of_nodes }}</td>
-        <td>{{ job.ranks_per_node }}</td>
-        <td>{{ job.threads_per_rank }}</td>
+        <td>
+          {% if job.application %}
+            {{ job.number_of_nodes }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if job.application %}
+            {{ job.ranks_per_node }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if job.application %}
+            {{ job.threads_per_rank }}
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
         <td>{{ job.result_value }}</td>
         <td>
           <div class="dropdown">
@@ -53,7 +79,9 @@
             </button>
             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-detail' job.id %}">Job Detail</a>
+              {% if job.application and job.application.cluster.status == "r" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'job-rerun' job.id %}">Run again</a>
+              {% endif %}
 	    </div>
           </div>
         </td>
