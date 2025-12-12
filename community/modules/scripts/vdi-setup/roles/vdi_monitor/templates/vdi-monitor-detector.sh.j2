@@ -1,0 +1,341 @@
+#!/bin/bash
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VDI Monitor Change Detection Module
+# Contains change detection logic and reconfiguration functions
+
+# Function to check if monitoring system is initialized
+is_system_initialized() {
+    local vars_file="$VDI_SETUP_DIR/vars.yaml"
+    if [[ ! -f "$vars_file" ]]; then
+        return 1
+    fi
+    
+    # Check if file tracking is initialized for all required files
+    if [[ ! -f "/opt/vdi-setup/.current_vars_file" ]] || \
+       [[ ! -f "/opt/vdi-setup/.current_install_file" ]] || \
+       [[ ! -f "/opt/vdi-setup/.current_roles_file" ]]; then
+        return 1
+    fi
+    
+    return 0  # Fully initialized
+}
+
+# Function to check if configuration files have changed
+check_config_changed() {
+    local changed=false
+    local change_details=""
+    
+    # Check vars.yaml
+    local current_vars_file=$(get_current_file_name "vars.yaml")
+    local stored_vars_file=$(get_stored_file_name "vars")
+    
+    if [[ "$current_vars_file" != "$stored_vars_file" ]]; then
+        change_details+="vars.yaml: $stored_vars_file -> $current_vars_file; "
+        changed=true
+    fi
+    
+    # Check install.yaml
+    local current_install_file=$(get_current_file_name "install.yaml")
+    local stored_install_file=$(get_stored_file_name "install")
+    
+    if [[ "$current_install_file" != "$stored_install_file" ]]; then
+        change_details+="install.yaml: $stored_install_file -> $current_install_file; "
+        changed=true
+    fi
+    
+    # Check roles.tar.gz
+    local current_roles_file=$(get_current_file_name "roles.tar.gz")
+    local stored_roles_file=$(get_stored_file_name "roles")
+    
+    if [[ "$current_roles_file" != "$stored_roles_file" ]]; then
+        change_details+="roles.tar.gz: $stored_roles_file -> $current_roles_file; "
+        changed=true
+    fi
+    
+    # Check for reset_password flags
+    if check_reset_password_flags; then
+        change_details+="reset_password flags detected; "
+        changed=true
+    fi
+    
+    # Store change details for logging
+    if [[ "$changed" == "true" ]]; then
+        echo "$change_details" > "/opt/vdi-setup/.pending_changes"
+        log_message "Configuration changes detected: $change_details"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to check if any user has reset_password flags set
+check_reset_password_flags() {
+    local vars_file="$VDI_SETUP_DIR/vars.yaml"
+    if [[ ! -f "$vars_file" ]]; then
+        return 1
+    fi
+    
+    local in_users_section=false
+    local has_reset_flag=false
+    
+    while IFS= read -r line; do
+        # Check if we're in the vdi_users section
+        if [[ "$line" =~ ^[[:space:]]*vdi_users:[[:space:]]*$ ]]; then
+            in_users_section=true
+            continue
+        fi
+        
+        # Check if we've left the vdi_users section
+        if [[ "$in_users_section" == "true" && "$line" =~ ^[[:space:]]*[a-zA-Z] ]]; then
+            in_users_section=false
+            continue
+        fi
+        
+        if [[ "$in_users_section" == "true" ]]; then
+            # Check for reset_password flag
+            if [[ "$line" =~ reset_password:[[:space:]]*(true|yes|1) ]]; then
+                has_reset_flag=true
+                log_message "DEBUG: Found reset_password flag set to true"
+                break
+            fi
+        fi
+    done < "$vars_file"
+    
+    if [[ "$has_reset_flag" == "true" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to trigger VDI re-configuration
+trigger_reconfig() {
+    log_message "Triggering VDI re-configuration"
+    
+    # Update deployment status to "reconfiguring"
+    update_deployment_status "reconfiguring"
+    
+    # Log pending changes if available
+    if [[ -f "/opt/vdi-setup/.pending_changes" ]]; then
+        local pending_changes=$(cat "/opt/vdi-setup/.pending_changes")
+        log_message "Pending changes to apply: $pending_changes"
+    fi
+    
+    # First, sync latest files from bucket
+    if ! sync_changed_files; then
+        log_message "WARNING: No files changed or failed to sync, proceeding with local files"
+    fi
+    
+    # Change to VDI setup directory
+    cd "$VDI_SETUP_DIR" || {
+        log_message "ERROR: Cannot change to $VDI_SETUP_DIR"
+        update_deployment_status "available"
+        return 1
+    }
+    
+    # Verify files exist before running Ansible
+    log_message "DEBUG: Checking required files before Ansible execution"
+    if [[ ! -f "install.yaml" ]]; then
+        log_message "ERROR: install.yaml not found in $VDI_SETUP_DIR"
+        update_deployment_status "available"
+        return 1
+    fi
+    if [[ ! -f "vars.yaml" ]]; then
+        log_message "ERROR: vars.yaml not found in $VDI_SETUP_DIR"
+        update_deployment_status "available"
+        return 1
+    fi
+    
+    log_message "DEBUG: Running Ansible playbook from $(pwd)"
+    log_message "DEBUG: Command: ansible-playbook install.yaml --connection=local --inventory=localhost, --limit=localhost --extra-vars=@vars.yaml"
+    
+    # Run Ansible playbook with re-configuration
+    ansible-playbook install.yaml \
+        --connection=local \
+        --inventory=localhost, \
+        --limit=localhost \
+        --extra-vars="@vars.yaml" \
+        --extra-vars="debug=true" \
+        >> "$ANSIBLE_LOG" 2>&1
+    
+    local exit_code=$?
+    log_message "DEBUG: Ansible exit code: $exit_code"
+    
+    if [[ $exit_code -eq 0 ]]; then
+        log_message "VDI re-configuration completed successfully"
+        update_deployment_status "available"
+    else
+        log_message "ERROR: VDI re-configuration failed with exit code $exit_code"
+        log_message "Check $ANSIBLE_LOG for details"
+        # Show last few lines of Ansible log for debugging
+        if [[ -f "$ANSIBLE_LOG" ]]; then
+            log_message "DEBUG: Last 10 lines of Ansible log:"
+            tail -10 "$ANSIBLE_LOG" | while read line; do
+                log_message "DEBUG: $line"
+            done
+        fi
+        update_deployment_status "failed"
+    fi
+    
+    return $exit_code
+}
+
+# Function to update deployment status
+update_deployment_status() {
+    local status="$1"
+    local instance_name=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/name")
+    local zone=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/zone" | sed 's/.*\/\([^\/]*\)$/\1/')
+    local project_id=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id")
+    
+    if [[ -n "$instance_name" && -n "$zone" && -n "$project_id" ]]; then
+        log_message "Updating deployment status to: $status"
+        
+        # Retry logic for metadata updates to handle fingerprint conflicts
+        local max_retries=3
+        local retry_count=0
+        local success=false
+        
+        while [[ $retry_count -lt $max_retries && "$success" == "false" ]]; do
+            if gcloud compute instances add-metadata "$instance_name" \
+                --zone="$zone" \
+                --project="$project_id" \
+                --metadata="deployment-status=$status" \
+                --quiet 2>/dev/null; then
+                success=true
+                log_message "Successfully updated deployment status to: $status"
+            else
+                retry_count=$((retry_count + 1))
+                if [[ $retry_count -lt $max_retries ]]; then
+                    log_message "WARNING: Failed to update deployment status (attempt $retry_count/$max_retries), retrying in 2 seconds..."
+                    sleep 2
+                else
+                    log_message "WARNING: Failed to update deployment status after $max_retries attempts"
+                fi
+            fi
+        done
+    else
+        log_message "WARNING: Could not determine instance metadata for status update"
+    fi
+}
+
+# Function to run monitoring loop
+run_monitoring_loop() {
+    log_message "Starting VDI monitoring loop"
+    
+    # Initialize file tracking
+    initialize_file_tracking
+    
+    # Always refresh file tracking on startup to capture current bucket state
+    log_message "Refreshing file tracking to capture current bucket state..."
+    
+    # Debug: Check bucket name and tracking files
+    log_message "DEBUG: Bucket name: '$BUCKET_NAME'"
+    log_message "DEBUG: Checking existing tracking files:"
+    log_message "DEBUG:   .current_vars_file exists: $([[ -f "/opt/vdi-setup/.current_vars_file" ]] && echo 'yes' || echo 'no')"
+    log_message "DEBUG:   .current_install_file exists: $([[ -f "/opt/vdi-setup/.current_install_file" ]] && echo 'yes' || echo 'no')"
+    log_message "DEBUG:   .current_roles_file exists: $([[ -f "/opt/vdi-setup/.current_roles_file" ]] && echo 'yes' || echo 'no')"
+    
+    # Update file tracking with current bucket state
+    local current_vars_file=$(get_current_file_name "vars.yaml")
+    log_message "DEBUG: Current vars file from bucket: '$current_vars_file'"
+    if [[ -n "$current_vars_file" ]]; then
+        store_file_name "vars" "$current_vars_file"
+        log_message "Updated vars file tracking: $current_vars_file"
+    else
+        log_message "WARNING: No vars.yaml file found in bucket"
+    fi
+    
+    local current_install_file=$(get_current_file_name "install.yaml")
+    log_message "DEBUG: Current install file from bucket: '$current_install_file'"
+    if [[ -n "$current_install_file" ]]; then
+        store_file_name "install" "$current_install_file"
+        log_message "Updated install file tracking: $current_install_file"
+    else
+        log_message "WARNING: No install.yaml file found in bucket"
+    fi
+    
+    local current_roles_file=$(get_current_file_name "roles.tar.gz")
+    log_message "DEBUG: Current roles file from bucket: '$current_roles_file'"
+    if [[ -n "$current_roles_file" ]]; then
+        store_file_name "roles" "$current_roles_file"
+        log_message "Updated roles file tracking: $current_roles_file"
+    else
+        log_message "WARNING: No roles.tar.gz file found in bucket"
+    fi
+    
+    log_message "File tracking refresh complete"
+    
+    # Cooldown variable to prevent rapid reconfigurations
+    local last_reconfig_time=0
+    
+    # Check for changes immediately after initialization
+    log_message "Performing initial change detection check..."
+    
+    # Debug: Show current file tracking state
+    log_message "DEBUG: Current file tracking state:"
+    local stored_vars=$(get_stored_file_name 'vars')
+    local stored_install=$(get_stored_file_name 'install')
+    local stored_roles=$(get_stored_file_name 'roles')
+    log_message "DEBUG:   vars.yaml: '$stored_vars'"
+    log_message "DEBUG:   install.yaml: '$stored_install'"
+    log_message "DEBUG:   roles.tar.gz: '$stored_roles'"
+    
+    if check_config_changed; then
+        log_message "Configuration changes detected during initialization - triggering reconfiguration"
+        if trigger_reconfig; then
+            last_reconfig_time=$(date +%s)
+            rm -f "/opt/vdi-setup/.pending_changes"
+        fi
+    else
+        log_message "No configuration changes detected during initialization"
+    fi
+    
+    # Main monitoring loop
+    local check_count=0
+    while true; do
+        local current_time=$(date +%s)
+        check_count=$((check_count + 1))
+        
+        # Log periodic check (every 5th check to avoid log spam)
+        if [[ $((check_count % 5)) -eq 0 ]]; then
+            log_message "Periodic check #${check_count} - checking for configuration changes..."
+        fi
+        
+        if check_config_changed; then
+            # Check if enough time has passed since last reconfiguration
+            local time_since_last_reconfig=$((current_time - last_reconfig_time))
+            
+            if [[ $time_since_last_reconfig -ge $RECONFIG_COOLDOWN ]]; then
+                log_message "Configuration changes detected - triggering reconfiguration"
+                if trigger_reconfig; then
+                    last_reconfig_time=$current_time
+                    rm -f "/opt/vdi-setup/.pending_changes"
+                fi
+            else
+                log_message "Changes detected but cooldown active (${time_since_last_reconfig}s/${RECONFIG_COOLDOWN}s) - waiting for cooldown to expire"
+            fi
+        else
+            # Log when no changes detected (every 5th check)
+            if [[ $((check_count % 5)) -eq 0 ]]; then
+                log_message "No configuration changes detected in check #${check_count}"
+            fi
+        fi
+        
+        # Sleep for configured interval before next check
+        sleep {{ vdi_monitor_check_interval | default(60) }}
+    done
+}

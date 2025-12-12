@@ -1,0 +1,214 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: DEBUG About to import lock_manager for vdi_monitor
+  debug:
+    msg: "About to import lock_manager for vdi_monitor"
+
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "vdi_monitor"
+
+- name: Check if vdi_monitor role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+
+- name: DEBUG Finished import_role for vdi_monitor
+  debug:
+    msg: "Finished import_role for vdi_monitor"
+
+- name: Set role variables from lock manager facts
+  ansible.builtin.set_fact:
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      VDI Monitor role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
+
+- name: Set VDI monitor variables
+  ansible.builtin.set_fact:
+    vdi_monitor_reconfig_cooldown: "{{ vdi_monitor_reconfig_cooldown | default(300) }}"
+    vdi_monitor_check_interval: "{{ vdi_monitor_check_interval | default(60) }}"
+
+# Skip all tasks if role should not run
+- name: Skip vdi_monitor tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping vdi_monitor role - already completed or not needed"
+  when: not role_should_run
+
+- name: Debug VDI monitor role execution
+  ansible.builtin.debug:
+    msg: |
+      VDI monitor role started:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment | default(false) }}
+        - lock_file_exists: {{ lock_file_stat.stat.exists | default(false) }}
+  when: role_should_run
+
+- name: Ensure VDI setup directory exists
+  ansible.builtin.file:
+    path: /opt/vdi-setup
+    state: directory
+    mode: '0755'
+  register: vdi_dir_creation
+  when: role_should_run
+
+- name: Create VDI monitor module directory
+  ansible.builtin.file:
+    path: /opt/vdi-setup/vdi-monitor-lib
+    state: directory
+    mode: '0755'
+  register: monitor_lib_creation
+  when: role_should_run
+
+- name: Debug directory creation status
+  ansible.builtin.debug:
+    msg: "VDI dir created: {{ vdi_dir_creation.changed }}, Monitor lib created: {{ monitor_lib_creation.changed }}"
+  when: debug and role_should_run
+
+# Copy VDI monitor modules
+- name: Copy VDI monitor configuration module
+  ansible.builtin.template:
+    src: vdi-monitor-config.sh.j2
+    dest: /opt/vdi-setup/vdi-monitor-lib/config.sh
+    mode: '0755'
+    owner: root
+    group: root
+  register: config_module_copy
+  when: role_should_run
+
+- name: Copy VDI monitor file module
+  ansible.builtin.template:
+    src: vdi-monitor-file.sh.j2
+    dest: /opt/vdi-setup/vdi-monitor-lib/file-monitor.sh
+    mode: '0755'
+    owner: root
+    group: root
+  register: file_module_copy
+  when: role_should_run
+
+- name: Copy VDI monitor change detector module
+  ansible.builtin.template:
+    src: vdi-monitor-detector.sh.j2
+    dest: /opt/vdi-setup/vdi-monitor-lib/change-detector.sh
+    mode: '0755'
+    owner: root
+    group: root
+  register: detector_module_copy
+  when: role_should_run
+
+- name: Copy VDI monitor test module
+  ansible.builtin.template:
+    src: vdi-monitor-test.sh.j2
+    dest: /opt/vdi-setup/vdi-monitor-lib/test-utils.sh
+    mode: '0755'
+    owner: root
+    group: root
+  register: test_module_copy
+  when: role_should_run
+
+- name: Copy VDI monitor main script
+  ansible.builtin.template:
+    src: vdi-monitor.sh.j2
+    dest: /usr/local/bin/vdi-monitor.sh
+    mode: '0755'
+    owner: root
+    group: root
+  register: main_script_copy
+  when: role_should_run
+
+- name: Copy VDI monitor systemd service
+  ansible.builtin.template:
+    src: vdi-monitor.service.j2
+    dest: /etc/systemd/system/vdi-monitor.service
+    mode: '0644'
+    owner: root
+  register: service_copy
+  when: role_should_run
+
+- name: Debug module copy status
+  ansible.builtin.debug:
+    msg: "VDI monitor modules copied - config: {{ config_module_copy.changed }}, file: {{ file_module_copy.changed }}, detector: {{ detector_module_copy.changed }}, test: {{ test_module_copy.changed }}, main: {{ main_script_copy.changed }}, service: {{ service_copy.changed }}"
+  when: debug and role_should_run
+
+# Enable and start VDI monitor service
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  when: role_should_run and service_copy.changed
+  register: daemon_reload_result
+
+- name: Check if VDI monitor service is already running
+  systemd:
+    name: vdi-monitor
+  register: monitor_service_status
+  when: role_should_run
+
+- name: Debug VDI monitor service status check
+  ansible.builtin.debug:
+    msg: "VDI monitor service status - Active: {{ monitor_service_status.status.ActiveState }}, Enabled: {{ monitor_service_status.status.LoadState }}"
+  when: debug and role_should_run
+
+- name: Enable VDI monitor service
+  systemd:
+    name: vdi-monitor
+    enabled: yes
+    state: started
+  register: monitor_service_start
+  when: role_should_run and not monitor_service_status.status.ActiveState == "active"
+
+- name: Set service start result for already running service
+  ansible.builtin.set_fact:
+    monitor_service_start:
+      changed: false
+      status: "{{ monitor_service_status.status }}"
+  when: role_should_run and monitor_service_status.status.ActiveState == "active"
+
+- name: Debug VDI monitor service status
+  ansible.builtin.debug:
+    msg: "VDI monitor service started: {{ monitor_service_start.changed }}"
+  when: debug and role_should_run
+
+- name: Debug VDI monitor role completion
+  ansible.builtin.debug:
+    msg: "VDI monitor role completed successfully"
+  when: role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "vdi_monitor"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark vdi_monitor role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

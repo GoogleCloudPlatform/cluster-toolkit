@@ -1,0 +1,119 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: DEBUG About to import lock_manager for base_os
+  debug:
+    msg: "About to import lock_manager for base_os"
+
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "base_os"
+
+- name: Check if base_os role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+
+- name: DEBUG Finished import_role for base_os
+  debug:
+    msg: "Finished import_role for base_os"
+
+- name: Set role variables from lock manager facts
+  ansible.builtin.set_fact:
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      Base OS role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
+
+# Skip all tasks if role should not run
+- name: Skip base_os tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping base_os role - already completed or not needed"
+  when: not role_should_run
+
+# Run base_os tasks only if needed
+- name: Run base_os tasks
+  block:
+
+  - name: Gather distribution facts
+    ansible.builtin.setup:
+      gather_subset: platform
+
+  # GPU / vWS driver setup
+  - name: Check if NVIDIA GPU is present
+    ansible.builtin.shell: lspci | grep -i nvidia
+    register: nvidia_gpu_present
+    failed_when: false
+
+  # Include distribution-specific tasks
+  - name: Include Ubuntu-specific tasks
+    ansible.builtin.include_tasks: ubuntu.yaml
+    when: ansible_facts.distribution == 'Ubuntu'
+
+  - name: Include Rocky Linux specific tasks
+    ansible.builtin.include_tasks: rocky.yaml
+    when: ansible_facts.distribution == 'Rocky'
+
+  - name: Include Debian-specific tasks
+    ansible.builtin.include_tasks: debian.yaml
+    when: ansible_facts.distribution == 'Debian'
+
+  # Common tasks for all distributions
+  - name: Ensure requests package is installed
+    pip:
+      name: requests
+      state: present
+
+  - name: Ensure Python & tooling are installed
+    ansible.builtin.package:
+      name:
+      - python3
+      - python3-pip
+      - jq
+      state: present
+
+  # GPU / vWS driver setup
+  - name: Provision GPU setup
+    ansible.builtin.include_tasks: gpu_driver_setup.yaml
+    when: nvidia_gpu_present.rc == 0
+
+  when: role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "base_os"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark base_os role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

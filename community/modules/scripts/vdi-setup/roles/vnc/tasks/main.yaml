@@ -1,0 +1,256 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "vnc"
+
+- name: Check if vnc role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+
+- name: Set role variables from lock manager facts
+  ansible.builtin.set_fact:
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+    users_with_port_changes: "{{ users_with_port_changes | default([]) }}"
+    removed_users: "{{ removed_users | default([]) }}"
+    vdi_resolution_changed: "{{ vdi_resolution_changed | default(false) }}"
+    vdi_resolution_locked_changed: "{{ vdi_resolution_locked_changed | default(false) }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      VNC role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
+
+- name: Debug resolution change detection
+  ansible.builtin.debug:
+    msg: |
+      Resolution change detection:
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - current_resolution: {{ vdi_resolution }}
+        - previous_resolution: {{ vdi_setup_status.vdi_resolution | default('unknown') }}
+        - will_restart_services: {{ vdi_resolution_changed }}
+  when: debug and vdi_resolution_changed
+
+- name: Debug resolution locked change detection
+  ansible.builtin.debug:
+    msg: |
+      Resolution locked change detection:
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - current_resolution_locked: {{ vdi_resolution_locked }}
+        - previous_resolution_locked: {{ vdi_setup_status.vdi_resolution_locked | default('unknown') }}
+        - will_update_connections: {{ vdi_resolution_locked_changed }}
+  when: debug and vdi_resolution_locked_changed
+
+- name: Skip VNC role if not needed
+  ansible.builtin.debug:
+    msg: "Skipping VNC role - already completed or not needed"
+  when: not role_should_run
+
+# Run VNC tasks only if needed
+- name: Run VNC tasks
+  block:
+
+  - name: "Install TigerVNC"
+    include_tasks: tigervnc.yaml
+    when: vnc_flavor | lower == 'tigervnc'
+
+  - name: "Install TightVNC"
+    include_tasks: tightvnc.yaml
+    when: vnc_flavor | lower == 'tightvnc'
+
+  # =============================================================================
+  # USER REMOVAL HANDLING
+  # =============================================================================
+
+  - name: Handle removed users (stop VNC services and lock accounts)
+    block:
+
+    - name: Stop VNC services for removed users
+      ansible.builtin.systemd:
+        name: "vncserver@{{ item }}"
+        state: stopped
+        enabled: no
+      loop: "{{ removed_users }}"
+      when: removed_users is defined and removed_users | length > 0
+      ignore_errors: true
+
+    - name: Kill X server processes for removed users
+      ansible.builtin.shell: |
+        pkill -f "Xvnc.*:{{ item }}" || true
+        sleep 2
+      loop: "{{ removed_users }}"
+      when: removed_users is defined and removed_users | length > 0
+      ignore_errors: true
+
+    - name: Lock local user accounts for removed users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password: "!"
+      loop: "{{ removed_users }}"
+      when: removed_users is defined and removed_users | length > 0
+
+    - name: Debug user removal actions
+      ansible.builtin.debug:
+        msg: |
+          User removal actions completed:
+          {% if removed_users is defined and removed_users | length > 0 %}
+          - Users locked: {{ removed_users }}
+          - VNC services stopped and disabled
+          - Local accounts locked with '!' password
+          {% else %}
+          - No users to remove
+          {% endif %}
+      when: debug
+
+    when: removed_users is defined and removed_users | length > 0
+
+  # =============================================================================
+  # PORT CHANGE HANDLING
+  # =============================================================================
+
+  - name: Handle port changes for existing users
+    block:
+    - name: Stop VNC services for users with port changes
+      ansible.builtin.systemd:
+        name: "vncserver@:{{ item.port - 5900 }}"
+        state: stopped
+      loop: "{{ users_with_port_changes }}"
+      when: users_with_port_changes is defined and users_with_port_changes | length > 0
+      ignore_errors: true
+
+    - name: Kill X server processes for users with port changes (old display)
+      ansible.builtin.shell: |
+        pkill -f "Xvnc.*:{{ (vdi_setup_status.user_ports[item.username] - 5900) }}" || true
+        sleep 2
+      loop: "{{ users_with_port_changes }}"
+      when:
+      - users_with_port_changes is defined and users_with_port_changes | length > 0
+      - vdi_setup_status.user_ports[item.username] is defined
+      ignore_errors: true
+
+    - name: Update VNC users mapping for port changes
+      ansible.builtin.template:
+        src: vncserver.users.j2
+        dest: /etc/tigervnc/vncserver.users
+        mode: '0644'
+      vars:
+        guac_map: "{{ vdi_users }}"
+      when: users_with_port_changes is defined and users_with_port_changes | length > 0
+
+    - name: Start VNC services for users with port changes
+      ansible.builtin.systemd:
+        name: "vncserver@:{{ item.port - 5900 }}"
+        state: started
+        enabled: yes
+      loop: "{{ users_with_port_changes }}"
+      when: users_with_port_changes is defined and users_with_port_changes | length > 0
+
+    - name: Debug port change actions
+      ansible.builtin.debug:
+        msg: |
+          Port change actions completed:
+          {% if users_with_port_changes is defined and users_with_port_changes | length > 0 %}
+          - Users with port changes: {{ users_with_port_changes | map(attribute='username') | list }}
+          - VNC services stopped, reconfigured, and restarted
+          {% else %}
+          - No port changes detected
+          {% endif %}
+      when: debug
+
+    when: users_with_port_changes is defined and users_with_port_changes | length > 0
+
+  # =============================================================================
+  # RESOLUTION CHANGE HANDLING
+  # =============================================================================
+
+  - name: Handle resolution changes for all users
+    block:
+    - name: Stop all VNC services for resolution change
+      ansible.builtin.systemd:
+        name: "vncserver@:{{ item.port - 5900 }}"
+        state: stopped
+      loop: "{{ vdi_users }}"
+      when: vdi_resolution_changed
+      ignore_errors: true
+
+    - name: Kill all X server processes for resolution change
+      ansible.builtin.shell: |
+        pkill -f "Xvnc.*:{{ item.port - 5900 }}" || true
+        sleep 2
+      loop: "{{ vdi_users }}"
+      when: vdi_resolution_changed
+      ignore_errors: true
+
+    - name: Update VNC users mapping for resolution change
+      ansible.builtin.template:
+        src: vncserver.users.j2
+        dest: /etc/tigervnc/vncserver.users
+        mode: '0644'
+      vars:
+        guac_map: "{{ vdi_users }}"
+      when: vdi_resolution_changed
+
+    - name: Start all VNC services for resolution change
+      ansible.builtin.systemd:
+        name: "vncserver@:{{ item.port - 5900 }}"
+        state: started
+        enabled: yes
+      loop: "{{ vdi_users }}"
+      when: vdi_resolution_changed
+
+    - name: Debug resolution change actions
+      ansible.builtin.debug:
+        msg: |
+          Resolution change actions completed:
+          {% if vdi_resolution_changed %}
+          - Resolution changed from {{ vdi_setup_status.vdi_resolution | default('unknown') }} to {{ vdi_resolution }}
+          - All VNC services stopped, reconfigured, and restarted
+          {% else %}
+          - No resolution changes detected
+          {% endif %}
+      when: debug
+
+    when: vdi_resolution_changed
+
+  when: role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "vnc"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark vnc role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

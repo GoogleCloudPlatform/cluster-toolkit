@@ -1,0 +1,101 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "vdi_tool"
+
+- name: Check if vdi_tool role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+
+- name: Set role variables from lock manager facts
+  ansible.builtin.set_fact:
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+    users_with_port_changes: "{{ users_with_port_changes | default([]) }}"
+    webapp_port_changed: "{{ webapp_port_changed | default(false) }}"
+    vdi_resolution_changed: "{{ vdi_resolution_changed | default(false) }}"
+    vdi_resolution_locked_changed: "{{ vdi_resolution_locked_changed | default(false) }}"
+    infrastructure_changed: "{{ infrastructure_changed | default(false) }}"
+    new_users: "{{ new_users | default([]) }}"
+    removed_users: "{{ removed_users | default([]) }}"
+    users_needing_reset: "{{ users_needing_reset | default([]) }}"
+    secret_project: "{{ project_id }}"
+    reset_webapp_admin_password: "{{ reset_webapp_admin_password | default(false) }}"
+    force_rerun: "{{ force_rerun | default(false) }}"
+    webapp_admin_hash: "{{ webapp_admin_hash | default('') }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      VDI Tool role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - infrastructure_changed: {{ infrastructure_changed }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
+
+- name: Skip VDI Tool role if not needed
+  ansible.builtin.debug:
+    msg: "Skipping VDI Tool role - already completed or not needed"
+  when: not role_should_run
+
+# Skip all tasks if role should not run
+- name: Skip vdi_tool tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping vdi_tool role - already completed or not needed"
+  when: not role_should_run
+
+- name: "Install Guacamole"
+  include_tasks: guacamole.yaml
+  when:
+  - vdi_tool | lower == 'guacamole'
+  - role_should_run
+
+- name: "Install NoMachine"
+  include_tasks: nomachine.yaml
+  when:
+  - vdi_tool | lower == 'nomachine'
+  - role_should_run
+
+- name: "Install Workspot"
+  include_tasks: workspot.yaml
+  when:
+  - vdi_tool | lower == 'workspot'
+  - role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "vdi_tool"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark vdi_tool role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

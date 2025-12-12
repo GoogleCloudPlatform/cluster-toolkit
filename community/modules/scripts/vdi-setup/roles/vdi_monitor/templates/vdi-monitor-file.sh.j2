@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VDI Monitor File Module
+# Contains file change detection and synchronization functions
+
+# Function to get GCS file hash
+get_gcs_hash() {
+    local gcs_path="$1"
+    log_message_quiet "DEBUG: Getting GCS hash for: $gcs_path"
+    local hash_result=$(gcloud storage hash "$gcs_path" --skip-crc32c 2>&1)
+    local exit_code=$?
+    if [[ $exit_code -eq 0 ]]; then
+        # Extract MD5 hash from output (format: "MD5 hash: <hash>")
+        local md5_hash=$(echo "$hash_result" | grep "MD5 hash:" | awk '{print $3}')
+        if [[ -n "$md5_hash" ]]; then
+            log_message_quiet "DEBUG: GCS hash result: $md5_hash"
+            echo "$md5_hash"
+        else
+            log_message_quiet "ERROR: Could not extract MD5 hash from output: $hash_result"
+            echo "INVALID-HASH"
+        fi
+    else
+        log_message_quiet "ERROR: Failed to get GCS hash for $gcs_path: $hash_result (exit code: $exit_code)"
+        echo "INVALID-HASH"
+    fi
+}
+
+# Function to get local file hash
+get_local_hash() {
+    local local_path="$1"
+    log_message_quiet "DEBUG: Getting local hash for: $local_path"
+    if [[ -f "$local_path" ]]; then
+        local hash_result=$(gcloud storage hash "$local_path" --skip-crc32c 2>&1)
+        local exit_code=$?
+        if [[ $exit_code -eq 0 ]]; then
+            # Extract MD5 hash from output (format: "MD5 hash: <hash>")
+            local md5_hash=$(echo "$hash_result" | grep "MD5 hash:" | awk '{print $3}')
+            if [[ -n "$md5_hash" ]]; then
+                log_message_quiet "DEBUG: Local hash result: $md5_hash"
+                echo "$md5_hash"
+            else
+                log_message_quiet "ERROR: Could not extract MD5 hash from output: $hash_result"
+                echo "INVALID-HASH"
+            fi
+        else
+            log_message_quiet "ERROR: Failed to get local hash for $local_path: $hash_result (exit code: $exit_code)"
+            echo "INVALID-HASH"
+        fi
+    else
+        log_message_quiet "DEBUG: Local file does not exist: $local_path"
+        echo "INVALID-HASH"
+    fi
+}
+
+# Function to get current file name from bucket (with hash suffix)
+get_current_file_name() {
+    local base_name="$1"
+    local pattern="gs://$BUCKET_NAME/$base_name-*"
+    local current_file=$(gsutil ls "$pattern" 2>/dev/null | head -1)
+    if [[ -n "$current_file" ]]; then
+        # Extract just the filename from the full path
+        basename "$current_file"
+    else
+        echo ""
+    fi
+}
+
+# Function to get stored file name
+get_stored_file_name() {
+    local file_type="$1"
+    local stored_file="/opt/vdi-setup/.current_${file_type}_file"
+    if [[ -f "$stored_file" ]]; then
+        cat "$stored_file"
+    else
+        echo ""
+    fi
+}
+
+# Function to store current file name
+store_file_name() {
+    local file_type="$1"
+    local file_name="$2"
+    echo "$file_name" > "/opt/vdi-setup/.current_${file_type}_file"
+}
+
+# Function to sync changed files from bucket
+sync_changed_files() {
+    log_message "Syncing changed files from bucket: gs://$BUCKET_NAME"
+    local sync_needed=false
+    
+    # Check and sync vars.yaml
+    local current_vars_file=$(get_current_file_name "vars.yaml")
+    local stored_vars_file=$(get_stored_file_name "vars")
+    
+    if [[ "$current_vars_file" != "$stored_vars_file" ]]; then
+        log_message "Syncing vars.yaml: $current_vars_file"
+        gsutil cp "gs://$BUCKET_NAME/$current_vars_file" "$VDI_SETUP_DIR/vars.yaml"
+        store_file_name "vars" "$current_vars_file"
+        sync_needed=true
+    fi
+    
+    # Check and sync install.yaml
+    local current_install_file=$(get_current_file_name "install.yaml")
+    local stored_install_file=$(get_stored_file_name "install")
+    
+    if [[ "$current_install_file" != "$stored_install_file" ]]; then
+        log_message "Syncing install.yaml: $current_install_file"
+        gsutil cp "gs://$BUCKET_NAME/$current_install_file" "$VDI_SETUP_DIR/install.yaml"
+        store_file_name "install" "$current_install_file"
+        sync_needed=true
+    fi
+    
+    # Check and sync roles.tar.gz and unpack if needed
+    local current_roles_file=$(get_current_file_name "roles.tar.gz")
+    local stored_roles_file=$(get_stored_file_name "roles")
+    
+    if [[ "$current_roles_file" != "$stored_roles_file" ]]; then
+        log_message "Syncing roles.tar.gz: $current_roles_file"
+        gsutil cp "gs://$BUCKET_NAME/$current_roles_file" "$VDI_SETUP_DIR/roles.tar.gz"
+        store_file_name "roles" "$current_roles_file"
+        
+        # Unpack roles
+        log_message "Unpacking updated roles"
+        tar xzf "$VDI_SETUP_DIR/roles.tar.gz" -C "$VDI_SETUP_DIR/"
+        sync_needed=true
+    fi
+    
+    if [[ "$sync_needed" == "true" ]]; then
+        log_message "Successfully synced changed files from bucket"
+        return 0
+    else
+        log_message "No files needed syncing"
+        return 1
+    fi
+}
+
+# Function to initialize file tracking
+initialize_file_tracking() {
+    log_message "Initializing file tracking"
+    
+    # Initialize vars.yaml tracking
+    if [[ ! -f "/opt/vdi-setup/.current_vars_file" ]]; then
+        local current_vars_file=$(get_current_file_name "vars.yaml")
+        if [[ -n "$current_vars_file" ]]; then
+            store_file_name "vars" "$current_vars_file"
+            log_message "Initialized vars file tracking: $current_vars_file"
+        fi
+    fi
+    
+    # Initialize install.yaml tracking
+    if [[ ! -f "/opt/vdi-setup/.current_install_file" ]]; then
+        local current_install_file=$(get_current_file_name "install.yaml")
+        if [[ -n "$current_install_file" ]]; then
+            store_file_name "install" "$current_install_file"
+            log_message "Initialized install file tracking: $current_install_file"
+        fi
+    fi
+    
+    # Initialize roles.tar.gz tracking
+    if [[ ! -f "/opt/vdi-setup/.current_roles_file" ]]; then
+        local current_roles_file=$(get_current_file_name "roles.tar.gz")
+        if [[ -n "$current_roles_file" ]]; then
+            store_file_name "roles" "$current_roles_file"
+            log_message "Initialized roles file tracking: $current_roles_file"
+        fi
+    fi
+    
+    log_message "File tracking initialization complete"
+}

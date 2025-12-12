@@ -1,0 +1,69 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# NVIDIA vWS (GRID) driver setup. See:
+# https://cloud.google.com/compute/docs/gpus#gpu-virtual-workstations
+# https://cloud.google.com/compute/docs/gpus/grid-drivers-table
+
+---
+
+- name: Get GCP machine type from metadata server
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/machine-type
+    method: GET
+    headers:
+      Metadata-Flavor: Google
+    return_content: yes
+  register: gcp_machine_type
+
+- name: Extract short machine type
+  ansible.builtin.set_fact:
+    gcp_machine_type: "{{ gcp_machine_type.content.split('/')[-1] }}"
+
+- name: Extract machine family from machine type
+  ansible.builtin.set_fact:
+    machine_family: "{{ gcp_machine_type.split('-')[0] }}"
+
+- name: Check if machine type is supported for NVIDIA vWS
+  ansible.builtin.set_fact:
+    is_nvidia_vws_supported: "{{ machine_family in ['g2', 'n1'] }}"
+
+# Additional drivers for other machine type families can go here
+- name: Set driver download URL based on machine type
+  ansible.builtin.set_fact:
+    driver_url: >-
+      {%- if is_nvidia_vws_supported -%}
+      https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU18.1/NVIDIA-Linux-x86_64-570.133.20-grid.run
+      {%- else -%}
+
+      {%- endif %}
+
+# Include distribution-specific GPU driver setup
+- name: Include Ubuntu GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/ubuntu.yaml
+  when:
+  - ansible_facts.distribution == 'Ubuntu'
+  - is_nvidia_vws_supported
+
+- name: Include Rocky Linux GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/rocky.yaml
+  when:
+  - ansible_facts.distribution == 'Rocky'
+  - is_nvidia_vws_supported
+
+- name: Include Debian GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/debian.yaml
+  when:
+  - ansible_facts.distribution == 'Debian'
+  - is_nvidia_vws_supported
