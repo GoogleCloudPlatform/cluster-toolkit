@@ -77,7 +77,7 @@ vars:
 terraform_providers:
   google:
     source: hashicorp/google
-    version: 7.2.0
+    version: 7.13.0
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)
@@ -86,7 +86,7 @@ terraform_providers:
 
   google-beta:
     source: hashicorp/google-beta
-    version: 7.2.0
+    version: 7.13.0
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)
