@@ -152,6 +152,8 @@ deployment_groups:
       network_name: $(vars.deployment_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
+      network_bgp_best_path_selection_mode: "STANDARD"
+      network_bgp_always_compare_med: true
       subnetworks_template:
         name_prefix: $(vars.deployment_name)-rdma-sub
         count: 4
