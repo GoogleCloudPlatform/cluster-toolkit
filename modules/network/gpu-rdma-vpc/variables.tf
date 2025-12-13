@@ -162,3 +162,15 @@ variable "nic_type" {
     error_message = "The nic_type must be \"MRDMA\"."
   }
 }
+
+variable "network_bgp_best_path_selection_mode" {
+  type        = string
+  description = "Specifies the BGP best path selection mode. Valid values are STANDARD or LEGACY. Default is LEGACY."
+  default     = "LEGACY"
+}
+
+variable "network_bgp_always_compare_med" {
+  type        = bool
+  description = "If set to true, the Cloud Router will use MED values from the peer even if the AS paths differ. Default is false."
+  default     = false
+}
