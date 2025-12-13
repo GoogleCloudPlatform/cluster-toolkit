@@ -304,6 +304,11 @@ variable "network_bgp_best_path_selection_mode" {
   type        = string
   description = "Specifies the BGP best path selection mode. Valid values are STANDARD or LEGACY. Default is LEGACY."
   default     = "LEGACY"
+
+  validation {
+    condition     = contains(["STANDARD", "LEGACY"], var.network_bgp_best_path_selection_mode)
+    error_message = "Allowed values for network_bgp_best_path_selection_mode are STANDARD or LEGACY."
+  }
 }
 
 variable "network_bgp_always_compare_med" {

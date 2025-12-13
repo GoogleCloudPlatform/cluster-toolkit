@@ -196,8 +196,8 @@ module "vpc" {
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
   network_profile                        = var.network_profile
-  bgp_best_path_selection_mode           = var.network_bgp_best_path_selection_mode
   bgp_always_compare_med                 = var.network_bgp_always_compare_med
+  bgp_best_path_selection_mode           = var.network_bgp_best_path_selection_mode
 }
 
 resource "terraform_data" "cloud_nat_validation" {
