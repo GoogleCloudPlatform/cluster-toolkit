@@ -21,9 +21,16 @@ from grafana_api.grafana_face import GrafanaFace
 
 from django.conf import settings
 
+from .cluster_manager import utils
+
 logger = logging.getLogger(__name__)
 
 def add_gcp_datasource(name, creds):
+    # Skip actual Grafana integration in local development
+    if utils.is_local_mode():
+        logger.info("Skipping Grafana datasource creation in local development mode")
+        return True
+
     auth = ("admin", settings.SECRET_KEY)
     api = GrafanaFace(auth=auth, host="localhost:3000")
     creds = json.loads(creds)
