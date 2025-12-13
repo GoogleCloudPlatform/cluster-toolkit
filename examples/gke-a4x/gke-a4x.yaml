@@ -74,25 +74,6 @@ vars:
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
-terraform_providers:
-  google:
-    source: hashicorp/google
-    version: 7.2.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
-
-  google-beta:
-    source: hashicorp/google-beta
-    version: 7.2.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
-
 
 deployment_groups:
 - group: primary
