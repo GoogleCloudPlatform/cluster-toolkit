@@ -84,7 +84,7 @@ deployment_groups:
     - nat_ips
 
   - id: sa
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     outputs:
     - key
     - service_account_email
