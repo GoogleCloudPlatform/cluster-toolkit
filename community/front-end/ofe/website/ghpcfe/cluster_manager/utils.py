@@ -64,6 +64,10 @@ def load_config(config_file=g_baseDir / "configuration.yaml", access_key=None):
 
     return g_config
 
+def is_local_mode() -> bool:
+    conf = load_config()
+    runtime_mode = str(conf.get("server", {}).get("runtime_mode", "")).lower()
+    return runtime_mode == "local"
 
 def _parse_tfvars(filename):
     res = {}

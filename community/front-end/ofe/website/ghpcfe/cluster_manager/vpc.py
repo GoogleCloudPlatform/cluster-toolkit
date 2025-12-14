@@ -20,6 +20,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from . import utils
 
 from . import utils
 from ..models import VirtualNetwork, VirtualSubnet
@@ -28,6 +29,13 @@ logger = logging.getLogger(__name__)
 
 
 def create_vpc(vpc: VirtualNetwork) -> None:
+    """Create a new VPC in GCP"""
+    if utils.is_local_mode():
+        # In local mode, just mark the VPC as managed
+        vpc.cloud_state = 'nm'  # Keep in new/managed state
+        vpc.cloud_id = f'mock-vpc-{vpc.id}'
+        vpc.save()
+        return
 
     # create working directory and copy in TerraForm templates
     target_dir = _tf_dir_for_vpc(vpc.id)
@@ -78,7 +86,13 @@ project = "{project_id}"
 
 
 def start_vpc(vpc: VirtualNetwork) -> None:
-    """Effectively, just 'terraform apply'"""
+    """Start a VPC in GCP"""
+    if utils.is_local_mode():
+        # In local mode, just mark the VPC as managed
+        vpc.cloud_state = 'm'  # Set to managed state
+        vpc.save()
+        return
+
     target_dir = _tf_dir_for_vpc(vpc.id)
     try:
         extra_env = {
@@ -112,6 +126,11 @@ def start_vpc(vpc: VirtualNetwork) -> None:
 
 
 def destroy_vpc(vpc: VirtualNetwork) -> None:
+    if utils.is_local_mode():
+        # In local mode, just mark the VPC as deleted
+        vpc.delete()
+        return
+
     target_dir = _tf_dir_for_vpc(vpc.id)
     extra_env = {
         "GOOGLE_APPLICATION_CREDENTIALS": Path(
@@ -124,6 +143,15 @@ def destroy_vpc(vpc: VirtualNetwork) -> None:
 
 
 def create_subnet(subnet: VirtualSubnet) -> None:
+    """Create a new Subnet in an existing VPC"""
+    if utils.is_local_mode():
+        # In local mode, just mark the subnet as managed
+        subnet.cloud_state = 'm'  # Set to managed state
+        subnet.cloud_id = f'mock-subnet-{subnet.id}'
+        # Keep the user-provided CIDR range as is
+        subnet.save()
+        return
+
     """Create a new Subnet in an existing VPC
     Uses adds a subnet file to the VPC TF directory.
     If no VPC TF directory exists, create one importing a
@@ -144,6 +172,11 @@ def create_subnet(subnet: VirtualSubnet) -> None:
 
 
 def delete_subnet(subnet: VirtualSubnet) -> None:
+    if utils.is_local_mode():
+        # In local mode, just delete the subnet
+        subnet.delete()
+        return
+
     """Removes the subnet from the VPC"""
     target_dir = _tf_dir_for_vpc(subnet.vpc.id)
     fname = target_dir / f"subnet-{subnet.id}.tf"

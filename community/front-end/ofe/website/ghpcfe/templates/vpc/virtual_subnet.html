@@ -19,6 +19,12 @@
 {% block content %}
   <h2>Update VPC Subnets</h2>
 
+  {% if is_local_mode %}
+  <div class="alert alert-info" role="alert">
+    <strong>Note:</strong> In local development mode, VPC and subnet operations will be simulated. Values will be stored but no actual network resources will be created.
+  </div>
+  {% endif %}
+
   <p><b>VPC ID:</b> {{ vpc.id }} </p>
   <p><b>Name:</b> {{ vpc.name }} </p>
   <p><b>Region:</b> {{ vpc.cloud_region }} </p>

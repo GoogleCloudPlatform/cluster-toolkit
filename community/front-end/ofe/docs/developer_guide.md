@@ -214,6 +214,10 @@ Note that a special home directory is created at `/home/root_jobs` to host jobs
 submitted by the Django superusers. For convenience they do not need Google
 identities and their jobs are run as *root* on the clusters.
 
+### Local Development
+
+The [local development](local_development.md) page contains more information about deploying OFE locally for testing.
+
 ### Django development
 
 #### Database Design

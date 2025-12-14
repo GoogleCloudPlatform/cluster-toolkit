@@ -27,6 +27,8 @@ from google.cloud import storage as gcs
 import google.cloud.secretmanager as secretmanager
 from google.cloud.billing_v1.services import cloud_catalog
 from google.oauth2 import service_account
+from . import utils
+from . import mock_cloud_data
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,23 @@ gcp_machine_table = defaultdict(
         "a2": defaultdict(lambda: "cascadelake"),
     },
 )
+
+
+def fallback_to_mock(mock_data_fn=None):
+    """Decorator to fallback to mock data in local mode on failure"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if utils.is_local_mode():
+                    logger.warning(
+                        f"{func.__name__} failed in local mode, using mock data. Error: {e}"
+                    )
+                    return mock_data_fn() if callable(mock_data_fn) else mock_data_fn
+                raise
+        return wrapper
+    return decorator
 
 
 def _get_arch_for_node_type_gcp(instance):
@@ -152,6 +171,8 @@ def _get_gcp_disk_types(
         for x in resp.get("items", [])
     ]
 
+
+@fallback_to_mock(mock_data_fn=lambda: mock_cloud_data.GCP_DISK_TYPES)
 def get_disk_types(cloud_provider, credentials, unused_region, zone):
     if cloud_provider == "GCP":
         return _get_gcp_disk_types(
@@ -335,6 +356,7 @@ def _get_ttl_hash(seconds=3600 * 24):
     return round(time.time() / seconds)
 
 
+@fallback_to_mock(mock_data_fn=lambda: mock_cloud_data.GCP_MACHINE_TYPES)
 def get_machine_types(cloud_provider, credentials, unused_region, zone):
     if cloud_provider == "GCP":
         return _get_gcp_machine_types(
@@ -396,6 +418,7 @@ def _get_gcp_region_zone_info(
     return results
 
 
+@fallback_to_mock(mock_data_fn=lambda: mock_cloud_data.GCP_REGIONS_ZONES)
 def get_region_zone_info(cloud_provider, credentials):
     if cloud_provider == "GCP":
         return _get_gcp_region_zone_info(credentials, ttl_hash=_get_ttl_hash())
@@ -424,7 +447,9 @@ def _get_gcp_subnets(credentials):
     return subnets
 
 
-def get_subnets(cloud_provider, credentials):
+@fallback_to_mock(mock_data_fn=lambda: mock_cloud_data.GCP_SUBNETS)
+def get_subnets(cloud_provider: str, credentials: str) -> list:
+    """Get list of subnets from cloud provider"""
     if cloud_provider == "GCP":
         return _get_gcp_subnets(credentials)
     else:
@@ -702,6 +727,10 @@ def gcs_apply_bucket_acl(
 
 
 def gcs_upload_file(bucket, path, contents, extra_acl=None):
+    # In local mode we don't want to actually upload to GCS
+    # Short circuit here to still allow gcs files to be created
+    if utils.is_local_mode():
+        return
     extra_acl = extra_acl if extra_acl else []
     logger.info(
         "Attempting to upload to gs://%s/%s", bucket, path if path else ""
