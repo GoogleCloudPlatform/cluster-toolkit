@@ -45,6 +45,8 @@ var movedModules = map[string]string{
 	"community/modules/scheduler/cloud-batch-login-node": "modules/scheduler/batch-login-node",
 	"community/modules/scheduler/htcondor-configure":     "community/modules/scheduler/htcondor-setup",
 	"community/modules/scripts/spack-install":            "community/modules/scripts/spack-setup",
+	"community/modules/file-system/cloud-storage-bucket": "modules/file-system/cloud-storage-bucket",
+	"community/modules/project/service-account":          "modules/project/service-account",
 }
 
 // GroupName is the name of a deployment group

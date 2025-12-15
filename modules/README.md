@@ -99,8 +99,7 @@ Modules that are still in development and less stable are labeled with the
 * **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
   file system. This module is deprecated and will be removed by July 1, 2025. Consider migrating to managed-lustre.
-* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
-  a Google Cloud Storage (GCS) bucket.
+* **[cloud-storage-bucket]** ![core-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
   persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
@@ -114,8 +113,8 @@ Modules that are still in development and less stable are labeled with the
 [managed-lustre]: file-system/managed-lustre/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
-[cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
-[gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
+[cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
+[gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 
 ### Monitoring
@@ -155,13 +154,13 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
-* **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
+* **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
-[service-account]: ../community/modules/project/service-account/README.md
+[service-account]: ../modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
 ### Pub/Sub

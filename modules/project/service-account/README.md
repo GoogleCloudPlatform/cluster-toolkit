@@ -6,7 +6,7 @@ Allows creation of service accounts for a Google Cloud Platform project.
 
 ```yaml
 - id: service_acct
-  source: community/modules/project/service-account
+  source: modules/project/service-account
   settings:
     project_id: $(vars.project_id)
     name: instance_acct
@@ -29,7 +29,7 @@ service account as a bucket viewer in the startup-script module:
 
 ```yaml
 - id: service_acct
-  source: community/modules/project/service-account
+  source: modules/project/service-account
   settings:
     project_id: $(vars.project_id)
     name: instance_acct
@@ -43,7 +43,7 @@ service account as a bucket viewer in the startup-script module:
     - $(service_acct.service_account_iam_email)
 ```
 
-[startup-script]: ../../../../modules/scripts/startup-script/README.md
+[startup-script]: ../../../modules/scripts/startup-script/README.md
 
 ## License
 

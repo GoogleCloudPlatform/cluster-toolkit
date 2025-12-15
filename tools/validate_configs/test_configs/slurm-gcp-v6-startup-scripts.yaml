@@ -35,7 +35,7 @@ deployment_groups:
       local_mounts: [/home]
 
   - id: bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: input-data
       local_mount: /data
