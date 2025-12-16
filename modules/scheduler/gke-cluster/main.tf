@@ -198,8 +198,7 @@ resource "google_container_cluster" "gke_cluster" {
         start_time     = maintenance_exclusion.value.start_time
         end_time       = maintenance_exclusion.value.end_time
         exclusion_options {
-          scope             = maintenance_exclusion.value.exclusion_scope
-          end_time_behavior = maintenance_exclusion.value.exclusion_end_time_behavior
+          scope = maintenance_exclusion.value.exclusion_scope
         }
       }
     }
