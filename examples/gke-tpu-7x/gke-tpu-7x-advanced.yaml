@@ -49,6 +49,9 @@ vars:
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
 
+# Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # # Managed Lustre is only supported in specific regions and zones
@@ -185,7 +188,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.34.1"
+      version_prefix: "1.34."
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -285,6 +288,12 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-7x-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-7x-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true
 
