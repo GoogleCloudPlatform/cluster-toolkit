@@ -116,16 +116,16 @@
   debug:
     msg: "{{nccl_test_logs.stdout}}"
 
-- name: Ensure average bus bandwidth is >= 100 GB/s
+- name: Ensure average bus bandwidth is >= 200 GB/s
   delegate_to: localhost
   ansible.builtin.shell: |
     grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
   register: avg_bus_bandwidth
-  failed_when: avg_bus_bandwidth.stdout | float < 100
+  failed_when: avg_bus_bandwidth.stdout | float < 200
 
 - name: "SUCCESS: Bandwidth validation passed. Cleaning up resources."
   ansible.builtin.debug:
-    msg: "Average bus bandwidth is >= 100 GB/s. Test passed. Cleaning up JobSet."
+    msg: "Average bus bandwidth is >= 200 GB/s. Test passed. Cleaning up JobSet."
 
 - name: Clean up
   delegate_to: localhost

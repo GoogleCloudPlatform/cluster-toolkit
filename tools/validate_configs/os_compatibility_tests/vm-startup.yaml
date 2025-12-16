@@ -23,7 +23,7 @@ vars:
   zone: us-central1-a
   machine_type: n1-standard-2
   # instance_image:
-  #   family: ubuntu-2004-lts
+  #   family: ubuntu-2204-lts
   #   project: ubuntu-os-cloud
   # instance_image:
   #   family: centos-7

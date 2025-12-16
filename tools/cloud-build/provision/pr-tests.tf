@@ -13,9 +13,8 @@
 # limitations under the License.
 
 locals {
-  auto_approved_pr_tests = [
-    "slurm-gcp-v6-simple-job-completion"
-  ]
+  auto_approved_pr_tests = []
+
 }
 
 

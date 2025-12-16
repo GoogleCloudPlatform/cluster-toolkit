@@ -60,7 +60,7 @@ steps:
     echo '      command:'                                                                  >> $${EXAMPLE_BP}
     echo '      - /bin/bash'                                                               >> $${EXAMPLE_BP}
     echo '      - -c'                                                                      >> $${EXAMPLE_BP}
-    echo '      - python -c '\''import jax; print(jax.device_count(), "TPU cores")'\'''    >> $${EXAMPLE_BP}
+    echo '      - python -c '\''import warnings; warnings.filterwarnings("ignore"); import jax; print(jax.device_count(), "TPU cores")'\'''    >> $${EXAMPLE_BP}
     echo '      node_count: 1'                                                             >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                                                     >> $${EXAMPLE_BP}
 

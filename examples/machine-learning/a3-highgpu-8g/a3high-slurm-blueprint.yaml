@@ -475,7 +475,7 @@ deployment_groups:
 - group: cluster
   modules:
   - id: compute_sa
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: compute
       project_roles:

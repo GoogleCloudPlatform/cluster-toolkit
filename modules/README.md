@@ -154,13 +154,13 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
-* **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
+* **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
-[service-account]: ../community/modules/project/service-account/README.md
+[service-account]: ../modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
 ### Pub/Sub

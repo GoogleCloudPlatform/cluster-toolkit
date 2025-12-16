@@ -51,7 +51,7 @@ deployment_groups:
 
 {{ filesystems_yaml | safe }}
 
-  - source: community/modules/project/service-account
+  - source: modules/project/service-account
     kind: terraform
     id: hpc_service_account
     settings:

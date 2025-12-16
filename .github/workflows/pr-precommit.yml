@@ -26,12 +26,21 @@ on:
     - main
     - develop
     - release-candidate
+    - hotfix-*
 
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
     - uses: actions/setup-python@v5
       with:
         # internal Python tests require Python 3.12
@@ -61,6 +70,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
     - uses: actions/setup-python@v5
       with:
         # the slurm-files Python requirements.txt requires updating
