@@ -48,6 +48,7 @@ import tpu
 import conf
 import conf_v2411
 import watch_delete_vm_op
+import repair
 
 log = logging.getLogger()
 
@@ -119,6 +120,17 @@ class NodeActionDown():
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes set down ({hostlist}) with reason={self.reason}")
         run(f"{lookup().scontrol} update nodename={hostlist} state=down reason={shlex.quote(self.reason)}")
+
+@dataclass(frozen=True)
+class NodeActionRepair():
+    reason: str
+    def apply(self, nodes: List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} nodes to repair ({hostlist}) with reason={self.reason}")
+        for node in nodes:
+            op_id = repair.call_rr_api(node, self.reason)
+            if op_id:
+                repair.store_operation(node, op_id, self.reason)
 
 @dataclass(frozen=True)
 class NodeActionUnknown():
@@ -238,10 +250,33 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
     return NodeActionUnchanged()
 
+def get_node_reason(nodename: str) -> Optional[str]:
+    """Get the reason for a node's state."""
+    try:
+        result = run(f"{lookup().scontrol} show node {nodename}")
+        for line in result.stdout.splitlines():
+            if "Reason=" in line:
+                reason = line.split("Reason=")[1].strip()
+                if "[" in reason:
+                    return reason.split("[")[0].strip()
+                return reason
+    except Exception as e:
+        log.error(f"Failed to get reason for node {nodename}: {e}")
+    return None
+
+
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     lkp = lookup()
     state = lkp.node_state(nodename)
+    if state is not None and "DRAIN" in state.flags:
+        reason = get_node_reason(nodename)
+        if reason in repair.REPAIR_REASONS:
+            if repair.is_node_being_repaired(nodename):
+                return NodeActionUnchanged()
+            inst = lkp.instance(nodename.split(".")[0])
+            if inst:
+                return NodeActionRepair(reason=reason)
 
     if lkp.node_is_gke(nodename):
         return NodeActionUnchanged()
@@ -642,6 +677,11 @@ def main():
             sync_instances()
         except Exception:
             log.exception("failed to sync instances")
+
+        try:
+            repair.poll_operations()
+        except Exception:
+            log.exception("failed to poll repair operations")
 
         try:
             sync_flex_migs(lkp)
