@@ -21,6 +21,7 @@ vars:
   deployment_name: slurm6-tpu
   region: us-central1
   zone: us-central1-a
+  nodeset_preemptible: false
 
 deployment_groups:
 - group: primary
@@ -37,7 +38,7 @@ deployment_groups:
       # Preemptible TPUs cost much less than non-preemptible TPUs.
       # The Cloud TPU service might preempt (shut down) these TPUs at any time.
       # https://cloud.google.com/tpu/docs/preemptible
-      preemptible: false
+      preemptible: $(vars.nodeset_preemptible)
       # Specify whether to preserve TPU on suspend.
       # If set to true, suspended VM will be stopped.
       # If set to false, suspended VM will be deleted.
