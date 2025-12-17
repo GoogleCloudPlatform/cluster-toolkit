@@ -679,6 +679,43 @@ func (bp *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
+func validateSlurmClusterName(bp Blueprint) error {
+	path := Root.Vars.Dot("slurm_cluster_name")
+
+	if !bp.Vars.Has("slurm_cluster_name") {
+		return nil // Optional: slurm_cluster_name is not always required
+	}
+
+	v, err := bp.Eval(GlobalRef("slurm_cluster_name").AsValue())
+	if err != nil {
+		return BpError{path, err}
+	}
+	if v.Type() != cty.String || v.IsNull() || !v.IsKnown() {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgValueNotString,
+		}}
+	}
+
+	s := v.AsString()
+	if len(s) == 0 {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgValueEmptyString,
+		}}
+	}
+
+	// Check that slurm_cluster_name matches the required regex
+	matched, _ := regexp.MatchString(`^[a-z](?:[a-z0-9]{0,9})$`, s)
+	if !matched {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgSlurmClusterNameReqs,
+		}}
+	}
+	return nil
+}
+
 // checkToolkitModulesUrlAndVersion returns an error if either
 // toolkit_modules_url or toolkit_modules_version is
 // exclsuively supplied (i.e., one is present, but the other is missing).
