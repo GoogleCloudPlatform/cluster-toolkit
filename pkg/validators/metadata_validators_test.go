@@ -45,7 +45,7 @@ func TestRegexValidator(t *testing.T) {
 	validator := RegexValidator{}
 
 	t.Run("fails_on_invalid_name", func(t *testing.T) {
-		// rule targeting module.setting "name"
+		// rule targeting module.setting "name" via vars:
 		rule := modulereader.ValidationRule{
 			Validator:    "regex",
 			ErrorMessage: "'name' must be lowercase and start with a letter.",
@@ -85,34 +85,8 @@ func TestRegexValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("blueprint_scope_validates_bp_var", func(t *testing.T) {
-		// blueprint-scoped rule should validate bp.Vars
-		bp := baseBP
-		bp.Vars = config.NewDict(map[string]cty.Value{
-			"global_name": cty.StringVal("Invalid-Name"),
-		})
-
-		rule := modulereader.ValidationRule{
-			Validator:    "regex",
-			ErrorMessage: "'global_name' must be lowercase and start with a letter.",
-			Inputs: map[string]interface{}{
-				"vars":    []interface{}{"global_name"},
-				"pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
-				"scope":   "blueprint",
-			},
-		}
-
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected blueprint-level validation error, got nil")
-		}
-		if !strings.Contains(err.Error(), "must be lowercase") {
-			t.Fatalf("expected blueprint error to contain message, got: %q", err.Error())
-		}
-	})
-
-	t.Run("skips_inherited_by_default_and_enforce_inherited", func(t *testing.T) {
-		// when module.setting equals blueprint var (inherited), default behavior should skip validation
+	t.Run("module_setting_equal_to_blueprint_var_is_validated", func(t *testing.T) {
+		// when module.setting equals blueprint var, module-scoped validators should still validate it
 		bp := baseBP
 		// set blueprint var and module setting to the same INVALID value
 		bp.Vars = config.NewDict(map[string]cty.Value{
@@ -122,8 +96,8 @@ func TestRegexValidator(t *testing.T) {
 			"name": cty.StringVal("Invalid-Name"),
 		})
 
-		// rule without enforce_inherited should skip (no error)
-		ruleSkip := modulereader.ValidationRule{
+		// module-scoped rule (uses vars: to indicate module.setting names)
+		rule := modulereader.ValidationRule{
 			Validator:    "regex",
 			ErrorMessage: "'name' must be lowercase and start with a letter.",
 			Inputs: map[string]interface{}{
@@ -131,23 +105,10 @@ func TestRegexValidator(t *testing.T) {
 				"pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
 			},
 		}
-		if err := validator.Validate(bp, bp.Groups[0].Modules[0], ruleSkip, bp.Groups[0], 0); err != nil {
-			t.Fatalf("expected no error when inherited and enforce_inherited absent, got: %v", err)
-		}
 
-		// rule with enforce_inherited should force validation and return error
-		ruleEnforce := modulereader.ValidationRule{
-			Validator:    "regex",
-			ErrorMessage: "'name' must be lowercase and start with a letter.",
-			Inputs: map[string]interface{}{
-				"vars":              []interface{}{"name"},
-				"pattern":           "^[a-z]([-a-z0-9]*[a-z0-9])?$",
-				"enforce_inherited": true,
-			},
-		}
-		err := validator.Validate(bp, bp.Groups[0].Modules[0], ruleEnforce, bp.Groups[0], 0)
-		if err == nil {
-			t.Fatalf("expected error when enforce_inherited is true, got nil")
+		// Expect an error because the module setting (even though equal to bp var) is validated.
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+			t.Fatalf("expected validation error when module.setting equals blueprint var, got nil")
 		}
 	})
 

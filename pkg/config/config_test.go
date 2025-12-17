@@ -355,6 +355,9 @@ func (s *zeroSuite) TestNewBlueprint(c *C) {
 	c.Assert(err, IsNil)
 
 	bp.path = outFile // set expected path
+	// NewBlueprint populates a runtime-only YamlCtx (positions in source YAML).
+	// Reflect that in the expected blueprint before doing a DeepEquals compare.
+	bp.YamlCtx = newBp.YamlCtx
 	c.Assert(bp, DeepEquals, newBp)
 }
 

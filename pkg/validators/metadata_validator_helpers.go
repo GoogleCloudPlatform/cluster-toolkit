@@ -62,67 +62,32 @@ func evaluateAndFlatten(val cty.Value) []cty.Value {
 	return values
 }
 
-// getBlueprintValues retrieves a cty.Value from blueprint variables by name,
-// evaluates it and returns the flattened values and the path to use for errors.
-func getBlueprintValues(bp config.Blueprint, varName string) ([]cty.Value, config.Path, error) {
-	var nilPath config.Path
-
-	if !bp.Vars.Has(varName) {
-		return nil, nilPath, fmt.Errorf("variable %q not found in blueprint vars", varName)
-	}
-	val := bp.Vars.Get(varName)
-	if evaledVal, err := bp.Eval(val); err == nil {
-		val = evaledVal
-	}
-	values := evaluateAndFlatten(val)
-	return values, config.Root.Vars.Dot(varName), nil
-}
-
 // getModuleSettingValues retrieves a cty.Value from module settings using a dot-separated path,
 // evaluates expressions via bp.Eval and returns flattened slice + path for errors.
 func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int, mod config.Module, settingName string) ([]cty.Value, config.Path, error) {
 	var nilPath config.Path
 
-	val, found := getNestedValue(mod.Settings, settingName)
-	if !found {
-		return nil, nilPath, fmt.Errorf("setting %q not found in module %q settings", settingName, mod.ID)
+	// Determine canonical path for this module.setting in the blueprint.
+	groupIndex := bp.GroupIndex(group.Name)
+	path := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings.Dot(settingName)
+
+	// If YAML context exists and the path is not present in the user's YAML,
+	// treat the setting as absent so validators skip it (honoring optional:true).
+
+	if bp.YamlCtx != nil {
+		if _, ok := bp.YamlCtx.Pos(path); !ok {
+			return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
+		}
 	}
+
+	val, _ := getNestedValue(mod.Settings, settingName)
+
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
 	}
 	values := evaluateAndFlatten(val)
 
-	groupIndex := bp.GroupIndex(group.Name)
-	path := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings.Dot(settingName)
-
 	return values, path, nil
-}
-
-// valuesEqualBlueprint returns true when the provided flattened module values are
-// equal to the flattened blueprint var with the same name. Comparison is only done
-// for string values; non-comparable types return false.
-func valuesEqualBlueprint(bp config.Blueprint, varName string, moduleValues []cty.Value) bool {
-	if !bp.Vars.Has(varName) {
-		return false
-	}
-	bpVal := bp.Vars.Get(varName)
-	if evaledBp, err := bp.Eval(bpVal); err == nil {
-		bpVal = evaledBp
-	}
-	bpVals := evaluateAndFlatten(bpVal)
-
-	if len(bpVals) != len(moduleValues) {
-		return false
-	}
-	for i := range bpVals {
-		if bpVals[i].Type() != cty.String || moduleValues[i].Type() != cty.String {
-			return false
-		}
-		if bpVals[i].AsString() != moduleValues[i].AsString() {
-			return false
-		}
-	}
-	return true
 }
 
 // parseStringList normalizes an input that may be a single string, []interface{} or nil into []string.
@@ -179,42 +144,6 @@ func processModuleSettings(bp config.Blueprint, mod config.Module, group config.
 	return nil
 }
 
-// processVarsAsBlueprint processes a list of names as blueprint vars.
-func processVarsAsBlueprint(bp config.Blueprint, list []string, optional bool, handler func(Target) error) error {
-	for _, name := range list {
-		values, path, err := getBlueprintValues(bp, name)
-		if err != nil {
-			if optional {
-				continue
-			}
-			// legacy behavior: skip when missing blueprint var even if optional == false
-			continue
-		}
-		if err := handler(Target{Name: name, Values: values, Path: path, IsBlueprint: true}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// processVarsPreferModuleSetting prefers module.setting for each name; skips if module.setting absent.
-func processVarsPreferModuleSetting(bp config.Blueprint, mod config.Module, group config.Group, modIdx int, list []string, handler func(Target) error) error {
-	for _, vname := range list {
-		if val, ok := getNestedValue(mod.Settings, vname); ok {
-			if evaled, err := bp.Eval(val); err == nil {
-				val = evaled
-			}
-			values := evaluateAndFlatten(val)
-			path := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(vname)
-			if err := handler(Target{Name: vname, Values: values, Path: path, IsBlueprint: false}); err != nil {
-				return err
-			}
-		}
-		// else: skip (do not fallback to blueprint var)
-	}
-	return nil
-}
-
 // IterateRuleTargets resolves vars/settings from a validation rule according to scope and optional semantics,
 // and calls the provided handler for each resolved Target. The handler may return an error to stop iteration.
 func IterateRuleTargets(
@@ -226,9 +155,9 @@ func IterateRuleTargets(
 	handler func(Target) error,
 ) error {
 
+	// Only support `vars:` in module metadata validators (each treated as a module.setting name).
+	// `settings:` support has been removed to enforce a single convention.
 	varsList, _ := parseStringList(rule.Inputs["vars"])
-	settingsList, _ := parseStringList(rule.Inputs["settings"])
-	scope, _ := rule.Inputs["scope"].(string)
 	optional := true
 	if v, ok := rule.Inputs["optional"]; ok {
 		if b, ok := v.(bool); ok {
@@ -236,22 +165,6 @@ func IterateRuleTargets(
 		}
 	}
 
-	switch scope {
-	case "module":
-		if len(settingsList) > 0 {
-			return processModuleSettings(bp, mod, group, modIdx, settingsList, optional, handler)
-		}
-		return processModuleSettings(bp, mod, group, modIdx, varsList, optional, handler)
-
-	case "blueprint":
-		return processVarsAsBlueprint(bp, varsList, optional, handler)
-
-	default:
-		if len(settingsList) > 0 {
-			if err := processModuleSettings(bp, mod, group, modIdx, settingsList, optional, handler); err != nil {
-				return err
-			}
-		}
-		return processVarsPreferModuleSetting(bp, mod, group, modIdx, varsList, handler)
-	}
+	// Interpret each var name as module.settings.<name>
+	return processModuleSettings(bp, mod, group, modIdx, varsList, optional, handler)
 }

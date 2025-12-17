@@ -43,9 +43,6 @@ func (r *RegexValidator) Validate(
 		}
 	}
 
-	// enforce_inherited option (default false)
-	enforceInherited, _ := rule.Inputs["enforce_inherited"].(bool)
-
 	// compile regex
 	re, err := regexp.Compile(patternRaw)
 	if err != nil {
@@ -74,11 +71,6 @@ func (r *RegexValidator) Validate(
 
 	// iterate targets using shared logic
 	err = IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		// If module value is equal to blueprint var and enforcement of inherited values is not requested, skip.
-		if !t.IsBlueprint && valuesEqualBlueprint(bp, t.Name, t.Values) && !enforceInherited {
-			// skip inherited
-			return nil
-		}
 		return validateValues(t.Values, t.Path)
 	})
 	return err
