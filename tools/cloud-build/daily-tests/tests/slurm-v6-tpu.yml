@@ -23,7 +23,6 @@ slurm_cluster_name: "v6tpu{{ build[0:5] }}"
 cli_deployment_vars:
    region: "{{ region }}"
    zone: "{{ zone }}"
-   nodeset_preemptible: true
 
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm6-tpu.yaml"

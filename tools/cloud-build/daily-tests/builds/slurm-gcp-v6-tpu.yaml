@@ -57,6 +57,8 @@ steps:
     cd /workspace && make
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
+    BLUEPRINT="/workspace/community/examples/hpc-slurm6-tpu.yaml"
+    sed -i 's/^[ ]*preemptible: false/      preemptible: true/' $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
