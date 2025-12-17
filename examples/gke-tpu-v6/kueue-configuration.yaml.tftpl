@@ -19,7 +19,7 @@ metadata:
 spec:
   nodeLabels:
     cloud.google.com/gke-tpu-accelerator: ${accelerator_type}
-  nodeTaints:
+  tolerations:
   - effect: NoSchedule
     key: google.com/tpu
     value: "present"

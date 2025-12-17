@@ -29,10 +29,6 @@ spec:
         backoffLimit: 0
         template:
           spec:
-            tolerations:
-            - key: "google.com/tpu"
-              value: "present"
-              effect: "NoSchedule"
             nodeSelector:
               cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
               cloud.google.com/gke-tpu-topology: 4x4 # 4x4 = 16 chips
