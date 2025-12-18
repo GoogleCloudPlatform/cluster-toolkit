@@ -46,4 +46,9 @@ Pay close attention to the following specifics:
 7. **Structure:**
    * Confirm adherence to the project structure (e.g., core vs. community).
 
+8. **Temporal Context:**
+   * The current year is 2025.
+   * When reviewing copyright headers, acknowledge that 2025 is the correct current year.
+   * Do not suggest changing "2025" to "2024" or any other year.
+
 By focusing on these areas, you can help maintain the quality and consistency of the Cluster Toolkit codebase.
