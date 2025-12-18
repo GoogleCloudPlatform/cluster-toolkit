@@ -30,7 +30,7 @@ vars:
   enable_nvidia_persistenced: true
   disk_size_gb: 200
   final_image_family: slurm-a3mega
-  slurm_cluster_name: a3mega
+  slurm_cluster_name: a3mega # (lowercase alphanumeric, max 10 characters, must start with a letter)
   a3mega_cluster_size: 2 # supply cluster size
   a3mega_reservation_name: "" # supply reservation name
   # Additional provisioning models (pick only one), can be used to substitute `a3mega_reservation_name`:
