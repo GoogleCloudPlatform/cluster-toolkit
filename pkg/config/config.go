@@ -600,6 +600,7 @@ func (err InputValueError) Error() string {
 
 var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
 var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
+var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z](?:[a-z0-9]{0,9})$`)
 
 // isValidLabelName checks if a string is a valid name for a GCP label.
 // For more information on valid label names, see the docs at:
@@ -706,8 +707,7 @@ func validateSlurmClusterName(bp Blueprint) error {
 	}
 
 	// Check that slurm_cluster_name matches the required regex
-	matched, _ := regexp.MatchString(`^[a-z](?:[a-z0-9]{0,9})$`, s)
-	if !matched {
+	if !matchSlurmClusterNameExp.MatchString(s) {
 		return BpError{path, InputValueError{
 			inputKey: "slurm_cluster_name",
 			cause:    errMsgSlurmClusterNameReqs,
