@@ -35,14 +35,33 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  - "MACHINE_TYPE=tpu"
+  - "TPU_RUNTIME_VERSION=tpu-vm-tf-2.14.0"
+  - "ACCELERATOR_TYPE=v3-8"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "NUM_NODES=2"
+  - "INSTANCE_PREFIX=v3sp"
+  - "BUILD_ID=$BUILD_ID"
+  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/tpuv3options.txt"
   args:
   - -c
   - |
-    set -x -e
+    set -e -u -o pipefail
+    echo "Sourcing find_available_zone.sh to determine zone."
+    source /workspace/tools/cloud-build/find_available_zone.sh
+    if [ -z "$${ZONE:-}" ]; then
+      echo "ERROR: ZONE not found" >&2
+      exit 1
+    fi
+    set -x
     cd /workspace && make
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    REGION="$${ZONE%-*}"
+    BUILD_ID_SHORT="$${BUILD_ID:0:6}"
+    BLUEPRINT="/workspace/community/examples/hpc-slurm6-tpu.yaml"
+    sed -i 's/^[ ]*preemptible: false/      preemptible: true/' $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-tpu.yml"

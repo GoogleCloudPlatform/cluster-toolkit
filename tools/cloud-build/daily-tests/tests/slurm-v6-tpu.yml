@@ -21,10 +21,9 @@ deployment_name: "v6-tpu-{{ build }}"
 slurm_cluster_name: "v6tpu{{ build[0:5] }}"
 
 cli_deployment_vars:
-   region: us-central1
-   zone: us-central1-a
+   region: "{{ region }}"
+   zone: "{{ zone }}"
 
-zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm6-tpu.yaml"
 network: "{{ deployment_name }}-net"
