@@ -46,6 +46,7 @@ from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
+import conf_v2411
 import watch_delete_vm_op
 
 log = logging.getLogger()
@@ -411,6 +412,7 @@ def sync_instances():
 
 def reconfigure_slurm():
     update_msg = "*** slurm configuration was updated ***"
+
     if lookup().cfg.hybrid:
         # terraform handles generating the config.yaml, don't do it here
         return
@@ -423,7 +425,11 @@ def reconfigure_slurm():
     util.update_config(cfg_new)
 
     if lookup().is_controller:
-        conf.gen_controller_configs(lookup())
+        if util.slurm_version_gte(lookup().slurm_version, "25.05"):
+            conf.generate_configs_slurm_v2505(lookup())
+        else:
+            conf_v2411.generate_configs_slurm_v2411(lookup())
+
         log.info("Restarting slurmctld to make changes take effect.")
         try:
             # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
@@ -445,10 +451,16 @@ def reconfigure_slurm():
         log.debug("Done.")
 
 
+def _generate_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
+
+    if util.slurm_version_gte(lkp.slurm_version, "25.05"):
+        return conf.gen_topology_yaml(lkp)
+    else:
+        return conf_v2411.gen_topology_conf(lkp)
+
 def update_topology(lkp: util.Lookup) -> None:
-    if conf.topology_plugin(lkp) != conf.TOPOLOGY_PLUGIN_TREE:
-        return
-    updated, summary = conf.gen_topology_conf(lkp)
+    updated, summary = _generate_topology(lkp) # type: ignore[attr-defined]
+
     if updated:
         log.info("Topology configuration updated. Reconfiguring Slurm.")
         util.scontrol_reconfigure(lkp)
