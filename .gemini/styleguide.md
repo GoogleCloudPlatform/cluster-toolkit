@@ -45,7 +45,7 @@ Pay close attention to the following specifics:
 
 7. **Structure:**
    * Confirm adherence to the project structure (e.g., core vs. community).
-   
+
 8. **Temporal Context:**
    * The current year is 2025.
    * When reviewing copyright headers, acknowledge that 2025 is the correct current year.
