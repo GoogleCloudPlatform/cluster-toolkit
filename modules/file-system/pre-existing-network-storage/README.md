@@ -75,8 +75,7 @@ The following is an example of using `pre-existing-network-storage` with the
 ```
 
 This is similar to the `lustre` filesystem, with the exception that it connects
-with a managed Lustre instance hosted by GCP.  Currently only Rocky 8 and
-Ubuntu 20.04 and Ubuntu 22.04 are supported.
+with a managed Lustre instance hosted by GCP.  Currently only Rocky 8 and Ubuntu 22.04 are supported.
 
 The following is an example of using `pre-existing-network-storage` with the `daos`
 filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be
