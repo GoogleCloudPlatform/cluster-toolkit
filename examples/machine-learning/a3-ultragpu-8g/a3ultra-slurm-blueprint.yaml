@@ -48,20 +48,20 @@ vars:
   a3u_dws_flex_enabled: false
   a3u_enable_spot_vm: false
 
-  # # To enable Managed-Lustre please uncomment this section and fill out the settings.
-  # # Additionally, please uncomment the private_service_access and managed-lustre modules.
-  # # Managed Lustre is only supported in specific regions and zones
-  # # Please refer https://cloud.google.com/managed-lustre/docs/locations
+  # To enable Managed-Lustre please uncomment this section and fill out the settings.
+  # Additionally, please uncomment the private_service_access and managed-lustre modules.
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
 
-  # # Managed-Lustre instance name. This should be unique for each deployment.
+  # Managed-Lustre instance name. This should be unique for each deployment.
   # lustre_instance_id: lustre-instance
 
-  # # The values of size_gib and per_unit_storage_throughput are co-related
-  # # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
-  # # Storage capacity of the lustre instance in GiB
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
   # lustre_size_gib: 36000
 
-  # # Maximum throughput of the lustre instance in MBps per TiB
+  # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
 deployment_groups:
