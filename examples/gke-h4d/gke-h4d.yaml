@@ -123,6 +123,7 @@ deployment_groups:
       enable_dcgm_monitoring: true
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
+      enable_filestore_csi: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
