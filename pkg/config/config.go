@@ -85,6 +85,17 @@ func (g *Group) Clone() Group {
 	return c
 }
 
+// ModuleIndex returns the index of the input module in the group
+// return -1 if not found
+func (g Group) ModuleIndex(id ModuleID) int {
+	for i, m := range g.Modules {
+		if m.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // Kind returns the kind of all the modules in the group.
 // If the group contains modules of different kinds, it returns UnknownKind
 func (g Group) Kind() ModuleKind {
@@ -280,6 +291,9 @@ type Blueprint struct {
 	path string
 	// records of intentions to stage file (populated by ghpc_stage function)
 	stagedFiles map[string]string
+	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
+	// was explicitly present in the user's source (runtime-only, not serialized).
+	YamlCtx *YamlCtx `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {
@@ -456,6 +470,9 @@ func NewBlueprint(path string) (Blueprint, *YamlCtx, error) {
 		return Blueprint{}, &ctx, err
 	}
 	bp.path = absPath
+	// Attach parsed YAML context to the Blueprint so validators can determine
+	// whether a module.setting path was explicitly present in the user's YAML.
+	bp.YamlCtx = &ctx
 	return bp, &ctx, nil
 }
 
