@@ -52,10 +52,26 @@ ORDER_SEED = b"What a wonderful phrase"
  # Test that shouldn't be scheduled too close to each other
 TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
-    (("ml-a4-highgpu-slurm", "gke-a4"), 2*60),
-    (("ml-a3-ultragpu-onspot-slurm", "ml-a3-ultragpu-onspot-jbvms", "gke-a3-ultragpu-onspot"), 1*60),
-    (("ml-a3-megagpu-slurm-ubuntu", "gke-a3-megagpu"), 1*60),
-    (("ml-a3-highgpu-slurm", "gke-a3-highgpu"), 1*60),
+    ((
+        "ml-a4-highgpu-slurm",
+        "ml-a4-highgpu-onspot-slurm",
+        "gke-a4"
+    ), 2*60),
+    ((
+        "ml-a3-ultragpu-onspot-slurm", 
+        "ml-a3-ultragpu-onspot-jbvms", 
+        "gke-a3-ultragpu-onspot"
+    ), 2*60),
+    ((
+        "ml-a3-megagpu-slurm-ubuntu",
+        "gke-a3-megagpu",
+        "ml-a3-megagpu-onspot-slurm-ubuntu",
+        "gke-a3-megagpu-onspot"
+    ), 1*60),
+    ((
+        "ml-a3-highgpu-slurm", 
+        "gke-a3-highgpu"
+    ), 1*60),
 ]
 # TODO:
 # * Consider defining constraints (e.g. reservations used) as a tags within tests yamls
