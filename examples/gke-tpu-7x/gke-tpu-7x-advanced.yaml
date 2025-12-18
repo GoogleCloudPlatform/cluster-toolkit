@@ -303,28 +303,16 @@ deployment_groups:
       remote_mount: $(training_bucket.gcs_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
+
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
       remote_mount: $(checkpoint_bucket.gcs_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-cache:enable-parallel-downloads:true,
-        rename-dir-limit=200000
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
+
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
@@ -358,7 +346,7 @@ deployment_groups:
 
       k8s_service_account_name: workload-identity-k8s-sa
       requested_cpu_per_pod: 8
-      image: ubuntu:latest
+      image: ubuntu:22.04
 
       command:
       - bash
