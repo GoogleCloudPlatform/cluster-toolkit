@@ -36,11 +36,11 @@ steps:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
-  - "NUM_NODES=4"  
+  - "NUM_NODES=4"
   - "MACHINE_TYPE=a3-highgpu-8g"
-  - "INSTANCE_PREFIX=a3hspgke" 
+  - "INSTANCE_PREFIX=a3hspgke"
   - "BUILD_ID=$BUILD_ID"
-  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3hoptions.txt" 
+  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3hoptions.txt"
   args:
   - -c
   - |
@@ -75,16 +75,12 @@ steps:
     echo '      - nvidia-smi'                                  >> $${EXAMPLE_BP}
     echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
-
     # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable as true and removing reservation from blueprint.
     sed -i '/id: a3_highgpu_pool/,/outputs: \[instructions\]/ { /zones: \[$(vars.zone)\]/a \
           spot: true \
           placement_policy: \
             type: COMPACT
     }' $${EXAMPLE_BP}
-
-    cat $${EXAMPLE_BP}
-    
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
