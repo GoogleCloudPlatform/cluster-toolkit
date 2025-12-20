@@ -75,7 +75,7 @@ steps:
     echo '      - nvidia-smi'                                  >> $${EXAMPLE_BP}
     echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
-    # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable as true and removing reservation from blueprint.
+    # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable as true.
     sed -i '/id: a3_highgpu_pool/,/outputs: \[instructions\]/ { /zones: \[$(vars.zone)\]/a \
           spot: true \
           placement_policy: \
