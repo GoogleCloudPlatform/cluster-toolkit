@@ -41,6 +41,8 @@ locals {
     "v2" = local.node_conf_hw.Mem334CPU96
     "v3" = local.node_conf_hw.Mem334CPU96
     "v4" = local.node_conf_hw.Mem400CPU240
+    "v5litepod" = local.node_conf_hw.Mem400CPU240
+    "v5p"       = local.node_conf_hw.Mem400CPU240
   }
   simple_nodes = ["v2-8", "v3-8", "v4-8"]
 }

@@ -36,17 +36,19 @@ class TPU:
     """Class for handling the TPU-vm nodes"""
 
     State = tpu.types.cloud_tpu.Node.State
-    TPUS_PER_VM = 4
     __expected_states = {
         "create": State.READY,
         "start": State.READY,
         "stop": State.STOPPED,
     }
 
+    # Updated mapping to include V5LITEPOD and V5P
     __tpu_version_mapping = {
         "V2": tpu.AcceleratorConfig().Type.V2,
         "V3": tpu.AcceleratorConfig().Type.V3,
         "V4": tpu.AcceleratorConfig().Type.V4,
+        "V5LITEPOD": tpu.AcceleratorConfig().Type.V5LITE_POD, # Corrected Enum
+        "V5P": tpu.AcceleratorConfig().Type.V5P,
     }
 
     @classmethod
@@ -74,6 +76,8 @@ class TPU:
         if ns_ac.topology != "" and ns_ac.version != "":
             ac = tpu.AcceleratorConfig()
             ac.topology = ns_ac.topology
+            if ns_ac.version not in self.__tpu_version_mapping:
+                raise ValueError(f"Unsupported TPU version: {ns_ac.version} in tpu.py mapping")
             ac.type_ = self.__tpu_version_mapping[ns_ac.version]
             self.ac = ac
         else:
@@ -140,11 +144,38 @@ class TPU:
             return False
 
     def __calc_vm_from_topology(self, topology):
+        if not topology:
+            return 0
         topo = topology.split("x")
-        tot = 1
+        total_chips = 1
         for num in topo:
-            tot = tot * int(num)
-        return tot // self.TPUS_PER_VM
+            total_chips = total_chips * int(num)
+
+        tpu_type = self.ac.type_
+        chips_per_host = 4
+
+        if tpu_type == tpu.AcceleratorConfig().Type.V5LITE_POD:
+             # v5e single host slices are 1, 4, 8 chips. Multi-host are multiples of 8.
+            if total_chips <= 8:
+                return 1
+            else:
+                return total_chips // 8
+        elif tpu_type == tpu.AcceleratorConfig().Type.V4:
+             chips_per_host = 4
+        elif tpu_type == tpu.AcceleratorConfig().Type.V5P:
+             chips_per_host = 4
+        elif tpu_type in [tpu.AcceleratorConfig().Type.V2,
+                          tpu.AcceleratorConfig().Type.V3]:
+             # Older generations, 4 chips per host for the slice arithmetic.
+             chips_per_host = 4
+        else:
+            log.warning(f"TPU type {tpu_type} not explicitly handled in __calc_vm_from_topology, defaulting to 4 chips per host for division.")
+
+        if total_chips % chips_per_host != 0:
+            log.error(f"Total chips {total_chips} for topology {topology} is not a multiple of chips_per_host {chips_per_host} for type {tpu_type}")
+            return max(1, total_chips // chips_per_host)
+
+        return total_chips // chips_per_host
 
     def __check_resp(self, response, op_name):
         des_state = self.__expected_states.get(op_name)
@@ -208,7 +239,7 @@ class TPU:
 
         node = tpu.Node()
         node.accelerator_config = self.ac
-        node.runtime_version = f"tpu-vm-tf-{self.tf_version}"
+        node.runtime_version = self.tf_version
         startup_script = """
         #!/bin/bash
         echo "startup script not found > /var/log/startup_error.log"
