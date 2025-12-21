@@ -52,7 +52,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
-  disk_size_gb: 200
+  disk_size_gb: 100
   a3mega_cluster_size: 2
   enable_ops_agent: "true"
   enable_nvidia_dcgm: "true"
