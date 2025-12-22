@@ -143,7 +143,7 @@ Modules that are still in development and less stable are labeled with the
 [multivpc]: network/multivpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
 [firewall-rules]: network/firewall-rules/README.md
-[private-service-access]: ../community/modules/network/private-service-access/README.md
+[private-service-access]: ../modules/network/private-service-access/README.md
 
 ### Packer
 

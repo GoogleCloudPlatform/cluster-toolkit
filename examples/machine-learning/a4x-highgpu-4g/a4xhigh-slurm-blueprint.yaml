@@ -332,7 +332,7 @@ deployment_groups:
     - network_storage
 
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [a4x-slurm-net-0]
 
   # To use Managed Lustre as for the shared /home directory:
