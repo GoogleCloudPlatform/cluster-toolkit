@@ -16,7 +16,7 @@
 
 # region, zone must be defined
 # in build file with --extra-vars flag!
-test_name: gke-a4-onspot
+test_name: gke-a4-spot
 deployment_name: gke-a4-spot-{{ build }}
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-a4/gke-a4.yaml"
