@@ -116,14 +116,14 @@ ghpc:
       inputs:
         vars: [partition_name]
         pattern: "^[a-z0-9]{1,10}$"
-      error_message: "partition_name must be lowercase and max 10 characters."
+      error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators
 
-There are three methods to manage or skip validation checks, depending on whether the validator is defined at the blueprint or module level.
+The methods for managing or skipping validation checks vary depending on whether the validator is defined at the blueprint or module level.
 
 ### Skipping Blueprint-level Validators
 For global environment checks, you can use the following methods to skip specific validators:
