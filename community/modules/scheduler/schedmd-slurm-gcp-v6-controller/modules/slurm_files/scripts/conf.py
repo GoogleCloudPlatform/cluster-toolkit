@@ -96,7 +96,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_dns" if any_dynamic or any_tpu or any_gke else None, # CORRECTED LINE
+            "cloud_dns" if any_dynamic or any_tpu or any_gke else None,
             "enable_configless",
             "idle_on_node_suspend",
         ],
@@ -178,11 +178,31 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
 
 def nodeset_tpu_lines(nodeset, lkp: util.Lookup) -> str:
     nodelist = lkp.nodelist(nodeset)
+    ac = nodeset.accelerator_config
+    chips_per_node = 0
+    gres_conf = {}
+
+    if ac and ac.topology and ac.version:
+        parts = [int(p) for p in ac.topology.split('x')]
+        num_chips = 1
+        for p in parts:
+            num_chips *= p
+        # Assuming node_count_static is the number of VMs in the nodeset for this topology
+        if nodeset.node_count_static > 0:
+            chips_per_node = num_chips // nodeset.node_count_static
+
+        if chips_per_node > 0:
+            # This string MUST somewhat match the Name, Type, and Count in cloud_gres.conf
+            gres_conf["Gres"] = f"tpu:{ac.version.lower()}:{chips_per_node}"
+    print(f"DEBUG: num_chips is {num_chips}")
+    print(f"DEBUG: nodeset.node_count_static is {nodeset.node_count_static}")
+    print(f"DEBUG: chips_per_node is {chips_per_node}")
+    print(f"DEBUG: gres is {gres_conf["Gres"]}")
     return "\n".join(
         map(
             dict_to_conf,
             [
-                {"NodeName": nodelist, "State": "CLOUD", **nodeset.node_conf},
+                {"NodeName": nodelist, "State": "CLOUD", **gres_conf, **nodeset.node_conf}, # Added gres_conf
                 {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
             ],
         )
@@ -202,6 +222,9 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
 
     def defmempercpu(nodeset_name: str) -> int:
         nodeset = lkp.cfg.nodeset.get(nodeset_name)
+        if not nodeset: # Should not happen if config is valid
+            print("Config seems invalid")
+            return MIN_MEM_PER_CPU
         template = nodeset.instance_template
         machine = lkp.template_machine_conf(template)
         mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
@@ -235,6 +258,11 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
         "PowerDownOnIdle": "YES" if power_down_on_idle else None,
         **partition.partition_conf,
     }
+
+    # --- MODIFICATION: Add Default=YES if specified in partition config ---
+    if partition.get("is_default", False):
+        line_elements["Default"] = "YES"
+    # --- END MODIFICATION ---
 
     return dict_to_conf(line_elements)
 
@@ -403,32 +431,34 @@ def gen_cloud_gres_conf_lines(lkp: util.Lookup) -> str:
         nodelist = lkp.nodelist(nodeset)
         ac = nodeset.accelerator_config
         if ac and ac.topology and ac.version:
-            # Basic chip count from topology (e.g., 2x4 = 8)
             parts = [int(p) for p in ac.topology.split('x')]
             num_chips = 1
             for p in parts:
                 num_chips *= p
 
-            # Determine chips per node. For single-host v5e, this is total_chips.
-            # This should ideally use the same logic as tpu.py's __calc_vm_from_topology
-            # to be consistent, but for a single node 2x4, chips_per_node is num_chips.
-            chips_per_node = num_chips // nodeset.node_count_static # Assuming static count == vm count
+            chips_per_node = 0
+            if nodeset.node_count_static > 0:
+                 chips_per_node = num_chips // nodeset.node_count_static
 
-            gres_type = f"tpu:{ac.version.lower()}:{chips_per_node}"
-            # Alternative, simpler GRES: gres_type = f"tpu:{chips_per_node}"
+            if chips_per_node > 0:
+                # --- MODIFICATION: Add File key for TPU devices ---
+                # Example path, confirm the correct device paths for your TPU version
+                f = "/dev/vfio/*"
+                # Alternatively, could be specific like /dev/accel[0-{chips_per_node-1}]
 
-            lines.append(
-                dict_to_conf(
-                    {
-                        "NodeName": nodelist,
-                        "Name": "tpu",
-                        # "Gres": gres_type,
-                        "Type": ac.version.lower(), # Optional subtype
-                        "Count": str(chips_per_node), # Or just the number
-                        # "File": "/dev/vfio/*", # Generic device path for TPUs
-                    }
+                lines.append(
+                    dict_to_conf(
+                        {
+                            "NodeName": nodelist,
+                            "Name": "tpu",
+                            "Type": ac.version.lower(),
+                            "Count": str(chips_per_node),
+                            # "File": tpu_device_file
+                        }
+                    )
                 )
-            )
+                # --- END MODIFICATION ---
+
     if lines:
         lines.append("\n")
     return "\n".join(lines)
@@ -690,4 +720,3 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
         _, summary = gen_topology_conf(lkp)
         summary.dump(lkp)
         install_topology_conf(lkp)
-        

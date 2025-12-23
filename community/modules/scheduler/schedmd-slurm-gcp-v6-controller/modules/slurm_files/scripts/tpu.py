@@ -239,7 +239,7 @@ class TPU:
 
         node = tpu.Node()
         node.accelerator_config = self.ac
-        node.runtime_version = self.tf_version
+        node.runtime_version = f"tpu-vm-tf-{self.tf_version}-pjrt"
         startup_script = """
         #!/bin/bash
         echo "startup script not found > /var/log/startup_error.log"
@@ -267,6 +267,7 @@ class TPU:
             "slurm_names": ";".join(slurm_names),
             "universe_domain": util.universe_domain(),
         }
+        print("Node metadata: {node.metadata}")
         node.tags = [self.lkp.cfg.slurm_cluster_name]
         if self.nodeset.service_account:
             node.service_account.email = self.nodeset.service_account.email
@@ -277,8 +278,9 @@ class TPU:
         node.network_config.enable_external_ips = self.enable_public_ip
         if self.data_disks:
             node.data_disks = self.data_disks
-
+        print("Node: {node}")
         request = tpu.CreateNodeRequest(parent=self._parent, node=node, node_id=node_id)
+        print("Request: {request}")
         resp = self._client.create_node(request=request).result()
         if not self.__check_resp(resp, "create"):
             return False

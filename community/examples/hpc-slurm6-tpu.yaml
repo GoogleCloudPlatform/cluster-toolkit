@@ -38,7 +38,7 @@ deployment_groups:
       accelerator_config:
         topology: "2x4"
         version : "V5LITEPOD"
-      tf_version            : v2-alpha-tpuv5-lite
+      tf_version            : 2.15.0
       preemptible           : true
 
   - id: tpu_partition
@@ -48,6 +48,7 @@ deployment_groups:
       partition_name: tpu
       exclusive: false
       resume_timeout: 3600
+      is_default: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
