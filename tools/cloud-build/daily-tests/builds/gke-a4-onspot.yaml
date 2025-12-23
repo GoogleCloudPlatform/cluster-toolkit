@@ -40,7 +40,7 @@ steps:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
-  - "NUM_NODES=2"
+  - "NUM_NODES=4"
   - "MACHINE_TYPE=a4-highgpu-8g"
   - "INSTANCE_PREFIX=a4spgke"
   - "BUILD_ID=$BUILD_ID"
