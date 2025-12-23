@@ -18,9 +18,12 @@ blueprint_name: slurm6-tpu
 
 vars:
   project_id: hpc-toolkit-dev ## Set GCP Project ID Here ##
-  deployment_name: slurmv5e-tpu
+  deployment_name: sim-slurmv5e-tpu
   region: europe-west4  # <--- CHANGE: Must be a v5e region
   zone: europe-west4-b
+  instance_image:
+    project: schedmd-slurm-public
+    family: slurm-gcp-6-10-ubuntu-2404-lts-nvidia-570
 
 deployment_groups:
 - group: primary
@@ -40,6 +43,7 @@ deployment_groups:
         version : "V5LITEPOD"
       tf_version            : 2.15.0
       preemptible           : true
+      docker_image: us-east1-docker.pkg.dev/managed-slurm-gke-dev/default/slurmd:python3.10-24.11-jax-pyxis
 
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -56,6 +60,7 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
+      instance_image: $(vars.instance_image)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -65,3 +70,4 @@ deployment_groups:
     - network
     settings:
       enable_controller_public_ips: true
+      instance_image: $(vars.instance_image)

@@ -224,6 +224,8 @@ class TPU:
         )
 
     def create_node(self, nodename):
+        print("Create node entered")
+        log.warning(f"Create node entered")
         if self.vmcount > 1 and not isinstance(nodename, list):
             log.error(
                 f"Tried to create a {self.vmcount} node TPU on nodeset {self._nodeset.nodeset_name} but only received one nodename {nodename}"
@@ -338,13 +340,18 @@ def delete_tpu_instances(instances: List[str]) -> None:
 def start_tpu(node: List[str]):
     lkp = util.lookup()
     tpuobj = TPU.make(lkp.node_nodeset_name(node[0]), lkp)
-
+    log.warning(
+        f"How many VM?"
+    )
     if len(node) == 1:
         node = node[0]
         log.debug(
             f"Will create a TPU of type {tpuobj.node_type} tf_version {tpuobj.tf_version} in zone {tpuobj.zone} with name {node}"
         )
         tpunode = tpuobj.get_node(node)
+        log.warning(
+            f"TPU object one vm: {tpuobj}"
+        )
         if tpunode is None:
             if not tpuobj.create_node(nodename=node):
                 log.error("Error creating tpu node {node}")
@@ -359,6 +366,9 @@ def start_tpu(node: List[str]):
     else:
         log.debug(
             f"Will create a multi-vm TPU of type {tpuobj.node_type} tf_version {tpuobj.tf_version} in zone {tpuobj.zone} with name {node[0]}"
+        )
+        log.warning(
+            f"TPU object multi vm: {tpuobj}"
         )
         if not tpuobj.create_node(nodename=node):
             log.error("Error creating tpu node {node}")

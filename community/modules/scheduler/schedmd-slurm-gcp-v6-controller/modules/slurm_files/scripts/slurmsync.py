@@ -140,7 +140,7 @@ def start_instance_op(node: str) -> Any:
 
 
 def start_instances(node_list):
-    log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
+    log.info("{} from slurmsync.py: instances to start ({})".format(len(node_list), ",".join(node_list)))
     lkp = lookup()
     # TODO: use code from resume.py to assign proper placement
     normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
