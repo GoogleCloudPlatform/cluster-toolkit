@@ -39,8 +39,8 @@ log = logging.getLogger()
 _SLURM_TOPO_ROOT = "slurm-root"
 TOPOLOGY_TREE = "topology/tree"
 TOPOLOGY_BLOCK = "topology/block"
-BLOCK_SIZE = 32 # Total number of blocks per block group, must be a power of two as required by Slurm.
-NVLINK_VM_COUNT = 18 # Number of A4X VMs per block
+BLOCK_SIZE = 32      # Represents total number of NVLDs per block group, must be a power of two as required by Slurm.
+NVLINK_VM_COUNT = 18 # Number of A4X VMs per NVLD
 
 
 def dict_to_conf(conf, delim=" ") -> str:
@@ -118,7 +118,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_dns" if not (any_dynamic or lkp.has_gke_nodesets()) else None,
+            "cloud_reg_addrs" if any_dynamic or any_tpu or any_gke else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
         ],

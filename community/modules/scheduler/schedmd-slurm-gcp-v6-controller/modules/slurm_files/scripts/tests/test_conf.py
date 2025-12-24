@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import pytest
-from mock import Mock
 import mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
 
@@ -45,7 +44,7 @@ def test_nodeset_lines():
         node_conf={"red": "velvet", "CPUs": 55},
     )
     lkp = util.Lookup(TstCfg(nodeset={'turbo': nodeset}))
-    lkp.template_info = Mock(return_value=TstTemplateInfo(
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type="Popov", count=33)
     ))
     mc = TstMachineConf(
@@ -57,7 +56,7 @@ def test_nodeset_lines():
         threads_per_core=10,
         cores_per_socket=11,
     )
-    lkp.template_machine_conf = Mock(return_value=mc) # type: ignore[method-assign]
+    lkp.template_machine_conf = mock.Mock(return_value=mc) # type: ignore[method-assign]
     assert conf.nodeset_lines(nodeset, lkp) == "\n".join(
         [
             "NodeName=m22-turbo-[0-4] State=CLOUD RealMemory=6 Boards=9 SocketsPerBoard=8 CoresPerSocket=11 ThreadsPerCore=10 CPUs=55 Gres=gpu:33 red=velvet",
@@ -197,13 +196,13 @@ TreeWidth=128"""),
 def test_conflines(mock_slurm_version, cfg, want):
     mock_slurm_version.return_value = "25.05"
     lkp = util.Lookup(cfg)
-    lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     lkp = util.Lookup(cfg)
     lkp.cfg.slurm_version = "25.05"
-    lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
 
 
@@ -225,9 +224,9 @@ def test_conflines(mock_slurm_version, cfg, want):
 def test_gen_cloud_gres_conf_lines(mock_slurm_version, cfg, gputype, gpucount, want):
     mock_slurm_version.return_value = "25.05"
     lkp = util.Lookup(cfg)
-    lkp.template_info = Mock(return_value=TstTemplateInfo(
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
     ))
     # mock nodelist to be smaller
-    lkp.nodelist = Mock(return_value="m22-turbo-[0-4]")  # type: ignore[method-assign]
+    lkp.nodelist = mock.Mock(return_value="m22-turbo-[0-4]")  # type: ignore[method-assign]
     assert conf.gen_cloud_gres_conf_lines(lkp) == want
