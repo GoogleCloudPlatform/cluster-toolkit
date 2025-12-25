@@ -45,6 +45,7 @@ steps:
   - "MACHINE_TYPE=g4-standard-48"
   - "INSTANCE_PREFIX=g4osp"
   - "BUILD_ID=$BUILD_ID"
+  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/g4options.txt"
   args:
   - -c
   - |

@@ -50,5 +50,4 @@ cli_deployment_vars:
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   disk_size_gb: 100
   cluster_size: 2
-  base_network_name: "{{ test_name }}"
   g4_enable_spot_vm: true
