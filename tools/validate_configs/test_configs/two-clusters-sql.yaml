@@ -49,7 +49,7 @@ deployment_groups:
   - source: modules/network/vpc
     id: hpc_network
 
-  - source: community/modules/network/private-service-access
+  - source: modules/network/private-service-access
     id: ps_connect
     use: [hpc_network]
 

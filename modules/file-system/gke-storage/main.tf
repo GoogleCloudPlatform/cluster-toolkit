@@ -30,7 +30,7 @@ check "private_vpc_connection_peering" {
     condition     = lower(var.storage_type) != "parallelstore" ? true : var.private_vpc_connection_peering != null
     error_message = <<-EOT
     Parallelstore must be run within the same VPC as the GKE cluster and have private services access enabled.
-    If using new VPC, please use community/modules/network/private-service-access to create private-service-access.
+    If using new VPC, please use modules/network/private-service-access to create private-service-access.
     If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc).
     EOT
   }
