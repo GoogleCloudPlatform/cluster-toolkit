@@ -2,6 +2,8 @@
 
 The Toolkit contains "validator" functions that perform tests to ensure that deployment variables are valid and that the HPC environment can be provisioned in your Google Cloud project.
 
+These validators run during the deployment folder creation phase (executed by `gcluster create` or the initial stage of `gcluster deploy`). This ensures that all configurations are validated strictly before any infrastructure is provisioned, and before external tools like Terraform or Packer are called.
+
 Validation occurs at two levels:
 
 1. **Blueprint-level Validators:** Global environment checks (e.g., project/region existence) defined in the blueprint or added implicitly.
