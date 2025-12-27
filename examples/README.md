@@ -28,6 +28,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -651,6 +652,12 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
+
+### [rapid-storage-slurm.yaml] ![core-badge]
+
+This blueprint creates a Slurm cluster with support for RAPID storage.
+
+[rapid-storage-slurm.yaml]: ./rapid-storage-slurm.yaml
 
 ### [gke-managed-lustre.yaml] ![core-badge]
 

@@ -12,22 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: storage-gke
-deployment_name: gke-storage-{{ build }}
+test_name: slurm-rapid-storage
+deployment_name: rapid-{{ build }}
+slurm_cluster_name: "rapid{{ build[0:4] }}"
 region: us-central1
-zone: us-central1-b  # for remote node
+zone: us-central1-b
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/storage-gke.yaml"
+blueprint_yaml: "{{ workspace }}/examples/rapid-storage-slurm.yaml"
 network: "{{ test_name }}-net"
-remote_node: "{{ deployment_name }}-0"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
-- test-validation/test-zonal-bucket.yml
-- test-validation/test-anywhere-cache.yml
+- test-validation/test-slurm-rapid-storage.yml
 cli_deployment_vars:
   region: "{{ region }}"
-  zone: "{{ zone }}"
   network_name: "{{ network }}"
-  authorized_cidr: "{{ build_ip.stdout }}/32"
-  gcp_public_cidrs_access_enabled: true
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
 custom_vars:
-  project: "{{ project }}"
+  project_id: "{{ project }}"
+  zone: "{{ zone }}"
+  output_dir: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
+  mounts:
+  - "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['gcs_bucket_local_mount'] }}"
+  partitions:
+  - rapid
