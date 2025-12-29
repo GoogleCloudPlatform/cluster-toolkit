@@ -47,7 +47,7 @@ load_exclusions() {
 	}
 
 	log "INFO" "Exclusion file is a GCS path. Streaming content..."
-	# Preliminary check to see if the GCS object exists and is accessible
+	# Preliminary check to see if the GCS object(exclusion file) exists and is accessible
 	if ! gcloud storage ls "$EXCLUSION_FILE" >/dev/null 2>&1; then
 		log "ERROR" "Cannot access GCS exclusion file: $EXCLUSION_FILE. Please check the path and permissions."
 		exit 1
@@ -139,7 +139,7 @@ _protect_network_resources() {
 	if [[ -n "$net_url" && "$net_url" != "None" ]]; then
 		local net_name=$(basename "${net_url}")
 		if [[ -n "${net_name}" && -z "${EXCLUSION_MAP[${net_name}]:-}" ]]; then
-			log "INFO" "    > Excluding Network (for ${source_resource_type} ${source_resource_name}): ${net_name}"
+			log "INFO" "Excluding Network (for ${source_resource_type} ${source_resource_name}): ${net_name}"
 			EXCLUSION_MAP["${net_name}"]=1
 		fi
 		# Store the full network URI for Filestore matching
@@ -151,7 +151,7 @@ _protect_network_resources() {
 	if [[ -n "$sub_url" && "$sub_url" != "None" ]]; then
 		local sub_name=$(basename "${sub_url}")
 		if [[ -n "${sub_name}" && -z "${EXCLUSION_MAP[${sub_name}]:-}" ]]; then
-			log "INFO" "    > Excluding Subnetwork (for ${source_resource_type} ${source_resource_name}): ${sub_name}"
+			log "INFO" "Excluding Subnetwork (for ${source_resource_type} ${source_resource_name}): ${sub_name}"
 			EXCLUSION_MAP["${sub_name}"]=1
 		fi
 	fi
@@ -193,7 +193,6 @@ populate_protected_resources() {
 				IFS=';' read -ra ig_url_list <<<"$ig_urls"
 				for ig_url in "${ig_url_list[@]}"; do
 					local ig_name=$(basename "${ig_url}")
-					# Corrected AWK indices
 					local ig_scope_type=$(echo "${ig_url}" | awk -F'/' '{print $(NF-3)}')
 					local ig_scope_name=$(echo "${ig_url}" | awk -F'/' '{print $(NF-2)}')
 					local scope_flag=""
@@ -220,13 +219,13 @@ populate_protected_resources() {
 							log "DEBUG" "MIG ${ig_name}: Extracted template name is '${template_name}'"
 							if [[ -n "$template_name" && "$template_name" != "None" ]]; then
 								if ! [[ -v EXCLUSION_MAP["$template_name"] ]]; then
-									log "INFO" "  > Excluding Instance Template (from GKE MIG ${ig_name}): ${template_name}"
+									log "INFO" "Excluding Instance Template (from GKE MIG ${ig_name}): ${template_name}"
 									EXCLUSION_MAP["${template_name}"]=1
 								else
-									log "DEBUG" "  > Instance Template ${template_name} (from GKE MIG ${ig_name}) is already excluded."
+									log "DEBUG" "Instance Template ${template_name} (from GKE MIG ${ig_name}) is already excluded."
 								fi
 							else
-								log "WARNING" "  > Could not extract a valid template name from URL '${template_url_from_mig}' for MIG ${ig_name}"
+								log "WARNING" "Could not extract a valid template name from URL '${template_url_from_mig}' for MIG ${ig_name}"
 							fi
 						else
 							log "DEBUG" "MIG ${ig_name}: No instanceTemplate URL found or value is 'None'."
@@ -243,7 +242,7 @@ populate_protected_resources() {
 						if [[ -n "$inst_name" ]]; then
 							local inst_zone=$(basename "$inst_zone_url")
 							if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
-								log "INFO" "  > Protecting Instance (from GKE ${cluster_name}): ${inst_name} in ${inst_zone}"
+								log "INFO" "Protecting Instance (from GKE ${cluster_name}): ${inst_name} in ${inst_zone}"
 								EXCLUSION_MAP["${inst_name}"]=1
 							fi
 							INSTANCES_TO_PROTECT["${inst_name}"]="${inst_zone}"
@@ -266,7 +265,7 @@ populate_protected_resources() {
 		while IFS=$'\t' read -r inst_name zone labels_str; do
 			if is_excluded "$inst_name" "$labels_str"; then # Returns 0 if excluded
 				if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
-					log "INFO" "  > Protecting Instance: ${inst_name} in ${zone}"
+					log "INFO" "Protecting Instance: ${inst_name} in ${zone}"
 					EXCLUSION_MAP["${inst_name}"]=1
 				fi
 				INSTANCES_TO_PROTECT["${inst_name}"]="${zone}"
@@ -297,10 +296,10 @@ populate_protected_resources() {
 				local template_name=$(basename "$template_url")
 				if [[ -n "$template_name" && "$template_name" != "None" ]]; then
 					if ! [[ -v EXCLUSION_MAP["$template_name"] ]]; then
-						log "INFO" "    > Excluding Instance Template (for ${inst_name}): ${template_name}"
+						log "INFO" "Excluding Instance Template (for ${inst_name}): ${template_name}"
 						EXCLUSION_MAP["${template_name}"]=1
 					else
-						log "DEBUG" "    > Instance Template ${template_name} (for ${inst_name}) is already excluded."
+						log "DEBUG" "Instance Template ${template_name} (for ${inst_name}) is already excluded."
 					fi
 				else
 					log "DEBUG" "Instance ${inst_name}: No valid template name found from URL '${template_url}'"
@@ -315,15 +314,14 @@ populate_protected_resources() {
 				[[ -z "$disk_url" ]] && continue
 				local disk_name=$(basename "${disk_url}")
 				if [[ -n "${disk_name}" && -z "${EXCLUSION_MAP[${disk_name}]:-}" ]]; then
-					log "INFO" "    > Excluding Disk (for ${inst_name}): ${disk_name}"
+					log "INFO" "Excluding Disk (for ${inst_name}): ${disk_name}"
 					EXCLUSION_MAP["${disk_name}"]=1
 				fi
 			done
 
-			# Refactored Network & Subnetwork Protection
+			# Network & Subnetwork Protection
 			IFS=';' read -ra net_urls <<<"$nets_list"
 			IFS=';' read -ra sub_urls <<<"$subs_list"
-			# Assuming the number of networks and subnetworks in the arrays match order
 			for i in "${!net_urls[@]}"; do
 				_protect_network_resources "Instance" "$inst_name" "${net_urls[$i]:-}" "${sub_urls[$i]:-}"
 			done
@@ -338,53 +336,26 @@ populate_protected_resources() {
 
 	# Part 4: TPU VMs protected via direct labels or name
 	log "INFO" "Checking for TPU VMs to protect..."
-	local tpus_raw
-	# Get the raw list with all details
-	if ! tpus_raw=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="json"); then
+	local tpus_data
+	if ! tpus_data=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="value(name,ZONE,labels.map())"); then
 		log "ERROR" "Failed to list TPU VMs."
 		((ERROR_COUNT++)) || true
 	else
-		# Extract 'name' and 'labels' from JSON blocks manually using grep/sed
-		# We look for lines containing "name": and "labels":
-		# This assumes standard JSON formatting from gcloud
-
-		# We'll use a temporary file to process blocks safely
-		local tmp_file=$(mktemp)
-		echo "$tpus_raw" >"$tmp_file"
-
-		# Find the line numbers where a new TPU object starts
-		local start_lines=$(grep -n "{" "$tmp_file" | cut -d: -f1)
-
-		# Instead of complex block parsing, we'll use a simpler 'grep' approach
-		# that pairs the Name and Labels together.
-		while read -r line; do
-			# Extract the full resource path from the "name": line
-			local full_path=$(echo "$line" | grep '"name":' | sed 's/.*"name": "\(.*\)",/\1/')
-			[[ -z "$full_path" ]] && continue
-
-			# Extract the short name
-			local tpu_name="${full_path##*/}"
-
-			# Extract the zone from the resource path
-			local tpu_zone=$(echo "$full_path" | sed -n 's/.*\/locations\/\([^\/]*\)\/.*/\1/p')
-
-			# Extract labels for this specific TPU
-			# Since we can't easily parse JSON labels with sed, we'll fetch them specifically for this TPU
-			local tpu_labels=$(gcloud compute tpus tpu-vm describe "$tpu_name" --zone="$tpu_zone" --project="$PROJECT_ID" --format="value(labels.map())" 2>/dev/null)
+		while IFS=$'\t' read -r tpu_name tpu_zone tpu_labels; do
+			[[ -z "$tpu_name" ]] && continue
 
 			log "DEBUG" "Parsed TPU: name='${tpu_name}', zone='${tpu_zone}'"
 
 			if is_excluded "$tpu_name" "$tpu_labels"; then
 				if ! [[ -v EXCLUSION_MAP["$tpu_name"] ]]; then
-					log "INFO" "  > Protecting TPU VM: ${tpu_name} in ${tpu_zone}"
+					log "INFO" "Protecting TPU VM: ${tpu_name} in ${tpu_zone}"
 					EXCLUSION_MAP["${tpu_name}"]=1
 				fi
 				if [[ -n "$tpu_zone" ]]; then
 					TPUS_TO_PROTECT["${tpu_name}"]="${tpu_zone}"
 				fi
 			fi
-		done < <(grep '"name":' "$tmp_file")
-		rm -f "$tmp_file"
+		done <<<"$tpus_data"
 	fi
 
 	# Part 5: Protect resources associated with the collected TPU VMs
@@ -422,7 +393,7 @@ populate_protected_resources() {
 			while IFS=$'\t' read -r addr_name addr_ip; do
 				if [[ -n "${addr_ip}" && -n "${PROTECTED_IPS[${addr_ip}]:-}" ]]; then
 					if [[ -n "${addr_name}" && -z "${EXCLUSION_MAP[${addr_name}]:-}" ]]; then
-						log "INFO" "  > Excluding Address: ${addr_name} (${addr_ip})"
+						log "INFO" "Excluding Address: ${addr_name} (${addr_ip})"
 						EXCLUSION_MAP["${addr_name}"]=1
 					fi
 				fi
@@ -455,7 +426,7 @@ populate_protected_resources() {
 				for net_uri in "${net_uris[@]}"; do
 					if [[ -n "$net_uri" ]] && [[ -v PROTECTED_NETWORK_URIS["$net_uri"] ]]; then
 						local net_name=$(basename "$net_uri")
-						log "INFO" "    > Excluding Instance Template (uses protected network '${net_name}'): ${template_name}"
+						log "INFO" "Excluding Instance Template (uses protected network '${net_name}'): ${template_name}"
 						EXCLUSION_MAP["${template_name}"]=1
 						found_protected=true
 						break
@@ -474,9 +445,8 @@ populate_protected_resources() {
 					if [[ -n "$sub_uri" ]]; then
 						local sub_name=$(basename "$sub_uri")
 						if [[ -n "$sub_name" ]] && [[ -v EXCLUSION_MAP["$sub_name"] ]]; then
-							log "INFO" "    > Excluding Instance Template (uses protected subnetwork '${sub_name}'): ${template_name}"
+							log "INFO" "Excluding Instance Template (uses protected subnetwork '${sub_name}'): ${template_name}"
 							EXCLUSION_MAP["${template_name}"]=1
-							# found_protected=true # Not strictly needed as we don't have further checks for this template
 							break
 						fi
 					fi
@@ -555,35 +525,7 @@ process_resources() {
 	log "INFO" "Finished processing $label. $count resources actioned."
 }
 
-# SPECIFIC HANDLERS (Unchanged from previous version)
-
-process_instance_templates() {
-	log "INFO" "--- Processing: Instance Templates ---"
-	local templates
-	if ! templates=$(gcloud compute instance-templates list \
-		--project="$PROJECT_ID" \
-		--filter="creationTimestamp < '$CUTOFF_TIME'" \
-		--format="value(name, labels.map())" | sort); then
-		log "ERROR" "Failed to list instance templates."
-		((ERROR_COUNT++)) || true
-		return 0
-	fi
-	if [[ -z "$templates" ]]; then
-		log "INFO" "No instance templates found matching criteria."
-		return 0
-	fi
-
-	local count=0
-	while IFS=$'\t' read -r name labels_str; do
-		if [[ -z "$name" ]]; then continue; fi
-		if ! is_excluded "$name" "${labels_str:-}"; then
-			execute_delete "Instance Template" "$name" \
-				"gcloud compute instance-templates delete \"$name\" --project=\"$PROJECT_ID\" --quiet" \
-				"(Global)"
-			((count++)) || true
-		fi
-	done <<<"$templates"
-}
+# SPECIFIC HANDLERS
 
 process_addresses() {
 	log "INFO" "--- Processing: Compute Addresses ---"
@@ -715,7 +657,7 @@ process_docker_images() {
 		return 0
 	fi
 	if [[ -z "$images_output" ]]; then
-		log "INFO" "  > No image versions found for $package_name."
+		log "INFO" "No image versions found for $package_name."
 		return 0
 	fi
 	local count=0
@@ -751,7 +693,6 @@ process_filestore() {
 
 	local count=0
 	while IFS=$'\t' read -r name location labels_str network_uri; do
-		# Trim potential whitespace
 		name=$(echo "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 		location=$(echo "$location" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 		network_uri=$(echo "$network_uri" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
@@ -837,7 +778,6 @@ process_subnetworks() {
 		fi
 
 		if ! is_excluded "$name"; then
-			# Dependent address cleanup can be added here if needed
 			execute_delete "Subnetwork" "$name" "gcloud compute networks subnets delete \"$name\" --project=\"$PROJECT_ID\" --region=\"$region\" --quiet"
 			((count++)) || true
 		fi
@@ -907,9 +847,7 @@ process_routers() {
 	done <<<"$routers"
 }
 
-# ==============================================================================
 # MAIN EXECUTION
-# ==============================================================================
 
 main() {
 	log "INFO" "STARTING RESOURCE CLEANUP: $PROJECT_ID"
@@ -930,9 +868,8 @@ main() {
 		"gcloud container clusters delete --project=\"$PROJECT_ID\"" "location"
 
 	process_resources "TPU VM" \
-		"gcloud compute tpus tpu-vm list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --zone - --format=\"csv[no-heading](name,location,labels.map())\" | sort" \
+		"gcloud compute tpus tpu-vm list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --zone - --format=\"csv[no-heading](name,ZONE,labels.map())\" | sort" \
 		"gcloud compute tpus tpu-vm delete --project=\"$PROJECT_ID\"" "zone"
-
 	process_resources "Compute Instance" \
 		"gcloud compute instances list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"csv[no-heading](name,zone.basename(),labels.map())\" | sort" \
 		"gcloud compute instances delete --project=\"$PROJECT_ID\" --delete-disks=all" "zone"
@@ -941,7 +878,9 @@ main() {
 	# --- Phase 2: Images & Artifacts ---
 	process_vm_images
 	process_docker_images
-	process_instance_templates
+	process_resources "Instance Template" \
+		"gcloud compute instance-templates list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"csv[no-heading](name,'global',labels.map())\" | sort" \
+		"gcloud compute instance-templates delete --project=\"$PROJECT_ID\"" "none"
 
 	# --- Phase 3: Network Infrastructure ---
 	process_routers
@@ -950,11 +889,11 @@ main() {
 		"gcloud compute disks list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME' AND zone:*\" --format=\"csv[no-heading](name,zone.basename(),labels.map())\" | sort" \
 		"gcloud compute disks delete --project=\"$PROJECT_ID\"" "zone"
 
-	# # --- Phase 4: Networking Hierarchies ---
+	# --- Phase 4: Networking Hierarchies ---
 	process_subnetworks
-	process_networks # This now handles dependent firewalls and routes
+	process_networks # This also handles dependent firewalls and routes
 
-	# # --- Phase 5: IAM Cleanup ---
+	# --- Phase 5: IAM Cleanup ---
 	process_iam_deleted_members
 
 	log "INFO" "CLEANUP RUN FINISHED"

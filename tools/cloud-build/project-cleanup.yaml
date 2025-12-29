@@ -40,9 +40,8 @@ steps:
             exit 0
         else
             echo "Cleanup script failed (returned non-zero exit code)."
-            
             if [ "$attempt" -lt "$max_retries" ]; then
-                wait_time=$((2 ** (attempt - 1)))
+                wait_time=$((15 * 2 ** (attempt - 1)))
                 echo "Waiting ${wait_time} seconds before retrying..."
                 sleep "$wait_time"
                 attempt=$((attempt + 1))
