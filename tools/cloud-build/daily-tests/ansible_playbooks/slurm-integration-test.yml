@@ -146,6 +146,15 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+      retries: 5
+      delay: 10
+      until: key_created.rc == 0
+      ignore_errors: yes
+
+    - name: Fail if SSH key add failed after retries
+      ansible.builtin.fail:
+        msg: "Failed to add SSH key to OS Login after multiple retries: {{ key_created.stderr }}"
+      when: key_created.rc != 0
 
     - name: Add Login node as host
       ansible.builtin.add_host:
