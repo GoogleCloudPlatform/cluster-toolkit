@@ -1277,8 +1277,10 @@ This blueprint shows how to use different storage options with GKE in the toolki
 
 > [!NOTE]
 > This blueprint also demonstrates support for Anywhere Cache. Anywhere Cache is a fully managed service
-that caches Cloud Storage data in Google Cloud.
-For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
+> that caches Cloud Storage data in Google Cloud. For each bucket, you can create a maximum of one cache per zone.
+> For example, if a bucket is located in the us-east1 region, you could create a cache in us-east1-b and another cache in us-east1-c.
+> For information on other parameters to enable anywhere cache, see [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache)
+> For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
 
 The blueprint contains the following:
 
