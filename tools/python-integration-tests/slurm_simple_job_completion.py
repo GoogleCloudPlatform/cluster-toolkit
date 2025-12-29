@@ -54,13 +54,18 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
         log.debug(f"sacct output for job {job_id}:\n{stdout}")
         try:
             data = json.loads(stdout)
-            if data.get("jobs"):
-                # sacct might return multiple lines for a job (e.g., job steps). We care about the main job state.
-                # Assuming the first entry for the job ID is the overall state.
-                return data["jobs"][0]["state"]["current"]
-            else:
-                log.warning(f"No job information found in sacct for JobID: {job_id}")
-                return "NOT_FOUND"
+            jobs = data.get("jobs")
+            if jobs:
+                for job in jobs:
+                    # The job_id from sacct can be an int, but the input job_id is a string.
+                    # Job steps have suffixes (e.g., '123.batch'), so we look for an exact match
+                    # with the main job ID to get the overall job state.
+                    if str(job.get("job_id")) == job_id:
+                        return job["state"]["current"]
+
+            # This is reached if jobs is empty or the main job ID was not found.
+            log.warning(f"No job information found in sacct for JobID: {job_id}")
+            return "NOT_FOUND"
         except (IndexError, KeyError, json.JSONDecodeError) as e:
             log.error(f"Error parsing sacct output for job {job_id}: {e}\nOutput: {stdout}")
             return "PARSE_ERROR"
