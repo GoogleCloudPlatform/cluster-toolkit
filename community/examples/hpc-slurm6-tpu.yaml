@@ -17,10 +17,13 @@
 blueprint_name: slurm6-tpu
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm6-tpu
-  region: us-central1
-  zone: us-central1-a
+  project_id: hpc-toolkit-dev ## Set GCP Project ID Here ##
+  deployment_name: sim-slurmv5e-tpu
+  region: europe-west4  # <--- CHANGE: Must be a v5e region
+  zone: europe-west4-b
+  instance_image:
+    project: schedmd-slurm-public
+    family: slurm-gcp-6-10-ubuntu-2404-lts-nvidia-570
 
 deployment_groups:
 - group: primary
@@ -32,24 +35,24 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
-      node_type: v3-8
-      tf_version: 2.14.0
-      # Preemptible TPUs cost much less than non-preemptible TPUs.
-      # The Cloud TPU service might preempt (shut down) these TPUs at any time.
-      # https://cloud.google.com/tpu/docs/preemptible
-      preemptible: false
-      # Specify whether to preserve TPU on suspend.
-      # If set to true, suspended VM will be stopped.
-      # If set to false, suspended VM will be deleted.
-      preserve_tpu: false
-      node_count_dynamic_max: 1
+      node_count_static     : 1
+      name                  : tpu-v5e-2x4-nodeset
+      enable_public_ips     : false
+      accelerator_config:
+        topology: "2x4"
+        version : "V5LITEPOD"
+      tf_version            : 2.15.0
+      preemptible           : true
+      docker_image: us-east1-docker.pkg.dev/managed-slurm-gke-dev/default/slurmd:python3.10-24.11-jax-pyxis
 
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings:
       partition_name: tpu
-      resume_timeout: 600
+      exclusive: false
+      resume_timeout: 3600
+      is_default: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
@@ -57,6 +60,7 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
+      instance_image: $(vars.instance_image)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -66,3 +70,4 @@ deployment_groups:
     - network
     settings:
       enable_controller_public_ips: true
+      instance_image: $(vars.instance_image)

@@ -36,11 +36,21 @@ locals {
       ThreadsPerCore = 2
       RealMemory     = 400000
     }
+    Mem400CPU224 = {
+      CPUs           = 224  # Correct for ct5lp-hightpu-8t
+      Boards         = 1
+      Sockets        = 2
+      CoresPerSocket = 56
+      ThreadsPerCore = 2
+      RealMemory     = 400000 # Approximately 384 GiB, consistent with ct5lp-hightpu-8t
+    }
   }
   node_conf_mappings = {
     "v2" = local.node_conf_hw.Mem334CPU96
     "v3" = local.node_conf_hw.Mem334CPU96
     "v4" = local.node_conf_hw.Mem400CPU240
+    "v5litepod" = local.node_conf_hw.Mem400CPU224
+    "v5p"       = local.node_conf_hw.Mem400CPU224
   }
   simple_nodes = ["v2-8", "v3-8", "v4-8"]
 }

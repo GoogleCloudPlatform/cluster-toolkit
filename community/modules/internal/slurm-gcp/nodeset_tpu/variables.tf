@@ -41,9 +41,10 @@ variable "accelerator_config" {
     version  = ""
   }
   validation {
-    condition     = var.accelerator_config.version == "" ? true : contains(["V2", "V3", "V4"], upper(var.accelerator_config.version))
-    error_message = "accelerator_config.version must be one of [\"V2\", \"V3\", \"V4\"]"
+    condition     = var.accelerator_config.version == "" ? true : contains(["V2", "V3", "V4", "V5LITEPOD", "V5P"], var.accelerator_config.version)
+    error_message = "accelerator_config.version must be one of [\"V2\", \"V3\", \"V4\", \"V5LITEPOD\", \"V5P\"]"
   }
+
   validation {
     condition     = var.accelerator_config.topology == "" ? true : can(regex("^[1-9]x[1-9](x[1-9])?$", var.accelerator_config.topology))
     error_message = "accelerator_config.topology must be a valid topology, like 2x2 4x4x4 4x2x4 etc..."
