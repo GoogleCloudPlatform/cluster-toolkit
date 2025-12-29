@@ -20,7 +20,7 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --exclusive
 
-# Usage: sbatch run-nccl-tests.sh
+# Usage: sbatch run-nccl-tests-tcpxo.sh
 
 set -x
 # This should be set to the squashfs file that you created for your application

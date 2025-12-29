@@ -337,7 +337,7 @@ deployment_groups:
   # 2. Uncomment the managed-lustre and private-service-access blocks
   # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json above to true
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [a3ultra-slurm-net-0]
 
   # - id: homefs

@@ -211,7 +211,7 @@ deployment_groups:
   # # PSA is required for all Managed Lustre functionality.
   # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [gke-a3-ultra-net-0]
   #   settings:
   #     prefix_length: 24
@@ -310,6 +310,7 @@ deployment_groups:
           cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
+        wait: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
