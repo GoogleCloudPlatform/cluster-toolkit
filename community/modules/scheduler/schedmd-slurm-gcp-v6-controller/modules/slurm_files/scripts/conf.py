@@ -118,7 +118,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_reg_addrs" if any_dynamic or any_tpu or any_gke else "cloud_dns",
+            "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
             "enable_configless",
             "idle_on_node_suspend",
         ],
@@ -133,15 +133,6 @@ def conflines(lkp: util.Lookup) -> str:
     task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
     task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
     default_tree_width = 65533 if any_dynamic else 128
-
-    if util.slurm_version_gte(lkp.slurm_version, "25.05"):
-        job_submit_plugins = "lua" if any_tpu else None
-        topology_plugin_val = TOPOLOGY_TREE if lkp.cfg.nodeset else None
-        topology_param = "SwitchAsNodeRank" if lkp.cfg.nodeset else None
-    else:
-        job_submit_plugins = None
-        topology_plugin_val = topology_plugin(lkp) if lkp.cfg.nodeset else None
-        topology_param = get("topology_param", "SwitchAsNodeRank")
 
     conf_options = {
         **(comma_params if not no_comma_params else {}),
@@ -167,9 +158,9 @@ def conflines(lkp: util.Lookup) -> str:
         "SlurmdTimeout": get("slurmd_timeout", 300),
         "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
-        "JobSubmitPlugins": job_submit_plugins,
-        "TopologyPlugin": topology_plugin_val,
-        "TopologyParam": topology_param,
+        "JobSubmitPlugins": "lua" if any_tpu else None,
+        "TopologyPlugin": topology_plugin(lkp) if lkp.cfg.nodeset else None,
+        "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
     }
     return dict_to_conf(conf_options, delim="\n")
 

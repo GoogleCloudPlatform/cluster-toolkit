@@ -102,7 +102,8 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128"""),
+TreeWidth=128
+TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
             cloud_parameters={
@@ -130,7 +131,8 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128"""),
+TreeWidth=128
+TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
             cloud_parameters={
@@ -169,8 +171,8 @@ SuspendTimeout=4
 SlurmdTimeout=5
 UnkillableStepTimeout=6
 TreeWidth=7
-TopologyPlugin=topology/tree
-TopologyParam=SwitchAsNodeRank"""),
+TopologyPlugin=guess
+TopologyParam=yellow"""),
         (TstCfg(
             install_dir="ukulele",
             task_prolog_scripts=[Placeholder()],
@@ -190,18 +192,16 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128"""),
+TreeWidth=128
+TopologyParam=SwitchAsNodeRank"""),
     ])
-@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
-def test_conflines(mock_slurm_version, cfg, want):
-    mock_slurm_version.return_value = "25.05"
+def test_conflines(cfg, want):
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     lkp = util.Lookup(cfg)
-    lkp.cfg.slurm_version = "25.05"
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
 
