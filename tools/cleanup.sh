@@ -115,7 +115,6 @@ is_excluded() {
 					log "WARNING" "$resource_name (Label: cleanup-exemption-date invalid date format: $VAL, expected YYYY-MM-DD)"
 					return 1 # Not excluded
 				fi
-				break # Found the label, no need to check further
 			fi
 		done
 	fi
@@ -125,14 +124,16 @@ is_excluded() {
 execute_delete() {
 	local resource_type="$1"
 	local resource_name="$2"
-	local cmd_str="$3"
-	local extra_info="${4:-}"
+	local extra_info="$3"
+	shift 3
+	local -a cmd_to_run=("$@")
 
 	if [[ "$DRY_RUN" == "true" ]]; then
 		log "DRY-RUN" "Would delete $resource_type: $resource_name $extra_info"
+		log "DRY-RUN" "Command: ${cmd_to_run[*]}"
 	else
 		log "EXECUTE" "Deleting $resource_type: $resource_name $extra_info"
-		if eval "$cmd_str"; then
+		if "${cmd_to_run[@]}"; then
 			log "SUCCESS" "Deleted $resource_name"
 		else
 			log "ERROR" "Failed to delete $resource_name"
@@ -516,8 +517,9 @@ log_protected_network_uris() {
 process_resources() {
 	local label="$1"
 	local list_command="$2"
-	local delete_command_base="$3"
-	local scope_type="$4" # Should be 'zone' or 'location' or 'region'
+	local scope_type="$3" # Should be 'zone' or 'location' or 'region'
+	shift 3
+	local -a delete_command_base=("$@")
 
 	log "INFO" "--- Processing: $label ---"
 
@@ -539,12 +541,14 @@ process_resources() {
 		log "DEBUG" "Processing line: name='${name}', scope='${scope}', labels_str='${labels_str}'"
 
 		if ! is_excluded "$name" "${labels_str:-}"; then
-			local final_cmd="$delete_command_base \"$name\" --quiet"
+			local -a cmd=("${delete_command_base[@]}")
+			cmd+=("$name")
+			cmd+=("--quiet")
 			if [[ "$scope_type" != "none" && -n "$scope" ]]; then
-				final_cmd="$final_cmd --$scope_type=\"$scope\""
+				cmd+=("--$scope_type=$scope")
 			fi
 
-			execute_delete "$label" "$name" "$final_cmd" "($scope)"
+			execute_delete "$label" "$name" "($scope)" "${cmd[@]}"
 			((count++)) || true
 		fi
 	done <<<"$resources"
@@ -570,9 +574,8 @@ process_addresses() {
 					log "WARNING" "Skipping IN_USE Regional Address $name ($region) NOT explicitly excluded."
 					continue
 				fi
-				execute_delete "Regional Address" "$name" \
-					"gcloud compute addresses delete \"$name\" --project=\"$PROJECT_ID\" --region=\"$region\" --quiet" \
-					"($region)"
+				execute_delete "Regional Address" "$name" "($region)" \
+					gcloud compute addresses delete "$name" --project="$PROJECT_ID" --region="$region" --quiet
 			fi
 		done <<<"$regional_addresses"
 	fi
@@ -592,9 +595,8 @@ process_addresses() {
 					log "DEBUG" "Skipping IN_USE Global Address $name NOT explicitly excluded."
 					continue
 				fi
-				execute_delete "Global Address" "$name" \
-					"gcloud compute addresses delete \"$name\" --project=\"$PROJECT_ID\" --global --quiet" \
-					"(Global)"
+				execute_delete "Global Address" "$name" "(Global)" \
+					gcloud compute addresses delete "$name" --project="$PROJECT_ID" --global --quiet
 			fi
 		done <<<"$global_addresses"
 	fi
@@ -620,14 +622,19 @@ process_iam_deleted_members() {
 		IFS=';' read -ra members <<<"$members_str"
 		for member in "${members[@]}"; do
 			if [[ "$member" == deleted:serviceAccount:* ]]; then
-				local cmd
-				cmd="gcloud projects remove-iam-policy-binding \"$PROJECT_ID\" --member=\"$member\" --role=\"$role\" --condition=None --quiet"
+				local -a cmd=(
+					"gcloud" "projects" "remove-iam-policy-binding" "$PROJECT_ID"
+					"--member=$member"
+					"--role=$role"
+					"--condition=None"
+					"--quiet"
+				)
 
 				if [[ "$DRY_RUN" == "true" ]]; then
 					log "DRY-RUN" "Would remove IAM binding: $member from role $role"
 				else
 					log "EXECUTE" "Removing IAM binding: $member from role $role"
-					if ! eval "$cmd" >/dev/null; then
+					if ! "${cmd[@]}" >/dev/null; then
 						log "ERROR" "Failed to remove binding for $member in $role"
 						((ERROR_COUNT++)) || true
 					fi
@@ -658,8 +665,8 @@ process_vm_images() {
 	while IFS=$'\t' read -r name labels_str; do
 		[[ -z "$name" ]] && continue
 		if ! is_excluded "$name" "${labels_str:-}"; then
-			execute_delete "VM Image" "$name" \
-				"gcloud compute images delete \"$name\" --project=\"$PROJECT_ID\" --quiet"
+			execute_delete "VM Image" "$name" "" \
+				gcloud compute images delete "$name" --project="$PROJECT_ID" --quiet
 			((count++)) || true
 		fi
 	done <<<"$images"
@@ -695,9 +702,8 @@ process_docker_images() {
 		if ! image_seconds=$(date -u -d "$update_time" +%s 2>/dev/null); then continue; fi
 		if [[ $image_seconds -lt $cutoff_seconds ]]; then
 			if ! is_excluded "$package_name" && ! is_excluded "$full_image_ref"; then
-				execute_delete "Docker Image Version" "$full_image_ref" \
-					"gcloud artifacts docker images delete \"$full_image_ref\" --project=\"$PROJECT_ID\" --delete-tags --quiet" \
-					"(Updated: $update_time)"
+				execute_delete "Docker Image Version" "$full_image_ref" "(Updated: $update_time)" \
+					gcloud artifacts docker images delete "$full_image_ref" --project="$PROJECT_ID" --delete-tags --quiet
 				((count++)) || true
 			fi
 		fi
@@ -758,16 +764,28 @@ process_filestore() {
 				((count++)) || true
 			else
 				log "EXECUTE" "Attempting to disable deletion protection on Filestore: $name ($location)"
-				local disable_cmd="gcloud filestore instances update \"$name\" --location=\"$location\" --project=\"$PROJECT_ID\" --no-deletion-protection --quiet"
-				if ! eval "$disable_cmd"; then
+				local -a disable_cmd=(
+					"gcloud" "filestore" "instances" "update" "$name"
+					"--location=$location"
+					"--project=$PROJECT_ID"
+					"--no-deletion-protection"
+					"--quiet"
+				)
+				if ! "${disable_cmd[@]}"; then
 					log "WARNING" "Failed to disable deletion protection for $name. This may be OK if it was already disabled or the instance is not in a state to be updated. Continuing with delete attempt."
 				else
 					log "INFO" "Deletion protection update command executed successfully for $name"
 				fi
 
 				log "EXECUTE" "Deleting Filestore: $name ($location)"
-				local delete_cmd="gcloud filestore instances delete \"$name\" --project=\"$PROJECT_ID\" --location=\"$location\" --quiet --force"
-				if eval "$delete_cmd"; then
+				local -a delete_cmd=(
+					"gcloud" "filestore" "instances" "delete" "$name"
+					"--project=$PROJECT_ID"
+					"--location=$location"
+					"--quiet"
+					"--force"
+				)
+				if "${delete_cmd[@]}"; then
 					log "SUCCESS" "Deleted Filestore $name"
 					((count++)) || true
 				else
@@ -805,7 +823,8 @@ process_subnetworks() {
 		fi
 
 		if ! is_excluded "$name"; then
-			execute_delete "Subnetwork" "$name" "gcloud compute networks subnets delete \"$name\" --project=\"$PROJECT_ID\" --region=\"$region\" --quiet"
+			execute_delete "Subnetwork" "$name" "($region)" \
+				gcloud compute networks subnets delete "$name" --project="$PROJECT_ID" --region="$region" --quiet
 			((count++)) || true
 		fi
 	done <<<"$subnets"
@@ -826,12 +845,19 @@ process_networks() {
 		if [[ "$name" == "default" ]]; then continue; fi
 		if ! is_excluded "$name"; then
 			gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
-				if [[ -n "$r" ]] && ! is_excluded "$r"; then execute_delete "Dep. Route" "$r" "gcloud compute routes delete \"$r\" --project=\"$PROJECT_ID\" --quiet"; fi
+				if [[ -n "$r" ]] && ! is_excluded "$r"; then
+					execute_delete "Dep. Route" "$r" "" \
+						gcloud compute routes delete "$r" --project="$PROJECT_ID" --quiet
+				fi
 			done || true
 			gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
-				if [[ -n "$r" ]] && ! is_excluded "$r"; then execute_delete "Dep. Firewall Rule" "$r" "gcloud compute firewall-rules delete \"$r\" --project=\"$PROJECT_ID\" --quiet"; fi
+				if [[ -n "$r" ]] && ! is_excluded "$r"; then
+					execute_delete "Dep. Firewall Rule" "$r" "" \
+						gcloud compute firewall-rules delete "$r" --project="$PROJECT_ID" --quiet
+				fi
 			done || true
-			execute_delete "Network" "$name" "gcloud compute networks delete \"$name\" --project=\"$PROJECT_ID\" --quiet"
+			execute_delete "Network" "$name" "" \
+				gcloud compute networks delete "$name" --project="$PROJECT_ID" --quiet
 			((count++)) || true
 		fi
 	done <<<"$networks"
@@ -864,9 +890,8 @@ process_routers() {
 		fi
 
 		if ! is_excluded "$name" "${labels_str:-}"; then
-			execute_delete "Cloud Router" "$name" \
-				"gcloud compute routers delete \"$name\" --project=\"$PROJECT_ID\" --region=\"$region\" --quiet" \
-				"($region)"
+			execute_delete "Cloud Router" "$name" "($region)" \
+				gcloud compute routers delete "$name" --project="$PROJECT_ID" --region="$region" --quiet
 			((count++)) || true
 		fi
 	done <<<"$routers"
@@ -890,15 +915,18 @@ main() {
 	# --- Phase 1: High Level Compute Resources ---
 	process_resources "GKE Cluster" \
 		"gcloud container clusters list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --format=\"value(name,location,resourceLabels.map())\" | sort" \
-		"gcloud container clusters delete --project=\"$PROJECT_ID\"" "location"
+		"location" \
+		"gcloud" "container" "clusters" "delete" "--project=$PROJECT_ID"
 
 	process_resources "TPU VM" \
 		"gcloud compute tpus tpu-vm list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --zone - --format=\"value(name,ZONE,labels.map())\" | sort" \
-		"gcloud compute tpus tpu-vm delete --project=\"$PROJECT_ID\"" "zone"
+		"zone" \
+		"gcloud" "compute" "tpus" "tpu-vm" "delete" "--project=$PROJECT_ID"
 
 	process_resources "Compute Instance" \
 		"gcloud compute instances list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"value(name,zone.basename(),labels.map())\" | sort" \
-		"gcloud compute instances delete --project=\"$PROJECT_ID\" --delete-disks=all" "zone"
+		"zone" \
+		"gcloud" "compute" "instances" "delete" "--project=$PROJECT_ID" "--delete-disks=all"
 	process_filestore
 
 	# --- Phase 2: Images & Artifacts ---
@@ -906,14 +934,16 @@ main() {
 	process_docker_images
 	process_resources "Instance Template" \
 		"gcloud compute instance-templates list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"value(name,'global',labels.map())\" | sort" \
-		"gcloud compute instance-templates delete --project=\"$PROJECT_ID\"" "none"
+		"none" \
+		"gcloud" "compute" "instance-templates" "delete" "--project=$PROJECT_ID"
 
 	# --- Phase 3: Network Infrastructure ---
 	process_routers
 	process_addresses
 	process_resources "Zonal Disk" \
 		"gcloud compute disks list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME' AND zone:*\" --format=\"value(name,zone.basename(),labels.map())\" | sort" \
-		"gcloud compute disks delete --project=\"$PROJECT_ID\"" "zone"
+		"zone" \
+		"gcloud" "compute" "disks" "delete" "--project=$PROJECT_ID"
 
 	# --- Phase 4: Networking Hierarchies ---
 	process_subnetworks
