@@ -1,4 +1,17 @@
 #!/bin/bash
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # CONFIGURATION & GLOBAL VARIABLES
 
@@ -102,7 +115,7 @@ is_excluded() {
 					log "WARNING" "$resource_name (Label: cleanup-exemption-date invalid date format: $VAL, expected YYYY-MM-DD)"
 					return 1 # Not excluded
 				fi
-				break
+				break # Found the label, no need to check further
 			fi
 		done
 	fi
@@ -123,7 +136,7 @@ execute_delete() {
 			log "SUCCESS" "Deleted $resource_name"
 		else
 			log "ERROR" "Failed to delete $resource_name"
-			((ERROR_COUNT++)) || true
+			((ERROR_COUNT++)) || true # Prevent exit if set -e is active
 		fi
 	fi
 }
@@ -134,10 +147,12 @@ _protect_network_resources() {
 	local source_resource_name="$2"
 	local net_url="$3"
 	local sub_url="$4"
+	local net_name
+	local sub_name
 
 	# Protect Network
 	if [[ -n "$net_url" && "$net_url" != "None" ]]; then
-		local net_name=$(basename "${net_url}")
+		net_name=$(basename "${net_url}")
 		if [[ -n "${net_name}" && -z "${EXCLUSION_MAP[${net_name}]:-}" ]]; then
 			log "INFO" "Excluding Network (for ${source_resource_type} ${source_resource_name}): ${net_name}"
 			EXCLUSION_MAP["${net_name}"]=1
@@ -149,7 +164,7 @@ _protect_network_resources() {
 
 	# Protect Subnetwork
 	if [[ -n "$sub_url" && "$sub_url" != "None" ]]; then
-		local sub_name=$(basename "${sub_url}")
+		sub_name=$(basename "${sub_url}")
 		if [[ -n "${sub_name}" && -z "${EXCLUSION_MAP[${sub_name}]:-}" ]]; then
 			log "INFO" "Excluding Subnetwork (for ${source_resource_type} ${source_resource_name}): ${sub_name}"
 			EXCLUSION_MAP["${sub_name}"]=1
@@ -192,9 +207,12 @@ populate_protected_resources() {
 
 				IFS=';' read -ra ig_url_list <<<"$ig_urls"
 				for ig_url in "${ig_url_list[@]}"; do
-					local ig_name=$(basename "${ig_url}")
-					local ig_scope_type=$(echo "${ig_url}" | awk -F'/' '{print $(NF-3)}')
-					local ig_scope_name=$(echo "${ig_url}" | awk -F'/' '{print $(NF-2)}')
+					local ig_name
+					ig_name=$(basename "${ig_url}")
+					local ig_scope_type
+					ig_scope_type=$(echo "${ig_url}" | awk -F'/' '{print $(NF-3)}')
+					local ig_scope_name
+					ig_scope_name=$(echo "${ig_url}" | awk -F'/' '{print $(NF-2)}')
 					local scope_flag=""
 
 					if [[ "$ig_scope_type" == "zones" ]]; then
@@ -215,7 +233,8 @@ populate_protected_resources() {
 					else
 						log "DEBUG" "MIG ${ig_name}: instanceTemplate URL is '${template_url_from_mig}'"
 						if [[ -n "$template_url_from_mig" && "$template_url_from_mig" != "None" ]]; then
-							local template_name=$(basename "$template_url_from_mig")
+							local template_name
+							template_name=$(basename "$template_url_from_mig")
 							log "DEBUG" "MIG ${ig_name}: Extracted template name is '${template_name}'"
 							if [[ -n "$template_name" && "$template_name" != "None" ]]; then
 								if ! [[ -v EXCLUSION_MAP["$template_name"] ]]; then
@@ -240,7 +259,8 @@ populate_protected_resources() {
 
 					while IFS=$'\t' read -r inst_name inst_zone_url; do
 						if [[ -n "$inst_name" ]]; then
-							local inst_zone=$(basename "$inst_zone_url")
+							local inst_zone
+							inst_zone=$(basename "$inst_zone_url")
 							if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
 								log "INFO" "Protecting Instance (from GKE ${cluster_name}): ${inst_name} in ${inst_zone}"
 								EXCLUSION_MAP["${inst_name}"]=1
@@ -263,6 +283,7 @@ populate_protected_resources() {
 		((ERROR_COUNT++)) || true
 	else
 		while IFS=$'\t' read -r inst_name zone labels_str; do
+			[[ -z "$inst_name" ]] && continue
 			if is_excluded "$inst_name" "$labels_str"; then # Returns 0 if excluded
 				if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
 					log "INFO" "Protecting Instance: ${inst_name} in ${zone}"
@@ -293,7 +314,8 @@ populate_protected_resources() {
 
 			# Protect Instance Template (for non-MIG instances)
 			if [[ -n "$template_url" ]]; then
-				local template_name=$(basename "$template_url")
+				local template_name
+				template_name=$(basename "$template_url")
 				if [[ -n "$template_name" && "$template_name" != "None" ]]; then
 					if ! [[ -v EXCLUSION_MAP["$template_name"] ]]; then
 						log "INFO" "Excluding Instance Template (for ${inst_name}): ${template_name}"
@@ -312,7 +334,8 @@ populate_protected_resources() {
 			IFS=';' read -ra disk_urls <<<"$disks_list"
 			for disk_url in "${disk_urls[@]}"; do
 				[[ -z "$disk_url" ]] && continue
-				local disk_name=$(basename "${disk_url}")
+				local disk_name
+				disk_name=$(basename "${disk_url}")
 				if [[ -n "${disk_name}" && -z "${EXCLUSION_MAP[${disk_name}]:-}" ]]; then
 					log "INFO" "Excluding Disk (for ${inst_name}): ${disk_name}"
 					EXCLUSION_MAP["${disk_name}"]=1
@@ -341,21 +364,26 @@ populate_protected_resources() {
 		log "ERROR" "Failed to list TPU VMs."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r tpu_name tpu_zone tpu_labels; do
-			[[ -z "$tpu_name" ]] && continue
+		if [[ -z "$tpus_data" ]]; then
+			log "INFO" "No TPU VMs found in project."
+		else
+			while IFS=$'\t' read -r tpu_name tpu_zone tpu_labels; do
+				[[ -z "$tpu_name" ]] && continue
+				log "DEBUG" "Read TPU: name='${tpu_name}', zone='${tpu_zone}', labels='${tpu_labels}'"
 
-			log "DEBUG" "Parsed TPU: name='${tpu_name}', zone='${tpu_zone}'"
-
-			if is_excluded "$tpu_name" "$tpu_labels"; then
-				if ! [[ -v EXCLUSION_MAP["$tpu_name"] ]]; then
-					log "INFO" "Protecting TPU VM: ${tpu_name} in ${tpu_zone}"
-					EXCLUSION_MAP["${tpu_name}"]=1
+				if is_excluded "$tpu_name" "$tpu_labels"; then # Returns 0 if excluded
+					if ! [[ -v EXCLUSION_MAP["$tpu_name"] ]]; then
+						log "INFO" "Protecting TPU VM: ${tpu_name} in ${tpu_zone}"
+						EXCLUSION_MAP["${tpu_name}"]=1
+					fi
+					if [[ -n "$tpu_zone" ]]; then
+						TPUS_TO_PROTECT["${tpu_name}"]="${tpu_zone}"
+					else
+						log "WARNING" "Zone is empty for TPU ${tpu_name}."
+					fi
 				fi
-				if [[ -n "$tpu_zone" ]]; then
-					TPUS_TO_PROTECT["${tpu_name}"]="${tpu_zone}"
-				fi
-			fi
-		done <<<"$tpus_data"
+			done <<<"$tpus_data"
+		fi
 	fi
 
 	# Part 5: Protect resources associated with the collected TPU VMs
@@ -425,7 +453,8 @@ populate_protected_resources() {
 				IFS=';' read -ra net_uris <<<"$nets_str"
 				for net_uri in "${net_uris[@]}"; do
 					if [[ -n "$net_uri" ]] && [[ -v PROTECTED_NETWORK_URIS["$net_uri"] ]]; then
-						local net_name=$(basename "$net_uri")
+						local net_name
+						net_name=$(basename "$net_uri")
 						log "INFO" "Excluding Instance Template (uses protected network '${net_name}'): ${template_name}"
 						EXCLUSION_MAP["${template_name}"]=1
 						found_protected=true
@@ -434,7 +463,7 @@ populate_protected_resources() {
 				done
 			fi
 
-			if [[ "$found_protected" = true ]]; then
+			if [[ "$found_protected" == true ]]; then
 				continue # Move to the next template
 			fi
 
@@ -443,7 +472,8 @@ populate_protected_resources() {
 				IFS=';' read -ra sub_uris <<<"$subs_str"
 				for sub_uri in "${sub_uris[@]}"; do
 					if [[ -n "$sub_uri" ]]; then
-						local sub_name=$(basename "$sub_uri")
+						local sub_name
+						sub_name=$(basename "$sub_uri")
 						if [[ -n "$sub_name" ]] && [[ -v EXCLUSION_MAP["$sub_name"] ]]; then
 							log "INFO" "Excluding Instance Template (uses protected subnetwork '${sub_name}'): ${template_name}"
 							EXCLUSION_MAP["${template_name}"]=1
@@ -504,13 +534,9 @@ process_resources() {
 	fi
 
 	local count=0
-	while IFS=',' read -r name scope labels_str; do
-		# Trim potential whitespace and quotes from CSV
-		name=$(echo "$name" | sed -e 's/^[[:space:]"]*//' -e 's/[[:space:]"]*$//')
-		scope=$(echo "$scope" | sed -e 's/^[[:space:]"]*//' -e 's/[[:space:]"]*$//')
-		labels_str=$(echo "$labels_str" | sed -e 's/^[[:space:]"]*//' -e 's/[[:space:]"]*$//')
-
+	while IFS=$'\t' read -r name scope labels_str; do
 		[[ -z "$name" ]] && continue
+		log "DEBUG" "Processing line: name='${name}', scope='${scope}', labels_str='${labels_str}'"
 
 		if ! is_excluded "$name" "${labels_str:-}"; then
 			local final_cmd="$delete_command_base \"$name\" --quiet"
@@ -594,7 +620,8 @@ process_iam_deleted_members() {
 		IFS=';' read -ra members <<<"$members_str"
 		for member in "${members[@]}"; do
 			if [[ "$member" == deleted:serviceAccount:* ]]; then
-				local cmd="gcloud projects remove-iam-policy-binding \"$PROJECT_ID\" --member=\"$member\" --role=\"$role\" --condition=None --quiet"
+				local cmd
+				cmd="gcloud projects remove-iam-policy-binding \"$PROJECT_ID\" --member=\"$member\" --role=\"$role\" --condition=None --quiet"
 
 				if [[ "$DRY_RUN" == "true" ]]; then
 					log "DRY-RUN" "Would remove IAM binding: $member from role $role"
@@ -617,7 +644,7 @@ process_vm_images() {
 	local images
 	if ! images=$(gcloud compute images list --project="$PROJECT_ID" --no-standard-images \
 		--filter="creationTimestamp < '$CUTOFF_TIME_IMAGES'" \
-		--format="value(name,creationTimestamp,labels.map())"); then
+		--format="value(name,labels.map())"); then
 		log "ERROR" "Failed to list VM images"
 		((ERROR_COUNT++)) || true
 		return 0
@@ -628,7 +655,7 @@ process_vm_images() {
 	fi
 
 	local count=0
-	while IFS=$'\t' read -r name timestamp labels_str; do
+	while IFS=$'\t' read -r name labels_str; do
 		[[ -z "$name" ]] && continue
 		if ! is_excluded "$name" "${labels_str:-}"; then
 			execute_delete "VM Image" "$name" \
@@ -640,7 +667,8 @@ process_vm_images() {
 
 process_docker_images() {
 	log "INFO" "--- Processing: Docker Images for 'test-runner' (Artifact Registry) ---"
-	local cutoff_date=$(date -u -d "14 days ago" '+%Y-%m-%dT%H:%M:%SZ')
+	local cutoff_date
+	cutoff_date=$(date -u -d "14 days ago" '+%Y-%m-%dT%H:%M:%SZ')
 	local cutoff_seconds
 	if ! cutoff_seconds=$(date -u -d "$cutoff_date" +%s); then
 		log "ERROR" "Failed to calculate cutoff_seconds."
@@ -701,12 +729,11 @@ process_filestore() {
 			log "WARNING" "Could not extract valid name or location for a Filestore instance."
 			continue
 		fi
-
 		log "DEBUG" "Filestore $name: Checking network URI: '$network_uri'"
 		# Protect Filestore if its network is used by any protected VM
-		local network_basename=$(basename "$network_uri")
-		# Construct the expected full URI format similar to compute instances
-		local full_network_uri="https://www.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/networks/${network_basename}"
+		local network_basename full_network_uri
+		network_basename=$(basename "$network_uri")
+		full_network_uri="https://www.googleapis.com/compute/v1/projects/${PROJECT_ID}/global/networks/${network_basename}"
 
 		if [[ -n "${network_uri}" && -n "${PROTECTED_NETWORK_URIS[${full_network_uri}]:-}" ]]; then
 			if [[ -z "${EXCLUSION_MAP[${name}]:-}" ]]; then
@@ -798,14 +825,12 @@ process_networks() {
 		[[ -z "$name" ]] && continue
 		if [[ "$name" == "default" ]]; then continue; fi
 		if ! is_excluded "$name"; then
-			local routes
-			routes=$(gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null || true)
-			for r in $routes; do if ! is_excluded "$r"; then execute_delete "Dep. Route" "$r" "gcloud compute routes delete \"$r\" --project=\"$PROJECT_ID\" --quiet"; fi; done
-
-			local fws
-			fws=$(gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null || true)
-			for fw in $fws; do if ! is_excluded "$fw"; then execute_delete "Dep. FW" "$fw" "gcloud compute firewall-rules delete \"$fw\" --project=\"$PROJECT_ID\" --quiet"; fi; done
-
+			gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
+				if [[ -n "$r" ]] && ! is_excluded "$r"; then execute_delete "Dep. Route" "$r" "gcloud compute routes delete \"$r\" --project=\"$PROJECT_ID\" --quiet"; fi
+			done || true
+			gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
+				if [[ -n "$r" ]] && ! is_excluded "$r"; then execute_delete "Dep. Firewall Rule" "$r" "gcloud compute firewall-rules delete \"$r\" --project=\"$PROJECT_ID\" --quiet"; fi
+			done || true
 			execute_delete "Network" "$name" "gcloud compute networks delete \"$name\" --project=\"$PROJECT_ID\" --quiet"
 			((count++)) || true
 		fi
@@ -864,14 +889,15 @@ main() {
 
 	# --- Phase 1: High Level Compute Resources ---
 	process_resources "GKE Cluster" \
-		"gcloud container clusters list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --format=\"csv[no-heading](name,location,resourceLabels.map())\" | sort" \
+		"gcloud container clusters list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --format=\"value(name,location,resourceLabels.map())\" | sort" \
 		"gcloud container clusters delete --project=\"$PROJECT_ID\"" "location"
 
 	process_resources "TPU VM" \
-		"gcloud compute tpus tpu-vm list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --zone - --format=\"csv[no-heading](name,ZONE,labels.map())\" | sort" \
+		"gcloud compute tpus tpu-vm list --project=\"$PROJECT_ID\" --filter=\"createTime < '$CUTOFF_TIME'\" --zone - --format=\"value(name,ZONE,labels.map())\" | sort" \
 		"gcloud compute tpus tpu-vm delete --project=\"$PROJECT_ID\"" "zone"
+
 	process_resources "Compute Instance" \
-		"gcloud compute instances list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"csv[no-heading](name,zone.basename(),labels.map())\" | sort" \
+		"gcloud compute instances list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"value(name,zone.basename(),labels.map())\" | sort" \
 		"gcloud compute instances delete --project=\"$PROJECT_ID\" --delete-disks=all" "zone"
 	process_filestore
 
@@ -879,14 +905,14 @@ main() {
 	process_vm_images
 	process_docker_images
 	process_resources "Instance Template" \
-		"gcloud compute instance-templates list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"csv[no-heading](name,'global',labels.map())\" | sort" \
+		"gcloud compute instance-templates list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME'\" --format=\"value(name,'global',labels.map())\" | sort" \
 		"gcloud compute instance-templates delete --project=\"$PROJECT_ID\"" "none"
 
 	# --- Phase 3: Network Infrastructure ---
 	process_routers
 	process_addresses
 	process_resources "Zonal Disk" \
-		"gcloud compute disks list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME' AND zone:*\" --format=\"csv[no-heading](name,zone.basename(),labels.map())\" | sort" \
+		"gcloud compute disks list --project=\"$PROJECT_ID\" --filter=\"creationTimestamp < '$CUTOFF_TIME' AND zone:*\" --format=\"value(name,zone.basename(),labels.map())\" | sort" \
 		"gcloud compute disks delete --project=\"$PROJECT_ID\"" "zone"
 
 	# --- Phase 4: Networking Hierarchies ---
