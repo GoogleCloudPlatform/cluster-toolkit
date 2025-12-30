@@ -247,7 +247,7 @@ The following requirements need to be satisfied for the node pool nodes to be ab
 2. Its consumption type must be `specific`.
 3. Its GCE VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count.
 
-If you want to utilise a shared reservation, the owner project of the shared reservation needs to be explicitly specified like the following. Note that a shared reservation can be used by the project that hosts the reservation (owner project) and by the projects the reservation is shared with (consumer projects). See how to [create and use a shared reservation](https://cloud.google.com/compute/docs/instances/reservations-shared).
+If you want to utilise a shared reservation, the owner project of the shared reservation needs to be explicitly specified like the following. Note that a shared reservation can be used by the project that hosts the reservation (owner project) and by the projects the reservation is shared with (consumer projects). See how to [create and use a shared reservation](https://cloud.google.com/compute/docs/instances/reservations-shared). Note that the shared reservation must be a specific reservation.
 
 ```yaml
 reservation_affinity:
