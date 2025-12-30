@@ -33,7 +33,7 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
         for job_id in job_ids:
             state = self.job_state(job_id)
             self.assertIn("COMPLETED", state, f"Job {job_id} did not complete successfully. Final state is {state}.")
-            print(f"JobID {job_id} finished successfully.")
+            log.info(f"JobID {job_id} finished successfully.")
 
     def wait_until_squeue_is_empty(self):
         while True:
