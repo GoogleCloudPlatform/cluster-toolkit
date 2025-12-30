@@ -38,16 +38,15 @@ steps:
         if /workspace/tools/cleanup.sh; then
             echo "Cleanup completed successfully."
             exit 0
-        else
-            echo "Cleanup script failed (returned non-zero exit code)."
-            if [ "$attempt" -lt "$max_retries" ]; then
-                wait_time=$((15 * 2 ** (attempt - 1)))
-                echo "Waiting ${wait_time} seconds before retrying..."
-                sleep "$wait_time"
-                attempt=$((attempt + 1))
-            else
-                echo "Max retries reached. Exiting with failure."
-                exit 1
-            fi
         fi
+        echo "Cleanup script failed (returned non-zero exit code)."
+        if [ "$attempt" -lt "$max_retries" ]; then
+            wait_time=$((15 * 2 ** (attempt - 1)))
+            echo "Waiting ${wait_time} seconds before retrying..."
+            sleep "$wait_time"
+        fi
+        attempt=$((attempt + 1))
     done
+
+    echo "Max retries reached. Exiting with failure."
+    exit
