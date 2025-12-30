@@ -230,3 +230,9 @@ def test_gen_cloud_gres_conf_lines(mock_slurm_version, cfg, gputype, gpucount, w
     # mock nodelist to be smaller
     lkp.nodelist = mock.Mock(return_value="m22-turbo-[0-4]")  # type: ignore[method-assign]
     assert conf.gen_cloud_gres_conf_lines(lkp) == want
+
+
+def test_block_size_is_power_of_two():
+    """Verify that BLOCK_SIZE is a power of two."""
+    block_size = conf.BLOCK_SIZE
+    assert block_size > 0 and (block_size & (block_size - 1) == 0)
