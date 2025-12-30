@@ -1,9 +1,9 @@
 # Hybrid Slurm Clusters
 
 > [!NOTE]
-> The `schedmd-slurm-gcp-v5` module has been officially deprecated. This blueprint,
+> The `schedmd-slurm-gcp-v5` module has been officially deprecated since v1.45.0. This blueprint,
 > and relevant doces however, still refer to the `schedmd-slurm-gcp-v5` modules.
-> This is an anomaly and will be fixed and updated in the upcoming releases.
+> There is no current hybrid solution for slurm-gcp-v6 however one is being developed.
 
 ## [on-prem-instructions.md](./on-prem-instructions.md)
 This document describes how to use the Cluster Toolkit to extend an on-premise Slurm
@@ -15,7 +15,7 @@ in GCP. These instructions can be used as a way of trying the
 [schedmd-slurm-gcp-v5-hybrid][hybridmodule] in GCP before bringing the
 configuration changes to a physical on-premise slurm cluster.
 
-[hybridmodule]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.41.0/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
+[hybridmodule]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
 ## Support Documents
 
