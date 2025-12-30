@@ -1,5 +1,10 @@
 # Deploying and installing the hybrid module
 
+> [!NOTE]
+> The `schedmd-slurm-gcp-v5` module has been officially deprecated since v1.45.0. This blueprint,
+> and relevant doces however, still refer to the `schedmd-slurm-gcp-v5` modules.
+> There is no current hybrid solution for slurm-gcp-v6 however one is being developed.
+
 These instructions step you through the deployment, installation and
 verification of a hybrid slurm cluster using the
 [schedmd-slurm-gcp-v5-controller] Cluster Toolkit module.
@@ -22,7 +27,7 @@ GCP.
 > **The indented blocks can be ignored if you are deploying onto an on-premise
 > controller.**
 
-[schedmd-slurm-gcp-v5-controller]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
+[schedmd-slurm-gcp-v5-controller]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
 ## Use the Cluster Toolkit to Create the Hybrid Deployment Directory
 The blueprint for creating a deploying the hybrid configuration can be found in
@@ -104,7 +109,7 @@ a set of support scripts.
 > on a machine other than the controller. The error looks like:
 > `FileNotFoundError: [Errno 2] No such file or directory: '/slurm/custom_scripts/prolog.d'`.
 
-[hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
+[hybridmodule]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [hybrid-configuration.yaml]: ./blueprints/hybrid-configuration.yaml
 
 ## Install and Configure Hybrid on the Controller Instance
