@@ -54,18 +54,7 @@ steps:
     echo '      machine_type: e2-standard-2'             >> $${EXAMPLE_BP}
     echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
     echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
-    echo ''
-    echo '  - id: job_template_hostname'                       >> $${EXAMPLE_BP}
-    echo '    source: modules/compute/gke-job-template'        >> $${EXAMPLE_BP}
-    echo '    use: [h4d-pool]'                                 >> $${EXAMPLE_BP}
-    echo '    settings:'                                       >> $${EXAMPLE_BP}
-    echo '      image: busybox'                                >> $${EXAMPLE_BP}
-    echo '      command:'                                      >> $${EXAMPLE_BP}
-    echo '      - echo'                                        >> $${EXAMPLE_BP}
-    echo '      - Hello World'                                 >> $${EXAMPLE_BP}
-    echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
-    echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-h4d.yml"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-reservation-block.yml"
