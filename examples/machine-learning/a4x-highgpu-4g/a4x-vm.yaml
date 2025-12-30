@@ -18,106 +18,41 @@ vars:
   project_id:
   deployment_name: a4x-jbvm
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-b
   machine_type: 'a4x-highgpu-4g'
   hostname_prefix: $(vars.deployment_name)
   instance_count: 2
+  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
+  build_from_image_project: ubuntu-os-accelerator-images
+  built_image_family: jbvm-ubuntu2404-accelerator-arm64
   instance_image:
-    project: ubuntu-os-accelerator-images
-    family: ubuntu-accelerator-2404-arm64-with-nvidia-580
-  custom_image:
-    family: u24-custom
     project: $(vars.project_id)
+    family: jbvm-ubuntu2404-accelerator-arm64
   disk_size_gb: 100
+  image_disk_size_gb: 100
   filestore_ip_range: 192.168.32.0/24
+  net0_range: 192.168.0.0/19
+  net1_range: 192.168.64.0/19
   reservation_name:
 deployment_groups:
-- group: primary
+- group: image-env
   modules:
-  - id: a4x_net_0
+  - id: a4x-image-net
     source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-a4x-net-0
-      mtu: 8896
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-a4x-sub-0
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.0.0/24
-      firewall_rules:
-      - name: $(vars.deployment_name)-a4x-internal-0
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-  - id: a4x_net_1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-a4x-net-1
-      mtu: 8896
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-a4x-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.1.0/24
-      firewall_rules:
-      - name: $(vars.deployment_name)-a4x-internal-1
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-  - id: a4x_rdma_net
-    source: modules/network/gpu-rdma-vpc
-    settings:
-      mtu: 8896
-      network_name: $(vars.deployment_name)-a4x-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
-      network_routing_mode: REGIONAL
-      subnetworks_template:
-        name_prefix: a4x-mrdma-sub
-        count: 4
-        ip_range: 192.168.128.0/24
-        region: $(vars.region)
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [a4x_net_0]
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /home
-      reserved_ip_range: $(vars.filestore_ip_range)
   - id: image-build-script
     source: modules/scripts/startup-script
     settings:
      # Install ansible
       install_ansible: true
-
       # Allow ssh between nodes
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
-
       runners:
-      # Set higher system limits, often useful in HPC/AI
-      - type: data
-        destination: /etc/security/limits.d/99-unlimited.conf
-        content: |
-          * - memlock unlimited
-          * - nproc unlimited
-          * - stack 8192
-          * - nofile 1048576
-          * - cpu unlimited
-          * - rtprio unlimited
-
-      # Install nvidia drivers/utilities
       - type: ansible-local
-        destination: install_nvidia_drivers.yml
+        destination: setup_nvidia_cuda_environment.yml
         content: |
           # ---
-          - name: Install NVIDIA Drivers and Utils
+          - name: Installing keyring
             hosts: all
             become: true
             vars:
@@ -140,18 +75,16 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-
             # Update apt cache
             - name: Update apt cache
               ansible.builtin.apt:
                 update_cache: true
-
             # Install the package
             - name: Install NVIDIA fabric and CUDA
               ansible.builtin.apt:
                 name: "{{ item }}"
+                state: present
               loop: "{{ nvidia_packages }}"
-
             # This section will optionally freeze the packages with
             # an apt-mark hold.
             - name: Freeze NVIDIA fabric and CUDA
@@ -159,15 +92,13 @@ deployment_groups:
                 name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
-
             post_tasks:
             - name: Enable NVIDIA DCGM by default
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: started
                 enabled: true
-
-      # (Optional) Install ibverbs-utils
+      # Install ibverbs-utils
       - type: ansible-local
         destination: install_ibverbs_packages.yml
         content: |
@@ -182,17 +113,30 @@ deployment_groups:
                 - ibverbs-utils
                 state: present
 
+     # Prerequisites for Mellanox/DOCA
+      - type: ansible-local
+        destination: install_mellanox_deps.yml
+        content: |
+          ---
+          - name: Install Mellanox Prerequisites
+            hosts: all
+            become: true
+            tasks:
+            - name: Install build-essential, dkms, and kernel headers
+              ansible.builtin.apt:
+                name:
+                - dkms
+                - build-essential
+                - "linux-headers-{{ ansible_kernel }}"
+                state: present
+                update_cache: true
       # Install DOCA-OFED
       - type: shell
         destination: install_mellanox.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
-          export DEBIAN_FRONTEND=noninteractive
-
-          # mft depends on dkms
-          apt install -y dkms
-
+          DEBIAN_FRONTEND=noninteractive
           mkdir -p /opt/src
           cd /opt/src
           wget https://www.mellanox.com/downloads/MFT/mft-4.34.0-145-aarch64-deb.tgz
@@ -201,7 +145,7 @@ deployment_groups:
           ./install.sh
           cd ..
           rm -rf mft-4.34.0-145-aarch64-deb
-          export DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
+          DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
           BASE_URL=https://linux.mellanox.com/public/repo/doca
           DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
           DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
@@ -211,13 +155,13 @@ deployment_groups:
           sudo apt-get -y install doca-ofed
 
 
-      # (Optional) Install OpenMPI from source.
+      # Install OpenMPI from source.
       - type: shell
         destination: install_openmpi.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
-          export DEBIAN_FRONTEND=noninteractive
+          DEBIAN_FRONTEND=noninteractive
 
           mkdir -p /opt/src
           cd /opt/src
@@ -231,7 +175,7 @@ deployment_groups:
           cd ../
           rm -rf openmpi-5.0.8.tar.bz2 openmpi-5.0.8
 
-      # (Optional) Install NCCL
+      # Install NCCL
       - type: ansible-local
         destination: install_nccl.yml
         content: |
@@ -240,14 +184,14 @@ deployment_groups:
             hosts: all
             become: true
             tasks:
-            - name: Install Linux Modules Extra
+            - name: Install NCCL Libraries
               ansible.builtin.package:
                 name:
                 - libnccl2
                 - libnccl-dev
                 state: present
 
-      # (Optional) Install NCCL-GIB network plugin as per nccl-gib specification for a4x
+      # Install NCCL-GIB network plugin as per nccl-gib specification for a4x
       - type: ansible-local
         destination: install_nccl_gib.yml
         content: |
@@ -284,8 +228,6 @@ deployment_groups:
               ansible.builtin.dpkg_selections:
                 name: "nccl-gib"
                 selection: hold
-
-      # Good to update ldconfig towards the end.
       - type: ansible-local
         destination: update_ldconfig.yml
         content: |
@@ -296,17 +238,16 @@ deployment_groups:
             tasks:
             - name: Configure ldconfig
               ansible.builtin.command: /usr/sbin/ldconfig
-
-      # Install linux-modules
+      # Install linux modules
       - type: ansible-local
-        destination: install_linux_modules.yml
+        destination: install_linux_extra.yml
         content: |
           ---
-          - name: Install linux modules
+          - name: Install linux extra
             hosts: all
             become: true
             tasks:
-            - name: Install linux modules
+            - name: Install linux extra
               ansible.builtin.package:
                 name:
                 - "linux-modules-{{ ansible_kernel }}"
@@ -319,31 +260,19 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - a4x_net_0
+    - a4x-image-net
     - image-build-script  # From the above image-build-script
     settings:
       machine_type: t2a-standard-16
-      disk_size: $(vars.disk_size_gb)
+      disk_size: $(vars.image_disk_size_gb)
       state_timeout: 45m  # Give the build plenty of time to finish
       # Start from this source image
-      source_image_project_id: [$(vars.instance_image.project)]
-      source_image_family: $(vars.instance_image.family)
-      # Create an image in your project, with your preferred
-      # image family from above
-      image_family: $(vars.custom_image.family)
+      source_image_family: $(vars.build_from_image_family)
+      source_image_project_id: [$(vars.build_from_image_project)]
+      image_family: $(vars.built_image_family)
       omit_external_ip: false
 
       metadata:
-        # Needed in Ubuntu 24.04 for enroot, not required on VMs using this image
-        # Unattended upgrades are disabled in this blueprint so that software does not
-        # get updated daily and lead to potential instability in the cluster environment.
-        #
-        # Unattended Upgrades installs available security updates from the Ubuntu
-        # security pocket for installed packages daily by default. Administrators who
-        # disable this feature assume all responsibility for manually reviewing and
-        # patching their systems against vulnerabilities.
-        #
-        # To enable unattended upgrades, please remove this section.
         user-data: |
           #cloud-config
           create_hostname_file: true
@@ -354,8 +283,62 @@ deployment_groups:
             content: |
               APT::Periodic::Update-Package-Lists "0";
               APT::Periodic::Unattended-Upgrade "0";
+- group: vm-env
+  modules:
+  - id: a4x_net_0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-a4x-net-0
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-a4x-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+  - id: a4x_net_1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-a4x-net-1
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-a4x-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+  - id: a4x_rdma_net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      mtu: 8896
+      network_name: $(vars.deployment_name)-a4x-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: a4x-mrdma-sub
+        count: 4
+        ip_range: 192.168.128.0/24
+        region: $(vars.region)
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [a4x_net_0]
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
 
-# This deployment group actually creates the VMs.
+# This deployment group  creates the VMs.
 - group: vms
   modules:
   - id: a4x_vms
@@ -369,10 +352,10 @@ deployment_groups:
       placement_policy:
         collocation: COLLOCATED
       disk_type: hyperdisk-balanced
-      disk_size_gb: 100
+      disk_size_gb: $(vars.disk_size_gb)
       automatic_restart: true
       on_host_maintenance: TERMINATE
-      instance_image: $(vars.custom_image)
+      instance_image: $(vars.instance_image)
       network_interfaces:
         $(concat(
           [{
@@ -401,7 +384,6 @@ deployment_groups:
           }],
           a4x_rdma_net.subnetwork_interfaces
         ))
-
   - id: wait-for-vms
     source: community/modules/scripts/wait-for-startup
     settings:
