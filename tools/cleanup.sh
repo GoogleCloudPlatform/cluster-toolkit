@@ -186,6 +186,11 @@ populate_protected_resources() {
 		((ERROR_COUNT++)) || true
 	else
 		while IFS=$'\t' read -r cluster_name location labels_str; do
+			if [[ -z "$cluster_name" ]]; then
+				log "DEBUG" "Skipping GKE cluster line with empty name."
+				continue
+			fi
+
 			if ! is_excluded "$cluster_name" "$labels_str"; then # Returns 1 if NOT excluded
 				continue
 			fi
@@ -430,7 +435,7 @@ populate_protected_resources() {
 		fi
 	fi
 
-	# Part 7: Protect Instance Templates based on Network Configuration (No jq)
+	# Part 7: Protect Instance Templates based on Network Configuration
 	log "INFO" "Checking Instance Templates for usage of protected networks..."
 	local templates_data
 	if ! templates_data=$(gcloud compute instance-templates list --project="$PROJECT_ID" \
@@ -563,11 +568,11 @@ process_addresses() {
 	local regional_addresses
 	if ! regional_addresses=$(gcloud compute addresses list --project="$PROJECT_ID" \
 		--filter="creationTimestamp < '$CUTOFF_TIME' AND region:*" \
-		--format="value(name,region.basename(),labels.map(),status)" | sort); then
+		--format="value(name,region.basename(),status,labels.map())" | sort); then
 		log "ERROR" "Failed to list Regional Addresses."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r name region labels_str status; do
+		while IFS=$'\t' read -r name region status labels_str; do
 			[[ -z "$name" ]] && continue
 			if ! is_excluded "$name" "${labels_str:-}"; then
 				if [[ "$status" == "IN_USE" ]]; then
@@ -584,11 +589,11 @@ process_addresses() {
 	local global_addresses
 	if ! global_addresses=$(gcloud compute addresses list --project="$PROJECT_ID" \
 		--filter="creationTimestamp < '$CUTOFF_TIME' AND NOT region:*" \
-		--format="value(name, labels.map(), status)" | sort); then
+		--format="value(name, status, labels.map())" | sort); then
 		log "ERROR" "Failed to list Global Addresses."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r name labels_str status; do
+		while IFS=$'\t' read -r name status labels_str; do
 			[[ -z "$name" ]] && continue
 			if ! is_excluded "$name" "${labels_str:-}"; then
 				if [[ "$status" == "IN_USE" ]]; then
@@ -715,7 +720,7 @@ process_filestore() {
 	local fs_data
 	# Get instance name, location, labels, and network URI
 	if ! fs_data=$(gcloud filestore instances list --project="$PROJECT_ID" --filter="createTime < '$CUTOFF_TIME'" \
-		--format="value(name.segment(5), name.segment(3), labels.map(), networks[0].network)"); then
+		--format="value(name.segment(5), name.segment(3), networks[0].network, labels.map())"); then
 		log "ERROR" "Failed to list Filestore instances."
 		((ERROR_COUNT++)) || true
 		return 0
@@ -726,7 +731,7 @@ process_filestore() {
 	fi
 
 	local count=0
-	while IFS=$'\t' read -r name location labels_str network_uri; do
+	while IFS=$'\t' read -r name location network_uri labels_str; do
 		name=$(echo "$name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 		location=$(echo "$location" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 		network_uri=$(echo "$network_uri" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
