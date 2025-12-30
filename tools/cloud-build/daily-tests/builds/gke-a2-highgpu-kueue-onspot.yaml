@@ -36,8 +36,8 @@ steps:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
-  - "NUM_NODES=4"
-  - "MACHINE_TYPE=a2-highgpu-1g"
+  - "NUM_NODES=12"
+  - "MACHINE_TYPE=a2-highgpu-2g"
   - "INSTANCE_PREFIX=a2hspgke"
   - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a2hoptions.txt"
@@ -68,7 +68,7 @@ steps:
     # Setting spot variable as true.
     sed -i '
     /id: a2_highgpu_pool/,/outputs: \[instructions\]/ {
-      /^[ ]*type: "COMPACT"/a \      spot: true
+      /^[ ]*settings:$/a \      spot: true
     }' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
