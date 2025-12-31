@@ -1,0 +1,98 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Run prerequisite NCCL scripts
+  shell: |
+    set -x -e
+    cd {{ ansible_user_dir }}
+    rm -rf cluster-toolkit
+    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+    cd cluster-toolkit/{{ nccl_test_path }}
+    bash import_pytorch_container.sh
+    sbatch --wait build-nccl-tests.sh
+  args:
+    chdir: "{{ ansible_user_dir }}"
+    executable: /bin/bash
+  register: build_result
+
+- name: Wait for aperture devices on compute nodes
+  shell: |
+    srun -N 2 --partition={{ custom_vars.gpu_partition }} --pty bash -c '
+      max_attempts=60 # Wait for up to 5 minute
+      attempt=0
+      while [ -z "$(ls -A /dev/aperture_devices 2>/dev/null)" ]; do
+        echo "Node $(hostname): Waiting for aperture devices... (Attempt $(($attempt + 1)))"
+        if [ $attempt -ge $max_attempts ]; then
+          echo "ERROR: Node $(hostname): Aperture devices not found after $max_attempts attempts." >&2
+          exit 1
+        fi
+        attempt=$(($attempt + 1))
+        sleep 5
+      done
+      echo "Node $(hostname): Aperture devices are ready."
+    '
+  args:
+    chdir: "{{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}"
+    executable: /bin/bash
+  when: custom_vars.gpu_partition == 'a3mega'
+
+- name: Submit NCCL test job and get job ID
+  shell: "sbatch run-nccl-tests.sh | awk '{print $4}'"
+  args:
+    chdir: "{{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}"
+    executable: /bin/bash
+  register: sbatch_output
+  changed_when: false
+
+- name: Set job_id fact
+  set_fact:
+    job_id: "{{ sbatch_output.stdout | trim }}"
+
+- name: Wait for NCCL test job to complete
+  command: "sacct -j {{ job_id }} -n -o State"
+  register: job_status
+  until: "'COMPLETED' in job_status.stdout or 'FAILED' in job_status.stdout or 'TIMEOUT' in job_status.stdout"
+  retries: 60 # wait for 30 minutes
+  delay: 30
+  changed_when: false
+
+- name: Check final job status
+  fail:
+    msg: "NCCL test job {{ job_id }} failed with status {{ job_status.stdout }}. Check slurm-{{ job_id }}.out on the login node."
+  when: "'COMPLETED' not in job_status.stdout"
+
+- name: Verify NCCL test output
+  shell: "cat slurm-{{ job_id }}.out | grep '# Avg bus bandwidth'"
+  args:
+    chdir: "{{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}"
+    executable: /bin/bash
+  register: nccl_output
+  changed_when: false
+
+- name: Display NCCL Test Result
+  debug:
+    msg: "NCCL Test Result: {{ nccl_output.stdout }}"
+  when: nccl_output.stdout is defined and nccl_output.stdout != ""
+
+- name: Extract average bus bandwidth
+  shell: "echo '{{ nccl_output.stdout }}' | awk -F':' '{print $NF}'"
+  register: avg_bus_bandwidth
+  changed_when: false
+  when: nccl_output.stdout is defined and nccl_output.stdout != ""
+
+- name: Ensure average bus bandwidth is sufficient
+  fail:
+    msg: "Average bus bandwidth is {{ avg_bus_bandwidth.stdout | trim }} GB/s, which is below the threshold of 30 GB/s."
+  when: (avg_bus_bandwidth.stdout | default('0') | float) < 30

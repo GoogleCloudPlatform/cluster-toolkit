@@ -115,7 +115,7 @@ deployment_groups:
       name_prefix: ubuntu
       instance_count: 1
       instance_image:
-        family: ubuntu-2004-lts
+        family: ubuntu-2204-lts
         project: ubuntu-os-cloud
   - id: wait-ubuntu
     source: community/modules/scripts/wait-for-startup

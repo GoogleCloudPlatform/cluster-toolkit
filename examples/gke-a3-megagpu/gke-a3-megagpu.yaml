@@ -77,7 +77,7 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: node_pool_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-np-sa
       project_roles:
@@ -89,7 +89,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: workload_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-wl-sa
       project_roles:
@@ -173,6 +173,7 @@ deployment_groups:
           cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
+        wait: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3_megagpu_pool.static_gpu_count)

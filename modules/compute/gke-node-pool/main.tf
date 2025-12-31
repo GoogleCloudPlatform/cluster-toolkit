@@ -61,6 +61,13 @@ locals {
   cluster_location = local.cluster_id_parts[3]
 }
 
+module "tpu" {
+  source = "../../internal/tpu-definition"
+
+  machine_type     = var.machine_type
+  placement_policy = var.placement_policy
+}
+
 
 data "google_container_cluster" "gke_cluster" {
   name     = local.cluster_name
@@ -106,7 +113,7 @@ resource "google_container_node_pool" "node_pool" {
     content {
       type         = var.placement_policy.type
       policy_name  = var.placement_policy.name
-      tpu_topology = var.placement_policy.tpu_topology
+      tpu_topology = module.tpu.is_tpu ? var.placement_policy.tpu_topology : null
     }
   }
 
@@ -160,7 +167,7 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     dynamic "taint" {
-      for_each = concat(var.taints, local.gpu_taint)
+      for_each = concat(var.taints, local.gpu_taint, module.tpu.tpu_taint)
       content {
         key    = taint.value.key
         value  = taint.value.value
@@ -231,6 +238,22 @@ resource "google_container_node_pool" "node_pool" {
       for_each = var.host_maintenance_interval != "" ? [1] : []
       content {
         maintenance_interval = var.host_maintenance_interval
+      }
+    }
+
+    kubelet_config {
+      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
+      dynamic "topology_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "restricted"
+        }
+      }
+      dynamic "memory_manager" {
+        for_each = var.enable_numa_aware_scheduling ? [1] : []
+        content {
+          policy = "Static"
+        }
       }
     }
   }
@@ -306,14 +329,6 @@ resource "google_container_node_pool" "node_pool" {
       - ${local.specific_reservation_requirement_violation_messages[property]}
       %{endfor}
       EOT
-    }
-    precondition {
-      condition = (
-        (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
-      )
-      error_message = "Shared extended reservations are not supported by GKE."
     }
     precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)

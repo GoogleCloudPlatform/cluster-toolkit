@@ -58,11 +58,11 @@ deployment_groups:
   # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
 
   - id: controller_sa
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: controller
       project_roles:
@@ -74,7 +74,7 @@ deployment_groups:
       - storage.objectViewer
 
   - id: login_sa
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: login
       project_roles:
@@ -83,7 +83,7 @@ deployment_groups:
       - storage.objectViewer
 
   - id: compute_sa
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: compute
       project_roles:
@@ -137,7 +137,6 @@ deployment_groups:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
       instance_image: $(vars.slurm_image)
-      bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
       allow_automatic_updates: false

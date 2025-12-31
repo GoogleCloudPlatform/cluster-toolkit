@@ -21,7 +21,16 @@ vars:
   region: us-central1
   zone: us-central1-a
   compute_node_machine_type: c2-standard-4
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+  # Managed-Lustre instance name. This should be unique for each deployment.
   lustre_instance_id: lustre-instance
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -34,7 +43,7 @@ deployment_groups:
 
   # Required for Managed Lustre instance
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
 
   - id: lustre-gcp
@@ -44,7 +53,8 @@ deployment_groups:
       name: $(vars.lustre_instance_id)
       local_mount: /lustre
       remote_mount: lustrefs
-      size_gib: 36000
+      size_gib: $(vars.lustre_size_gib)
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
 - group: slurm-cluster
   modules:

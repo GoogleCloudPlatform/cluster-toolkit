@@ -37,6 +37,15 @@ variable "name" {
     EOD
   type        = string
   default     = null
+
+  validation {
+    # Check if the variable is null OR if it matches the GCP resource naming regex.
+    condition     = var.name == null || can(regex("^[a-z]([-a-z0-9]{0,34}[a-z0-9])?$", var.name))
+    error_message = <<-EOD
+    If provided, the node pool name must be between 1 and 36 characters, start with a lowercase letter, end with an alphanumeric, and contain only lowercase letters, numbers, and hyphens.
+    Underscores are not allowed. A shorter length is enforced to accommodate a suffix when creating multiple node pools.
+    EOD
+  }
 }
 
 variable "internal_ghpc_module_id" {
@@ -456,7 +465,7 @@ variable "max_run_duration" {
 variable "enable_private_nodes" {
   description = "Whether nodes have internal IP addresses only."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "num_node_pools" {
@@ -469,4 +478,10 @@ variable "num_slices" {
   description = "Number of TPUs slices to create. This is same as num_node_pools."
   type        = number
   default     = 1
+}
+
+variable "enable_numa_aware_scheduling" {
+  description = "Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling."
+  type        = bool
+  default     = false
 }

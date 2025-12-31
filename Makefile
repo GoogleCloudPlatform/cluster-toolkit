@@ -8,7 +8,7 @@ MIN_GOLANG_VERSION=1.24 # for building gcluster
         warn-go-version warn-terraform-version warn-packer-version \
         test-engine validate_configs validate_golden_copy packer-check \
         terraform-format packer-format mypy \
-        check-tflint check-pre-commit
+        check-tflint check-pre-commit ci-tests
 
 SHELL=/bin/bash -o pipefail
 ENG = ./cmd/... ./pkg/...
@@ -71,9 +71,10 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install mvdan.cc/sh/v3/cmd/shfmt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
-	pip install mypy
+	pip install mypy==1.18.2
 
 
 clean:
@@ -93,6 +94,9 @@ clean:
 	done
 
 # RULES SUPPORTING THE ABOVE
+ci-tests: warn-go-missing
+	$(info **************** running gcluster unit tests for CI **************)
+	go test -v $(ENG) | go-junit-report > test-results.xml
 
 test-engine: warn-go-missing
 	$(info **************** vetting go code **********************)

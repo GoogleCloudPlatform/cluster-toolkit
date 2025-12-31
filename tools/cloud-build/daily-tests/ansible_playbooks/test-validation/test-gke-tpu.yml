@@ -1,0 +1,146 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.project is defined
+    - custom_vars.expected_tpu_count is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Identify Job File
+  delegate_to: localhost
+  ansible.builtin.shell: ls {{ workspace }}/{{ deployment_name }}/primary/my-job*.yaml | head -n 1
+  register: job_file_result
+  changed_when: False
+
+- name: Register Job Variables
+  ansible.builtin.set_fact:
+    job_file_path: "{{ job_file_result.stdout }}"
+    job_name: "{{ job_file_result.stdout | basename | splitext | first }}"
+
+- name: Execute the job
+  delegate_to: localhost
+  ansible.builtin.command: kubectl create -f {{ job_file_path }} -v=9
+  changed_when: False
+
+- name: Block to wait for job completion and capture failures
+  block:
+  - name: Wait for job to complete
+    delegate_to: localhost
+    ansible.builtin.command: kubectl wait --for=condition=complete "job/{{ job_name }}" --timeout=10m
+    register: job_wait_result
+
+  - name: Get job pods
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods --selector=job-name={{ job_name }} -o jsonpath='{.items[0].metadata.name}'
+    register: job_pod_name
+    changed_when: false
+
+  - name: Get job logs
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl logs {{ job_pod_name.stdout }}
+    register: job_logs
+    changed_when: false
+
+  - name: Print job output
+    ansible.builtin.debug:
+      msg: "Job Output: {{ job_logs.stdout }}"
+
+  - name: Verify TPU count
+    ansible.builtin.assert:
+      that:
+      - (custom_vars.expected_tpu_count | string ~ ' TPU cores') in job_logs.stdout
+      fail_msg: "Expected '{{ custom_vars.expected_tpu_count }} TPU cores' in logs, but got: {{ job_logs.stdout }}"
+
+  rescue:
+  - name: "FAILURE: Job did not complete or verification failed. Capturing debug info."
+    ansible.builtin.debug:
+      msg: "The Job failed to complete within the expected time or failed verification. See debug output below."
+
+  - name: Get all pods status on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -o wide
+    register: pods_on_failure
+    changed_when: false
+
+  - name: Print all pods status on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_on_failure.stdout_lines }}"
+
+  - name: Describe the job on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe job {{ job_name }}
+    register: job_describe_on_failure
+    changed_when: false
+
+  - name: Print job description on failure
+    ansible.builtin.debug:
+      msg: "{{ job_describe_on_failure.stdout_lines }}"
+
+  - name: Get pod name on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods --selector=job-name={{ job_name }} --no-headers -o custom-columns=":metadata.name"
+    register: pod_name_on_failure
+    changed_when: false
+
+  - name: Describe the pod on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe pod {{ item }}
+    loop: "{{ pod_name_on_failure.stdout_lines }}"
+    register: pod_describe_on_failure
+    changed_when: false
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Print pod description on failure
+    ansible.builtin.debug:
+      msg: "{{ pod_describe_on_failure.results }}"
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Get logs from the pod on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl logs {{ item }}
+    loop: "{{ pod_name_on_failure.stdout_lines }}"
+    register: pod_logs_on_failure
+    changed_when: false
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Print pod logs on failure
+    ansible.builtin.debug:
+      msg: "{{ pod_logs_on_failure.results }}"
+    when: pod_name_on_failure.stdout_lines | length > 0
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "GKE Job failed."
+
+- name: Print job_completion debug output
+  ansible.builtin.debug:
+    var: job_wait_result.stdout_lines
+
+- name: Clean up
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl delete job {{ job_name }} -v=9

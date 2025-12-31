@@ -91,7 +91,7 @@ No providers.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_health_check_firewall_rule"></a> [health\_check\_firewall\_rule](#module\_health\_check\_firewall\_rule) | ../../../../modules/network/firewall-rules | n/a |
-| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | ../../../../community/modules/file-system/cloud-storage-bucket | n/a |
+| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | ../../../../modules/file-system/cloud-storage-bucket | n/a |
 
 ## Resources
 

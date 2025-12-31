@@ -23,7 +23,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/h4d-vm.yaml"
@@ -34,18 +34,32 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "NUM_NODES=4"
+  - "MACHINE_TYPE=h4d-highmem-192-lssd"
+  - "INSTANCE_PREFIX=h4dsp"
+  - "BUILD_ID=$BUILD_ID"
+  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/h4doptions.txt"
   args:
   - -c
   - |
-    set -x -e
+    set -e -u -o pipefail
+    echo "Sourcing find_available_zone.sh to determine zone."
+    source /workspace/tools/cloud-build/find_available_zone.sh
+    if [ -z "$${ZONE:-}" ]; then
+      echo "ERROR: ZONE not found" >&2
+      exit 1
+    fi
+    set -x
     cd /workspace && make
-    BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=us-central1
-    ZONE=us-central1-a
+    REGION="$${ZONE%-*}"
+    BUILD_ID_SHORT=$${BUILD_ID:0:6}
     BLUEPRINT="/workspace/examples/h4d-vm.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
+    sed -i '/  - id: h4d-vms/,/  - id: wait-for-vms/ { /    settings:/a \
+          provisioning_model: "SPOT"
+    }' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

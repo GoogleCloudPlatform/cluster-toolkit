@@ -64,7 +64,7 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
 
   - id: homefs
@@ -76,7 +76,7 @@ deployment_groups:
 ###### GKE Setup ######
 
   - id: gke_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: slinky-gke-sa
       project_roles:

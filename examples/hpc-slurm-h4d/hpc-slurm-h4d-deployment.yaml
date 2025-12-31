@@ -1,0 +1,32 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    # The GCS bucket used for storing terraform state
+    bucket:   # Bucket Name
+
+vars:
+  # --- Required Variables ---
+  project_id:               # GCP Project ID
+  deployment_name:          # Unique name for the deployment
+  region:                   # GCP region for the deployment
+  zone:                     # GCP zone for the deployment
+  h4d_cluster_size:         # Number of Nodes in the Cluster
+  h4d_reservation_name:     # Specify a reservation name if using reserved instances
+
+  # Additional provisioning models (pick only one), can be used to substitute `h4d_reservation_name`:
+  # h4d_dws_flex_enabled: false   # Set to true to use Dynamic Workload Scheduler (DWS) Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+  # h4d_enable_spot_vm: false     # Set to true to use Spot VMs for H4D nodes, for more info visit: https://cloud.google.com/compute/docs/instances/spot

@@ -119,7 +119,7 @@ The Cluster Toolkit officially supports the following VM images:
 
 * HPC Rocky Linux 8
 * Debian 11
-* Ubuntu 20.04 LTS
+* Ubuntu 22.04 LTS
 
 For more information on these and other images, see
 [docs/vm-images.md](docs/vm-images.md).
