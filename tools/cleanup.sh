@@ -35,12 +35,18 @@ log() {
 check_dependencies() {
 	log "INFO" "Checking for required command-line tools..."
 	local dependencies=("gcloud" "awk" "grep" "sort" "date" "sed" "basename")
+	local missing_deps=()
+
 	for cmd in "${dependencies[@]}"; do
 		if ! command -v "$cmd" &>/dev/null; then
-			log "ERROR" "Missing required dependency: $cmd. Please install it via cloud build and try again."
-			exit 1 # Dependencies are critical, we must exit immediately here.
+			missing_deps+=("$cmd")
 		fi
 	done
+
+	if [ ${#missing_deps[@]} -ne 0 ]; then
+		log "ERROR" "Missing required dependencies: ${missing_deps[*]}. Please install them and try again."
+		exit 1 # Dependencies are critical, we must exit after reporting all missing ones.
+	fi
 	log "INFO" "All dependencies are satisfied."
 }
 
@@ -53,11 +59,9 @@ load_exclusions() {
 		local line="$1"
 		local trimmed_line
 		trimmed_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-		if [[ -n "$trimmed_line" ]] && [[ "$trimmed_line" != \#* ]]; then
-			if [[ -z "${EXCLUSION_MAP[${trimmed_line}]:-}" ]]; then
-				EXCLUSION_MAP["${trimmed_line}"]=1
-				((line_count++))
-			fi
+		if [[ -n "$trimmed_line" ]] && [[ "$trimmed_line" != \#* ]] && [[ -z "${EXCLUSION_MAP[${trimmed_line}]:-}" ]]; then
+			EXCLUSION_MAP["${trimmed_line}"]=1
+			((line_count++))
 		fi
 	}
 
@@ -579,7 +583,7 @@ process_addresses() {
 			[[ -z "$name" ]] && continue
 			if ! is_excluded "$name" "${labels_str:-}"; then
 				if [[ "$status" == "IN_USE" ]]; then
-					log "DEBUG" "Skipping IN_USE Regional Address $name ($region)."
+					log "SKIP" "Skipping IN_USE Regional Address $name ($region)."
 					continue
 				fi
 				execute_delete "Regional Address" "$name" "($region)" \
@@ -600,7 +604,7 @@ process_addresses() {
 			[[ -z "$name" ]] && continue
 			if ! is_excluded "$name" "${labels_str:-}"; then
 				if [[ "$status" == "IN_USE" ]]; then
-					log "DEBUG" "Skipping IN_USE Global Address $name."
+					log "SKIP" "Skipping IN_USE Global Address $name."
 					continue
 				fi
 				execute_delete "Global Address" "$name" "(Global)" \
@@ -762,7 +766,7 @@ process_filestore() {
 
 		if [[ -n "${network_uri}" && -n "${PROTECTED_NETWORK_URIS[${full_network_uri}]:-}" ]]; then
 			if [[ -z "${EXCLUSION_MAP[${name}]:-}" ]]; then
-				log "INFO" "SKIP : Filestore $name ($location) on PROTECTED network $network_basename (URI: $full_network_uri)"
+				log "SKIP" "Filestore $name ($location) on PROTECTED network $network_basename (URI: $full_network_uri)"
 				EXCLUSION_MAP["${name}"]=1
 			fi
 			continue
@@ -865,28 +869,24 @@ process_networks() {
 
 	local count=0
 	while IFS=$'\t' read -r name self_link; do
-		[[ -z "$name" ]] && continue
-		if [[ "$name" == "default" ]]; then continue; fi
-		if ! is_excluded "$name"; then
-			# Delete dependent routes
-			gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
-				if [[ -n "$r" ]] && ! is_excluded "$r"; then
-					execute_delete "Dependent Route" "$r" "" \
-						gcloud compute routes delete "$r" --project="$PROJECT_ID" --quiet
-				fi
-			done || true
-			# Delete dependent firewall rules
-			gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
-				if [[ -n "$r" ]] && ! is_excluded "$r"; then
-					execute_delete "Dependent Firewall Rule" "$r" "" \
-						gcloud compute firewall-rules delete "$r" --project="$PROJECT_ID" --quiet
-				fi
-			done || true
-			# Delete the network itself
-			execute_delete "Network" "$name" "" \
-				gcloud compute networks delete "$name" --project="$PROJECT_ID" --quiet
-			((count++)) || true
-		fi
+		[[ -z "$name" || "$name" == "default" || $(is_excluded "$name") ]] && continue
+		gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
+			if [[ -n "$r" ]] && ! is_excluded "$r"; then
+				execute_delete "Dependent Route" "$r" "" \
+					gcloud compute routes delete "$r" --project="$PROJECT_ID" --quiet
+			fi
+		done || true
+		# Delete dependent firewall rules
+		gcloud compute firewall-rules list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
+			if [[ -n "$r" ]] && ! is_excluded "$r"; then
+				execute_delete "Dependent Firewall Rule" "$r" "" \
+					gcloud compute firewall-rules delete "$r" --project="$PROJECT_ID" --quiet
+			fi
+		done || true
+		# Delete the network itself
+		execute_delete "Network" "$name" "" \
+			gcloud compute networks delete "$name" --project="$PROJECT_ID" --quiet
+		((count++)) || true
 	done <<<"$networks"
 	log "INFO" "Finished processing VPC Networks. $count networks actioned."
 }
