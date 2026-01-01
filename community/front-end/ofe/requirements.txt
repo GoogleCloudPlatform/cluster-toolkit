@@ -58,7 +58,7 @@ jsonschema-specifications==2025.9.1
 lazy-object-proxy==1.12.0
 libcst==1.8.5
 macholib==1.16.3
-MarkupSafe==2.1.3
+MarkupSafe==3.0.3
 mccabe==0.7.0
 mypy-extensions==1.1.0
 nodeenv==1.9.1
