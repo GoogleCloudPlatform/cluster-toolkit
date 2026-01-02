@@ -14,18 +14,24 @@
  * limitations under the License.
 */
 
-# to check if a tag key already exists 
-data "google_tags_tag_key" "check_tag_key"{
-  parent = var.tag_key_parent
-  short_name = var.tag_key_short_name
+# Use the external data source
+data "external" "check_tag_key" {
+  program = ["bash", "${path.module}/check_tag.sh"]
+
+  query = {
+    parent     = var.tag_key_parent
+    short_name = var.tag_key_short_name
+  }
 }
 
 locals {
-    existing_tag_key_id = google_tags_tag_key.check_tag_key.id
+  # If the script returned an empty string, the key doesn't exist
+  tag_key_exists = data.external.check_tag_key.result.id != ""
+  tag_key_id     = local.tag_key_exists ? data.external.check_tag_key.result.id : google_tags_tag_key.key[0].id
 }
 
 resource "google_tags_tag_key" "key" {
-  count = local.existing_tag_key_id == null ? 1 : 0
+  count = local.tag_key_exists ? 0 : 1
 
   parent       = var.tag_key_parent
   short_name   = var.tag_key_short_name
@@ -35,9 +41,11 @@ resource "google_tags_tag_key" "key" {
 }
 
 resource "google_tags_tag_value" "values" {
-  for_each = toset(var.tag_value)
+  # This creates a map where the key is the short_name 
+  # and the value is the entire object
+  for_each = { for val in var.tag_value : val.short_name => val }
 
-  parent      = local.existing_tag_key_id == null ? google_tags_tag_key.key[0].id : data.google_tags_tag_key.check_tag_key.id
+  parent      = local.tag_key_id
   short_name  = each.value.short_name
   description = each.value.description
 }
