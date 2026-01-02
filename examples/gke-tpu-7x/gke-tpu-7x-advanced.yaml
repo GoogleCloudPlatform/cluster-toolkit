@@ -167,6 +167,7 @@ deployment_groups:
       enable_gcsfuse_csi: true # enable GCS Fuse for the cluster
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
+      enable_filestore_csi: true # enable Filestore for the cluster
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
@@ -454,3 +455,44 @@ deployment_groups:
   #     node_count: 1
 
   #   outputs: [instructions]
+
+  # # --- FILESTORE ADDITIONS ---
+  - id: filestore
+    source: modules/file-system/filestore
+    use: [gke-tpu-7x-net-0]
+    settings: {local_mount: /mnt/7x-filestore}
+
+  - id: shared-filestore-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gke-tpu-7x-cluster, filestore]
+
+  # Shared Filestore Job
+  - id: shared-fs-job
+    source: modules/compute/gke-job-template
+    use:
+    - gke-tpu-7x-cluster
+    - gke-tpu-7x-pool
+    - shared-filestore-pv
+    settings:
+      image: alpine/git:latest
+      command:
+      - sh
+      - -c
+      - |
+        echo "Pod ${HOSTNAME} is starting..."
+        SHARED_DIR=/mnt/7x-filestore
+        mkdir -p $SHARED_DIR
+        cd $SHARED_DIR
+
+        # Simulate some work and write to a shared file
+        cmd="date +%s"
+        TIMESTAMP=`$cmd`
+        echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+        echo "Displaying content of shared_output.txt:"
+        echo "---"
+        cat shared_output.txt # Read the content to show it's shared
+        echo "---"
+        sleep 120
+        echo "Pod ${HOSTNAME} finished."
+      node_count: 2
+    outputs: [instructions]
