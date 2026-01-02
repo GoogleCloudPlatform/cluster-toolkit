@@ -17,7 +17,7 @@ BUILD_ID_SHORT="${BUILD_ID:0:6}"
 PROVISIONING_MODEL="SPOT"
 TERMINATION_ACTION="DELETE"
 FULL_INSTANCE_PREFIX="${INSTANCE_PREFIX}-${BUILD_ID_SHORT}-"
-MIN_NODES=2 # Define minimum number of nodes required
+MIN_NODES="${MIN_NODES:-2}" # Define minimum number of nodes required
 
 generate_instance_names() {
 	local prefix=$1
