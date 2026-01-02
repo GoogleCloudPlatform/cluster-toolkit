@@ -74,7 +74,7 @@ pyasn1-modules==0.4.2
 pycparser==2.23
 PyJWT==2.10.1
 pylint==4.0.4
-pylint-django==2.6.1
+pylint-django==2.7.0
 pylint-plugin-utils==0.9.0
 pyparsing==3.2.5
 python3-openid==3.2.0
