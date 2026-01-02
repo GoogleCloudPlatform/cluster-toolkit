@@ -96,7 +96,7 @@ This repository also includes an advanced blueprint, `gke-tpu-v6-advanced.yaml`,
 * **Dedicated Service Accounts** for nodes and workloads, following security best practices.
 * **Automatic creation of two GCS buckets** for training data and checkpoints.
 * **Performance-tuned GCS FUSE mounts** pre-configured in the cluster as Persistent Volumes.
-* **Optional** High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview)** for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration)
+* **Optional** High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview) for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration)
 * **Optional** High-Performance Storage: [Hyperdisk Balanced](https://docs.cloud.google.com/compute/docs/disks/hyperdisks) support for highly available and consistent performance across GKE nodes. For details of configuring Hyperdisk Balanced, please refer to the [appendix](#understanding-hyperdisk-balanced-integration).
 * **Optional** Shared File Storage: [Filestore](https://docs.cloud.google.com/filestore/docs/overview) for managed NFS capabilities allowing multiple TPU hosts to share logs, code, or datasets. For details, refer to the [appendix](#understanding-filestore-integration).
 
