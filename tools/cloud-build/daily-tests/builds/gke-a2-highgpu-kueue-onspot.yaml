@@ -37,6 +37,7 @@ steps:
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=12"
+  - "MIN_NODES=6"
   - "MACHINE_TYPE=a2-highgpu-2g"
   - "INSTANCE_PREFIX=a2hspgke"
   - "BUILD_ID=$BUILD_ID"
