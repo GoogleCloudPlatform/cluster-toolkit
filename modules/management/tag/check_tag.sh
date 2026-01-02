@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Checks if a tag key exists and returns the ID or an empty string
-set -e
+set -eo pipefail
 
 eval "$(jq -r '@sh "PARENT=\(.parent) SHORT_NAME=\(.short_name)"')"
 

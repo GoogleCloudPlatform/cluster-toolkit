@@ -37,16 +37,16 @@ variable "tag_key_purpose" {
 }
 
 variable "tag_key_purpose_data" {
-  description = "Purpose data cannot be changed once set. Purpose data corresponds to the policy system that the tag is intended for. For example, the GCE_FIREWALL purpose expects data in the following format: network = \"<project-name>/<vpc-name>\"."
+  description = "Purpose data cannot be changed once set. Purpose data corresponds to the policy system that the tag is intended for. For example, the GCE_FIREWALL purpose expects data in the following map format: network = \"<project-id>/<network-id>\" (or) Network URI (or) selfLinkWithId."
   type        = map(string)
   default     = null
 }
 
 variable "tag_value" {
   description = <<-EOT
-  A TagValue is a child of a particular TagKey. TagValues are used to group cloud resources for the purpose of controlling them using policies.
-  short_name:User-assigned short name for TagValue. The short name should be unique for TagValues within the same parent TagKey. The short name can have a maximum length of 256 characters. The permitted character set for the shortName includes all UTF-8 encoded Unicode characters except single quotes ('), double quotes (\"), backslashes (\\), and forward slashes (/).
-  description: User-assigned description of the TagValue. Must not exceed 256 characters.
+  A list of TagValues to create as children of the TagKey. TagValues are used to group cloud resources for the purpose of controlling them using policies. Each object in the list should have the following attributes:
+  - `short_name`: User-assigned short name for the TagValue. Must be unique for TagValues within the same parent TagKey. Maximum length of 256 characters. The permitted character set includes all UTF-8 encoded Unicode characters except single quotes ('), double quotes ("), backslashes (\\), and forward slashes (/).
+  - `description`: User-assigned description of the TagValue. Must not exceed 256 characters.
   EOT
   type = list(object({
     short_name  = string
