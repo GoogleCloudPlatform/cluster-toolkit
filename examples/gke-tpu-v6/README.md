@@ -96,7 +96,9 @@ This repository also includes an advanced blueprint, `gke-tpu-v6-advanced.yaml`,
 * **Dedicated Service Accounts** for nodes and workloads, following security best practices.
 * **Automatic creation of two GCS buckets** for training data and checkpoints.
 * **Performance-tuned GCS FUSE mounts** pre-configured in the cluster as Persistent Volumes.
-* **Optional High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview)** for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration)
+* **Optional** High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview)** for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration)
+* **Optional** High-Performance Storage: [Hyperdisk Balanced](https://docs.cloud.google.com/compute/docs/disks/hyperdisks) support for highly available and consistent performance across GKE nodes. For details of configuring Hyperdisk Balanced, please refer to the [appendix](#understanding-hyperdisk-balanced-integration).
+* **Optional** Shared File Storage: [Filestore](https://docs.cloud.google.com/filestore/docs/overview) for managed NFS capabilities allowing multiple TPU hosts to share logs, code, or datasets. For details, refer to the [appendix](#understanding-filestore-integration).
 
 ### Deploying the Advanced Blueprint
 
@@ -312,3 +314,42 @@ After making these changes, run the `gcluster deploy` command as usual.
     ```
 
 The logs of the pod verifies the disk is mounted successfully and performs a mixed I/O test to validate the disk's provisioned performance.
+
+### Understanding Filestore integration
+
+To enable Filestore integration, perform the following steps before deploying:
+
+1. In the `gke-tpu-v6-cluster` module settings, ensure `enable_filestore_csi: true` is set.
+2. Find the section commented `--- FILESTORE ADDITIONS ---`. Uncomment the following modules:
+   * `filestore`: Provisions the Filestore instance and specifies the `local_mount` point.
+   * `shared-filestore-pv`: Creates the Kubernetes Persistent Volume and Claim.
+   * `shared-fs-job`: (Optional) A test job template to verify multi-node shared writing.
+
+#### Testing the Shared Filestore Mount
+The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two different pods can write to and read from the same file simultaneously.
+
+1. Connect to your cluster:
+
+    ```sh
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    ```
+
+    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
+
+2. Apply the Filestore test manifest,whose path is provided in the final deployment instructions:
+
+    ```sh
+    kubectl apply -f <path/to/shared-fs-job.yaml>
+    ```
+
+3. Verify the Shared Output: Once the pods are running, check the logs of the first pod to see it reading data written by the second pod:
+
+    ```sh
+    # Get pod names
+    kubectl get pods
+    
+    # Check logs for the first pod
+    kubectl logs <pod-name-0>
+    ```
+
+The logs will display content from `shared_output.txt`, showing timestamps and hostnames from both pods, confirming that the filesystem is truly shared.
