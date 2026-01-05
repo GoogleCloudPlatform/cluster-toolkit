@@ -74,9 +74,9 @@ deployment_groups:
         subnet_ip: 192.168.0.0/18
       - subnet_name: $(vars.deployment_name)-proxy-subnet
         subnet_region: $(vars.region)
-        subnet_ip: "192.168.192.0/24"
-        purpose: "REGIONAL_MANAGED_PROXY"
-        role: "ACTIVE"
+        subnet_ip: 192.168.192.0/24
+        purpose: REGIONAL_MANAGED_PROXY
+        role: ACTIVE
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-sub-0
         ranges:
@@ -126,7 +126,7 @@ deployment_groups:
         region: $(vars.region)
 
   - id: node_pool_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-np-sa
       project_roles:
@@ -138,7 +138,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: workload_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-wl-sa
       project_roles:
@@ -151,7 +151,7 @@ deployment_groups:
       - container.admin
 
   - id: training_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /training-data
       name_prefix: training
@@ -160,7 +160,7 @@ deployment_groups:
       enable_hierarchical_namespace: true
 
   - id: checkpoint_bucket
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /checkpoint-data
       name_prefix: checkpoint
@@ -202,12 +202,12 @@ deployment_groups:
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: $(vars.version_prefix)
-      release_channel: RAPID
+      release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2024-12-01T00:00:00Z"
-        end_time: "2025-12-22T00:00:00Z"
+        start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
       enable_inference_gateway: true
     outputs: [instructions]
 

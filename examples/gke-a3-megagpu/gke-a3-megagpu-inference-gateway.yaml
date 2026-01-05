@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,12 +70,12 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.deployment_name)-subnet
         subnet_region: $(vars.region)
-        subnet_ip: 10.128.0.0/20 
+        subnet_ip: 10.128.0.0/20
       - subnet_name: $(vars.deployment_name)-proxy-subnet
         subnet_region: $(vars.region)
-        subnet_ip: "10.129.0.0/24"
-        purpose: "REGIONAL_MANAGED_PROXY"
-        role: "ACTIVE"
+        subnet_ip: 10.129.0.0/24
+        purpose: REGIONAL_MANAGED_PROXY
+        role: ACTIVE
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-subnet
         ranges:
@@ -85,7 +85,7 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: node_pool_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-np-sa
       project_roles:
@@ -97,7 +97,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: workload_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-wl-sa
       project_roles:
