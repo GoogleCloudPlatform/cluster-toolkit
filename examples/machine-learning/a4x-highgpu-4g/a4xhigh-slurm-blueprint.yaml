@@ -400,16 +400,8 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-checkpoints
       fs_type: gcsfuse
-      mount_options: "implicit-dirs,\
-                      metadata-cache-negative-ttl-secs=0,\
-                      metadata-cache-ttl-secs=-1,\
-                      stat-cache-max-size-mb=-1,\
-                      type-cache-max-size-mb=-1,\
-                      file-cache-max-size-mb=-1,\
-                      file-cache-cache-file-for-range-read=true,\
-                      file-cache-enable-parallel-downloads=true,\
+      mount_options: "profile=aiml-checkpointing,\
                       cache-dir=/mnt/localssd,\
-                      enable-streaming-writes=true,\
                       dir-mode=777,\
                       file-mode=777,\
                       allow_other"
@@ -429,12 +421,7 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-training-data
       fs_type: gcsfuse
-      mount_options: "implicit-dirs,\
-                      metadata-cache-negative-ttl-secs=0,\
-                      metadata-cache-ttl-secs=-1,\
-                      stat-cache-max-size-mb=-1,\
-                      type-cache-max-size-mb=-1,\
-                      enable-streaming-writes=true,\
+      mount_options: "profile=aiml-training,\
                       dir-mode=777,\
                       file-mode=777,\
                       allow_other"
@@ -448,15 +435,8 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-model-serving
       fs_type: gcsfuse
-      mount_options: "implicit-dirs,\
+      mount_options: "profile=aiml-serving,\
                       cache-dir=/mnt/localssd,\
-                      metadata-cache-negative-ttl-secs=0,\
-                      metadata-cache-ttl-secs=-1,\
-                      stat-cache-max-size-mb=-1,\
-                      type-cache-max-size-mb=-1,\
-                      file-cache-max-size-mb=-1,\
-                      file-cache-cache-file-for-range-read=true,\
-                      file-cache-enable-parallel-downloads=true,\
                       dir-mode=777,\
                       file-mode=777,\
                       allow_other"
