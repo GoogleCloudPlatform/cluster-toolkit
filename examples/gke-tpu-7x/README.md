@@ -296,7 +296,7 @@ Once deployed, the `Lustre` filesystem is available to the cluster as a `Persist
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
@@ -367,7 +367,7 @@ After making these changes, run the `gcluster deploy` command as usual.
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
@@ -409,7 +409,7 @@ The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two 
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
     Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
