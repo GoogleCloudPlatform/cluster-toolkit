@@ -1,5 +1,5 @@
 ## Description
-The tag module creates a tag key and the associated tag values.
+The tag module creates a tag key and the provided tag values.
 
 If the key already exists, then the tag values passed are associated with the existing tag key.
 
