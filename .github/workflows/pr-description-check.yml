@@ -1,0 +1,70 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Check PR Description
+on:
+  pull_request:
+    types:
+    - opened
+    - edited
+    - synchronize
+jobs:
+  check-description:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Check PR description
+      env:
+        PR_BODY: ${{ github.event.pull_request.body }}
+      run: |
+        TEMPLATE_PATH=".github/pull_request_template.md"
+
+        if [ -f "$TEMPLATE_PATH" ]; then
+          TEMPLATE_BODY=$(cat "$TEMPLATE_PATH")
+        else
+          TEMPLATE_BODY=""
+        fi
+
+        # Function to normalize text: removes empty lines, trims leading/trailing whitespace, and removes carriage returns
+        normalize_text() {
+          echo -n "$1" | tr -d '\r' | awk 'NF' | awk '{$1=$1};1'
+        }
+
+        # 1. Check if the PR body is empty or contains only whitespace
+        if [ -z "$(echo "$PR_BODY" | tr -d '[:space:]')" ]; then
+          echo "Error: PR description is empty or contains only whitespace."
+          exit 1
+        fi
+
+        # 2. Check if the PR body is identical to the template
+        NORMALIZED_PR_BODY=$(normalize_text "$PR_BODY")
+        NORMALIZED_TEMPLATE_BODY=$(normalize_text "$TEMPLATE_BODY")
+
+        if [[ "$NORMALIZED_PR_BODY" == "$NORMALIZED_TEMPLATE_BODY" ]]; then
+          echo "Error: PR description only contains the template text. Please add a description of your changes."
+          exit 1
+        fi
+
+        # 3. Check if at least 10 characters have been added to the description
+        #    Use `diff` to isolate the added lines between the template and the PR body.
+        ADDED_TEXT=$(diff --changed-group-format="%>" --unchanged-group-format="" <(echo "$NORMALIZED_TEMPLATE_BODY") <(echo "$NORMALIZED_PR_BODY") || true)
+        ADDED_TEXT_LEN=${#ADDED_TEXT}
+
+        if [[ "$ADDED_TEXT_LEN" -lt 10 ]]; then
+          echo "Error: PR description must contain at least 10 added characters."
+          exit 1
+        fi
+
+        echo "PR description check passed."

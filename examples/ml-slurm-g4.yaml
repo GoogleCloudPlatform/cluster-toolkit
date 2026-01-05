@@ -13,102 +13,322 @@
 # limitations under the License.
 
 ---
-
 blueprint_name: ml-slurm-g4
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm-g4
+  project_id:  ## Set Project ID ##
+  deployment_name: g4-ml-example
   region: us-central1
   zone: us-central1-b
-  g4_reservation_name: "" ## Set Reservation Name
-  disk_size_gb: 200
-  new_image:
-    family: slurm-gcp-6-11-ubuntu-2204-lts-nvidia-570
-    project: schedmd-slurm-public
+  g4_machine_type: g4-standard-48
+  # To enable Dual NIC, you MUST use g4-standard-384
+  # g4_machine_type: g4-standard-384
+  cluster_size: 2 # Number of static compute nodes
+  # Image settings
+  source_image_family: ubuntu-2404-lts-amd64
+  source_image_project: ubuntu-os-cloud
+  image_build_machine_type: n2-standard-4
+  image_disk_size_gb: 50
+  built_image_family: slurm-g4-ubuntu2404
 
-# Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+  build_slurm_from_git_ref: 6.10.6 # Or a newer stable tag
+
+  # Cluster env settings
+  net0_range: 192.168.0.0/24
+  # net1_range: 192.168.2.0/24 # Uncomment for Dual NIC on g4-standard-384
+  filestore_ip_range: 192.168.1.0/29
+
+  # Cluster Settings
+  disk_size_gb: 100
+
 deployment_groups:
-- group: primary
+- group: image-env
   modules:
-  - id: network
+  - id: builder-net
     source: modules/network/vpc
     settings:
+      network_name: $(vars.deployment_name)-build-net
+
+- group: image-build-script
+  modules:
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      # Install nvidia drivers/utilities
+      - type: ansible-local
+        destination: install_nvidia_drivers.yml
+        content: |
+          # ---
+          - name: Install NVIDIA Drivers and Utils
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
+              enable_nvidia_dcgm: false
+              nvidia_packages:
+              # 1. Open Kernel Driver: Installs the open-source kernel components.
+              - nvidia-kernel-open-575
+              # 2. Driver Metapackage: Pulls in the 580.xx driver version.
+              - cuda-drivers-575
+              # 3. CUDA Toolkit: Installs the 12.9.1 toolkit.
+              - cuda-toolkit-12-9
+              - datacenter-gpu-manager
+
+            tasks:
+            # Download the NVIDIA repo
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ cuda_repo_url }}"
+                dest: "{{ cuda_repo_filename }}"
+
+            # Install the NVIDIA repo
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ cuda_repo_filename }}"
+                state: present
+
+            # Update apt cache
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: true
+
+            # Install the package
+            - name: Install NVIDIA fabric and CUDA
+              ansible.builtin.apt:
+                name: "{{ item }}"
+              loop: "{{ nvidia_packages }}"
+
+            # This section will optionally freeze the packages with
+            # an apt-mark hold.
+            - name: Freeze NVIDIA fabric and CUDA
+              ansible.builtin.dpkg_selections:
+                name: "{{ item }}"
+                selection: hold
+              loop: "{{ nvidia_packages }}"
+
+
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": false,
+            "install_cuda": false,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops",
+            "install_managed_lustre": false
+          }
+
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          sudo apt update
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+
+- group: image
+  modules:
+  - id: slurm-g4-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.image_disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project)]
+      image_family: $(vars.built_image_family)
+      omit_external_ip: false
+
+      metadata:
+        user-data: |
+          #cloud-config
+          create_hostname_file: true
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
+    use:
+    - builder-net
+    - slurm-build-script
+
+- group: cluster-env
+  modules:
+  - id: net0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  # Instructions for Dual NIC on g4-standard-384:
+  # 1. Uncomment the 'net1' module below.
+  # 2. Ensure 'vars.net1_range' is also uncommented and defined.
+  #
+  # - id: net1 # Added second network
+  #   source: modules/network/vpc
+  #   settings:
+  #     network_name: $(vars.deployment_name)-net-1
+  #     subnetworks:
+  #     - subnet_name: $(vars.deployment_name)-sub-1
+  #       subnet_region: $(vars.region)
+  #       subnet_ip: $(vars.net1_range)
+  #     firewall_rules:
+  #     - name: $(vars.deployment_name)-internal-1
+  #       ranges: [$(vars.net1_range)]
+  #       allow:
+  #       - protocol: tcp
+  #       - protocol: udp
+  #       - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - net0 # Filestore attached to net0
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
 
 - group: cluster
   modules:
+  - id: g4_node_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM and Persistence on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+            tasks:
+            - name: Update Ops Agent configuration for DCGM
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                create: yes
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                        receiver_version: 2
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Ensure Google Cloud Ops Agent is running
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable and Start NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            # Enable persistenced service
+            - name: Enable and Start nvidia-persistenced
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: started
+                enabled: true
 
   - id: g4_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    # Instructions for Dual NIC on g4-standard-384:
+    # 3. Add 'net1' to the 'use' list below (e.g., use: [net0, net1, g4_node_startup])
+    use: [net0, g4_node_startup]
     settings:
+      node_count_static: $(vars.cluster_size)
       node_count_dynamic_max: 0
-      enable_placement: false
-      node_count_static: 1
-      bandwidth_tier: gvnic_enabled
-      machine_type: g4-standard-48
+      machine_type: $(vars.g4_machine_type)
       disk_type: hyperdisk-balanced
-      instance_image: $(vars.new_image)
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
       instance_image_custom: true
-      reservation_name: $(vars.g4_reservation_name)
+      enable_placement: false
+
+      # Instructions for Dual NIC on g4-standard-384:
+      # 4. Uncomment the 'network_interfaces' block below to define the two NICs.
+      #
+      # network_interfaces:
+      #   - subnetwork: $(net0.subnetwork_self_link)
+      #     nic_type: GVNIC
+      #   - subnetwork: $(net1.subnetwork_self_link)
+      #     nic_type: GVNIC
 
   - id: g4_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [g4_nodeset]
+    use:
+    - g4_nodeset
     settings:
-      is_default: true
       partition_name: g4
+      is_default: true
       exclusive: false
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use:
+    - net0
     settings:
-      machine_type: e2-standard-2
-      enable_login_public_ips: true
-      instance_image: $(vars.new_image)
+      machine_type: n2-standard-4
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
       instance_image_custom: true
-
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network]
-    settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      filestore_share_name: homeshare
-      local_mount: /home
-
-  # - id: private_service_access
-  #   source: community/modules/network/private-service-access
-  #   use: [network]
-
-  # To use Managed Lustre as for the shared /home directory:
-  # 1. Comment out the filestore block above and the `filestore_ip_range` line in the vars block.
-  # 2. Uncomment the managed-lustre and private-service-access blocks.
-  # 3. Ensure the instance_image being used has the Lustre client installed.
-  # - id: homefs
-  #   source: modules/file-system/managed-lustre
-  #   use:
-  #   - network
-  #   - private_service_access
-  #   settings:
-  #     size_gib: 18000
-  #     name: lustre-instance1
-  #     local_mount: /home
-  #     remote_mount: lustrefs
-  #     outputs:
-  #     - network_storage
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network
     - g4_partition
-    - slurm_login
+    - net0
     - homefs
+    - slurm_login
     settings:
-      machine_type: e2-standard-2
-      enable_controller_public_ips: true
-      instance_image: $(vars.new_image)
+      machine_type: n2-standard-4
+      instance_image:
+        project: $(vars.project_id)
+        family: $(vars.built_image_family)
       instance_image_custom: true
+      enable_controller_public_ips: true

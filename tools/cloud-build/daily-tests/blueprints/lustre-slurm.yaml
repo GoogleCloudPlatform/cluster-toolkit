@@ -70,7 +70,7 @@ deployment_groups:
   # Slurm VMs #
   #############
 
-  # # Ubuntu 20.04 LTS
+  # # Ubuntu 22.04 LTS
   # - id: ubuntu_nodeset
   #   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
   #   use: [network]

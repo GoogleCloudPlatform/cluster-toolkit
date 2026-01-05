@@ -30,7 +30,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.73.1"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.76.0"
   }
 
   required_version = ">= 1.1"

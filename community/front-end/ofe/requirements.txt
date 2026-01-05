@@ -20,12 +20,12 @@ dill==0.4.0
 distlib==0.4.0
 # django-revproxy==0.11.0 released but not yet in pypi
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
-Django==5.2.8
+Django==5.2.9
 django-allauth==65.13.0
 django-crispy-forms==2.4
 django-extensions==3.2.3
 djangorestframework==3.16.1
-filelock==3.20.0
+filelock==3.20.1
 google-api-core==2.28.1
 google-api-python-client==2.186.0
 google-auth==2.42.1
@@ -98,7 +98,7 @@ tomlkit==0.13.3
 typing-inspect==0.9.0
 typing_extensions==4.15.0
 uritemplate==4.2.0
-urllib3==2.5.0
+urllib3==2.6.0
 uvicorn==0.38.0
 virtualenv==20.35.4
 wrapt==2.0.0
