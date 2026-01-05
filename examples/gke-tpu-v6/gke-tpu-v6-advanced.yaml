@@ -494,16 +494,17 @@ deployment_groups:
   #       SHARED_DIR=/mnt/v6e-filestore
   #       mkdir -p $SHARED_DIR
   #       cd $SHARED_DIR
-
+  #
   #       # Simulate some work and write to a shared file
   #       cmd="date +%s"
   #       TIMESTAMP=`$cmd`
   #       echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+  #       sleep 5
   #       echo "Displaying content of shared_output.txt:"
   #       echo "---"
   #       cat shared_output.txt # Read the content to show it's shared
   #       echo "---"
-  #       sleep 120
+  #       sleep 20
   #       echo "Pod ${HOSTNAME} finished."
   #     node_count: 2
   #   outputs: [instructions]
