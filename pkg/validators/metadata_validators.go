@@ -141,7 +141,6 @@ func (v *AllowedEnumValidator) Validate(
 	group config.Group,
 	modIdx int) error {
 
-
 	// 1. Parse Metadata Inputs (flags)
 	caseSensitive, err := parseBoolInput(rule.Inputs, "case_sensitive", true)
 	if err != nil {
