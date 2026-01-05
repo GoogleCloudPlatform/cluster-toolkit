@@ -65,10 +65,10 @@ class RepairScriptTest(unittest.TestCase):
         repair.store_operations(operations)
         mock_open_file.assert_called_with(repair.REPAIR_FILE, 'w', encoding='utf-8')
         handle = mock_open_file()
-        handle.write.assert_called_once()
-        # The argument to write will be a JSON string, so we load it back to compare
-        written_data = json.loads(handle.write.call_args[0][0])
-        self.assertEqual(written_data, operations)
+        expected_json_string = json.dumps(operations, indent=4)
+        written_data_parts = [call_args[0][0] for call_args in handle.write.call_args_list]
+        written_data = ''.join(written_data_parts)
+        self.assertEqual(written_data, expected_json_string)
         mock_lockf.assert_any_call(handle, fcntl.LOCK_EX)
         mock_lockf.assert_any_call(handle, fcntl.LOCK_UN)
 
