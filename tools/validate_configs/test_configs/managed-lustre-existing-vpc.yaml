@@ -21,6 +21,7 @@ vars:
   deployment_name: network
   region: europe-west4
   zone: europe-west4-a
+  lustre_instance_id: lustre-instance
 
 deployment_groups:
 - group: primary
@@ -32,4 +33,7 @@ deployment_groups:
     source: modules/file-system/managed-lustre
     use: [network1]
     settings:
+      name: $(vars.lustre_instance_id)
       local_mount: /lustre
+      remote_mount: lustrefs
+      private_vpc_connection_peering: "servicenetworking-googleapis-com"

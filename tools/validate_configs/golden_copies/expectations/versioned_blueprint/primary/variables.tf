@@ -34,6 +34,11 @@ variable "labels" {
   type        = any
 }
 
+variable "lustre_instance_id" {
+  description = "Toolkit deployment variable: lustre_instance_id"
+  type        = string
+}
+
 variable "project_id" {
   description = "Toolkit deployment variable: project_id"
   type        = string

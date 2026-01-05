@@ -20,12 +20,19 @@ vars:
   deployment_name: high-io-01
   region: us-central1
   zone: us-central1-a
+  lustre_instance_id: lustre-instance
 
 deployment_groups:
 - group: primary
   modules:
   - id: network1
     source: modules/network/vpc
+
+  - id: private-service-access
+    source: modules/network/private-service-access
+    use: [network1]
+    outputs:
+    - private_vpc_connection_peering
 
   - id: appfs
     source: modules/file-system/filestore
@@ -36,7 +43,11 @@ deployment_groups:
   - id: managed_lustre
     source: modules/file-system/managed-lustre
     use: [network1]
-    settings: {local_mount: /lustre}
+    settings:
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      private_vpc_connection_peering: $(private-service-access.private_vpc_connection_peering)
 
   - id: batch-job
     source: modules/scheduler/batch-job-template

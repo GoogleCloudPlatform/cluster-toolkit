@@ -33,10 +33,10 @@ vars:
     - us-central1-c
     - us-central1-f
   instance_image_custom: false
-  lustre_instance_id: lustre-instance
   labels:
     ghpc_blueprint: versioned
     ghpc_deployment: ((var.deployment_name))
+  lustre_instance_id: lustre-instance
   project_id: invalid-project
   region: us-central1
   slurm_image:
@@ -61,20 +61,23 @@ deployment_groups:
           region: ((var.region))
           zone: ((var.zone))
     modules:
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/vpc?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/vpc?ref=v1.49.0&depth=1
         kind: terraform
         id: network
         settings:
           deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           project_id: ((var.project_id))
           region: ((var.region))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/network/private-service-access?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/network/private-service-access?ref=v1.49.0&depth=1
         kind: terraform
         id: private_service_access
+        use:
+          - network
         settings:
-          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          network_id: ((module.network.network_id))
           project_id: ((var.project_id))
-          region: ((var.region))
       - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.37.0&depth=1
         kind: terraform
         id: controller_sa
@@ -89,7 +92,7 @@ deployment_groups:
             - monitoring.metricWriter
             - pubsub.admin
             - storage.objectViewer
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.49.0&depth=1
         kind: terraform
         id: login_sa
         settings:
@@ -100,7 +103,7 @@ deployment_groups:
             - logging.logWriter
             - monitoring.metricWriter
             - storage.objectViewer
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.49.0&depth=1
         kind: terraform
         id: compute_sa
         settings:
@@ -124,7 +127,7 @@ deployment_groups:
           project_id: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/filestore?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/filestore?ref=v1.49.0&depth=1
         kind: terraform
         id: projectsfs
         use:
@@ -146,15 +149,16 @@ deployment_groups:
         settings:
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
-          lustre_instance_id: ((var.lustre_instance_id)
           local_mount: /lustre
+          name: ((var.lustre_instance_id))
+          network_id: ((module.network.network_id))
+          network_self_link: ((module.network.network_self_link))
+          private_vpc_connection_peering: ((module.private_service_access.private_vpc_connection_peering))
+          project_id: ((var.project_id))
           remote_mount: lustrefs
           size_gib: 36000
-          network_self_link: ((module.network.network_self_link))
-          network_id: ((module.network.network_id))
-          project_id: ((var.project_id))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: n2_nodeset
         use:
@@ -173,7 +177,7 @@ deployment_groups:
           service_account_email: ((module.compute_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: n2_partition
         use:
@@ -185,7 +189,7 @@ deployment_groups:
           partition_conf:
             SuspendTime: 300
           partition_name: n2
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: c2_nodeset
         use:
@@ -207,7 +211,7 @@ deployment_groups:
           service_account_email: ((module.compute_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: c2_partition
         use:
@@ -216,7 +220,7 @@ deployment_groups:
           exclusive: true
           nodeset: ((flatten([module.c2_nodeset.nodeset])))
           partition_name: c2
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: c2d_nodeset
         use:
@@ -238,7 +242,7 @@ deployment_groups:
           service_account_email: ((module.compute_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: c2d_partition
         use:
@@ -246,7 +250,7 @@ deployment_groups:
         settings:
           nodeset: ((flatten([module.c2d_nodeset.nodeset])))
           partition_name: c2d
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: c3_nodeset
         use:
@@ -268,7 +272,7 @@ deployment_groups:
           service_account_email: ((module.compute_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: c3_partition
         use:
@@ -276,7 +280,7 @@ deployment_groups:
         settings:
           nodeset: ((flatten([module.c3_nodeset.nodeset])))
           partition_name: c3
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: a2_8_nodeset
         use:
@@ -302,7 +306,7 @@ deployment_groups:
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
           zones: ((var.gpu_zones))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: a2_8_partition
         use:
@@ -313,7 +317,7 @@ deployment_groups:
             DefMemPerCPU: null
             DefMemPerGPU: 160000
           partition_name: a208
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: a2_16_nodeset
         use:
@@ -339,7 +343,7 @@ deployment_groups:
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
           zones: ((var.gpu_zones))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: a2_16_partition
         use:
@@ -350,7 +354,7 @@ deployment_groups:
             DefMemPerCPU: null
             DefMemPerGPU: 160000
           partition_name: a216
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1
         kind: terraform
         id: h3_nodeset
         use:
@@ -372,7 +376,7 @@ deployment_groups:
           service_account_email: ((module.compute_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1
         kind: terraform
         id: h3_partition
         use:
@@ -380,7 +384,7 @@ deployment_groups:
         settings:
           nodeset: ((flatten([module.h3_nodeset.nodeset])))
           partition_name: h3
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.49.0&depth=1
         kind: terraform
         id: slurm_login
         use:
@@ -398,7 +402,7 @@ deployment_groups:
           service_account_email: ((module.login_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-controller?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-controller?ref=v1.49.0&depth=1
         kind: terraform
         id: slurm_controller
         use:
@@ -438,7 +442,7 @@ deployment_groups:
           service_account_email: ((module.controller_sa.service_account_email))
           subnetwork_self_link: ((module.network.subnetwork_self_link))
           zone: ((var.zone))
-      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/monitoring/dashboard?ref=v1.38.0&depth=1
+      - source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/monitoring/dashboard?ref=v1.49.0&depth=1
         kind: terraform
         id: hpc_dashboard
         outputs:
@@ -448,4 +452,4 @@ deployment_groups:
           labels: ((var.labels))
           project_id: ((var.project_id))
 toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: v1.38.0
+toolkit_modules_version: v1.49.0
