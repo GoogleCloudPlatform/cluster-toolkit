@@ -141,6 +141,25 @@ func (v *AllowedEnumValidator) Validate(
 	group config.Group,
 	modIdx int) error {
 
+
+	// 1. Parse Metadata Inputs (flags)
+	caseSensitive, err := parseBoolInput(rule.Inputs, "case_sensitive", true)
+	if err != nil {
+		return config.BpError{
+			Err:  fmt.Errorf("validation rule for module %q: %v", mod.ID, err),
+			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+		}
+	}
+
+	allowNull, err := parseBoolInput(rule.Inputs, "allow_null", false)
+	if err != nil {
+		return config.BpError{
+			Err:  fmt.Errorf("validation rule for module %q: %v", mod.ID, err),
+			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+		}
+	}
+
+	// 2. Normalize the 'allowed' list
 	allowedRaw, ok := rule.Inputs["allowed"]
 	if !ok {
 		return config.BpError{
@@ -157,12 +176,7 @@ func (v *AllowedEnumValidator) Validate(
 		}
 	}
 
-	caseSensitive, _ := rule.Inputs["case_sensitive"].(bool)
-	if _, ok := rule.Inputs["case_sensitive"]; !ok {
-		caseSensitive = true
-	}
-	allowNull, _ := rule.Inputs["allow_null"].(bool)
-
+	// 3. Build the lookup set
 	allowedSet := make(map[string]struct{}, len(allowedList))
 	for _, s := range allowedList {
 		key := s
@@ -172,6 +186,7 @@ func (v *AllowedEnumValidator) Validate(
 		allowedSet[key] = struct{}{}
 	}
 
+	// 4. Iterate and validate user-provided values
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
 		return v.checkValues(t.Values, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
 	})
