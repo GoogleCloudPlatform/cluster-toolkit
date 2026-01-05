@@ -117,6 +117,12 @@ Modules that are still in development and less stable are labeled with the
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 
+### Management
+
+* **[tag-binding]** ![core-badge] : A LocationTagBinding represents a connection between a TagValue and a non-global target such as a Cloud Run Service or Compute Instance. Once a LocationTagBinding is created, the TagValue is applied to all the descendants of the cloud resource. The module creates multiple tag-bindings from a list of parent resources, tag_values, and locations.
+
+[tag-binding]: management/tag-binding/README.md
+
 ### Monitoring
 
 * **[dashboard]** ![core-badge] : Creates a
