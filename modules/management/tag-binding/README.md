@@ -15,9 +15,9 @@ The following example creates a LocationTagBinding between a TagValue and a Comp
         - parent: "//compute.googleapis.com/projects/${google_project.project.number}/zones/us-central1-a/instances/<instance-id>" # The full resource name of the resource the TagValue is bound to. E.g. //cloudresourcemanager.googleapis.com/projects/123
           tag_value: tagValues/456 # The TagValue of the TagBinding. Must be of the form tagValues/456.
           location: "us-central1-a" # Location of the target resource.
-        - parent: "//container.googleapis.com/projects/PROJECT_NUMBER/locations/LOCATION/clusters/CLUSTER_NAME/nodePools/NODE_POOL_NAME"
-          tag_value: tagValues/456 
-          location: "us-central1-a"
+        - parent: parent: "//container.googleapis.com/projects/PROJECT_NUMBER/locations/us-central1/clusters/CLUSTER_NAME/nodePools/NODE_POOL_NAME"
+          tag_value: tagValues/456
+          location: "us-central1"
 ```
 
 ## License

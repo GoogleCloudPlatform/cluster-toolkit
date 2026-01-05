@@ -19,7 +19,7 @@ resource "google_tags_location_tag_binding" "binding" {
   # This prevents key collisions when one parent has multiple tags.
   for_each = {
     for item in var.tag_binding :
-    "${item.parent}-${item.tag_value}-${item.location}" => item
+    md5("${item.parent}-${item.tag_value}-${item.location}") => item
   }
 
   parent    = each.value.parent
