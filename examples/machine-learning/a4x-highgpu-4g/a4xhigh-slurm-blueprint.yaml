@@ -401,9 +401,9 @@ deployment_groups:
       local_mount: /gcs-checkpoints
       fs_type: gcsfuse
       mount_options: "profile=aiml-checkpointing,\
-                      cache-dir=/mnt/localssd,\
-                      dir-mode=777,\
-                      file-mode=777,\
+                      cache_dir=/mnt/localssd,\
+                      dir_mode=777,\
+                      file_mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for reading training data.
@@ -422,8 +422,8 @@ deployment_groups:
       local_mount: /gcs-training-data
       fs_type: gcsfuse
       mount_options: "profile=aiml-training,\
-                      dir-mode=777,\
-                      file-mode=777,\
+                      dir_mode=777,\
+                      file_mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for model serving.
@@ -436,9 +436,9 @@ deployment_groups:
       local_mount: /gcs-model-serving
       fs_type: gcsfuse
       mount_options: "profile=aiml-serving,\
-                      cache-dir=/mnt/localssd,\
-                      dir-mode=777,\
-                      file-mode=777,\
+                      cache_dir=/mnt/localssd,\
+                      dir_mode=777,\
+                      file_mode=777,\
                       allow_other"
 
 
