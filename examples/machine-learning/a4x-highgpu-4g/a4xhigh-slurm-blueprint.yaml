@@ -380,14 +380,13 @@ deployment_groups:
       enable_hierarchical_namespace: true
       local_mount: /gcs
       random_suffix: true
-      mount_options: "implicit-dirs,\
-                      metadata-cache-negative-ttl-secs=0,\
-                      metadata-cache-ttl-secs=-1,\
-                      stat-cache-max-size-mb=-1,\
-                      type-cache-max-size-mb=-1,\
-                      enable-streaming-writes=true,\
-                      dir-mode=777,\
-                      file-mode=777,\
+      mount_options: "implicit_dirs,\
+                      metadata_cache_negative_ttl_secs=0,\
+                      metadata_cache_ttl_secs=-1,\
+                      stat_cache_max_size_mb=-1,\
+                      type_cache_max_size_mb=-1,\
+                      dir_mode=777,\
+                      file_mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
