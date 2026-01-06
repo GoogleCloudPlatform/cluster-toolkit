@@ -82,6 +82,19 @@ variable "mtu" {
   default     = 8896
 }
 
+variable "enable_ipv6_ula" {
+  description = "Enabled IPv6 ULA, this is a permanent change and cannot be undone!"
+  type        = bool
+  default     = false
+}
+
+variable "internal_ipv6_range" {
+  description = "When enabling IPv6 ULA, optionally specify a /48 from fd20::/20 (default null)"
+  type        = string
+  default     = null
+}
+
+
 variable "subnetworks" {
   description = <<-EOT
   List of subnetworks to create within the VPC. If left empty, it will be

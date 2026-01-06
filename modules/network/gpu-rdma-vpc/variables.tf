@@ -50,7 +50,7 @@ variable "subnetworks_template" {
   ip_range    (string, required, range of IPs for all subnets to share (CIDR format), default is 192.168.0.0/16)
   region      (string, optional, region to deploy subnets to, defaults to vars.region)
   EOT
-  nullable    = false
+  nullable    = true
   type = object({
     count       = number
     name_prefix = string
@@ -65,8 +65,18 @@ variable "subnetworks_template" {
   }
 
   validation {
-    condition     = var.subnetworks_template.count > 0
-    error_message = "Number of subnetworks must be greater than 0"
+    # If it's NOT a RoCE Metal profile, the template cannot be null
+    condition = (
+      can(regex("vpc-roce-metal", var.network_profile)) || 
+      var.subnetworks_template != null
+    )
+    error_message = "subnetworks_template cannot be null unless using a 'vpc-roce-metal' network profile."
+  }
+
+validation {
+    # If template is provided, count must be > 0
+    condition     = var.subnetworks_template == null ? true : var.subnetworks_template.count > 0
+    error_message = "Number of subnetworks must be greater than 0."
   }
 
   validation {

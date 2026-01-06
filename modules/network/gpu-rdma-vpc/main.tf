@@ -18,9 +18,10 @@ locals {
   autoname      = replace(var.deployment_name, "_", "-")
   network_name  = var.network_name == null ? "${local.autoname}-net" : var.network_name
   subnet_prefix = var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
-
-  new_bits = ceil(log(var.subnetworks_template.count, 2))
-  template_subnetworks = [for i in range(var.subnetworks_template.count) :
+  is_roce_metal = var.network_profile != null ? can(regex("vpc-roce-metal", var.network_profile)) : false
+  
+  new_bits = local.is_roce_metal? 0 :  ceil(log(var.subnetworks_template.count, 2))
+  template_subnetworks = local.is_roce_metal? [] : [for i in range(var.subnetworks_template.count) :
     {
       subnet_name   = "${local.subnet_prefix}-${i}"
       subnet_region = try(var.subnetworks_template.region, var.region)
