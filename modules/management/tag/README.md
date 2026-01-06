@@ -20,7 +20,7 @@ The following example creates a TagKey and its associated TagValue resources.
         network: "<project-id>/<network-id>"
         # Network URI or selfLinkWithId can be passed in the place of "project_id/network_id".
         # Example: "https://www.googleapis.com/compute/alpha/projects/my-gcp-project/global/networks/8506222224444488888"
-      tag_value:
+      tag_values:
         - short_name: "fw-falcon-tagvalue-1"
           description: "fw-falcon-tagvalue-1 is for purpose-1"
         - short_name: "fw-falcon-tagvalue-2"

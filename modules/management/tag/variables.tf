@@ -96,13 +96,13 @@ variable "tag_values" {
       length(v.short_name) <= 256 &&
       !can(regex("['\"/\\\\]", v.short_name))
     ])
-    error_message = "Each tag_value.short_name must be <= 256 characters and cannot contain quotes ('), double quotes (\"), backslashes (\\), or forward slashes (/)."
+    error_message = "Each tag_values.short_name must be <= 256 characters and cannot contain quotes ('), double quotes (\"), backslashes (\\), or forward slashes (/)."
   }
 
   validation {
     condition = alltrue([
       for v in var.tag_values : length(v.description) <= 256
     ])
-    error_message = "Each tag_value.description must not exceed 256 characters."
+    error_message = "Each tag_values.description must not exceed 256 characters."
   }
 }
