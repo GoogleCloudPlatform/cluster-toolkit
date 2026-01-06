@@ -43,7 +43,7 @@ resource "google_tags_tag_key" "key" {
 resource "google_tags_tag_value" "values" {
   # This creates a map where the key is the short_name 
   # and the value is the entire object
-  for_each = { for val in var.tag_value : val.short_name => val }
+  for_each = { for val in var.tag_values : val.short_name => val }
 
   parent      = local.tag_key_id
   short_name  = each.value.short_name
