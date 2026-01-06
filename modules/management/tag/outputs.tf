@@ -14,16 +14,7 @@
  * limitations under the License.
 */
 
-terraform {
-  required_version = ">= 1.5"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 7.2"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:tag/v1.76.0"
-  }
+output "tag_key_id" {
+  description = "The resource name of the Tag Key (e.g., tagKeys/12345), whether existing or newly created."
+  value       = local.tag_key_id
 }

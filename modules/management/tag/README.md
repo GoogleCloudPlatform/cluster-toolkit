@@ -27,10 +27,6 @@ The following example creates a TagKey and its associated TagValue resources.
           description: "fw-falcon-tagvalue-2 is for purpose-2"
 ```
 
-## Dependencies
-
-* The tag module uses an `external` data source that executes a shell script (check_tag.sh). This script relies on `gcloud` and `jq` being installed and authenticated on the machine running Terraform.
-
 ## Limitation
 
 * The tag module does not handle pre-existing TagValues gracefully. If a TagValue with a given short_name already exists under the TagKey, Terraform will attempt to create it again and fail.
@@ -56,14 +52,12 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
-| <a name="requirement_external"></a> [external](#requirement\_external) | >= 2.3.5 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_external"></a> [external](#provider\_external) | >= 2.3.5 |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 
 ## Modules
@@ -76,7 +70,7 @@ No modules.
 |------|------|
 | [google_tags_tag_key.key](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/tags_tag_key) | resource |
 | [google_tags_tag_value.values](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/tags_tag_value) | resource |
-| [external_external.check_tag_key](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
+| [google_tags_tag_keys.existing_tag_keys](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/tags_tag_keys) | data source |
 
 ## Inputs
 
@@ -91,5 +85,7 @@ No modules.
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_tag_key_id"></a> [tag\_key\_id](#output\_tag\_key\_id) | The resource name of the Tag Key (e.g., tagKeys/12345), whether existing or newly created. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
