@@ -83,7 +83,7 @@ variable "mtu" {
 }
 
 variable "enable_ipv6_ula" {
-  description = "Enabled IPv6 ULA, this is a permanent change and cannot be undone!"
+  description = "Enable IPv6 ULA, this is a permanent change and cannot be undone!"
   type        = bool
   default     = false
 }
@@ -93,7 +93,6 @@ variable "internal_ipv6_range" {
   type        = string
   default     = null
 }
-
 
 variable "subnetworks" {
   description = <<-EOT
