@@ -331,14 +331,6 @@ resource "google_container_node_pool" "node_pool" {
       EOT
     }
     precondition {
-      condition = (
-        (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
-      )
-      error_message = "Shared extended reservations are not supported by GKE."
-    }
-    precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)
       error_message = "Only SURGE strategy is supported"
     }

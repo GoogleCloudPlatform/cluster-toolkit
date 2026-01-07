@@ -396,7 +396,7 @@ deployment_groups:
   # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use:
     - sysnet
   - id: homefs

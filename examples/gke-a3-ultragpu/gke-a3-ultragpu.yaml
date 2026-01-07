@@ -211,7 +211,7 @@ deployment_groups:
   # # PSA is required for all Managed Lustre functionality.
   # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [gke-a3-ultra-net-0]
   #   settings:
   #     prefix_length: 24
@@ -310,6 +310,7 @@ deployment_groups:
           cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
+        wait: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
@@ -345,13 +346,7 @@ deployment_groups:
       remote_mount: $(training_bucket.gcs_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
 
   # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
@@ -363,15 +358,7 @@ deployment_groups:
       remote_mount: $(checkpoint_bucket.gcs_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-cache:enable-parallel-downloads:true,
-        rename-dir-limit=200000
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
 
   # Persistent Volume for training data
   - id: training-pv
@@ -412,7 +399,7 @@ deployment_groups:
         size_gb: 1000  # Use 1 out of 12 TB for local scratch
 
       k8s_service_account_name: workload-identity-k8s-sa
-      image: ubuntu:latest
+      image: ubuntu:22.04
 
       command:
       - bash

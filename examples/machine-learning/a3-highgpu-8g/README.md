@@ -197,6 +197,14 @@ Important Restrictions:
 1. This skip option is only valid when recreating the cluster; the initial deployment always requires an image build.
 2. The image build cannot be skipped if the `deployment_name` is changed.
 
+Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+
+Example (deploy only the primary group for this blueprint):
+
+```bash
+./gcluster deploy -d a3high-slurm-deployment.yaml a3high-slurm-blueprint.yaml --only primary
+```
+
 ## Receive Data Path Manager (RxDM)
 
 To achieve optimal application performance, an additional service called the

@@ -34,6 +34,5 @@ custom_vars:
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
-  disk_size_gb: 200
   a3u_provisioning_model: SPOT
   base_network_name: "{{ test_name }}"

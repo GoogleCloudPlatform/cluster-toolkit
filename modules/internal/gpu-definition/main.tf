@@ -73,6 +73,10 @@ locals {
     "g2-standard-32"        = { type = "nvidia-l4", count = 1 },
     "g2-standard-48"        = { type = "nvidia-l4", count = 4 },
     "g2-standard-96"        = { type = "nvidia-l4", count = 8 },
+    "g4-standard-48"        = { type = "nvidia-rtx-pro-6000", count = 1 },
+    "g4-standard-96"        = { type = "nvidia-rtx-pro-6000", count = 2 },
+    "g4-standard-192"       = { type = "nvidia-rtx-pro-6000", count = 4 },
+    "g4-standard-384"       = { type = "nvidia-rtx-pro-6000", count = 8 },
   }
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 

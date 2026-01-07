@@ -1698,7 +1698,9 @@ class Lookup:
         return self.nodeset_is_gke(self.node_nodeset(node_name))
 
     def nodeset_is_gke(self, nodeset=None) -> bool:
-        return "gke_nodepool" in nodeset
+        if hasattr(nodeset, 'get'):
+            return "gke_nodepool" in nodeset
+        return False
 
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """
@@ -1946,6 +1948,13 @@ class Lookup:
             active_reservation=active_reservation
         )
 
+    def has_block_topology(self, partition: NSDict) -> bool:
+        return all(self.cfg.nodeset[ns].accelerator_topology == "1x72" and
+         self.cfg.nodeset[ns].reservation_name for ns in partition.partition_nodeset)
+
+    def has_gke_nodesets(self) -> bool:
+        return any(self.nodeset_is_gke(nodeset) for nodeset in self.cfg.nodeset.values())
+
     @lru_cache(maxsize=1)
     def machine_types(self):
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
@@ -2091,6 +2100,24 @@ class Lookup:
 
         return self._parse_job_info(job_info=job_info)
 
+    @cached_property
+    def slurm_version(self) -> str:
+        """Get slurm version from slurmctld -V"""
+        try:
+            slurmctld_path = slurmdirs.prefix / "sbin" / "slurmctld"
+            result = run(f"{slurmctld_path} -V")
+            # The output is expected to be like "slurm 24.11.1"
+            match = re.search(r'(\d+\.\d+)', result.stdout)
+            if match:
+                version = match.group(1)
+                log.debug(f"Detected Slurm version: {version}")
+                return version
+        except Exception as e:
+            log.error(f"Failed to get slurm version via slurmctld: {e}")
+
+        log.warning("Failed to determine Slurm version, returning 'unknown'")
+        return "unknown"
+
     @property
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
@@ -2222,3 +2249,15 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
+
+def slurm_version_gte(v1: str, v2: str) -> bool:
+    """Returns true if v1 >= v2, expects YY.MM format"""
+    try:
+        v1_parts = v1.split('.')
+        v2_parts = v2.split('.')
+        v1_major, v1_minor = int(v1_parts[0]), int(v1_parts[1])
+        v2_major, v2_minor = int(v2_parts[0]), int(v2_parts[1])
+        return (v1_major, v1_minor) >= (v2_major, v2_minor)
+    except (ValueError, IndexError):
+        log.error(f"Could not parse Slurm versions '{v1}' or '{v2}'. Assuming older version.")
+        return False

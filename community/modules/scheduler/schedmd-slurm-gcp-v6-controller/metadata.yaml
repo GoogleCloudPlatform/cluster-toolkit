@@ -19,3 +19,10 @@ spec:
     - compute.googleapis.com
     - iam.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: regex
+    inputs:
+      vars: [slurm_cluster_name]
+      pattern: "^[a-z](?:[a-z0-9]{0,9})$"
+    error_message: "'slurm_cluster_name' must contain only lowercase letters and numbers, start with a letter, and be 1-10 characters long."

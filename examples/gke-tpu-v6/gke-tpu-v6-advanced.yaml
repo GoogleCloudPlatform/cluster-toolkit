@@ -53,6 +53,9 @@ vars:
   v6e_node_pool_disk_size_gb: 100
   version_prefix: "1.33."
 
+ # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # # Managed Lustre is only supported in specific regions and zones
@@ -242,7 +245,7 @@ deployment_groups:
   # # PSA is required for all Managed Lustre functionality.
   # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [gke-tpu-v6-net-0]
   #   settings:
   #     prefix_length: 24
@@ -285,6 +288,12 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-v6-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6-pool.tpu_accelerator_type)
       jobset:
         install: true
 
@@ -294,13 +303,7 @@ deployment_groups:
       remote_mount: $(training_bucket.gcs_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
 
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
@@ -308,15 +311,7 @@ deployment_groups:
       remote_mount: $(checkpoint_bucket.gcs_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-cache:enable-parallel-downloads:true,
-        rename-dir-limit=200000
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
 
   # Persistent Volume for training data
   - id: training-pv
@@ -351,7 +346,7 @@ deployment_groups:
 
       k8s_service_account_name: workload-identity-k8s-sa
       requested_cpu_per_pod: 8
-      image: ubuntu:latest
+      image: ubuntu:22.04
 
       command:
       - bash

@@ -45,7 +45,7 @@ deployment_groups:
       region: $(vars.region)
 
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
     settings:
       prefix_length: 24

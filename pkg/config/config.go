@@ -47,6 +47,7 @@ var movedModules = map[string]string{
 	"community/modules/scripts/spack-install":            "community/modules/scripts/spack-setup",
 	"community/modules/file-system/cloud-storage-bucket": "modules/file-system/cloud-storage-bucket",
 	"community/modules/project/service-account":          "modules/project/service-account",
+	"community/modules/network/private-service-access":   "modules/network/private-service-access",
 }
 
 // GroupName is the name of a deployment group
@@ -83,6 +84,17 @@ func (g *Group) Clone() Group {
 		c.Modules[i] = m.Clone()
 	}
 	return c
+}
+
+// ModuleIndex returns the index of the input module in the group
+// return -1 if not found
+func (g Group) ModuleIndex(id ModuleID) int {
+	for i, m := range g.Modules {
+		if m.ID == id {
+			return i
+		}
+	}
+	return -1
 }
 
 // Kind returns the kind of all the modules in the group.
@@ -280,6 +292,9 @@ type Blueprint struct {
 	path string
 	// records of intentions to stage file (populated by ghpc_stage function)
 	stagedFiles map[string]string
+	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
+	// was explicitly present in the user's source (runtime-only, not serialized).
+	YamlCtx *YamlCtx `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {
@@ -456,6 +471,9 @@ func NewBlueprint(path string) (Blueprint, *YamlCtx, error) {
 		return Blueprint{}, &ctx, err
 	}
 	bp.path = absPath
+	// Attach parsed YAML context to the Blueprint so validators can determine
+	// whether a module.setting path was explicitly present in the user's YAML.
+	bp.YamlCtx = &ctx
 	return bp, &ctx, nil
 }
 
@@ -600,6 +618,7 @@ func (err InputValueError) Error() string {
 
 var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
 var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
+var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z](?:[a-z0-9]{0,9})$`)
 
 // isValidLabelName checks if a string is a valid name for a GCP label.
 // For more information on valid label names, see the docs at:
@@ -676,6 +695,42 @@ func (bp *Blueprint) checkBlueprintName() error {
 		}}
 	}
 
+	return nil
+}
+
+func validateSlurmClusterName(bp Blueprint) error {
+	path := Root.Vars.Dot("slurm_cluster_name")
+
+	if !bp.Vars.Has("slurm_cluster_name") {
+		return nil // Optional: slurm_cluster_name is not always required
+	}
+
+	v, err := bp.Eval(GlobalRef("slurm_cluster_name").AsValue())
+	if err != nil {
+		return BpError{path, err}
+	}
+	if v.Type() != cty.String || v.IsNull() || !v.IsKnown() {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgValueNotString,
+		}}
+	}
+
+	s := v.AsString()
+	if len(s) == 0 {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgValueEmptyString,
+		}}
+	}
+
+	// Check that slurm_cluster_name matches the required regex
+	if !matchSlurmClusterNameExp.MatchString(s) {
+		return BpError{path, InputValueError{
+			inputKey: "slurm_cluster_name",
+			cause:    errMsgSlurmClusterNameReqs,
+		}}
+	}
 	return nil
 }
 

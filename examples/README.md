@@ -66,6 +66,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-g4](#gke-g4-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
+  * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1277,8 +1278,10 @@ This blueprint shows how to use different storage options with GKE in the toolki
 
 > [!NOTE]
 > This blueprint also demonstrates support for Anywhere Cache. Anywhere Cache is a fully managed service
-that caches Cloud Storage data in Google Cloud.
-For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
+> that caches Cloud Storage data in Google Cloud. For each bucket, you can create a maximum of one cache per zone.
+> For example, if a bucket is located in the us-east1 region, you could create a cache in us-east1-b and another cache in us-east1-c.
+> For information on other parameters to enable anywhere cache, see [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache)
+> For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
 
 The blueprint contains the following:
 
@@ -1709,6 +1712,14 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 This example shows how TPU 7x cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-7x/README.md).
 
 [gke-tpu-7x]: ../examples/gke-tpu-7x
+
+### [gcloud-example.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates how to use the `gcloud` community module to run
+arbitrary `gcloud` commands during deployment and destroy. It shows an example
+of creating and deleting a network, subnet, and VM instance.
+
+[gcloud-example.yaml]: ../community/examples/gcloud-example.yaml
 
 ## Blueprint Schema
 

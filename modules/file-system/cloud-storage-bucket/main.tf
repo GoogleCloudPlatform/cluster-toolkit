@@ -118,9 +118,9 @@ resource "google_storage_bucket" "bucket" {
     }
 
     precondition {
-      condition = var.anywhere_cache == null || alltrue([
+      condition = var.anywhere_cache != null ? alltrue([
         for zone in var.anywhere_cache.zones : startswith(zone, var.region)
-      ])
+      ]) : true
       error_message = "The zone for the Anywhere Cache must be within the bucket's region."
     }
   }

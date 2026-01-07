@@ -34,7 +34,7 @@ Connecting services which use a service networking PSA connection:
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
   # included in the Owner role, but not Editor.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
-  - source: community/modules/network/private-service-access
+  - source: modules/network/private-service-access
     id: ps_connect
     use: [network]
 ```
@@ -45,7 +45,7 @@ Connecting [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes
   - source: modules/network/vpc
     id: network
 
-  - source: community/modules/network/private-service-access
+  - source: modules/network/private-service-access
     id: ps_connect
     use: [network]
     settings:
