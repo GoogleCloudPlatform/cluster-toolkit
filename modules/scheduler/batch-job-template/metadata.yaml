@@ -20,3 +20,12 @@ spec:
     - compute.googleapis.com
 ghpc:
   inject_module_id: job_id
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [on_host_maintenance]
+      allowed:
+      - MIGRATE
+      - TERMINATE
+      allow_null: true
+    error_message: "on_host_maintenance must be either 'MIGRATE' or 'TERMINATE'. If omitted, the system will choose the appropriate default based on your hardware configuration."
