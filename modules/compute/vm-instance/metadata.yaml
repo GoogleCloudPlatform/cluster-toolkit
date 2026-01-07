@@ -17,3 +17,13 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [on_host_maintenance]
+      allowed:
+      - MIGRATE
+      - TERMINATE
+      allow_null: true
+    error_message: "on_host_maintenance must be either 'MIGRATE' or 'TERMINATE'. If omitted, the system will choose the appropriate default based on your hardware configuration."

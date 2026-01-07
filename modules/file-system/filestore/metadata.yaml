@@ -17,3 +17,27 @@ spec:
   requirements:
     services:
     - file.googleapis.com
+
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [filestore_tier]
+      allowed:
+      - BASIC_HDD
+      - BASIC_SSD
+      - HIGH_SCALE_SSD
+      - ZONAL
+      - REGIONAL
+      - ENTERPRISE
+      allow_null: false
+    error_message: "Invalid value for filestore_tier. The value must be one of: BASIC_HDD, BASIC_SSD, HIGH_SCALE_SSD, ZONAL, REGIONAL, ENTERPRISE."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [connect_mode]
+      allowed:
+      - DIRECT_PEERING
+      - PRIVATE_SERVICE_ACCESS
+      allow_null: false
+    error_message: "'connect_mode' must be either DIRECT_PEERING or PRIVATE_SERVICE_ACCESS."

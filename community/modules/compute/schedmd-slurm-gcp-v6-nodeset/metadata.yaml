@@ -19,3 +19,14 @@ spec:
 ghpc:
   inject_module_id: name
   has_to_be_used: true
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [bandwidth_tier]
+      allowed:
+      - platform_default
+      - virtio_enabled
+      - gvnic_enabled
+      - tier_1_enabled
+      allow_null: false
+    error_message: "Allowed values for bandwidth_tier are 'platform_default', 'virtio_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
