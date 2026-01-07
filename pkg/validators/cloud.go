@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"regexp"
 	"strings"
 
 	"golang.org/x/exp/maps"
@@ -239,4 +240,67 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
+}
+
+func TestReservationExists(projectID string, zone string, reservationName string) error {
+	ctx := context.Background()
+	s, err := compute.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	_, err = s.Reservations.Get(projectID, zone, reservationName).Do()
+	if err != nil {
+		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, projectID, zone)
+	}
+
+	return nil
+}
+
+// // Wrapper for the blueprint validator logic
+func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Get inputs
+	if err := checkInputs(inputs, []string{"project_id", "zone", "reservation_name"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	projectID := m["project_id"]
+	zone := m["zone"]
+	resInput := m["reservation_name"]
+
+	// 2. Determine if it's a Shared Reservation (Resource Path) or Local (Simple Name)
+	// Regex matches: projects/{PROJECT}/reservations/{NAME}
+	re := regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
+	matches := re.FindStringSubmatch(resInput)
+
+	targetProject := projectID
+	targetName := resInput
+
+	if len(matches) == 3 {
+		// It's a shared reservation path
+		targetProject = matches[1]
+		targetName = matches[2]
+		
+		if targetProject != projectID {
+			fmt.Printf("INFO: Validating shared reservation %q in project %q\n", targetName, targetProject)
+		}
+	}
+
+	// 3. Call the GCP API
+	ctx := context.Background()
+	s, err := compute.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	_, err = s.Reservations.Get(targetProject, zone, targetName).Do()
+	if err != nil {
+		return fmt.Errorf("reservation %q not found in project %q and zone %q", targetName, targetProject, zone)
+	}
+
+	return nil
 }
