@@ -18,11 +18,8 @@ deployment_name: gke-tpu-7x-{{ build }}
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-tpu-7x/gke-tpu-7x.yaml"
 network: "{{ deployment_name }}-net"
-region: us-central1
-zone: us-central1-c
 remote_node: "{{ deployment_name }}-remote-node-0"
 machine_type: tpu7x-standard-4t
-extended_reservation: cloudtpu-20251001223000-1287580847
 num_slices: 1
 tpu_topology: 2x2x1
 static_node_count: 1
@@ -34,9 +31,11 @@ cli_deployment_vars:
   tpu_topology: "{{ tpu_topology }}"
   static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
-  reservation: "{{ extended_reservation }}"
 custom_vars:
   project: "{{ project }}"
   expected_tpu_count: 8
+  instance_labels:
+    tpu7x_onspot: true
+  enable_spot: true
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
