@@ -67,15 +67,6 @@ variable "tag_key_purpose_data" {
   description = "Purpose data cannot be changed once set. Purpose data corresponds to the policy system that the tag is intended for. For example, the GCE_FIREWALL purpose expects data in the following map format: network = \"<project-id>/<network-id>\" (or) Network URI (or) selfLinkWithId."
   type        = map(string)
   default     = null
-
-  validation {
-    condition = (
-      var.tag_key_purpose == "GCE_FIREWALL" ?
-      (var.tag_key_purpose_data != null ? contains(keys(var.tag_key_purpose_data), "network") : false) :
-      true
-    )
-    error_message = "When tag_key_purpose is set to 'GCE_FIREWALL', tag_key_purpose_data must be provided and must contain a 'network' key."
-  }
 }
 
 variable "tag_values" {

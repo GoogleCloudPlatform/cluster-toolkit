@@ -48,6 +48,17 @@ resource "google_tags_tag_key" "key" {
   description  = var.tag_key_description
   purpose      = var.tag_key_purpose
   purpose_data = var.tag_key_purpose_data
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.tag_key_purpose == "GCE_FIREWALL" ?
+        (var.tag_key_purpose_data != null ? contains(keys(var.tag_key_purpose_data), "network") : false) :
+        true
+      )
+      error_message = "When tag_key_purpose is set to 'GCE_FIREWALL', tag_key_purpose_data must be provided and must contain a 'network' key."
+    }
+  }
 }
 
 # Create values using the resolved ID
