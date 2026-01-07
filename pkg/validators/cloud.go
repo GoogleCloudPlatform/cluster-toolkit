@@ -242,19 +242,61 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
+// TestReservationExists checks if a reservation exists in a project and zone.
+// It uses TestProjectExists for diagnosis if the specific reservation is missing.
 func TestReservationExists(projectID string, zone string, reservationName string) error {
+	if reservationName == "" {
+		return nil
+	}
+
 	ctx := context.Background()
 	s, err := compute.NewService(ctx)
 	if err != nil {
 		return handleClientError(err)
 	}
 
+	// 1. Direct check: Try to get the specific reservation in the specific zone (Fast Path)
 	_, err = s.Reservations.Get(projectID, zone, reservationName).Do()
-	if err != nil {
+	if err == nil {
+		return nil // Success: Found exactly where expected
+	}
+
+	// 2. Diagnostic Path: The Get failed.
+	// Before searching other zones, check if the project itself is reachable.
+	// Reusing TestProjectExists provides the standardized error/hint for missing projects.
+	if pErr := TestProjectExists(projectID); pErr != nil {
+		return pErr
+	}
+
+	// 3. Project is valid. Let's find out if the reservation exists in another zone.
+	aggList, aggErr := s.Reservations.AggregatedList(projectID).Do()
+	if aggErr != nil {
+		// If listing fails after project exists, it's likely a permission/API issue.
 		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, projectID, zone)
 	}
 
-	return nil
+	foundInZones := []string{}
+	for _, scopedList := range aggList.Items {
+		for _, res := range scopedList.Reservations {
+			if res.Name == reservationName {
+				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
+				parts := strings.Split(res.Zone, "/")
+				foundInZones = append(foundInZones, parts[len(parts)-1])
+			}
+		}
+	}
+
+	// 4. Return helpful zone hint or general not-found
+	if len(foundInZones) > 0 {
+		return config.HintError{
+			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) %s instead of %q",
+				reservationName, projectID, strings.Join(foundInZones, ", "), zone),
+			Hint: fmt.Sprintf("The blueprint is configured for %q. Change your zone or use a reservation located in %q.", zone, zone),
+		}
+	}
+
+	// Found project, but name exists in NO zone.
+	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, projectID)
 }
 
 // // Wrapper for the blueprint validator logic
@@ -271,6 +313,10 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	projectID := m["project_id"]
 	zone := m["zone"]
 	resInput := m["reservation_name"]
+
+	if resInput == "" {
+		return nil // Skip validation if no reservation is provided
+	}
 
 	// 2. Determine if it's a Shared Reservation (Resource Path) or Local (Simple Name)
 	// Regex matches: projects/{PROJECT}/reservations/{NAME}
@@ -289,18 +335,5 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 			fmt.Printf("INFO: Validating shared reservation %q in project %q\n", targetName, targetProject)
 		}
 	}
-
-	// 3. Call the GCP API
-	ctx := context.Background()
-	s, err := compute.NewService(ctx)
-	if err != nil {
-		return handleClientError(err)
-	}
-
-	_, err = s.Reservations.Get(targetProject, zone, targetName).Do()
-	if err != nil {
-		return fmt.Errorf("reservation %q not found in project %q and zone %q", targetName, targetProject, zone)
-	}
-
-	return nil
+	return TestReservationExists(targetProject, zone, targetName)
 }
