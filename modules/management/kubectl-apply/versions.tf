@@ -35,7 +35,7 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.76.0"
+    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.77.0"
   }
 
   required_version = ">= 1.3"
