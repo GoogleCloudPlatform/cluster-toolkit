@@ -29,6 +29,7 @@ post_deploy_tests:
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+- test-validation/test-nccl.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
