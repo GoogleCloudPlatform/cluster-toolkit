@@ -67,8 +67,8 @@ variable "subnetworks_template" {
   validation {
     # If it's NOT a RoCE Metal profile, the template cannot be null
     condition = (
-      can(regex("vpc-roce-metal", var.network_profile)) ? 
-      var.subnetworks_template == null : 
+      can(regex("vpc-roce-metal", var.network_profile)) ?
+      var.subnetworks_template == null :
       var.subnetworks_template != null
     )
     error_message = "subnetworks_template must be null when using 'vpc-roce-metal' network profile and non-null for all other profiles."
