@@ -514,12 +514,12 @@ variable "reservation_name" {
     Set to an empty string if using no reservation or automatically-consumed reservations.
 
     Formats:
-    - Local Reservation: If the reservation is in the same project as the cluster (var.project_id), you can use just the name:
+    - Local Reservation: For reservations in the same project as the cluster (var.project_id), the name is sufficient:
       RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
-    - Shared Reservation: If the reservation is shared from a different project, you must use the full resource path:
+    - Shared Reservation: For reservations shared from a different project, the full resource path is required:
       projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
 
-    Note: When using a shared reservation, ensure the service account for the nodes in this project has 'compute.reservations.get' permission in the HOST_PROJECT_ID.
+    Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project.
   EOD
   type        = string
   default     = ""
