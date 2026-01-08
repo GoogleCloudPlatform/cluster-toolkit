@@ -90,7 +90,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[filestore]** ![core-badge] : Creates a
   [filestore](https://cloud.google.com/filestore) file system.
-* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a
+* **[parallelstore]** ![core-badge] ![experimental-badge] ![deprecated-badge]: Creates a
   [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.

@@ -1,3 +1,8 @@
+> [!WARNING]
+> Parallelstore is deprecated and will be removed soon. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../managed-lustre/README.md)
+
 ## Description
 
 This module creates Kubernetes Storage Class (SC) that can be used by a Persistent Volume Claim (PVC)
