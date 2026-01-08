@@ -26,6 +26,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
+	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 )
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
@@ -239,4 +240,47 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
+}
+
+// TestIAMPolicyBindingExists checks if an IAM binding for a specific role and member exists in a project.
+func TestIAMPolicyBindingExists(projectID string, member string, role string) error {
+	ctx := context.Background()
+	s, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	// Fetch the IAM policy for the project
+	policy, err := s.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	// Check if the role and member are present in the policy bindings
+	for _, binding := range policy.Bindings {
+		if binding.Role == role {
+			for _, m := range binding.Members {
+				if m == member {
+					return nil // Success: Binding found
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("IAM binding for role %q and member %q not found in project %q", role, member, projectID)
+}
+
+// testIAMPolicyBindingExists extracts inputs and invokes the core IAM validator
+func testIAMPolicyBindingExists(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Validate required inputs
+	if err := checkInputs(inputs, []string{"project_id", "member", "role"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	// 2. Run the core validation
+	return TestIAMPolicyBindingExists(m["project_id"], m["member"], m["role"])
 }
