@@ -3,7 +3,7 @@ google-cloud-pubsub~=2.0
 google-api-python-client==2.61.0
 httplib2==0.20.4
 PyYAML==6.0
-urllib3==2.6.0
+urllib3==2.6.3
 protobuf==5.29.5
 certifi==2024.7.4
 setuptools==78.1.1
