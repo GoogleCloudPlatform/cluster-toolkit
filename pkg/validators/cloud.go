@@ -30,7 +30,7 @@ import (
 )
 
 var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
-var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation_name$`)
+var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`) 
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
@@ -320,6 +320,10 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	if resInput == "" {
 		return nil // Skip validation if no reservation is provided
 	}
+
+	// Handle hierarchical formats (e.g., <name>/reservationBlocks/<block>)
+	// by stripping the block suffix.
+	resInput = strings.Split(resInput, "/reservationBlocks/")[0]
 
 	// 2. Determine if it's a Shared Reservation (Resource Path) or Local (Simple Name)
 	// Regex matches: projects/{PROJECT}/reservations/{NAME}
