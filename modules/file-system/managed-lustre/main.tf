@@ -75,9 +75,9 @@ resource "google_lustre_instance" "lustre_instance" {
   gke_support_enabled = var.gke_support_enabled
 
   timeouts {
-    create = "1h"
-    update = "1h"
-    delete = "1h"
+    create = contains([125, 250], var.per_unit_storage_throughput) ? "2h" : "1h"
+    update = contains([125, 250], var.per_unit_storage_throughput) ? "2h" : "1h"
+    delete = contains([125, 250], var.per_unit_storage_throughput) ? "2h" : "1h"
   }
 
   depends_on = [var.private_vpc_connection_peering, data.google_storage_bucket.lustre_import_bucket]
