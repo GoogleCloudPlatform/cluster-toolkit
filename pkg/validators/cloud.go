@@ -29,6 +29,9 @@ import (
 	serviceusage "google.golang.org/api/serviceusage/v1"
 )
 
+var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
+var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation_name$`)
+
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
 		m, ok := d.(map[string]interface{})
@@ -320,8 +323,7 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 
 	// 2. Determine if it's a Shared Reservation (Resource Path) or Local (Simple Name)
 	// Regex matches: projects/{PROJECT}/reservations/{NAME}
-	re := regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
-	matches := re.FindStringSubmatch(resInput)
+	matches := reservationNameRegex.FindStringSubmatch(resInput)
 
 	targetProject := projectID
 	targetName := resInput
@@ -330,10 +332,6 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 		// It's a shared reservation path
 		targetProject = matches[1]
 		targetName = matches[2]
-
-		if targetProject != projectID {
-			fmt.Printf("INFO: Validating shared reservation %q in project %q\n", targetName, targetProject)
-		}
 	}
 	return TestReservationExists(targetProject, zone, targetName)
 }

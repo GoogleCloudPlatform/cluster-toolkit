@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
-	"regexp"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
@@ -241,9 +240,6 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"zone":       zoneRef,
 			}),
 		})
-
-		// Detect any variables like 'reservation_name' or 'a3mega_reservation_name'
-		resKeyRegex := regexp.MustCompile(`^(.*_)?reservation_name$`)
 
 		for _, varName := range bp.Vars.Keys() {
 			if resKeyRegex.MatchString(varName) {
