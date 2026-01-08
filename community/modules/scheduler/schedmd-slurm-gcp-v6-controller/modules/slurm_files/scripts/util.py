@@ -336,12 +336,15 @@ def create_client_options(api: ApiEndpoint) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
     ud = universe_domain()
-    options = {}
-    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
-        options["universe_domain"] = ud
-    if ver:
-        options["api_endpoint"] = f"https://{api.value}.{ud}/{ver}/"
-    co = ClientOptions(**options)
+    
+    # Explicitly pass arguments to the constructor
+    api_endpoint = f"https://{api.value}.{ud}/{ver}/" if ver else None
+    universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
+
+    co = ClientOptions(
+        api_endpoint=api_endpoint,
+        universe_domain=universe_domain_val
+    )
     log.debug(f"Using ClientOptions = {co} for API: {api.value}")
     return co
 
@@ -614,10 +617,12 @@ def storage_client() -> storage.Client:
     Config-independent storage client
     """
     ud = universe_domain()
-    co = {}
-    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
-        co["universe_domain"] = ud
-    return storage.Client(client_options=ClientOptions(**co))
+    # Check if we need a custom universe domain, otherwise pass None
+    universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
+    
+    return storage.Client(
+        client_options=ClientOptions(universe_domain=universe_domain_val)
+    )
 
 
 class DeffetiveStoredConfigError(Exception):
