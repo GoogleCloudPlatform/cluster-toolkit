@@ -30,7 +30,7 @@ import (
 )
 
 var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
-var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`) 
+var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`)
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
