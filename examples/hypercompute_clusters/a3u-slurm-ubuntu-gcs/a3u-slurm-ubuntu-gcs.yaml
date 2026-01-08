@@ -33,7 +33,7 @@ vars:
     project: ubuntu-os-accelerator-images
     family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.9.1
+  build_slurm_from_git_ref: 6.10.6
 
   # Cluster env settings
   # net0 and filestore ranges must not overlap
