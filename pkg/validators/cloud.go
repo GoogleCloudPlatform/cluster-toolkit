@@ -19,14 +19,15 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"regexp"
 	"strings"
 
 	"golang.org/x/exp/maps"
+	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
-	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 )
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
@@ -242,45 +243,76 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// TestIAMPolicyBindingExists checks if an IAM binding for a specific role and member exists in a project.
-func TestIAMPolicyBindingExists(projectID string, member string, role string) error {
+// TestIAMPolicyBindingExists checks for a specific IAM binding, resolving project numbers automatically.
+func TestIAMPolicyBindingExists(hostProjectID string, serviceProjectID string, role string) error {
 	ctx := context.Background()
 	s, err := cloudresourcemanager.NewService(ctx)
 	if err != nil {
 		return handleClientError(err)
 	}
 
-	// Fetch the IAM policy for the project
-	policy, err := s.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	// 1. Resolve Service Project Number to construct the member string
+	// This makes it generic so you don't need to hardcode the project number.
+	project, err := s.Projects.Get(serviceProjectID).Do()
 	if err != nil {
-		return handleClientError(err)
+		return fmt.Errorf("failed to get service project %s: %v", serviceProjectID, handleClientError(err))
+	}
+	member := fmt.Sprintf("serviceAccount:%d-compute@developer.gserviceaccount.com", project.ProjectNumber)
+
+	// 2. Fetch IAM policy for the Host Project
+	policy, err := s.Projects.GetIamPolicy(hostProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		return fmt.Errorf("failed to get IAM policy for host project %s: %v", hostProjectID, handleClientError(err))
 	}
 
-	// Check if the role and member are present in the policy bindings
+	// 3. Verify the binding exists
 	for _, binding := range policy.Bindings {
 		if binding.Role == role {
 			for _, m := range binding.Members {
 				if m == member {
-					return nil // Success: Binding found
+					return nil // Success: Binding confirmed
 				}
 			}
 		}
 	}
 
-	return fmt.Errorf("IAM binding for role %q and member %q not found in project %q", role, member, projectID)
+	return fmt.Errorf("IAM binding for role %q and member %q not found in project %q", role, member, hostProjectID)
 }
 
-// testIAMPolicyBindingExists extracts inputs and invokes the core IAM validator
+// testIAMPolicyBindingExists extracts inputs and only runs if a shared reservation is detected
 func testIAMPolicyBindingExists(bp config.Blueprint, inputs config.Dict) error {
-	// 1. Validate required inputs
-	if err := checkInputs(inputs, []string{"project_id", "member", "role"}); err != nil {
-		return err
-	}
 	m, err := inputsAsStrings(inputs)
 	if err != nil {
 		return err
 	}
 
-	// 2. Run the core validation
-	return TestIAMPolicyBindingExists(m["project_id"], m["member"], m["role"])
+	resName := m["reservation_name"]
+
+	// Handle conditional execution: Only run if it's a shared reservation path.
+	// Shared reservation format: "projects/<project-id>/reservations/<name>"
+	// Normal reservation format: "reservation-name"
+	if !strings.HasPrefix(resName, "projects/") {
+		fmt.Printf("skipping IAM binding check: %q is not a shared reservation path", resName)
+		return nil // Success: Skip validation for local reservations
+	}
+
+	// 1. Extract Host Project ID from the shared reservation path
+	re := regexp.MustCompile(`^projects/([^/]+)/`)
+	matches := re.FindStringSubmatch(resName)
+	if len(matches) <= 1 {
+		fmt.Printf("skipping IAM binding check: could not parse project ID from %q", resName)
+		return nil
+	}
+	hostProjectID := matches[1]
+
+	// 2. Extract other required fields
+	serviceProjectID := m["service_project_id"]
+	role := m["role"]
+
+	if serviceProjectID == "" || role == "" {
+		return fmt.Errorf("validator %s requires 'service_project_id' and 'role'", "test_iam_policy_binding_exists")
+	}
+
+	// 3. Invoke core validation logic
+	return TestIAMPolicyBindingExists(hostProjectID, serviceProjectID, role)
 }
