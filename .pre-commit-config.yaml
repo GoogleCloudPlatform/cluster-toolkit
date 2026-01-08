@@ -85,14 +85,45 @@ repos:
     require_serial: true
   - id: pytest-check
     name: pytest-check
-    entry: python -m pytest
-    language: system
+    entry: pytest
+    language: python
+    additional_dependencies:
+    - pytest==8.0.0
+    - pytest-mock
+    - pytest-unordered
+    - mock  # Needed for 'import mock' statements
+    - google-cloud-secret-manager
+    - google-cloud-storage # Specifically required for util.py
+    - google-cloud-bigquery
+    - google-api-python-client
+    - PyYAML
+    - requests
+    - httplib2
+    - more-executors
+    - addict
+    - google-cloud-tpu
     types: [python]
     pass_filenames: false
+
   - id: mypy-check
     name: mypy-check
     entry: mypy community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts --check-untyped-defs
-    language: system
+    language: python
+    additional_dependencies:
+    - mypy==1.8.0
+    - types-PyYAML
+    - types-requests
+    - types-httplib2
+    - types-mock
+    - google-cloud-secret-manager
+    - google-cloud-storage
+    - google-cloud-bigquery
+    - google-api-python-client
+    - pytest
+    - pytest-unordered
+    - more-executors
+    - addict
+    - google-cloud-tpu
     types: [python]
     pass_filenames: false
 
