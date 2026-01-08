@@ -510,16 +510,12 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.
-    Set to an empty string if using no reservation or automatically-consumed reservations.
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+    - RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
 
-    Formats:
-    - Local Reservation: If the reservation is in the same project as the cluster (var.project_id), you can use just the name:
-      RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
-    - Shared Reservation: If the reservation is shared from a different project, you must use the full resource path:
-      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
-
-    Note: When using a shared reservation, ensure the service account for the nodes in this project has 'compute.reservations.get' permission in the HOST_PROJECT_ID.
+    Must be a "SPECIFIC" reservation
+    Set to empty string if using no reservation or automatically-consumed reservations
   EOD
   type        = string
   default     = ""
