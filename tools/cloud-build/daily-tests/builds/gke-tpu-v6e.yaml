@@ -21,6 +21,9 @@ tags:
 - m.kubectl-apply
 - gke
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 7200s
 
 steps:
