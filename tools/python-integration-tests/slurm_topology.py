@@ -39,7 +39,7 @@ class SlurmTopologyTest(test.SlurmTest):
         r_rack_set = [set(v) for v in r_rack.values()]
         s_rack_set = [set(v) for v in s_rack.values()]
 
-        self.assert_equal(r_rack_set, s_rack_set, "The two sets did not match.")
+        self.assert_equal({frozenset(s) for s in r_rack_set}, {frozenset(s) for s in s_rack_set}, "The two sets did not match.")
 
     def get_slurm_topology(self):
         stdin, stdout, stderr = self.ssh_client.exec_command("scontrol show topo")

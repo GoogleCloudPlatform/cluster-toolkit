@@ -33,7 +33,7 @@ vars:
   num_slices:
 
   # Machine type
-  machine_type:
+  machine_type: ct6e-standard-4t
 
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
@@ -171,6 +171,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
+      enable_filestore_csi: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
@@ -464,4 +465,46 @@ deployment_groups:
   #       --directory="/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-balanced-iops
   #     node_count: 1
 
+  #   outputs: [instructions]
+
+  # # --- FILESTORE ADDITIONS ---
+  # - id: filestore
+  #   source: modules/file-system/filestore
+  #   use: [gke-tpu-v6-net-0]
+  #   settings: {local_mount: /mnt/v6e-filestore}
+
+  # - id: shared-filestore-pv
+  #   source: modules/file-system/gke-persistent-volume
+  #   use: [gke-tpu-v6-cluster, filestore]
+
+  # # Shared Filestore Job
+  # - id: shared-fs-job
+  #   source: modules/compute/gke-job-template
+  #   use:
+  #   - gke-tpu-v6-cluster
+  #   - gke-tpu-v6-pool
+  #   - shared-filestore-pv
+  #   settings:
+  #     image: alpine/git:latest
+  #     command:
+  #     - sh
+  #     - -c
+  #     - |
+  #       echo "Pod ${HOSTNAME} is starting..."
+  #       SHARED_DIR=/mnt/v6e-filestore
+  #       mkdir -p $SHARED_DIR
+  #       cd $SHARED_DIR
+  #
+  #       # Simulate some work and write to a shared file
+  #       cmd="date +%s"
+  #       TIMESTAMP=`$cmd`
+  #       echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+  #       sleep 5
+  #       echo "Displaying content of shared_output.txt:"
+  #       echo "---"
+  #       cat shared_output.txt # Read the content to show it's shared
+  #       echo "---"
+  #       sleep 20
+  #       echo "Pod ${HOSTNAME} finished."
+  #     node_count: 2
   #   outputs: [instructions]

@@ -1,5 +1,10 @@
 # Setting up Hybrid Slurm Clusters Using the Cluster Toolkit
 
+> [!NOTE]
+> The `schedmd-slurm-gcp-v5` module has been officially deprecated since v1.45.0. This blueprint,
+> and relevant doces however, still refer to the `schedmd-slurm-gcp-v5` modules.
+> There is no current hybrid solution for slurm-gcp-v6 however one is being developed.
+
 ## Introduction
 
 Cloud hybrid slurm clusters are slurm clusters that manage both local and cloud
@@ -38,7 +43,7 @@ detail, as well as how to customize many of these assumptions to fit your needs.
 [Slurm on GCP][slurm-gcp] provides additional documentation for hybrid
 deployments in their [hybrid.md] documentation.
 
-[hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
+[hybridmodule]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
 [slurm\_controller\_hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/master/terraform/slurm_cluster/modules/slurm_controller_hybrid
 [hybrid.md]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/docs/hybrid.md
@@ -161,8 +166,8 @@ make install
 A valid Cluster Toolkit blueprint for creating a hybrid configuration deployment can
 be found in the blueprints directory with the name [hybrid-configuration.yaml].
 This blueprint can be customized to your needs, for example, partitions can be
-updated or new partitions can be defined. See the documentation for the
-[schedmd-slurm-gcp-v5-partition](../../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md)
+updated or new partitions can be defined. See the documentation for the _now deprecated_
+[schedmd-slurm-gcp-v5-partition](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md)
 module for more information.
 
 Additionally, many of the parameters for the [schedmd-slurm-gcp-v5-hybrid][hybridmodule]
@@ -181,11 +186,11 @@ settings to be called out:
   directory as the `slurm.conf` file.
 
 [hybrid-configuration.yaml]: ./blueprints/hybrid-configuration.yaml
-[network_storage]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_network_storage
-[google_app_cred_path]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_google_app_cred_path
-[slurm_bin_dir]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_slurm_bin_dir
-[output_dir]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_output_dir
-[install_dir]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_install_dir
+[network_storage]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_network_storage
+[google_app_cred_path]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_google_app_cred_path
+[slurm_bin_dir]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_slurm_bin_dir
+[output_dir]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_output_dir
+[install_dir]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_install_dir
 
 ### Creating a Slurm Compute Image
 
@@ -307,7 +312,7 @@ the credentials as the [`google_app_cred_path`][inputappcred] setting in the
 [wif]: https://cloud.google.com/iam/docs/workload-identity-federation
 [wifconfig]: https://cloud.google.com/iam/docs/configuring-workload-identity-federation
 [sakey]: https://cloud.google.com/docs/authentication/provide-credentials-adc#local-key
-[inputappcred]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_google_app_cred_path
+[inputappcred]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_google_app_cred_path
 
 ### Prepare NFS
 
@@ -382,7 +387,7 @@ provided below:
       mount_options: ""
 ```
 
-[inputns]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input\_network\_storage
+[inputns]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input\_network\_storage
 
 #### Mount From Another Source
 

@@ -391,8 +391,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
     precondition {
-      condition     = var.enable_flex_start == true ? (var.spot == false) : true
+      condition     = !(var.enable_flex_start && var.spot)
       error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning && var.spot)
+      error_message = "Both enable_queued_provisioning and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
   }
 }
