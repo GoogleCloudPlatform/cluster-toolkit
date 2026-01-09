@@ -22,6 +22,9 @@ tags:
 - m.vm-instance
 - m.wait-for-startup
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -55,6 +58,8 @@ steps:
     cd /workspace && make
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
+    BASE_TEST_NAME="a3u-spot-jbvms"
+    FULL_TEST_NAME="${_TEST_PREFIX}$${BASE_TEST_NAME}"
     BLUEPRINT="/workspace/examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"
     # Removing reservation and automatic restart from blueprint for spot VMs to work.
     sed -i -e '/reservation/d' -e '/automatic_restart/d' $${BLUEPRINT}
@@ -62,4 +67,5 @@ steps:
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-jbvms.yml"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-jbvms.yml" \
+        --extra-vars="test_name=$${FULL_TEST_NAME}"
