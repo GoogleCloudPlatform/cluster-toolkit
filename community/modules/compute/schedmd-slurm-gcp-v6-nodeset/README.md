@@ -77,7 +77,7 @@ your Slurm nodes. Both local and shared reservations can be configured using the
 ### Reservation Types
 
 *   **Local Reservation:** For reservations located within the same project as the cluster (`var.project_id`).
-*   **Shared Reservation:** For reservations shared from a different Host Project. This allows for centralized management of reservations.
+*   **Shared Reservation:** For reservations shared from a different host project. This allows for centralized management of reservations.
 
 ### Configuration
 
@@ -88,8 +88,6 @@ The format of the `reservation_name` input determines the type of reservation us
 
 *   **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
     `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
-
-### Permissions for Shared Reservations
 
 > **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get' 
 > permission for the node service account in the host project (HOST_PROJECT_ID). 
