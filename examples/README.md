@@ -54,7 +54,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
-  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
+  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
@@ -73,7 +73,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
-* [Variables and expressions](#variables-and-expressions)
+* [Variables, expressions, and functions](#variables-expressions-and-functions)
 
 ## Instructions
 
@@ -139,8 +139,8 @@ subcommands as well:
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
 
-[terraform backends]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration
-[configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
+[terraform backends]: https://developer.hashicorp.com/terraform/language/backend
+[configuration block]: https://developer.hashicorp.com/terraform/language/backend#define-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 
 ## Blueprint Descriptions
@@ -323,14 +323,14 @@ For more resources on static compute nodes see the following cloud docs pages:
 
 * [About [Slurm] node types](https://cloud.google.com/cluster-toolkit/docs/slurm/node-types)
 * [Best practices for static compute nodes]
-* [Reconfigure a running cluster](http://cloud/cluster-toolkit/docs/slurm/reconfigure-cluster)
-* [Manage static compute nodes](http://cloud/cluster-toolkit/docs/slurm/manage-static-nodes)
+* [Reconfigure a running cluster](https://cloud.google.com/cluster-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](https://cloud.google.com/cluster-toolkit/docs/slurm/manage-static-nodes)
 
 For a similar, more advanced, example which demonstrates static node
 functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
-[Best practices for static compute nodes]: http://cloud/cluster-toolkit/docs/slurm/static-nodes-best-practices
+[Best practices for static compute nodes]: https://cloud.google.com/cluster-toolkit/docs/slurm/static-nodes-best-practices
 [hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
@@ -352,7 +352,7 @@ Follow [hpc-slurm-tpu-maxtext].
 
 ### [hpc-slurm6-apptainer.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint creates a custom [Apptainer](https:https://apptainer.org) enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described [here](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/apptainer).
+This blueprint creates a custom [Apptainer](https://apptainer.org) enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described [here](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/apptainer).
 
 [hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
 
@@ -650,7 +650,7 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
-### [pfs-managed-lustre-vms.yaml] ![core-badge]
+### [pfs-managed-lustre-vm.yaml] ![core-badge]
 
 Creates a Managed Lustre file-system that is mounted in one client instance.
 
@@ -676,7 +676,7 @@ Eventually you should see a line similar to:
 with remote_mount, and local_mount reflecting the settings of the module and
 IP being set to the lustre instance's IP.
 
-#### Quota Requirements for pfs-managed-lustre.yaml
+#### Quota Requirements for pfs-managed-lustre-vm.yaml
 
 For this example, the following is needed in the selected region:
 
@@ -686,7 +686,7 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **~34: 32 MGS, 2 client-vm**
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
-[pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
+[pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
 
 ### [gke-managed-lustre.yaml] ![core-badge]
 
@@ -1091,7 +1091,7 @@ GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document].
 
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
-[hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
+[hcls-blueprint.yaml]:  ../examples/hcls-blueprint.yaml
 
 ### [af3-slurm.yaml]: ![core-badge] ![experimental-badge]
 
@@ -1230,7 +1230,7 @@ Toolkit. It includes:
 
   Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
   while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
-  machine family specific values. More on this [gke-node-pool](../community/modules/compute/gke-node-pool/README.md#gpus-examples)
+  machine family specific values. More on this [gke-node-pool](../modules/compute/gke-node-pool/README.md#gpus-examples)
 
 ```yaml
 machine_type: n1-standard-1
@@ -1471,7 +1471,6 @@ This blueprint takes care of the initial infrastructure setup (e.g., network cre
 ### [gke-consumption-options] ![core-badge]
 
 This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
-* [DWS Calendar](../examples/gke-consumption-options/dws-calendar)
 * [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
 * [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
 
@@ -1503,7 +1502,7 @@ For more information see:
 
 ### [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge] ![experimental-badge]
 
-## Monte Carlo Simulations for Value at Risk
+#### Monte Carlo Simulations for Value at Risk
 
 This blueprint will take you through a tutorial on an FSI Value at Risk calculation using Cloud tools:
 
@@ -1520,7 +1519,7 @@ See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md
 This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-starccm-slurm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload).
 
 [tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
@@ -1836,9 +1835,9 @@ vars:
 
 Deployment variables are set under the vars field at the top level of the
 blueprint file. These variables can be explicitly referenced in modules as
-[Blueprint Variables](#blueprint-variables). Any module setting (inputs) not
-explicitly provided and matching exactly a deployment variable name will
-automatically be set to these values.
+[Blueprint Variables](#variables-expressions-and-functions). Any module
+setting (inputs) not explicitly provided and matching exactly a deployment
+variable name will automatically be set to these values.
 
 Deployment variables should be used with care. Module default settings with the
 same name as a deployment variable and not explicitly set will be overwritten by
@@ -1899,7 +1898,7 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-## Variables, expressions and functions
+## Variables, expressions, and functions
 
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
