@@ -245,6 +245,28 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
+// handleAPIError catches specific Google API errors (403, 400) to provide
+// actionable hard errors that block deployment.
+func handleAPIError(err error, resourceName string, projectID string) error {
+	if err == nil {
+		return nil
+	}
+
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) {
+		switch gerr.Code {
+		case 403:
+			// Project-level/IAM issue: fail hard.
+			return fmt.Errorf("insufficient permissions to verify %s in project %q (or project does not exist): %w", resourceName, projectID, err)
+		case 404:
+			// Resource not found: return raw error to trigger calling function's diagnostics.
+			return err
+		}
+	}
+
+	return err
+}
+
 // TestReservationExists checks if a reservation exists in a project and zone.
 // It uses TestProjectExists for diagnosis if the specific reservation is missing.
 func TestReservationExists(projectID string, zone string, reservationName string) error {
@@ -262,6 +284,15 @@ func TestReservationExists(projectID string, zone string, reservationName string
 	_, err = s.Reservations.Get(projectID, zone, reservationName).Do()
 	if err == nil {
 		return nil // Success: Found exactly where expected
+	}
+
+	// ERROR PATH: Handle Hard Failures (403 Permission / 400 Disabled API)
+	// We only reach this point if err != nil.
+	apiErr := handleAPIError(err, fmt.Sprintf("reservation %q", reservationName), projectID)
+
+	var gerr *googleapi.Error
+	if errors.As(apiErr, &gerr) && gerr.Code != 404 {
+		return apiErr
 	}
 
 	// 2. Diagnostic Path: The Get failed.
