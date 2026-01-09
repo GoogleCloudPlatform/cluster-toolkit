@@ -430,10 +430,7 @@ def reconfigure_slurm():
         else:
             conf_v2411.generate_configs_slurm_v2411(lookup())
 
-        log.info("Restarting slurmctld to make changes take effect.")
         try:
-            # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
-            run("sudo systemctl restart slurmctld.service", check=False)
             util.scontrol_reconfigure(lookup())
         except Exception:
             log.exception("failed to reconfigure slurmctld")

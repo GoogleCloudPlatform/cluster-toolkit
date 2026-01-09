@@ -2250,10 +2250,12 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
-    log.info("Running systemctl restart slurmctld.service")
-    run("sudo systemctl restart slurmctld.service", timeout=30)
-    log.info("Running scontrol reconfigure")
-    run(f"{lkp.scontrol} reconfigure")
+    try:
+        log.info("Running scontrol reconfigure")
+        run(f"{lkp.scontrol} reconfigure")
+    except Exception:
+        log.exception("scontrol reconfigure failed, restarting slurmctld")
+        run("sudo systemctl restart slurmctld.service", timeout=30)
 
 def slurm_version_gte(v1: str, v2: str) -> bool:
     """Returns true if v1 >= v2, expects YY.MM format"""
