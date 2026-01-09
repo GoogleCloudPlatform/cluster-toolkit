@@ -70,32 +70,32 @@ can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
 ## Using Compute Engine Reservations
 
-This module supports the use of Compute Engine reservations to ensure capacity for 
-your Slurm nodes. Both local and shared reservations can be configured using the 
+This module supports the use of Compute Engine reservations to ensure capacity for
+your Slurm nodes. Both local and shared reservations can be configured using the
 `reservation_name` variable. Reservations must be of type "SPECIFIC".
 
 ### Reservation Types
 
-*   **Local Reservation:** For reservations located within the same project as the cluster (`var.project_id`).
-*   **Shared Reservation:** For reservations shared from a different host project. This allows for centralized management of reservations.
+* **Local Reservation:** For reservations located within the same project as the cluster (`var.project_id`).
+* **Shared Reservation:** For reservations shared from a different host project. This allows for centralized management of reservations.
 
 ### Configuration
 
 The format of the `reservation_name` input determines the type of reservation used:
 
-*   **Local Reservation Format:** For reservations in the same project as the cluster (var.project_id), the name is sufficient:
+* **Local Reservation Format:** For reservations in the same project as the cluster (var.project_id), the name is sufficient:
     `RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
 
-*   **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
+* **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
     `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
 
-> **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get' 
-> permission for the node service account in the host project (HOST_PROJECT_ID). 
+> **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get'
+> permission for the node service account in the host project (HOST_PROJECT_ID).
 > Ensure this permission is granted before deploying.
 
 ### No Reservation
 
-To deploy nodes without a specific reservation (or to use automatically-consumed reservations), 
+To deploy nodes without a specific reservation (or to use automatically-consumed reservations),
 set `reservation_name` to an empty string (`""`).
 
 ### Compute VM Zone Policies
