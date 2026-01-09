@@ -2253,7 +2253,7 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     try:
         log.info("Running scontrol reconfigure")
         run(f"{lkp.scontrol} reconfigure")
-    except Exception:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         log.exception("scontrol reconfigure failed, restarting slurmctld")
         run("sudo systemctl restart slurmctld.service", timeout=30)
 
