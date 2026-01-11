@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"regexp"
 	"strings"
 
@@ -245,26 +246,23 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// handleAPIError catches specific Google API errors (403, 400) to provide
-// actionable hard errors that block deployment.
-func handleAPIError(err error, resourceName string, projectID string) error {
-	if err == nil {
-		return nil
+func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
+	aggList, err := s.Reservations.AggregatedList(projectID).Do()
+	if err != nil {
+		return nil, err
 	}
 
-	var gerr *googleapi.Error
-	if errors.As(err, &gerr) {
-		switch gerr.Code {
-		case 403:
-			// Project-level/IAM issue: fail hard.
-			return fmt.Errorf("insufficient permissions to verify %s in project %q (or project does not exist): %w", resourceName, projectID, err)
-		case 404:
-			// Resource not found: return raw error to trigger calling function's diagnostics.
-			return err
+	foundInZones := []string{}
+	for _, scopedList := range aggList.Items {
+		for _, res := range scopedList.Reservations {
+			if res.Name == name {
+				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
+				parts := strings.Split(res.Zone, "/")
+				foundInZones = append(foundInZones, parts[len(parts)-1])
+			}
 		}
 	}
-
-	return err
+	return foundInZones, nil
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
@@ -280,47 +278,34 @@ func TestReservationExists(projectID string, zone string, reservationName string
 		return handleClientError(err)
 	}
 
-	// 1. Direct check: Try to get the specific reservation in the specific zone (Fast Path)
+	// 1. Direct check: Fast Path
 	_, err = s.Reservations.Get(projectID, zone, reservationName).Do()
 	if err == nil {
-		return nil // Success: Found exactly where expected
+		return nil // Success
 	}
 
-	// ERROR PATH: Handle Hard Failures (403 Permission / 400 Disabled API)
-	// We only reach this point if err != nil.
-	apiErr := handleAPIError(err, fmt.Sprintf("reservation %q", reservationName), projectID)
-
+	// 2. Handle Permission Denied on GET
 	var gerr *googleapi.Error
-	if errors.As(apiErr, &gerr) && gerr.Code != 404 {
-		return apiErr
+	if errors.As(err, &gerr) && gerr.Code == 403 {
+		logging.Info("HINT: Identity lacks permission to verify reservation %q in project %q. Skipping this validator.", reservationName, projectID)
+		return nil
 	}
 
-	// 2. Diagnostic Path: The Get failed.
-	// Before searching other zones, check if the project itself is reachable.
-	// Reusing TestProjectExists provides the standardized error/hint for missing projects.
+	// 3. Diagnostic Path: Project validation
 	if pErr := TestProjectExists(projectID); pErr != nil {
 		return pErr
 	}
 
-	// 3. Project is valid. Let's find out if the reservation exists in another zone.
-	aggList, aggErr := s.Reservations.AggregatedList(projectID).Do()
+	// 4. Search other zones
+	foundInZones, aggErr := findReservationInOtherZones(s, projectID, reservationName)
 	if aggErr != nil {
-		// If listing fails after project exists, it's likely a permission/API issue.
+		if errors.As(aggErr, &gerr) && gerr.Code == 403 {
+			return fmt.Errorf("reservation %q not found in project %q and zone %q (Note: identity lacks permission to search other zones)", reservationName, projectID, zone)
+		}
 		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, projectID, zone)
 	}
 
-	foundInZones := []string{}
-	for _, scopedList := range aggList.Items {
-		for _, res := range scopedList.Reservations {
-			if res.Name == reservationName {
-				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
-				parts := strings.Split(res.Zone, "/")
-				foundInZones = append(foundInZones, parts[len(parts)-1])
-			}
-		}
-	}
-
-	// 4. Return helpful zone hint or general not-found
+	// 5. Construct help message if found elsewhere
 	if len(foundInZones) > 0 {
 		return config.HintError{
 			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) %s instead of %q",
@@ -329,7 +314,6 @@ func TestReservationExists(projectID string, zone string, reservationName string
 		}
 	}
 
-	// Found project, but name exists in NO zone.
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, projectID)
 }
 
