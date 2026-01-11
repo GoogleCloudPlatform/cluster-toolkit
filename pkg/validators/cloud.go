@@ -20,8 +20,10 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
@@ -315,4 +317,145 @@ func testIAMPolicyBindingExists(bp config.Blueprint, inputs config.Dict) error {
 
 	// 3. Invoke core validation logic
 	return TestIAMPolicyBindingExists(hostProjectID, serviceProjectID, role)
+}
+
+// getFloat64 safely converts a cty.Value to a float64, handling marks and strings
+func getFloat64(v cty.Value) (float64, bool) {
+	unmarked, _ := v.Unmark()
+	if unmarked.IsNull() || !unmarked.IsKnown() {
+		return 0, false
+	}
+
+	if unmarked.Type() == cty.Number {
+		f, _ := unmarked.AsBigFloat().Float64()
+		return f, true
+	}
+
+	if unmarked.Type() == cty.String {
+		f, err := strconv.ParseFloat(unmarked.AsString(), 64)
+		if err == nil {
+			return f, true
+		}
+	}
+
+	return 0, false
+}
+
+// TestQuotaAvailability queries GCP regional quotas and compares them against requested amounts.
+func TestQuotaAvailability(projectID string, region string, requested map[string]float64) error {
+	ctx := context.Background()
+	s, err := compute.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	reg, err := s.Regions.Get(projectID, region).Do()
+	if err != nil {
+		return fmt.Errorf("failed to get quotas for region %s: %v", region, err)
+	}
+
+	for metric, reqValue := range requested {
+		for _, q := range reg.Quotas {
+			if q.Metric == metric {
+				available := q.Limit - q.Usage
+				if reqValue > available {
+					return fmt.Errorf("Insufficient quota for %s in %s. Requested: %.0f, Available: %.0f (Limit: %.0f, Usage: %.0f)",
+						metric, region, reqValue, available, q.Limit, q.Usage)
+				}
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// testQuotaAvailability aggregates resources based on validator inputs and blueprint modules.
+func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
+	projectIDVal := inputs.Get("project_id")
+	regionVal := inputs.Get("region")
+
+	if projectIDVal.IsNull() || regionVal.IsNull() {
+		return fmt.Errorf("validator %s requires 'project_id' and 'region'", "test_quota_availability")
+	}
+
+	unmarkedPID, _ := projectIDVal.Unmark()
+	unmarkedReg, _ := regionVal.Unmark()
+	projectID := unmarkedPID.AsString()
+	region := unmarkedReg.AsString()
+
+	// Extract overrides from validator inputs
+	unmarkedMT, _ := inputs.Get("machine_type").Unmark()
+	inputMT := ""
+	if !unmarkedMT.IsNull() && unmarkedMT.Type() == cty.String {
+		inputMT = unmarkedMT.AsString()
+	}
+
+	inputCount, _ := getFloat64(inputs.Get("cluster_size"))
+	inputDiskSize, _ := getFloat64(inputs.Get("disk_size_gb"))
+
+	requested := make(map[string]float64)
+	ctx := context.Background()
+	s, err := compute.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	bp.WalkModulesSafe(func(_ config.ModulePath, mod *config.Module) {
+		settings := mod.Settings.Items()
+
+		// 1. Instance Count
+		count := 1.0
+		foundCount := false
+		for _, key := range []string{"cluster_size", "node_count", "instance_count", "count"} {
+			if val, ok := settings[key]; ok {
+				if f, ok := getFloat64(val); ok && f > 0 {
+					count = f
+					foundCount = true
+					break
+				}
+			}
+		}
+		if !foundCount && inputCount > 0 {
+			count = inputCount
+		}
+
+		// 2. Machine Type (CPUs/GPUs) - Priority: Input > Module
+		mtName := inputMT
+		if mtName == "" {
+			if mtVal, ok := settings["machine_type"]; ok && !mtVal.IsNull() {
+				u, _ := mtVal.Unmark()
+				if u.Type() == cty.String {
+					mtName = u.AsString()
+				}
+			}
+		}
+
+		if mtName != "" {
+			zone := region + "-a"
+			mt, err := s.MachineTypes.Get(projectID, zone, mtName).Do()
+			if err == nil {
+				requested["CPUS"] += float64(mt.GuestCpus) * count
+				for _, acc := range mt.Accelerators {
+					metric := strings.ToUpper(acc.GuestAcceleratorType) + "_GPUS"
+					requested[metric] += float64(acc.GuestAcceleratorCount) * count
+				}
+			}
+		}
+
+		// 3. Disks - Priority: Input > Module
+		moduleDiskSize := 0.0
+		for _, key := range []string{"disk_size_gb", "boot_disk_size_gb"} {
+			if val, ok := settings[key]; ok {
+				if f, ok := getFloat64(val); ok {
+					moduleDiskSize += f
+				}
+			}
+		}
+		if moduleDiskSize == 0 && inputDiskSize > 0 {
+			moduleDiskSize = inputDiskSize
+		}
+		requested["DISKS_TOTAL_GB"] += moduleDiskSize * count
+	})
+
+	return TestQuotaAvailability(projectID, region, requested)
 }
