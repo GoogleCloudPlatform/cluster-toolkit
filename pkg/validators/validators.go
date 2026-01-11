@@ -54,7 +54,6 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
-	testIAMPolicyBindingExistsName    = "test_iam_policy_binding_exists"
 	testQuotaAvailabilityName         = "test_quota_availability"
 )
 
@@ -67,7 +66,6 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
-		testIAMPolicyBindingExistsName:    testIAMPolicyBindingExists,
 		testQuotaAvailabilityName:         testQuotaAvailability,
 	}
 }
