@@ -287,7 +287,7 @@ func TestReservationExists(projectID string, zone string, reservationName string
 	// 2. Handle Permission Denied on GET
 	var gerr *googleapi.Error
 	if errors.As(err, &gerr) && gerr.Code == 403 {
-		logging.Info("HINT: Identity lacks permission to verify reservation %q in project %q. Skipping this validator.", reservationName, projectID)
+		logging.Info("HINT: Identity lacks permission to verify reservation %q in project %q. Skipping validator 'test_reservation_exists".", reservationName, projectID)
 		return nil
 	}
 
