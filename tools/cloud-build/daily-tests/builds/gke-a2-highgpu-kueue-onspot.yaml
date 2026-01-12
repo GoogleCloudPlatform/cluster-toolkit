@@ -52,9 +52,23 @@ steps:
       echo "ERROR: ZONE not found" >&2
       exit 1
     fi
+    REGION="$${ZONE%-*}"
+    echo "Using ZONE=$${ZONE} and REGION=$${REGION}"
+
+    # Check for and create the resource policy if it doesn't exist
+    POLICY_NAME="a2-highgpu-compact"
+    if ! gcloud compute resource-policies describe $${POLICY_NAME} --region=$${REGION} --project=$${PROJECT_ID} > /dev/null 2>&1; then
+      echo "Resource policy $${POLICY_NAME} not found in region $${REGION}. Creating it..."
+      gcloud compute resource-policies create group-placement $${POLICY_NAME} \
+        --collocation=collocated \
+        --region=$${REGION} \
+        --project=$${PROJECT_ID}
+      echo "Resource policy $${POLICY_NAME} created."
+    else
+      echo "Resource policy $${POLICY_NAME} already exists in region $${REGION}."
+    fi
     set -x
     cd /workspace && make
-    REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     EXAMPLE_BP=tools/cloud-build/daily-tests/blueprints/gke-a2-highgpu.yaml
 
