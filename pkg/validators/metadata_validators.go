@@ -141,12 +141,14 @@ func (v *AllowedEnumValidator) Validate(
 	group config.Group,
 	modIdx int) error {
 
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+
 	// 1. Parse Metadata Inputs (flags)
 	caseSensitive, err := parseBoolInput(rule.Inputs, "case_sensitive", true)
 	if err != nil {
 		return config.BpError{
 			Err:  fmt.Errorf("validation rule for module %q: %v", mod.ID, err),
-			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+			Path: modPath,
 		}
 	}
 
@@ -154,7 +156,7 @@ func (v *AllowedEnumValidator) Validate(
 	if err != nil {
 		return config.BpError{
 			Err:  fmt.Errorf("validation rule for module %q: %v", mod.ID, err),
-			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+			Path: modPath,
 		}
 	}
 
@@ -163,7 +165,7 @@ func (v *AllowedEnumValidator) Validate(
 	if !ok {
 		return config.BpError{
 			Err:  fmt.Errorf("validation rule for module %q is missing an 'allowed' list", mod.ID),
-			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+			Path: modPath,
 		}
 	}
 
@@ -171,7 +173,7 @@ func (v *AllowedEnumValidator) Validate(
 	if err != nil {
 		return config.BpError{
 			Err:  fmt.Errorf("validation rule for module %q: %v", mod.ID, err),
-			Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source,
+			Path: modPath,
 		}
 	}
 

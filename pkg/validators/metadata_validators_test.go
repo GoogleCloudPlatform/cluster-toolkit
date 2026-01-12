@@ -201,6 +201,14 @@ func TestAllowedEnumValidator(t *testing.T) {
 		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
 			t.Fatalf("unexpected error for valid routing mode 'GLOBAL': %v", err)
 		}
+
+		// 4. Test success with correct uppercase value 'REGIONAL'
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_routing_mode": cty.StringVal("REGIONAL"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error for valid routing mode 'REGIONAL': %v", err)
+		}
 	})
 
 	t.Run("handles_explicit_case_insensitive_matching", func(t *testing.T) {
