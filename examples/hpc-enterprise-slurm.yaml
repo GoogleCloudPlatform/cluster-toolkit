@@ -48,6 +48,8 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+
+  # modules/network/vpc provides Cloud NAT and Private Google Access by default
   - id: network
     source: modules/network/vpc
 
@@ -70,7 +72,6 @@ deployment_groups:
       - iam.serviceAccountUser
       - logging.logWriter
       - monitoring.metricWriter
-      - pubsub.admin
       - storage.objectViewer
 
   - id: login_sa
@@ -81,6 +82,7 @@ deployment_groups:
       - logging.logWriter
       - monitoring.metricWriter
       - storage.objectViewer
+      # - storage.objectUser # add if using Cloud Storage Bucket as storage
 
   - id: compute_sa
     source: modules/project/service-account
@@ -89,7 +91,18 @@ deployment_groups:
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
-      - storage.objectCreator
+      - storage.objectViewer
+      # - storage.objectUser # add if using Cloud Storage Bucket as storage
+
+  - id: ddn_sa
+    source: community/modules/project/service-account
+    settings:
+      name: ddn
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - compute.viewer
+      - runtimeconfig.admin
 
   - id: homefs
     source: modules/file-system/filestore
@@ -110,6 +123,9 @@ deployment_groups:
     use: [network]
     settings:
       local_mount: /scratch
+      service_account:
+        email: $(ddn_sa.service_account_email)
+        new: false
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -276,10 +292,7 @@ deployment_groups:
     settings:
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
-      # we recommend disabling public IPs if possible
-      # but that requires your network to have a NAT or
-      # private access configured
-      enable_login_public_ips: true
+      enable_login_public_ips: false
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -295,10 +308,7 @@ deployment_groups:
         resume_timeout: 600
         suspend_rate: 0
         suspend_timeout: 600
-      # we recommend disabling public IPs if possible
-      # but that requires your network to have a NAT or
-      # private access configured
-      enable_controller_public_ips: true
+      enable_controller_public_ips: false
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard
