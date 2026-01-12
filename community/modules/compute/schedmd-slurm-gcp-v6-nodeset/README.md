@@ -89,6 +89,11 @@ The format of the `reservation_name` input determines the type of reservation us
 * **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
     `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
 
+  Where:
+  * `HOST_PROJECT_ID` is the project ID where the shared reservation was created.
+  * `RESERVATION_NAME` is the name assigned to the specific reservation.
+  * `BLOCK_ID` (Optional) is the identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+
 > **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get'
 > permission for the node service account in the host project (HOST_PROJECT_ID).
 > Ensure this permission is granted before deploying.

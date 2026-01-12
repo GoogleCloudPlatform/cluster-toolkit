@@ -519,6 +519,11 @@ variable "reservation_name" {
     - Shared Reservation: For reservations shared from a different project, the full resource path is required:
       projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
 
+    Where:
+    - HOST_PROJECT_ID: Project ID where the shared reservation was created.
+    - RESERVATION_NAME: The name assigned to the specific reservation.
+    - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+
     Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project.
   EOD
   type        = string
