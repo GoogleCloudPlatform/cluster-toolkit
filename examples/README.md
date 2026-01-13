@@ -265,7 +265,7 @@ File systems:
   2.5 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
-> [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
+* [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
 
 #### Quota Requirements for hpc-enterprise-slurm.yaml
 
