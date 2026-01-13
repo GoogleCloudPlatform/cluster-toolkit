@@ -47,4 +47,3 @@ cli_deployment_vars:
   disk_size_gb: 100
   cluster_size: 2
   g4_enable_spot_vm: true
-  
