@@ -27,7 +27,7 @@ locals {
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
   jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
   gib_supported_versions_x86   = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
-  gib_supported_versions_arm64 = ["v1.0.7"]
+  gib_supported_versions_arm64 = ["v1.1.1", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
     local.gib_supported_versions_arm64
     ) : (
