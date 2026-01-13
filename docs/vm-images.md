@@ -37,7 +37,8 @@ either the specific module definition or the global variables. The
 ```yaml
 instance_image:
  family: hpc-rocky-linux-8
- project: cloud-hpc-image-public
+ project: cloud-hpc-image-public    # If family is defined, omit name
+ name: hpc-rocky-linux-8-v20251117  # If name is defined, omit family
 ```
 
 The `project` setting defines the space where the image will be found. Either
