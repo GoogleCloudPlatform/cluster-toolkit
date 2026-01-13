@@ -325,7 +325,7 @@ deployment_groups:
       disk_size: 100
       machine_type: c2-standard-8
 
-      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
+      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260108
       source_image_project_id: [ubuntu-os-accelerator-images]
 
       image_family: $(vars.family)
