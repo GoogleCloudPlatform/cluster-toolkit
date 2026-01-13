@@ -27,8 +27,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
-  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
-  * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
+  * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -266,14 +265,7 @@ File systems:
   2.5 TiB of capacity
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> [!WARNING]
-> This module is deprecated and will be removed on July 1, 2025. The
-> recommended replacement is the
-> [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
+* The managed_lustre is mounted at /lustre and is designed for the highly parallel and random I/O performance. It has a minimum capacity of ~18TiB.
 
 #### Quota Requirements for hpc-enterprise-slurm.yaml
 
@@ -606,49 +598,6 @@ The blueprint contains the following:
     inspect the `rsl.out.0000` file for a summary of the job.
 
 [serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
-
-### [pfs-lustre.yaml] ![core-badge] ![deprecated-badge]
-
-_This blueprint has been deprecated and will be removed on August 1, 2025._
-
-Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
-
-The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of
-~10TiB and is mounted at `/lustre`.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-After the creation of the file-system and the client instances, the startup
-scripts on the client instances will automatically install the lustre drivers,
-configure the mount-point, and mount the file system to the specified
-directory. This may take a few minutes after the VMs are created and can be
-verified by running:
-
-```sh
-watch df
-```
-
-Eventually you should see a line similar to:
-
-```sh
-<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
-```
-
-with remote_mount, and local_mount reflecting the settings of the module and
-IP being set to the lustre instance's IP.
-
-#### Quota Requirements for pfs-lustre.yaml
-
-For this example the following is needed in the selected region:
-
-* Compute Engine API: Persistent Disk SSD (GB): **~14TB: 3500GB MDT, 3500GB OST[0-2]**
-* Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
-* Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
-
-[pfs-lustre.yaml]: ./pfs-lustre.yaml
 
 ### [pfs-managed-lustre-vm.yaml] ![core-badge]
 

@@ -15,10 +15,18 @@
   */
 
 module "network" {
-  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/vpc?ref=v1.38.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/vpc?ref=v1.49.0&depth=1"
   deployment_name = var.deployment_name
+  labels          = var.labels
   project_id      = var.project_id
   region          = var.region
+}
+
+module "private_service_access" {
+  source     = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/network/private-service-access?ref=v1.49.0&depth=1"
+  labels     = var.labels
+  network_id = module.network.network_id
+  project_id = var.project_id
 }
 
 module "controller_sa" {
@@ -30,7 +38,7 @@ module "controller_sa" {
 }
 
 module "login_sa" {
-  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.38.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.49.0&depth=1"
   deployment_name = var.deployment_name
   name            = "login"
   project_id      = var.project_id
@@ -38,7 +46,7 @@ module "login_sa" {
 }
 
 module "compute_sa" {
-  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.38.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/project/service-account?ref=v1.49.0&depth=1"
   deployment_name = var.deployment_name
   name            = "compute"
   project_id      = var.project_id
@@ -57,7 +65,7 @@ module "homefs" {
 }
 
 module "projectsfs" {
-  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/filestore?ref=v1.38.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/filestore?ref=v1.49.0&depth=1"
   deployment_name = var.deployment_name
   labels          = var.labels
   local_mount     = "/projects"
@@ -67,19 +75,23 @@ module "projectsfs" {
   zone            = var.zone
 }
 
-module "scratchfs" {
-  source               = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/DDN-EXAScaler?ref=v1.38.0&depth=1"
-  labels               = var.labels
-  local_mount          = "/scratch"
-  network_self_link    = module.network.network_self_link
-  project_id           = var.project_id
-  subnetwork_address   = module.network.subnetwork_address
-  subnetwork_self_link = module.network.subnetwork_self_link
-  zone                 = var.zone
+module "managed-lustre" {
+  source                         = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.49.0&depth=1"
+  deployment_name                = var.deployment_name
+  labels                         = var.labels
+  local_mount                    = "/lustre"
+  name                           = var.lustre_instance_id
+  network_id                     = module.network.network_id
+  network_self_link              = module.network.network_self_link
+  private_vpc_connection_peering = module.private_service_access.private_vpc_connection_peering
+  project_id                     = var.project_id
+  remote_mount                   = "lustrefs"
+  size_gib                       = 36000
+  zone                           = var.zone
 }
 
 module "n2_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   instance_image          = var.slurm_image
   instance_image_custom   = var.instance_image_custom
@@ -95,7 +107,7 @@ module "n2_nodeset" {
 }
 
 module "n2_partition" {
-  source     = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source     = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   exclusive  = false
   is_default = true
   nodeset    = flatten([module.n2_nodeset.nodeset])
@@ -106,7 +118,7 @@ module "n2_partition" {
 }
 
 module "c2_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "tier_1_enabled"
   disk_size_gb            = 100
@@ -125,14 +137,14 @@ module "c2_nodeset" {
 }
 
 module "c2_partition" {
-  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   exclusive      = true
   nodeset        = flatten([module.c2_nodeset.nodeset])
   partition_name = "c2"
 }
 
 module "c2d_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "tier_1_enabled"
   disk_size_gb            = 100
@@ -151,13 +163,13 @@ module "c2d_nodeset" {
 }
 
 module "c2d_partition" {
-  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   nodeset        = flatten([module.c2d_nodeset.nodeset])
   partition_name = "c2d"
 }
 
 module "c3_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "tier_1_enabled"
   disk_size_gb            = 100
@@ -176,13 +188,13 @@ module "c3_nodeset" {
 }
 
 module "c3_partition" {
-  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   nodeset        = flatten([module.c3_nodeset.nodeset])
   partition_name = "c3"
 }
 
 module "a2_8_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "gvnic_enabled"
   disk_size_gb            = 100
@@ -206,7 +218,7 @@ module "a2_8_nodeset" {
 }
 
 module "a2_8_partition" {
-  source  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   nodeset = flatten([module.a2_8_nodeset.nodeset])
   partition_conf = {
     DefMemPerCPU = null
@@ -216,7 +228,7 @@ module "a2_8_partition" {
 }
 
 module "a2_16_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "gvnic_enabled"
   disk_size_gb            = 100
@@ -240,7 +252,7 @@ module "a2_16_nodeset" {
 }
 
 module "a2_16_partition" {
-  source  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   nodeset = flatten([module.a2_16_nodeset.nodeset])
   partition_conf = {
     DefMemPerCPU = null
@@ -250,7 +262,7 @@ module "a2_16_partition" {
 }
 
 module "h3_nodeset" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.49.0&depth=1"
   allow_automatic_updates = false
   bandwidth_tier          = "gvnic_enabled"
   disk_size_gb            = 100
@@ -269,13 +281,13 @@ module "h3_nodeset" {
 }
 
 module "h3_partition" {
-  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.38.0&depth=1"
+  source         = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.49.0&depth=1"
   nodeset        = flatten([module.h3_nodeset.nodeset])
   partition_name = "h3"
 }
 
 module "slurm_login" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.38.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.49.0&depth=1"
   enable_login_public_ips = true
   instance_image          = var.slurm_image
   instance_image_custom   = var.instance_image_custom
@@ -290,7 +302,7 @@ module "slurm_login" {
 }
 
 module "slurm_controller" {
-  source = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-controller?ref=v1.38.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-controller?ref=v1.49.0&depth=1"
   cloud_parameters = {
     no_comma_params = false
     resume_rate     = 0
@@ -304,7 +316,7 @@ module "slurm_controller" {
   instance_image_custom        = var.instance_image_custom
   labels                       = var.labels
   login_nodes                  = flatten([module.slurm_login.login_nodes])
-  network_storage              = flatten([module.scratchfs.network_storage, flatten([module.projectsfs.network_storage, flatten([module.homefs.network_storage])])])
+  network_storage              = flatten([module.managed-lustre.network_storage, flatten([module.projectsfs.network_storage, flatten([module.homefs.network_storage])])])
   nodeset                      = flatten([module.h3_partition.nodeset, flatten([module.a2_16_partition.nodeset, flatten([module.a2_8_partition.nodeset, flatten([module.c3_partition.nodeset, flatten([module.c2d_partition.nodeset, flatten([module.c2_partition.nodeset, flatten([module.n2_partition.nodeset])])])])])])])
   nodeset_dyn                  = flatten([module.h3_partition.nodeset_dyn, flatten([module.a2_16_partition.nodeset_dyn, flatten([module.a2_8_partition.nodeset_dyn, flatten([module.c3_partition.nodeset_dyn, flatten([module.c2d_partition.nodeset_dyn, flatten([module.c2_partition.nodeset_dyn, flatten([module.n2_partition.nodeset_dyn])])])])])])])
   nodeset_tpu                  = flatten([module.h3_partition.nodeset_tpu, flatten([module.a2_16_partition.nodeset_tpu, flatten([module.a2_8_partition.nodeset_tpu, flatten([module.c3_partition.nodeset_tpu, flatten([module.c2d_partition.nodeset_tpu, flatten([module.c2_partition.nodeset_tpu, flatten([module.n2_partition.nodeset_tpu])])])])])])])
@@ -317,7 +329,7 @@ module "slurm_controller" {
 }
 
 module "hpc_dashboard" {
-  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/monitoring/dashboard?ref=v1.38.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/monitoring/dashboard?ref=v1.49.0&depth=1"
   deployment_name = var.deployment_name
   labels          = var.labels
   project_id      = var.project_id

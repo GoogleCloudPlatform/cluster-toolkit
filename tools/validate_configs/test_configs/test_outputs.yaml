@@ -21,6 +21,7 @@ vars:
   deployment_name: test_outputs
   region: europe-west4
   zone: europe-west4-a
+  lustre_instance_id: lustre-instance
 
 deployment_groups:
 - group: primary
@@ -83,6 +84,12 @@ deployment_groups:
     - subnetwork_address
     - nat_ips
 
+  - id: private-service-access
+    source: modules/network/private-service-access
+    use: [vpc]
+    outputs:
+    - private_vpc_connection_peering
+
   - id: sa
     source: modules/project/service-account
     outputs:
@@ -105,11 +112,14 @@ deployment_groups:
     outputs:
     - startup_script
 
-  - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed-lustre
+    source: modules/file-system/managed-lustre
     outputs:
-    - private_addresses
-    - ssh_console
-    - mount_command
-    - http_console
     - network_storage
+    - install_managed_lustre_client
+    settings:
+      name: $(vars.lustre_instance_id)
+      remote_mount: lustrefs
+      network_id: $(vpc.network_id)
+      network_self_link: $(vpc.network_self_link)
+      private_vpc_connection_peering: $(private-service-access.private_vpc_connection_peering)
