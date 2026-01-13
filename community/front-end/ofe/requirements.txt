@@ -25,7 +25,7 @@ django-allauth==65.13.1
 django-crispy-forms==2.5
 django-extensions==3.2.3
 djangorestframework==3.16.1
-filelock==3.20.1
+filelock==3.20.3
 google-api-core==2.28.1
 google-api-python-client==2.187.0
 google-auth==2.45.0
