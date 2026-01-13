@@ -30,7 +30,6 @@ post_deploy_tests:
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
-  # g4-standard-48 has 4 NVIDIA T4 GPUs
   gpu_count: 1
   gpu_partition: g4
   test_persistenced: true
