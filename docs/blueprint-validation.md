@@ -1,18 +1,24 @@
-## Blueprint Validation
+# Blueprint Validation
 
-The Toolkit contains "validator" functions that perform basic tests of
-the blueprint to ensure that deployment variables are valid and that the HPC
-environment can be provisioned in your Google Cloud project. To succeed,
-validators need the following services to be enabled in your blueprint
-project(s):
+The Toolkit contains "validator" functions that perform tests to ensure that deployment variables are valid and that the HPC environment can be provisioned in your Google Cloud project.
+
+These validators run during the deployment folder creation phase (executed by `gcluster create` or the initial stage of `gcluster deploy`). This ensures that all configurations are validated strictly before any infrastructure is provisioned, and before external tools like Terraform or Packer are called.
+
+Validation occurs at two levels:
+
+1. **Blueprint-level Validators:** Global environment checks (e.g., project/region existence) defined in the blueprint or added implicitly.
+2. **Module-level (Metadata) Validators:** Input-specific checks (e.g., regex naming patterns) defined within a module's `metadata.yaml`.
+
+To succeed, validators often need the following services to be enabled in your blueprint project(s):
 
 * Compute Engine API (compute.googleapis.com)
 * Service Usage API (serviceusage.googleapis.com)
 
-One can [explicitly define validators](#explicit-validators), however, the
-expectation is that the implicit behavior will be useful for most users. When
-implicit, a validator is added if all deployment variables matching its inputs
-are defined. Validators that have no inputs are always enabled by default
+---
+
+## Blueprint-level Validators
+
+One can [explicitly define these validators](#explicit-blueprint-validators); however, the expectation is that the implicit behavior will be useful for most users. When implicit, a validator is added if all deployment variables matching its inputs are defined. Validators that have no inputs are always enabled by default
 because they do not require any specific deployment variable.
 
 Each validator is described below:
@@ -63,7 +69,7 @@ Each validator is described below:
     blueprint
   * FAIL: if any deployment variable is unused in the blueprint
 
-### Explicit validators
+### Explicit Blueprint Validators
 
 Validators can be overwritten and supplied with alternative input values,
 however they are limited to the set of functions defined above. As an example,
@@ -96,9 +102,33 @@ validators:
       zone: $(vars.zone)
 ```
 
-### Skipping or disabling validators
+## Module-level (Metadata) Validators
 
-There are three methods to disable configured validators:
+Module-level validators are defined directly within a module's `metadata.yaml` file under the `ghpc.validators` field. These are primarily used for early validation of module-specific input variables before any infrastructure is provisioned.
+
+### Regex Validator
+The `regex` validator ensures that input variables match a specific regular expression pattern. This is commonly used to enforce Google Cloud naming conventions or specific software requirements (like Slurm partition name lengths).
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: regex
+      inputs:
+        vars: [partition_name]
+        pattern: "^[a-z0-9]{1,10}$"
+      error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
+```
+
+Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
+
+## Skipping or Disabling Validators
+
+The methods for managing or skipping validation checks vary depending on whether the validator is defined at the blueprint or module level.
+
+### Skipping Blueprint-level Validators
+For global environment checks, you can use the following methods to skip specific validators:
 
 * Set `skip` value in validator config:
 
@@ -115,11 +145,37 @@ validators:
 ./gcluster create ... --skip-validators="test_project_exists,test_apis_enabled"
 ```
 
-* To disable all validators, set the [validation level to IGNORE](#validation-levels).
+### Disabling Module-level Validators
+Module-scoped validators are defined and managed within the module's `metadata.yaml`. To control them, you must edit the module source directly.
+
+#### To Disable a Validator
+To stop a module-level validator from running, **remove** the entry from the list or **comment it out** as shown below:
+
+```yaml
+# community/modules/<category>/<module>/metadata.yaml
+ghpc:
+  validators: [] # Option 1: Set to an empty list
+  # Option 2: Comment out the specific validator
+  # - validator: regex
+  #   inputs:
+  #     vars: [partition_name]
+  #     pattern: "^[a-z0-9]{1,10}$"
+```
+
+### Disabling All Validation (Universal)
+To bypass all validation checks—including both blueprint-level and module-level validators—you can set the [validation level](#validation-levels) to `IGNORE`. This provides a single command-line toggle to suppress all automated checks.
+
+* Set the validation level to IGNORE via CLI:
+
+    ```shell
+    ./gcluster create -l IGNORE examples/hpc-slurm.yaml
+    ```
 
 ### Validation levels
 
-They can also be set to 3 differing levels of behavior using the command-line
+Validation levels determine how the toolkit handles a validation failure. These levels apply to both Blueprint-level and Module-level validators.
+
+They can be set to 3 differing levels of behavior using the command-line
 `--validation-level` flag:
 
 * `"ERROR"` (default): If any validator fails, the deployment directory will not be

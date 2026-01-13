@@ -24,6 +24,7 @@ cli_deployment_vars:
   region: europe-west4
   zone: "{{ zone }}"
   gpu_zones: "[europe-west4-a,europe-west4-b,europe-west4-c]"
+  lustre_instance_id: "lustre-instance-{{build}}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
 network: "{{ test_name }}"
@@ -48,4 +49,4 @@ custom_vars:
   mounts:
   - /home
   - /projects
-  - /scratch
+  - /lustre

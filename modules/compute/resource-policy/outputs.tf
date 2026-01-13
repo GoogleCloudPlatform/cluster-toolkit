@@ -19,10 +19,12 @@ output "placement_policy" {
   Group placement policy to use for placing VMs or GKE nodes placement. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
   It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
   Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions.
+  The value `tpu_topology` is only used for TPU node pools. The `gke-node-pool` module ensures it is configured appropriately for only TPUs during placement policy mapping.
   EOT
 
   value = {
-    type = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? "COMPACT" : null
-    name = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? local.name : null
+    type         = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? "COMPACT" : null
+    name         = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? local.name : null
+    tpu_topology = (var.workload_policy.type != null) ? var.workload_policy.accelerator_topology : null
   }
 }

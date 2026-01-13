@@ -33,7 +33,6 @@ custom_vars:
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
-  disk_size_gb: 200
   a3u_reservation_name: hpc-exr-2
   a3u_provisioning_model: RESERVATION_BOUND
   base_network_name: "{{ test_name }}"

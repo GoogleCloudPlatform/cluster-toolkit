@@ -1,3 +1,9 @@
+> [!WARNING]
+> The `Parallelstore` `storage_type` is deprecated and will be removed on October 31, 2026. For a
+> replacement on GKE, we recommend using the
+> [GCP Managed Lustre module](../managed-lustre/README.md)
+> See the [gke-managed-lustre.yaml](../../../examples/gke-managed-lustre.yaml) blueprint for a complete example.
+
 ## Description
 
 This module creates Kubernetes Storage Class (SC) that can be used by a Persistent Volume Claim (PVC)
@@ -20,7 +26,7 @@ then use them in a `gke-job-template` to dynamically provision the resource.
   # PSA is required for all Parallelstore functionality.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
     settings:
       prefix_length: 24
@@ -117,7 +123,7 @@ No resources.
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Controls the mountOptions for dynamically provisioned PersistentVolumes of this storage class. | `string` | `null` | no |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to deploy the storage PVC/PV | `string` | `"default"` | no |
-| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc). | `string` | `null` | no |
+| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc). | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
 | <a name="input_pv_mount_path"></a> [pv\_mount\_path](#input\_pv\_mount\_path) | Path within the container at which the volume should be mounted. Must not contain ':'. | `string` | `"/data"` | no |
 | <a name="input_pvc_count"></a> [pvc\_count](#input\_pvc\_count) | How many PersistentVolumeClaims that will be created | `number` | `1` | no |

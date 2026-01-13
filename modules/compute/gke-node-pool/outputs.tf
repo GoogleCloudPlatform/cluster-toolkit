@@ -135,3 +135,18 @@ output "instance_templates" {
   description = "The URLs of Instance Templates"
   value       = [for key, template in data.google_compute_region_instance_template.instance_template : template.self_link]
 }
+
+output "tpu_accelerator_type" {
+  description = "The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice')."
+  value       = module.tpu.is_tpu ? module.tpu.tpu_accelerator_type : null
+}
+
+output "tpu_topology" {
+  description = "The topology of the TPU slice (e.g., '4x4')."
+  value       = module.tpu.is_tpu ? module.tpu.tpu_topology : null
+}
+
+output "tpu_chips_per_node" {
+  description = "The number of TPU chips on each node in the pool."
+  value       = module.tpu.is_tpu ? module.tpu.tpu_chips_per_node : null
+}

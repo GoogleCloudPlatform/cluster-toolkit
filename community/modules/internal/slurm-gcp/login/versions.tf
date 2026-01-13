@@ -24,6 +24,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-controller/v1.67.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-controller/v1.77.0"
   }
 }

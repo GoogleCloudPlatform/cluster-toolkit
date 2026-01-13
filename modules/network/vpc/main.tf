@@ -180,7 +180,7 @@ resource "terraform_data" "network_profile_firewall_validation" {
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 12.0"
+  version = "~> 13.0"
 
   depends_on = [terraform_data.network_profile_firewall_validation]
 

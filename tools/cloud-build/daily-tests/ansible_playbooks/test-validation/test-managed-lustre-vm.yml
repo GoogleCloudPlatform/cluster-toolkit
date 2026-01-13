@@ -1,0 +1,52 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Verify Mount Point Exists and is Lustre Type
+  ansible.builtin.command: stat -f -c %T "{{ mount_point | default('/lustre') }}"
+  register: fs_type
+  changed_when: false
+  vars:
+    expected_fs_type: "lustre"
+  failed_when: fs_type.stdout | trim != expected_fs_type
+
+- name: Set Unique Test Filename and Content
+  ansible.builtin.set_fact:
+    test_file: "{{ mount_point | default('/lustre') }}/ansible_test_{{ 999 | random }}.txt"
+    test_content: "Lustre Write Test is Successful"
+
+- name: Write Canary File to Lustre
+  ansible.builtin.copy:
+    content: "{{ test_content }}"
+    dest: "{{ test_file }}"
+  become: yes
+
+- name: Read Canary File
+  ansible.builtin.slurp:
+    src: "{{ test_file }}"
+  register: file_content
+  become: yes
+
+- name: Verify Content
+  ansible.builtin.assert:
+    that:
+    - (file_content.content | b64decode) == test_content
+    fail_msg: "Content mismatch! Expected: '{{ test_content }}', Found: '{{ file_content.content | b64decode }}'"
+    quiet: yes
+
+- name: Remove Canary File (Clean Up)
+  ansible.builtin.file:
+    path: "{{ test_file }}"
+    state: absent
+  become: yes

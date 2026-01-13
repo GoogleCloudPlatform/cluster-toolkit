@@ -186,3 +186,21 @@ variable "labels" {
   description = "Labels to add to the GKE job template. Key-value pairs."
   type        = map(string)
 }
+
+variable "tpu_accelerator_type" {
+  description = "The TPU accelerator type label. Populated from gke-node-pool via `use` field."
+  type        = list(string)
+  default     = [null]
+}
+
+variable "tpu_topology" {
+  description = "The TPU topology label. Populated from gke-node-pool via `use` field."
+  type        = list(string)
+  default     = [null]
+}
+
+variable "tpu_chips_per_node" {
+  description = "The number of TPU chips per node. Populated from gke-node-pool via `use` field."
+  type        = list(string)
+  default     = [null]
+}

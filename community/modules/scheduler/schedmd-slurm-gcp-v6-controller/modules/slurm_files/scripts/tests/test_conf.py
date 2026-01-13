@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import pytest
-from mock import Mock
+import mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
 
 import addict # type: ignore
@@ -43,8 +43,8 @@ def test_nodeset_lines():
         node_count_dynamic_max=3,
         node_conf={"red": "velvet", "CPUs": 55},
     )
-    lkp = util.Lookup(TstCfg())
-    lkp.template_info = Mock(return_value=TstTemplateInfo(
+    lkp = util.Lookup(TstCfg(nodeset={'turbo': nodeset}))
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type="Popov", count=33)
     ))
     mc = TstMachineConf(
@@ -56,7 +56,7 @@ def test_nodeset_lines():
         threads_per_core=10,
         cores_per_socket=11,
     )
-    lkp.template_machine_conf = Mock(return_value=mc) # type: ignore[method-assign]
+    lkp.template_machine_conf = mock.Mock(return_value=mc) # type: ignore[method-assign]
     assert conf.nodeset_lines(nodeset, lkp) == "\n".join(
         [
             "NodeName=m22-turbo-[0-4] State=CLOUD RealMemory=6 Boards=9 SocketsPerBoard=8 CoresPerSocket=11 ThreadsPerCore=10 CPUs=55 Gres=gpu:33 red=velvet",
@@ -103,7 +103,6 @@ SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
 TreeWidth=128
-TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
@@ -133,7 +132,6 @@ SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
 TreeWidth=128
-TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
@@ -159,7 +157,8 @@ TopologyParam=SwitchAsNodeRank"""),
                 "topology_plugin": "guess",
                 "topology_param": "yellow",
             },
-        ),
+            nodeset={"a": TstNodeset()},
+        ), 
          """PrivateData=events,jobs
 SchedulerParameters=bf_busy_nodes,bf_continue,ignore_prefer_validation,nohold_on_prolog_fail
 ResumeProgram=ukulele/resume_wrapper.sh
@@ -178,7 +177,7 @@ TopologyParam=yellow"""),
             install_dir="ukulele",
             task_prolog_scripts=[Placeholder()],
             task_epilog_scripts=[Placeholder()],
-        ),
+        ), 
          """LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
 TaskProlog=/slurm/custom_scripts/task_prolog.d/task-prolog
@@ -194,14 +193,17 @@ SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
 TreeWidth=128
-TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
     ])
 def test_conflines(cfg, want):
-    assert conf.conflines(util.Lookup(cfg)) == want
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    assert conf.conflines(lkp) == want
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
-    assert conf.conflines(util.Lookup(cfg)) == want
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    assert conf.conflines(lkp) == want
 
 
 @pytest.mark.parametrize(
@@ -216,11 +218,21 @@ def test_conflines(cfg, want):
         ), 
         "Popov",
         8,
-         "Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
+         "NodeName=m22-turbo-[0-4] Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
     ])
-def test_gen_cloud_gres_conf_lines(cfg, gputype, gpucount, want):
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_gen_cloud_gres_conf_lines(mock_slurm_version, cfg, gputype, gpucount, want):
+    mock_slurm_version.return_value = "25.05"
     lkp = util.Lookup(cfg)
-    lkp.template_info = Mock(return_value=TstTemplateInfo(
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
     ))
+    # mock nodelist to be smaller
+    lkp.nodelist = mock.Mock(return_value="m22-turbo-[0-4]")  # type: ignore[method-assign]
     assert conf.gen_cloud_gres_conf_lines(lkp) == want
+
+
+def test_block_size_is_power_of_two():
+    """Verify that BLOCK_SIZE is a power of two."""
+    block_size = conf.BLOCK_SIZE
+    assert block_size > 0 and (block_size & (block_size - 1) == 0)

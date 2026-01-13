@@ -38,7 +38,12 @@ import itertools
 # OFE-deployment test is configured to only run as a PR trigger and does
 # not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
 # for the configuration.
-TO_SKIP = frozenset(["ofe-deployment"])
+TO_SKIP = frozenset([
+    "ofe-deployment", 
+    "ml-a3-ultragpu-slurm", 
+    "gke-a3-ultragpu", 
+    "ml-a3-ultragpu-jbvms"
+])
 
 # Seed for deterministic order of tests, change to other value to shuffle tests
 ORDER_SEED = b"What a wonderful phrase"
@@ -47,9 +52,26 @@ ORDER_SEED = b"What a wonderful phrase"
  # Test that shouldn't be scheduled too close to each other
 TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
-    (("ml-a4-highgpu-slurm", "gke-a4"), 2*60),
-    (("ml-a3-ultragpu-slurm", "ml-a3-ultragpu-jbvms", "gke-a3-ultragpu"), 1*60),
-    (("ml-a3-megagpu-slurm", "ml-a3-megagpu-slurm-ubuntu", "gke-a3-megagpu"), 1*60),
+    ((
+        "ml-a4-highgpu-slurm",
+        "ml-a4-highgpu-onspot-slurm",
+        "gke-a4"
+    ), 2*60),
+    ((
+        "ml-a3-ultragpu-onspot-slurm", 
+        "ml-a3-ultragpu-onspot-jbvms", 
+        "gke-a3-ultragpu-onspot"
+    ), 2*60),
+    ((
+        "ml-a3-megagpu-slurm-ubuntu",
+        "gke-a3-megagpu",
+        "ml-a3-megagpu-onspot-slurm-ubuntu",
+        "gke-a3-megagpu-onspot"
+    ), 1*60),
+    ((
+        "ml-a3-highgpu-slurm", 
+        "gke-a3-highgpu"
+    ), 1*60),
 ]
 # TODO:
 # * Consider defining constraints (e.g. reservations used) as a tags within tests yamls
@@ -106,5 +128,3 @@ if __name__ == "__main__":
 
     print(f"Failed to find valid schedule after {MAX_TRIES} tries", file=sys.stderr)
     sys.exit(1)
-
-    

@@ -31,8 +31,9 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
         self.wait_until_squeue_is_empty()
 
         for job_id in job_ids:
-            self.assertIn("COMPLETED", self.job_state(job_id), f"Something went wrong with JobID:{job_id}.")
-            print(f"JobID {job_id} finished successfully.")
+            state = self.job_state(job_id)
+            self.assertIn("COMPLETED", state, f"Job {job_id} did not complete successfully. Final state is {state}.")
+            log.info(f"JobID {job_id} finished successfully.")
 
     def wait_until_squeue_is_empty(self):
         while True:
@@ -41,12 +42,33 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
             lines = stdout.splitlines()[1:] # Skip header
 
             if not lines:
+                log.info("squeue is empty.")
                 break
+            log.info(f"Waiting for {len(lines)} jobs to complete...")
             time.sleep(5)
 
-    def job_state(self, job_id: str) -> list[str]:
-        stdout = ssh.exec_and_check(self.ssh_client, f'scontrol show job {job_id} --json')
-        return json.loads(stdout)["jobs"][0]["job_state"]
+    def job_state(self, job_id: str) -> str:
+        """Gets the final state of a job using sacct."""
+        cmd = f'sacct -j {job_id} --json --format=JobID,State'
+        stdout = ssh.exec_and_check(self.ssh_client, cmd)
+        log.debug(f"sacct output for job {job_id}:\n{stdout}")
+        try:
+            data = json.loads(stdout)
+            jobs = data.get("jobs")
+            if jobs:
+                for job in jobs:
+                    # The job_id from sacct can be an int, but the input job_id is a string.
+                    # Job steps have suffixes (e.g., '123.batch'), so we look for an exact match
+                    # with the main job ID to get the overall job state.
+                    if str(job.get("job_id")) == job_id:
+                        return job["state"]["current"]
+
+            # This is reached if jobs is empty or the main job ID was not found.
+            log.warning(f"No job information found in sacct for JobID: {job_id}")
+            return "NOT_FOUND"
+        except (IndexError, KeyError, json.JSONDecodeError) as e:
+            log.error(f"Error parsing sacct output for job {job_id}: {e}\nOutput: {stdout}")
+            return "PARSE_ERROR"
 
     def submit_job(self, cmd: str) -> str:
         stdout = ssh.exec_and_check(self.ssh_client, cmd)

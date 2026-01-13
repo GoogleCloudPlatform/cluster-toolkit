@@ -20,6 +20,7 @@ vars:
   deployment_name: high-io-01
   region: us-central1
   zone: us-central1-a
+  lustre_instance_id: lustre-instance
 
 deployment_groups:
 - group: primary
@@ -27,20 +28,30 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
 
+  - id: private-service-access
+    source: modules/network/private-service-access
+    use: [network1]
+    outputs:
+    - private_vpc_connection_peering
+
   - id: appfs
     source: modules/file-system/filestore
     use: [network1]
     settings:
       local_mount: /apps
 
-  - id: lustrefs
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
     use: [network1]
-    settings: {local_mount: /scratch}
+    settings:
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      private_vpc_connection_peering: $(private-service-access.private_vpc_connection_peering)
 
   - id: batch-job
     source: modules/scheduler/batch-job-template
-    use: [network1, appfs, lustrefs]
+    use: [network1, appfs, managed_lustre]
     settings:
       runnable: "echo 'hello world'"
       machine_type: n2-standard-4

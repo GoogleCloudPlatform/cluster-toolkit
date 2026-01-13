@@ -52,29 +52,27 @@ vars:
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
-  nccl_rdma_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
+  version_prefix: "1.33."
 
-terraform_providers:
-  google:
-    source: hashicorp/google
-    version: 6.34.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
+  # # To enable Managed-Lustre please uncomment this section and fill out the settings.
+  # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
+  # # Managed Lustre is only supported in specific regions and zones
+  # # Please refer https://cloud.google.com/managed-lustre/docs/locations
 
-  google-beta:
-    source: hashicorp/google-beta
-    version: 6.34.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
+  # # Managed-Lustre instance name. This should be unique for each deployment.
+  # lustre_instance_id: $(vars.deployment_name)
+
+  # # The values of size_gib and per_unit_storage_throughput are co-related
+  # # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # # Storage capacity of the lustre instance in GiB
+  # lustre_size_gib: 36000
+
+  # # Maximum throughput of the lustre instance in MBps per TiB
+  # per_unit_storage_throughput: 500
 
 
 deployment_groups:
@@ -138,7 +136,7 @@ deployment_groups:
         region: $(vars.region)
 
   - id: node_pool_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-np-sa
       project_roles:
@@ -150,7 +148,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: workload_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-wl-sa
       project_roles:
@@ -161,6 +159,24 @@ deployment_groups:
       - storage.objectAdmin
       - artifactregistry.reader
 
+  - id: training_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
   - id: a4x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-a4x-net-0, workload_service_account]
@@ -170,6 +186,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
       enable_k8s_beta_apis:
       - "resource.k8s.io/v1beta1/deviceclasses"
       - "resource.k8s.io/v1beta1/resourceclaims"
@@ -181,13 +198,13 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      version_prefix: "1.32."
-      release_channel: RAPID
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2025-04-01T00:00:00Z"
-        end_time: "2026-04-10T00:00:00Z"
+        start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
       additional_networks:
         $(concat(
           [{
@@ -205,6 +222,48 @@ deployment_groups:
          gke-a4x-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
+
+  # # --- MANAGED LUSTRE ADDITIONS ---
+  # # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # # included in the Owner role, but not Editor.
+  # # PSA is required for all Managed Lustre functionality.
+  # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  # - id: private_service_access
+  #   source: modules/network/private-service-access
+  #   use: [gke-a4x-net-0]
+  #   settings:
+  #     prefix_length: 24
+
+  # # Firewall to allow Managed Lustre connection
+  # - id: lustre_firewall_rule
+  #   source: modules/network/firewall-rules
+  #   use: [gke-a4x-net-0]
+  #   settings:
+  #     ingress_rules:
+  #     - name: $(vars.deployment_name)-allow-lustre-traffic
+  #       description: Allow Managed Lustre traffic
+  #       source_ranges:
+  #       - $(private_service_access.cidr_range)
+  #       allow:
+  #       - protocol: tcp
+  #       ports:
+  #       - "988"
+
+  # - id: managed-lustre
+  #   source: modules/file-system/managed-lustre
+  #   use: [gke-a4x-net-0, private_service_access]
+  #   settings:
+  #     name: $(vars.lustre_instance_id)
+  #     local_mount: /lustre
+  #     remote_mount: lustrefs
+  #     size_gib: $(vars.lustre_size_gib)
+  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+
+  # - id: lustre-pv
+  #   source: modules/file-system/gke-persistent-volume
+  #   use: [managed-lustre, a4x-cluster]
+  #   settings:
+  #     capacity_gib: $(vars.lustre_size_gib)
 
   - id: workload_policy
     source: modules/compute/resource-policy
@@ -229,8 +288,6 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-gb200
         count: 4
-        gpu_driver_installation_config:
-          gpu_driver_version: DEFAULT
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -257,8 +314,10 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a4x-cluster]
     settings:
+      target_architecture: "arm64"
       kueue:
         install: true
+        version: "0.14.4"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
@@ -267,8 +326,26 @@ deployment_groups:
         install: true
       nvidia_dra_driver:
         install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
+          version: v1.1.0
+          accelerator_count: 4
+          node_affinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: cloud.google.com/gke-accelerator
+                  operator: In
+                  values:
+                  - $(vars.accelerator_type)
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - arm64
       apply_manifests:
-      - source: $(vars.nccl_rdma_installer_path)
       - source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template
@@ -286,4 +363,128 @@ deployment_groups:
         operator: Equal
         value: arm64
         effect: NoSchedule
+    outputs: [instructions]
+
+  # Create a remote mount of training_bucket using
+  # mount options optimized for reading training data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
+  - id: gcs-training
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(training_bucket.gcs_bucket_name)
+      local_mount: /training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
+
+  # Create a remote mount of checkpoint_bucket using mount
+  # options optimized for writing and reading checkpoint data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
+  - id: gcs-checkpointing
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
+      local_mount: /checkpoint-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
+
+  # Persistent Volume for training data
+  - id: training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-training, a4x-cluster]
+    settings:
+      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
+      capacity_gib: 1000000
+
+  # Persistent Volume for checkpoint data
+  - id: checkpointing-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-checkpointing, a4x-cluster]
+    settings:
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+      capacity_gib: 1000000
+
+  # This is an example job that will install and run an `fio`
+  # benchmark against the training and checkpointing buckets.
+  - id: fio-bench-job-template
+    source: modules/compute/gke-job-template
+    use: [checkpointing-pv, training-pv, a4x-pool]
+    settings:
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
+      # By adding an ephemeral volume, this will ensure that the job adds:
+      # nodeSelector:
+      #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
+      # which is the best practice for using local-ssd for ephemeral storage.
+      ephemeral_volumes:
+      - type: local-ssd
+        mount_path: /scratch-data
+        size_gb: 1000  # Use 1 out of 12 TB for local scratch
+
+      k8s_service_account_name: workload-identity-k8s-sa
+      image: ubuntu:22.04
+      tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+
+      command:
+      - bash
+      - -c
+      - |
+
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+
+        # Install fio
+        apt update -y && apt install -y fio
+
+        # Use a tag to create a unique path for tests
+        TAG=`date +%s`
+
+        # Verify mountpoints
+        df -h
+        mountpoint /scratch-data
+        mountpoint /checkpoint-data
+        mountpoint /training-data
+
+        # Create temporary directory for fio benchmarks
+        mkdir -p /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
+        # The following will take roughly 10 minutes to complete
+
+        # Perform scratch data write performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/scratch-data/fio-benchmarks-${TAG} \
+          --name=scratch --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform training data reading performance test
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/training-data/fio-benchmarks-${TAG} \
+          --name=training --blocksize=1m --iodepth=64 --readwrite=randread
+
+        # Perform checkpoint data writing performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform checkpoint data reading performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=read
+
+        # Clean up temporary directories for fio benchmarks
+        rm -rf /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
     outputs: [instructions]

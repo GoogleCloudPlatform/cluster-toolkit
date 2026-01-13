@@ -90,7 +90,7 @@ deployment_groups:
         - protocol: icmp
 
   - id: node_pool_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-np-sa
       project_roles:
@@ -102,7 +102,7 @@ deployment_groups:
       - artifactregistry.reader
 
   - id: workload_service_account
-    source: community/modules/project/service-account
+    source: modules/project/service-account
     settings:
       name: gke-wl-sa
       project_roles:
@@ -122,7 +122,6 @@ deployment_groups:
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_private_endpoint: false # Allows access from authorized public IPs
-      enable_numa_aware_scheduling: true
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
@@ -145,12 +144,12 @@ deployment_groups:
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.32."
-      release_channel: RAPID
+      release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2025-08-01T00:00:00Z"
-        end_time: "2026-04-10T00:00:00Z"
+        start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
     outputs: [instructions]
 
   - id: g4-pool
@@ -161,6 +160,7 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
+      enable_numa_aware_scheduling: true
       guest_accelerator:
       - type: nvidia-rtx-pro-6000
         count: $(vars.num_gpus)
@@ -190,6 +190,7 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        wait: true
       jobset:
         install: true
 

@@ -355,6 +355,9 @@ func (s *zeroSuite) TestNewBlueprint(c *C) {
 	c.Assert(err, IsNil)
 
 	bp.path = outFile // set expected path
+	// NewBlueprint populates a runtime-only YamlCtx (positions in source YAML).
+	// Reflect that in the expected blueprint before doing a DeepEquals compare.
+	bp.YamlCtx = newBp.YamlCtx
 	c.Assert(bp, DeepEquals, newBp)
 }
 
@@ -840,5 +843,83 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 		} else {
 			c.Error(err, " should be BpError")
 		}
+	}
+}
+
+func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
+	var e InputValueError
+
+	h := func(val cty.Value) error {
+		vars := NewDict(map[string]cty.Value{"slurm_cluster_name": val})
+		return validateSlurmClusterName(Blueprint{Vars: vars})
+	}
+
+	// Valid slurm_cluster_name examples
+	c.Check(h(cty.StringVal("a")), IsNil)          // single lowercase letter
+	c.Check(h(cty.StringVal("abc123")), IsNil)     // letters and numbers
+	c.Check(h(cty.StringVal("slurm1")), IsNil)     // typical name
+	c.Check(h(cty.StringVal("a123456789")), IsNil) // max length (10 chars)
+
+	{ // Is slurm_cluster_name an empty string?
+		err := h(cty.StringVal(""))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*empty string.*")
+	}
+
+	{ // Is slurm_cluster_name not a string?
+		err := h(cty.NumberIntVal(100))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*not.*string.*")
+	}
+
+	{ // Is slurm_cluster_name longer than 10 characters?
+		err := h(cty.StringVal("slurm12345678"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*between 1 and 10 characters.*")
+	}
+
+	{ // Does slurm_cluster_name contain uppercase letters?
+		err := h(cty.StringVal("Slurm"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*lowercase letter.*")
+	}
+
+	{ // Does slurm_cluster_name start with a number?
+		err := h(cty.StringVal("1slurm"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*start with a lowercase letter.*")
+	}
+
+	{ // Does slurm_cluster_name contain special characters (dash)?
+		err := h(cty.StringVal("slurm-gke"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+	}
+
+	{ // Does slurm_cluster_name contain special characters (underscore)?
+		err := h(cty.StringVal("slurm_gke"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+	}
+
+	{ // Does slurm_cluster_name contain special characters (period)?
+		err := h(cty.StringVal("slurm.gke"))
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+	}
+
+	{ // Is slurm_cluster_name not set?  (should pass - it's optional)
+		err := validateSlurmClusterName(Blueprint{})
+		c.Check(err, IsNil)
+	}
+
+	{ // Expression (should pass if it evaluates correctly)
+		c.Check(h(MustParseExpression(`"slurm${1}"`).AsValue()), IsNil)
+	}
+
+	{ // Expression that results in invalid value
+		err := h(MustParseExpression(`"Slurm${1}"`).AsValue())
+		c.Check(errors.As(err, &e), Equals, true)
+		c.Check(err, ErrorMatches, ".*lowercase letter.*")
 	}
 }

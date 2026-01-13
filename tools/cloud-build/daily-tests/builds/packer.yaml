@@ -26,6 +26,11 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/packer.yaml"
+
 # test image creation by provisioning a new VPC and using Packer to build an
 # image in it
 - id: packer-v6

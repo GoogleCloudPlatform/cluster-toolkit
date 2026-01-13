@@ -167,6 +167,13 @@ resource "google_container_cluster" "gke_cluster" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  dynamic "gateway_api_config" {
+    for_each = var.enable_inference_gateway ? [1] : []
+    content {
+      channel = "CHANNEL_STANDARD"
+    }
+  }
+
   dynamic "authenticator_groups_config" {
     for_each = local.cluster_authenticator_security_group
     content {
@@ -191,7 +198,8 @@ resource "google_container_cluster" "gke_cluster" {
         start_time     = maintenance_exclusion.value.start_time
         end_time       = maintenance_exclusion.value.end_time
         exclusion_options {
-          scope = maintenance_exclusion.value.exclusion_scope
+          scope             = maintenance_exclusion.value.exclusion_scope
+          end_time_behavior = maintenance_exclusion.value.exclusion_end_time_behavior
         }
       }
     }
@@ -229,6 +237,12 @@ resource "google_container_cluster" "gke_cluster" {
     lustre_csi_driver_config {
       enabled = var.enable_managed_lustre_csi
     }
+    dynamic "http_load_balancing" {
+      for_each = var.enable_inference_gateway ? [1] : []
+      content {
+        disabled = false
+      }
+    }
   }
 
   timeouts {
@@ -240,22 +254,6 @@ resource "google_container_cluster" "gke_cluster" {
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
-    }
-
-    kubelet_config {
-      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
-      dynamic "topology_manager" {
-        for_each = var.enable_numa_aware_scheduling ? [1] : []
-        content {
-          policy = "restricted"
-        }
-      }
-      dynamic "memory_manager" {
-        for_each = var.enable_numa_aware_scheduling ? [1] : []
-        content {
-          policy = "Static"
-        }
-      }
     }
   }
 
@@ -446,7 +444,7 @@ module "kubectl_apply" {
   cluster_id = google_container_cluster.gke_cluster.id
   project_id = var.project_id
 
-  apply_manifests = flatten([
+  apply_manifests = concat(flatten([
     for idx, network_info in local.all_networks : [
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
@@ -462,5 +460,12 @@ module "kubectl_apply" {
         template_vars = { name = network_info.name }
       }
     ]
-  ])
+    ]),
+    var.enable_inference_gateway ? [
+      {
+        source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
+        template_vars = {}
+      }
+    ] : []
+  )
 }
