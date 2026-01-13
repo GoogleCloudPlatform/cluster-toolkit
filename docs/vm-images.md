@@ -36,9 +36,9 @@ either the specific module definition or the global variables. The
 
 ```yaml
 instance_image:
-  project: centos-cloud
-  family: centos-v7        # If family is defined, omit name
-  name: centos-7-v20230809 # If name is defined, omit family
+ family: hpc-rocky-linux-8
+ project: cloud-hpc-image-public    # If family is defined, omit name
+ name: hpc-rocky-linux-8-v20251117  # If name is defined, omit family
 ```
 
 The `project` setting defines the space where the image will be found. Either
