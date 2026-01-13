@@ -1,6 +1,6 @@
 >[!WARNING]
 >
->![deprecated-badge] This blueprint is deprecated and is no longer maintained. The blueprint will be removed by Feb 15, 2026
+>![deprecated-badge] This blueprint is not maintained any longer. The blueprint will be removed by Feb 15, 2026
 >
 >We recommend using the [A3 Ultra Slurm Blueprint](../../machine-learning/a3-ultragpu-8g) instead.
 
