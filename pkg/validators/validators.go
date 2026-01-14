@@ -55,6 +55,7 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testQuotaAvailabilityName         = "test_quota_availability"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -66,6 +67,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testQuotaAvailabilityName:         testQuotaAvailability,
 	}
 }
 
