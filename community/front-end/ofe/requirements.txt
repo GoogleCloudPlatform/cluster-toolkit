@@ -100,7 +100,7 @@ typing_extensions==4.15.0
 uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.40.0
-virtualenv==20.35.4
+virtualenv==20.36.1
 wrapt==2.0.1
 xmltodict==1.0.2
 yq==3.4.3
