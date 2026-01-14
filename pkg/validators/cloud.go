@@ -19,8 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -241,7 +244,6 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// getFloat64 safely converts a cty.Value to a float64, handling marks and strings
 func getFloat64(v cty.Value) (float64, bool) {
 	unmarked, _ := v.Unmark()
 	if unmarked.IsNull() || !unmarked.IsKnown() {
@@ -249,8 +251,10 @@ func getFloat64(v cty.Value) (float64, bool) {
 	}
 
 	if unmarked.Type() == cty.Number {
-		f, _ := unmarked.AsBigFloat().Float64()
-		return f, true
+		if bf := unmarked.AsBigFloat(); bf != nil {
+			f, _ := bf.Float64()
+			return f, true
+		}
 	}
 
 	if unmarked.Type() == cty.String {
@@ -263,49 +267,68 @@ func getFloat64(v cty.Value) (float64, bool) {
 	return 0, false
 }
 
-// TestQuotaAvailability queries GCP regional quotas and compares them against requested amounts.
-func TestQuotaAvailability(projectID string, region string, requested map[string]float64) error {
-	ctx := context.Background()
-	s, err := compute.NewService(ctx)
-	if err != nil {
-		return handleClientError(err)
-	}
-
+func TestQuotaAvailability(s *compute.Service, projectID string, region string, requested map[string]float64) error {
 	reg, err := s.Regions.Get(projectID, region).Do()
 	if err != nil {
 		return fmt.Errorf("failed to get quotas for region %s: %v", region, err)
 	}
 
-	for metric, reqValue := range requested {
+	var quotaErrors []string
+	metrics := make([]string, 0, len(requested))
+	for m := range requested {
+		metrics = append(metrics, m)
+	}
+	sort.Strings(metrics)
+
+	for _, metric := range metrics {
+		reqValue := requested[metric]
+		if reqValue <= 0 {
+			continue
+		}
+		foundMetric := false
 		for _, q := range reg.Quotas {
 			if q.Metric == metric {
-				available := q.Limit - q.Usage
-				if reqValue > available {
-					return fmt.Errorf("Insufficient quota for %s in %s. Requested: %.0f, Available: %.0f (Limit: %.0f, Usage: %.0f)",
-						metric, region, reqValue, available, q.Limit, q.Usage)
+				foundMetric = true
+				available := q.Limit
+				if q.Limit != -1 {
+					available = q.Limit - q.Usage
+				}
+
+				if q.Limit != -1 && reqValue > available {
+					quotaErrors = append(quotaErrors, fmt.Sprintf("Insufficient quota for %s in %s. Requested: %.0f, Available: %.0f (Limit: %.0f, Usage: %.0f)",
+						metric, region, reqValue, available, q.Limit, q.Usage))
 				}
 				break
 			}
 		}
+		if !foundMetric {
+			quotaErrors = append(quotaErrors, fmt.Sprintf("Insufficient quota for %s in %s. Requested: %.0f, Available: 0 (This metric is not enabled for your project in this region)",
+				metric, region, reqValue))
+		}
+	}
+
+	if len(quotaErrors) > 0 {
+		return fmt.Errorf("quota validation failed:\n- %s", strings.Join(quotaErrors, "\n- "))
 	}
 	return nil
 }
 
-// testQuotaAvailability aggregates resources based on validator inputs and blueprint modules.
 func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 	projectIDVal := inputs.Get("project_id")
 	regionVal := inputs.Get("region")
+	zoneVal := inputs.Get("zone")
 
-	if projectIDVal.IsNull() || regionVal.IsNull() {
-		return fmt.Errorf("validator %s requires 'project_id' and 'region'", "test_quota_availability")
+	if projectIDVal.IsNull() || regionVal.IsNull() || zoneVal.IsNull() {
+		return fmt.Errorf("validator %s requires 'project_id', 'region' and 'zone'", "test_quota_availability")
 	}
 
 	unmarkedPID, _ := projectIDVal.Unmark()
 	unmarkedReg, _ := regionVal.Unmark()
+	unmarkedZon, _ := zoneVal.Unmark()
 	projectID := unmarkedPID.AsString()
 	region := unmarkedReg.AsString()
+	zonee := unmarkedZon.AsString()
 
-	// Extract overrides from validator inputs
 	unmarkedMT, _ := inputs.Get("machine_type").Unmark()
 	inputMT := ""
 	if !unmarkedMT.IsNull() && unmarkedMT.Type() == cty.String {
@@ -322,15 +345,18 @@ func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 		return handleClientError(err)
 	}
 
+	var walkErr error
 	bp.WalkModulesSafe(func(_ config.ModulePath, mod *config.Module) {
+		if walkErr != nil {
+			return
+		}
 		settings := mod.Settings.Items()
-
-		// 1. Instance Count
+	
 		count := 1.0
 		foundCount := false
-		for _, key := range []string{"cluster_size", "node_count", "instance_count", "count"} {
+		for _, key := range []string{"cluster_size", "node_count", "node_count_static", "instance_count", "count"} {
 			if val, ok := settings[key]; ok {
-				if f, ok := getFloat64(val); ok && f > 0 {
+				if f, ok := getFloat64(val); ok { // allow 0 for static count
 					count = f
 					foundCount = true
 					break
@@ -338,38 +364,65 @@ func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 			}
 		}
 		if !foundCount && inputCount > 0 {
+			count = 0 
+		} else if inputCount > 0 {
 			count = inputCount
 		}
-
-		// 2. Machine Type (CPUs/GPUs) - Priority: Input > Module
-		mtName := inputMT
-		if mtName == "" {
-			if mtVal, ok := settings["machine_type"]; ok && !mtVal.IsNull() {
-				u, _ := mtVal.Unmark()
-				if u.Type() == cty.String {
-					mtName = u.AsString()
-				}
+	
+		mtName := ""
+		if mtVal, ok := settings["machine_type"]; ok && !mtVal.IsNull() {
+			u, _ := mtVal.Unmark()
+			if u.Type() == cty.String {
+				mtName = u.AsString()
 			}
 		}
-
-		if mtName != "" {
-			zone := region + "-a"
+	
+		if mtName != "" && inputMT != "" {
+			mtName = inputMT
+		}
+	
+		if mtName != "" && count > 0 {
+			zone := zonee
 			mt, err := s.MachineTypes.Get(projectID, zone, mtName).Do()
-			if err == nil {
-				requested["CPUS"] += float64(mt.GuestCpus) * count
-				for _, acc := range mt.Accelerators {
-					metric := strings.ToUpper(acc.GuestAcceleratorType) + "_GPUS"
-					requested[metric] += float64(acc.GuestAcceleratorCount) * count
+			if err != nil {
+				walkErr = fmt.Errorf("Failed to get machine_type %s in zone %s: %v", mtName, zone, err)
+				return
+			}
+			requested["CPUS"] += float64(mt.GuestCpus) * count
+			for _, acc := range mt.Accelerators {
+				accType := strings.ToUpper(acc.GuestAcceleratorType)
+				var metric string
+	
+				if strings.Contains(accType, "H100") || strings.Contains(accType, "H200") || strings.Contains(accType, "GB200") || strings.Contains(accType, "B200") {
+					metric = "GPUS_PER_GPU_FAMILY"
+				} else {
+					metricBase := strings.ReplaceAll(accType, "-", "_")
+					metricBase = strings.ReplaceAll(metricBase, "TESLA_", "")
+					metric = metricBase + "_GPUS"
 				}
+				requested[metric] += float64(acc.GuestAcceleratorCount) * count
+			}
+
+			if mt.ImageSpaceGb > 0 { // Note: some older APIs use this, modern logic uses counts
+				requested["LOCAL_SSD_TOTAL_GB"] += float64(mt.ImageSpaceGb) * count
+			}
+			if lssd, ok := getFloat64(settings["local_ssd_count"]); ok {
+				requested["LOCAL_SSD_TOTAL_GB"] += lssd * 375 * count
 			}
 		}
-
-		// 3. Disks - Priority: Input > Module
+	
 		moduleDiskSize := 0.0
 		for _, key := range []string{"disk_size_gb", "boot_disk_size_gb"} {
 			if val, ok := settings[key]; ok {
 				if f, ok := getFloat64(val); ok {
 					moduleDiskSize += f
+				}
+			}
+		}
+		if disks, ok := settings["additional_disks"]; ok && !disks.IsNull() {
+			for _, d := range disks.AsValueSlice() {
+				if dSize, ok := getFloat64(d.GetAttr("disk_size_gb")); ok {
+					moduleDiskSize += dSize
 				}
 			}
 		}
@@ -379,5 +432,9 @@ func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 		requested["DISKS_TOTAL_GB"] += moduleDiskSize * count
 	})
 
-	return TestQuotaAvailability(projectID, region, requested)
+	if walkErr != nil {
+		return walkErr
+	}
+
+	return TestQuotaAvailability(s, projectID, region, requested)
 }
