@@ -90,6 +90,8 @@ Modules that are still in development and less stable are labeled with the
 
 * **[filestore]** ![core-badge] : Creates a
   [filestore](https://cloud.google.com/filestore) file system.
+* **[netapp-volume]** ![core-badge] : Creates a
+  [netapp-volume](https://docs.cloud.google.com/netapp/volumes/docs/discover/overview) file system.
 * **[parallelstore]** ![core-badge] ![experimental-badge] ![deprecated-badge]: Creates a
   [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
@@ -105,6 +107,7 @@ Modules that are still in development and less stable are labeled with the
   and mounts [WEKA](https://www.weka.io/) filesystems.
 
 [filestore]: file-system/filestore/README.md
+[netapp-volume]: file-system/netapp-volume/README.md
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [managed-lustre]: file-system/managed-lustre/README.md

@@ -128,6 +128,7 @@ EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-ece.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-slurm.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-expansion.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/eda/eda-hybrid-cloud.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
