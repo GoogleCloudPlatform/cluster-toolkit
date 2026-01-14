@@ -242,89 +242,75 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// checkMachineType checks if a machine type exists in a specific zone using an existing service client.
-func validateMachineTypeInZone(s *compute.Service, projectID string, zone string, machineType string) error {
-	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
+// 1. Helper for cty resolution
+func resolveMachineTypeString(bp config.Blueprint, val cty.Value) string {
+	v := val
+	if resolved, err := bp.Eval(v); err == nil {
+		v = resolved
+	}
+	if v != cty.NilVal && !v.IsNull() && v.Type() == cty.String {
+		return v.AsString()
+	}
+	return ""
+}
 
-	// SUCCESS PATH: The machine type exists in the specified zone.
+// checkMachineType checks if a machine type exists in a specific zone using an existing service client.
+func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string) error {
+	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
 	if err == nil {
 		return nil
 	}
 
-	// 2. SOFT WARNING PATH: Check for Permission (403) or Disabled API (400)
 	var gerr *googleapi.Error
-	if errors.As(err, &gerr) {
-		if gerr.Code == 403 || gerr.Code == 400 {
-			// Print the warning to the console and return nil to "skip"
-			fmt.Printf("Warning: validator \"test_all_machine_types\" skipped: could not access Compute Engine API for project %q (%v)\n", projectID, gerr.Message)
-			fmt.Println("Check IAM permissions (compute.machineTypes.get) and ensure the API is enabled to use this validator.")
-			return nil
-		}
+	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
+		fmt.Printf("WARNING: validator \"test_machine_type_in_zone\" skipped: could not access Compute Engine API for project %q (%v)\n", projectID, gerr.Message)
+		fmt.Println("Check IAM permissions (compute.machineTypes.get) and ensure the API is enabled to use this validator.")
+		return nil
 	}
 
 	return fmt.Errorf("machine type %q is not available in zone %q for project %q", machineType, zone, projectID)
 }
 
 func testMachineTypeAvailability(bp config.Blueprint, inputs config.Dict) error {
+	s, err := compute.NewService(context.Background())
+	if err != nil {
+		return handleClientError(err)
+	}
 	m, err := inputsAsStrings(inputs)
 	if err != nil {
 		return err
 	}
-	projectID := m["project_id"]
-	globalZone := m["zone"]
 
-	if projectID == "" {
-		return fmt.Errorf("machine type validation requires a project_id")
-	}
+	pID, gZone, exMT := m["project_id"], m["zone"], m["machine_type"]
 
-	// 0. Create Service
-	ctx := context.Background()
-	s, err := compute.NewService(ctx)
-	if err != nil {
-		return handleClientError(err)
+	if exMT != "" {
+		if gZone == "" {
+			return fmt.Errorf("zone must be provided when validating explicit machine_type")
+		}
+		return validateMachineTypeInZone(s, pID, gZone, exMT)
 	}
 
 	errs := config.Errors{}
-
-	// 2. Walk through every module in the blueprint
 	bp.WalkModulesSafe(func(path config.ModulePath, mod *config.Module) {
-		targetZone := globalZone
-		zVal := mod.Settings.Get("zone")
-
-		if resolvedZone, err := bp.Eval(zVal); err == nil {
-			zVal = resolvedZone
+		tZone := gZone
+		if resZone := resolveMachineTypeString(bp, mod.Settings.Get("zone")); resZone != "" {
+			tZone = resZone
 		}
 
-		if zVal != cty.NilVal && !zVal.IsNull() && zVal.Type() == cty.String {
-			targetZone = zVal.AsString()
-		}
-
-		if targetZone == "" {
+		if tZone == "" {
 			return
 		}
 
-		// 2. Iterate over settings to find any that look like a machine type
 		for key, val := range mod.Settings.Items() {
-			// Catch "machine_type", "manager_machine_type", "system_node_pool_machine_type", etc.
+			// matches exact "machine_type" or suffixes with underscore
 			if key != "machine_type" && !strings.HasSuffix(key, "_machine_type") {
 				continue
 			}
 
-			// Validate the value
-			mtVal := val
-			if resolved, err := bp.Eval(mtVal); err == nil {
-				mtVal = resolved
-			}
-
-			if mtVal == cty.NilVal || mtVal.IsNull() || mtVal.Type() != cty.String {
-				continue
-			}
-			machineType := mtVal.AsString()
-
-			// 3. Run the validation
-			if err := validateMachineTypeInZone(s, projectID, targetZone, machineType); err != nil {
-				// We add the key to the error message so the user knows WHICH setting failed
-				errs.Add(fmt.Errorf("In module '%s' setting '%s': %w", mod.ID, key, err))
+			if mtName := resolveMachineTypeString(bp, val); mtName != "" {
+				if err := validateMachineTypeInZone(s, pID, tZone, mtName); err != nil {
+					errs.Add(fmt.Errorf("in module %q setting %q: %w", mod.ID, key, err))
+				}
 			}
 		}
 	})

@@ -239,14 +239,13 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"project_id": projectRef,
 				"zone":       zoneRef,
 			}),
-		},
-			config.Validator{ // Add this block
-				Validator: testMachineTypeInZone,
-				Inputs: config.NewDict(map[string]cty.Value{
-					"project_id": projectRef,
-					"zone":       zoneRef,
-				}),
-			})
+		}, config.Validator{
+			Validator: testMachineTypeInZone,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		})
 	}
 
 	if projectIDExists && regionExists && zoneExists {
