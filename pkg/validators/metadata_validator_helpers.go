@@ -168,3 +168,18 @@ func IterateRuleTargets(
 	// Interpret each var name as module.settings.<name>
 	return processModuleSettings(bp, mod, group, modIdx, varsList, optional, handler)
 }
+
+// parseBoolInput retrieves a boolean value from a map by key.
+// If the key is missing, it returns the defaultVal.
+// If the key is present but not a boolean, it returns an error.
+func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) (bool, error) {
+	v, ok := inputs[key]
+	if !ok {
+		return defaultVal, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("'%s' must be a boolean, not %T", key, v)
+	}
+	return b, nil
+}
