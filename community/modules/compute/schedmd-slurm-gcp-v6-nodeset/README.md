@@ -68,6 +68,41 @@ page.
 More information on GPU support in Slurm on GCP and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Using Compute Engine Reservations
+
+This module supports the use of Compute Engine reservations to ensure capacity for
+your Slurm nodes. Both local and shared reservations can be configured using the
+`reservation_name` variable. Reservations must be of type "SPECIFIC".
+
+### Reservation Types
+
+* **Local Reservation:** For reservations located within the same project as the cluster (`var.project_id`).
+* **Shared Reservation:** For reservations shared from a different host project. This allows for centralized management of reservations.
+
+### Configuration
+
+The format of the `reservation_name` input determines the type of reservation used:
+
+* **Local Reservation Format:** For reservations in the same project as the cluster (var.project_id), the name is sufficient:
+    `RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
+
+* **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
+    `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
+
+  Where:
+  * `HOST_PROJECT_ID` is the project ID where the shared reservation was created.
+  * `RESERVATION_NAME` is the name assigned to the specific reservation.
+  * `BLOCK_ID` (Optional) is the identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+
+> **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get'
+> permission for the node service account in the host project (HOST_PROJECT_ID).
+> Ensure this permission is granted before deploying.
+
+### No Reservation
+
+To deploy nodes without a specific reservation (or to use automatically-consumed reservations),
+set `reservation_name` to an empty string (`""`).
+
 ### Compute VM Zone Policies
 
 The Slurm on GCP nodeset module allows you to specify additional zones in
@@ -205,7 +240,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/>- RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/><br/>Must be a "SPECIFIC" reservation<br/>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/><br/>Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project. | `string` | `""` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the compute instances. | `string` | `null` | no |

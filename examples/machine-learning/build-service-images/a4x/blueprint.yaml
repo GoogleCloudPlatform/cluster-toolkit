@@ -228,7 +228,7 @@ deployment_groups:
       disk_size: 100
       disk_type: hyperdisk-balanced
       machine_type: c4a-highcpu-16
-      source_image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20250722
+      source_image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20260110
       source_image_project_id: [ubuntu-os-accelerator-images]
       image_family: $(vars.family)
       omit_external_ip: false

@@ -39,5 +39,3 @@ custom_vars:
   - lowcost
   mounts:
   - /home
-  - /projects
-  - /scratch

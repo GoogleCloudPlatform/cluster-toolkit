@@ -90,15 +90,12 @@ Modules that are still in development and less stable are labeled with the
 
 * **[filestore]** ![core-badge] : Creates a
   [filestore](https://cloud.google.com/filestore) file system.
-* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a
+* **[parallelstore]** ![core-badge] ![experimental-badge] ![deprecated-badge]: Creates a
   [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
 * **[managed-lustre]** ![core-badge] ![experimental-badge]: Creates a
   [managed-lustred](https://cloud.google.com/managed-lustre) file system.
-* **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
-  a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module is deprecated and will be removed by July 1, 2025. Consider migrating to managed-lustre.
 * **[cloud-storage-bucket]** ![core-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
   persistent volumes and persistent volume claims for shared storage.
@@ -111,7 +108,6 @@ Modules that are still in development and less stable are labeled with the
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [managed-lustre]: file-system/managed-lustre/README.md
-[ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md

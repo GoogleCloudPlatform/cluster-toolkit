@@ -93,10 +93,10 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		c.Check(g.TerraformProviders, DeepEquals, map[string]PR{
 			"google": TerraformProvider{
 				Source:  "hashicorp/google",
-				Version: ">= 6.9.0, <= 7.12.0"},
+				Version: ">= 6.9.0, <= 7.15.0"},
 			"google-beta": TerraformProvider{
 				Source:  "hashicorp/google-beta",
-				Version: ">= 6.9.0, <= 7.12.0"}})
+				Version: ">= 6.9.0, <= 7.15.0"}})
 	}
 
 	{ // no def PR, group PR
@@ -358,7 +358,7 @@ func (s *zeroSuite) TestValidateModuleReference(c *C) {
 
 func (s *zeroSuite) TestSubstituteModuleSources(c *C) {
 	a := Module{ID: "moduleA", Source: "modules/network/pre-existing-vpc"}
-	b := Module{ID: "moduleB", Source: "community/modules/file-system/DDN-EXAScaler"}
+	b := Module{ID: "moduleB", Source: "modules/file-system/managed-lustre"}
 	y := Module{ID: "moduleY", Source: "./modules/network/pre-existing-vpc"}
 
 	dg := []Group{
@@ -373,7 +373,7 @@ func (s *zeroSuite) TestSubstituteModuleSources(c *C) {
 	bp.substituteModuleSources()
 	// Check that sources remain unchanged
 	c.Assert(bp.Groups[0].Modules[0].Source, Equals, "modules/network/pre-existing-vpc")
-	c.Assert(bp.Groups[0].Modules[1].Source, Equals, "community/modules/file-system/DDN-EXAScaler")
+	c.Assert(bp.Groups[0].Modules[1].Source, Equals, "modules/file-system/managed-lustre")
 	c.Assert(bp.Groups[1].Modules[0].Source, Equals, "./modules/network/pre-existing-vpc")
 
 	// toolkit_modules_url and toolkit_modules_version provided
@@ -383,7 +383,7 @@ func (s *zeroSuite) TestSubstituteModuleSources(c *C) {
 	bp.substituteModuleSources()
 	// Check that embedded sources (a and b) are transformed correctly
 	expectedSourceA := "github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/pre-existing-vpc?ref=v1.15.0&depth=1"
-	expectedSourceB := "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/DDN-EXAScaler?ref=v1.15.0&depth=1"
+	expectedSourceB := "github.com/GoogleCloudPlatform/cluster-toolkit//modules/file-system/managed-lustre?ref=v1.15.0&depth=1"
 	c.Assert(bp.Groups[0].Modules[0].Source, Equals, expectedSourceA)
 	c.Assert(bp.Groups[0].Modules[1].Source, Equals, expectedSourceB)
 

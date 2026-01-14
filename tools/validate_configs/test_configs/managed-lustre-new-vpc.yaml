@@ -14,22 +14,31 @@
 
 ---
 
-blueprint_name: hexa-net
+blueprint_name: managed-lustre-net
 
 vars:
   project_id: hpc-toolkit-demo
   deployment_name: network
   region: europe-west4
   zone: europe-west4-a
+  lustre_instance_id: lustre-instance
+
 
 deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: private_service_access
+    source: modules/network/private-service-access
     use: [network1]
+
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
+    use: [network1, private_service_access]
     settings:
-      local_mount: /scratch
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 36000

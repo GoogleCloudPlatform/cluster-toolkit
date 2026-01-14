@@ -1,3 +1,8 @@
+> [!WARNING]
+> This module is deprecated and will be removed on October 31, 2026. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../managed-lustre/README.md)
+
 ## Description
 
 This module creates [parallelstore](https://cloud.google.com/parallelstore)
