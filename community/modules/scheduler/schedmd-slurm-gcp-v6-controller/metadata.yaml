@@ -21,8 +21,13 @@ spec:
     - storage.googleapis.com
 ghpc:
   validators:
+  - validator: range
+    inputs:
+      vars: [static_ips]
+      max: 1
+    error_message: "The Slurm modules supports 0 or 1 static IPs on controller instance."
   - validator: regex
     inputs:
       vars: [slurm_cluster_name]
       pattern: "^[a-z](?:[a-z0-9]{0,9})$"
-    error_message: "'slurm_cluster_name' must contain only lowercase letters and numbers, start with a letter, and be 1-10 characters long."
+    error_message: "'slurm_cluster_name' must contain abc only lowercase letters and numbers, start with a letter, and be 1-10 characters long."
