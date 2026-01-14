@@ -310,7 +310,8 @@ deployment_groups:
           cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
-        wait: true
+        wait: false # Set to false to overcome an intermittent destruction failure
+                    # where 'helm uninstall' can time out.
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
