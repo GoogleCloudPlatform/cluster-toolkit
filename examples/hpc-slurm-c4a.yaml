@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ vars:
   region: us-central1
   zone: us-central1-a
   instance_image:
-    family: slurm-gcp-6-9-ubuntu-2204-lts-arm64
+    family: slurm-gcp-6-11-ubuntu-2404-lts-arm64
     project: schedmd-slurm-public
   disk_type: hyperdisk-balanced
 
