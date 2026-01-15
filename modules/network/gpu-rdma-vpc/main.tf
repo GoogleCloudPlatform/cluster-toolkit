@@ -17,13 +17,14 @@
 locals {
   autoname      = replace(var.deployment_name, "_", "-")
   network_name  = var.network_name == null ? "${local.autoname}-net" : var.network_name
-  subnet_prefix = var.subnetworks_template==null ||  var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
+  subnet_prefix = var.subnetworks_template == null || var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
   is_roce_metal = var.network_profile != null ? can(regex("vpc-roce-metal", var.network_profile)) : false
 
   new_bits = local.is_roce_metal ? 0 : ceil(log(var.subnetworks_template.count, 2))
-  // RoCE metal profile doesn't allow creating a subnetwork, as the profile 
-  // automatically creates a predefined subnetwork for the MRDMA interfaces.
-  // See: https://cloud.google.com/vpc/docs/network-profiles
+  /** RoCE metal profile doesn't allow creating a subnetwork, as the profile 
+  * automatically creates a predefined subnetwork for the MRDMA interfaces.
+  * See: https://cloud.google.com/vpc/docs/network-profiles
+  **/
   template_subnetworks = local.is_roce_metal ? [] : [for i in range(var.subnetworks_template.count) :
     {
       subnet_name   = "${local.subnet_prefix}-${i}"
