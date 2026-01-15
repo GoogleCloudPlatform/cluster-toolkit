@@ -81,7 +81,9 @@ variable "subnetworks_template" {
   }
 
   validation {
-    condition     = can(cidrhost(var.subnetworks_template.ip_range, 0))
+    # If the template is null, return true (pass). 
+    # Otherwise, check if the CIDR format is valid.
+    condition     = var.subnetworks_template == null ? true : can(cidrhost(var.subnetworks_template.ip_range, 0))
     error_message = "IP address range must be in CIDR format."
   }
 }

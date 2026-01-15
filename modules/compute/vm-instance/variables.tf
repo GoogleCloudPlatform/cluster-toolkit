@@ -233,15 +233,15 @@ variable "network_interfaces" {
   }
   validation {
     condition = alltrue([
-      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == "MRDMA" || ni.nic_type == "IRDMA" || ni.nic_type == "IDPF" || ni.nic_type == null
+      for ni in var.network_interfaces : ni.nic_type == null || contains(["GVNIC", "VIRTIO_NET", "MRDMA", "IRDMA", "IDPF"], ni.nic_type)
     ])
-    error_message = "In the variable network_interfaces, field \"nic_type\" must be \"GVNIC\", \"VIRTIO_NET\", \"MRDMA\", \"IRDMA\",\"IDPF\"  or null."
+    error_message = "In the variable network_interfaces, field \"nic_type\" must be \"GVNIC\", \"VIRTIO_NET\", \"MRDMA\", \"IRDMA\", \"IDPF\" or null."
   }
   validation {
     condition = alltrue([
-      for ni in var.network_interfaces : ni.stack_type == "IPV4_ONLY" || ni.stack_type == "IPV4_IPV6" || ni.stack_type == "IPV6_ONLY" || ni.stack_type == null
+      for ni in var.network_interfaces : ni.stack_type == null || contains(["IPV4_ONLY", "IPV4_IPV6", "IPV6_ONLY"], ni.stack_type)
     ])
-    error_message = "In the variable network_interfaces, field \"stack_type\" must be either \"IPV4_ONLY\", \"IPV4_IPV6\" , \"IPV6_ONLY\" or null."
+    error_message = "In the variable network_interfaces, field \"stack_type\" must be either \"IPV4_ONLY\", \"IPV4_IPV6\", \"IPV6_ONLY\" or null."
   }
 }
 
