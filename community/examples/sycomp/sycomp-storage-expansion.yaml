@@ -1,0 +1,37 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: sycomp-storage-expansion
+
+vars:
+  # Note: project_id, region, and zone must match the existing cluster.
+  project_id: ""                       ## Set GCP Project ID of existing cluster
+  deployment_name: "sycomp-expansion"  ## Set a name for this expansion deployment
+  region: ""                           ## Set region of existing cluster
+  zone: ""                             ## Set zone of existing cluster
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: sycomp-scale-expansion
+    source: "git::https://gitlab.com/sycomp/cluster-toolkit.git//sycomp-scale-expansion?ref=main"
+    settings:
+      name_prefix: "<name_prefix_of_existing_cluster>" ## Set to the name_prefix of the cluster to expand. See the README for details on how this value is determined.
+      add_scale_nodes: 1                               ## Number of storage nodes to add, This value is configurable.

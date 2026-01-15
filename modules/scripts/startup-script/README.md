@@ -160,6 +160,7 @@ sudo bash add-monitoring-agent-repo.sh --also-install
 curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
 sudo bash add-logging-agent-repo.sh --also-install
 sudo service stackdriver-agent start
+sudo service google-fluentd restart
 ```
 
 #### Cloud Ops Agent Installation
@@ -177,6 +178,12 @@ curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
 sudo dpkg --configure -a
 sudo bash add-monitoring-agent-repo.sh --uninstall
 sudo bash add-monitoring-agent-repo.sh --remove-repo
+sudo systemctl stop google-fluentd.service
+sudo systemctl disable google-fluentd.service
+sudo dpkg --configure -a
+curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
+sudo bash add-logging-agent-repo.sh --uninstall
+sudo bash add-logging-agent-repo.sh --remove-repo
 
 # Install ops-agent
 

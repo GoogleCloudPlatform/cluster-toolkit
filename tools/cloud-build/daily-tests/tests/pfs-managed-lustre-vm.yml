@@ -25,6 +25,8 @@ cli_deployment_vars:
   lustre_instance_id: "lustre-instance-{{build}}"
 post_deploy_tests:
 - test-validation/test-mounts.yml
+- test-validation/test-managed-lustre-vm.yml
 custom_vars:
+  num_slurm_nodes: 1
   mounts:
   - /lustre

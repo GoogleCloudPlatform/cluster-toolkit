@@ -77,6 +77,14 @@ gcluster deploy -d a4xhigh-slurm-deployment.yaml examples/machine-learning/a4x-h
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
+Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+
+Example (deploy only the primary group for this blueprint):
+
+```bash
+./gcluster deploy -d a4xhigh-slurm-deployment.yaml a4xhigh-slurm-blueprint.yaml --only primary
+```
+
 ### Cloud Storage FUSE
 
 This blueprint includes four Cloud Storage FUSE mounts to provide a simple and scalable way

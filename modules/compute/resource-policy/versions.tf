@@ -27,7 +27,7 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:resource-policy/v1.37.2"
+    module_name = "blueprints/terraform/hpc-toolkit:resource-policy/v1.78.0"
   }
 
   required_version = ">= 1.3"

@@ -53,8 +53,6 @@ locals {
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
-  kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
-  jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
 data "http" "manifest_from_url" {
@@ -87,15 +85,21 @@ module "kubectl_apply_manifests" {
 }
 
 module "install_kueue" {
-  source            = "./kubectl"
-  source_path       = local.install_kueue ? local.kueue_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists]
+  source           = "./helm_install"
+  count            = local.install_kueue ? 1 : 0
+  wait             = try(var.kueue.wait, false)
+  timeout          = 1200
+  release_name     = "kueue"
+  chart_repository = "oci://registry.k8s.io/kueue/charts"
+  chart_name       = "kueue"
+  chart_version    = var.kueue.version
+  namespace        = "kueue-system"
+  create_namespace = true
+  values_yaml = [
+    file("${path.module}/kueue/kueue-helm-values.yaml")
+  ]
 
-  providers = {
-    kubectl = kubectl
-  }
+  depends_on = [var.gke_cluster_exists]
 }
 
 module "configure_kueue" {
@@ -113,15 +117,20 @@ module "configure_kueue" {
 }
 
 module "install_jobset" {
-  source            = "./kubectl"
-  source_path       = local.install_jobset ? local.jobset_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists, module.configure_kueue]
-
-  providers = {
-    kubectl = kubectl
-  }
+  source           = "./helm_install"
+  count            = local.install_jobset ? 1 : 0
+  wait             = false
+  timeout          = 1200
+  release_name     = "jobset"
+  chart_repository = "oci://registry.k8s.io/jobset/charts"
+  chart_name       = "jobset"
+  chart_version    = var.jobset.version
+  namespace        = "jobset-system"
+  create_namespace = true
+  values_yaml = [
+    file("${path.module}/jobset/jobset-helm-values.yaml")
+  ]
+  depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 
 module "install_nvidia_dra_driver" {
@@ -173,9 +182,9 @@ module "install_nvidia_dra_driver" {
             operator: Equal
             value: present
             effect: NoSchedule
-          - key: kubernetes.io/arch 
-            operator: Equal 
-            value: arm64 
+          - key: kubernetes.io/arch
+            operator: Equal
+            value: arm64
             effect: NoSchedule
 
       EOF
@@ -218,17 +227,17 @@ module "install_gpu_operator" {
             operator: Equal
             value: present
             effect: NoSchedule
-          - key: kubernetes.io/arch 
-            operator: Equal 
-            value: arm64 
+          - key: kubernetes.io/arch
+            operator: Equal
+            value: arm64
             effect: NoSchedule
 
       node-feature-discovery:
         worker:
           tolerations:
-            - key: kubernetes.io/arch 
-              operator: Equal 
-              value: arm64 
+            - key: kubernetes.io/arch
+              operator: Equal
+              value: arm64
               effect: NoSchedule
             - key: "node-role.kubernetes.io/master"
               operator: "Equal"

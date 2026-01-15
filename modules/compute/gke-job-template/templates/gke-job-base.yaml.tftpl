@@ -58,21 +58,29 @@ spec:
         image: ${image}
         command:
         %{for s in command}- ${indent(8, yamlencode(s))}%{~ endfor }
-        %{~ if gpu_limit != null || cpu_request != null ~}
+        %{~ if gpu_limit != null || cpu_request != null || tpu_limit != null ~}
         resources:
-          %{~ if gpu_limit != null ~}
+          %{~ if gpu_limit != null || tpu_limit != null ~}
           limits:
+            %{~ if gpu_limit != null ~}
             # GPUs should only be specified as limits
             # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
             nvidia.com/gpu: ${gpu_limit}
+            %{~ endif ~}
+            %{~ if tpu_limit != null ~}
+            google.com/tpu: ${tpu_limit}
+            %{~ endif ~}
           %{~ endif ~}
-          %{~ if cpu_request != null || memory_request != null || ephemeral_request != null ~}
+          %{~ if cpu_request != null || memory_request != null || ephemeral_request != null || tpu_limit != null ~}
           requests:
             %{~ if full_node_request ~}
             # cpu request attempts full node per pod
             %{~ endif ~}
             %{~ if cpu_request != null ~}
             cpu: ${cpu_request}
+            %{~ endif ~}
+            %{~ if tpu_limit != null ~}
+            google.com/tpu: ${tpu_limit}
             %{~ endif ~}
             %{~ if memory_request != null ~}
             memory: ${memory_request}

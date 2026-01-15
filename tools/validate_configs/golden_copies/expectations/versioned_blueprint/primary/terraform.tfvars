@@ -25,6 +25,8 @@ labels = {
   ghpc_deployment = "golden_copy_deployment"
 }
 
+lustre_instance_id = "lustre-instance"
+
 project_id = "invalid-project"
 
 region = "us-central1"

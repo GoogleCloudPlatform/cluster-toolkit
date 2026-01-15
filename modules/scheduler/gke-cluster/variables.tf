@@ -104,14 +104,31 @@ variable "maintenance_start_time" {
 }
 
 variable "maintenance_exclusions" {
-  description = "List of maintenance exclusions. A cluster can have up to three."
+  description = "List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`."
   type = list(object({
-    name            = string
-    start_time      = string
-    end_time        = string
-    exclusion_scope = string
+    name                        = string
+    start_time                  = string
+    end_time                    = optional(string)
+    exclusion_scope             = string
+    exclusion_end_time_behavior = optional(string)
   }))
   default = []
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions : (
+        ((x.end_time != null) != (x.exclusion_end_time_behavior != null)) &&
+        try(length(trimspace(x.end_time)) > 0, true)
+      )
+    ])
+    error_message = "For each maintenance exclusion, exactly one of 'end_time' or 'exclusion_end_time_behavior' must be specified. If 'end_time' is provided, it cannot be an empty string."
+  }
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions :
+      x.exclusion_end_time_behavior == null || x.exclusion_end_time_behavior == "UNTIL_END_OF_SUPPORT"
+    ])
+    error_message = "If specified, 'exclusion_end_time_behavior' must be 'UNTIL_END_OF_SUPPORT'."
+  }
   validation {
     condition = alltrue([
       for x in var.maintenance_exclusions :
@@ -522,6 +539,12 @@ variable "enable_external_dns_endpoint" {
   Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.
   Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details.
   EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_inference_gateway" {
+  description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
   type        = bool
   default     = false
 }

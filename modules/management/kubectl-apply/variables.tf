@@ -15,9 +15,34 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.12.2", "v0.11.4", "v0.10.1", "v0.10.0"]
-  jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
-  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
+  # This list defines the Kueue Helm chart versions that are officially tested and supported by this toolkit, based on the official changelog.
+  # The list should be updated as new versions are tested and approved.
+  # Refer https://github.com/kubernetes-sigs/kueue/tree/main/CHANGELOG
+
+  # Note: The apiVersion associated with the Topology kind should be
+  # kueue.x-k8s.io/v1beta1 when using v0.14.0 or higher. Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.14.md#api-change
+  kueue_supported_versions = ["0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+
+  # Officially supported latest helm chart versions of Jobset.
+  # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
+  jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
+  gib_supported_versions_x86   = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
+  gib_supported_versions_arm64 = ["v1.1.1", "v1.1.0", "v1.0.7"]
+  gib_supported_versions = var.target_architecture == "arm64" ? (
+    local.gib_supported_versions_arm64
+    ) : (
+    local.gib_supported_versions_x86
+  )
+}
+
+variable "target_architecture" {
+  description = "The target architecture for the GKE nodes and gIB plugin (e.g., 'x86_64' or 'arm64')."
+  type        = string
+  default     = "x86_64"
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.target_architecture)
+    error_message = "The target_architecture must be either 'x86_64' or 'arm64'."
+  }
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -42,7 +67,7 @@ resource "terraform_data" "gib_validations" {
   lifecycle {
     precondition {
       condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.template_vars.version)
-      error_message = "Supported version of the NCCL gIB plugin are ${join(", ", local.gib_supported_versions)}"
+      error_message = "Supported version of the NCCL gIB plugin for architecture ${var.target_architecture} are ${join(", ", local.gib_supported_versions)}"
     }
   }
 }
@@ -89,10 +114,11 @@ variable "apply_manifests" {
 
 
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. If `wait` is true, the installation will wait for resources to be ready. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.12.2")
+    wait                 = optional(bool, false)
+    version              = optional(string, "0.13.3")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })
@@ -109,7 +135,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.7.2")
+    version = optional(string, "0.10.1")
   })
   default = {}
 }
@@ -153,6 +179,7 @@ variable "gib" {
         }
       })
       accelerator_count = number
+      max_unavailable   = optional(string, "50%")
     })
   })
   default = {

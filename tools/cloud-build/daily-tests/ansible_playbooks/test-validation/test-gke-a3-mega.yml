@@ -27,7 +27,7 @@
   delegate_to: localhost
   ansible.builtin.shell: |
     wget -O {{ workspace }}/examples/nccl-test.yaml \
-      https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/39308db7574925ea3c14f9113fcf87f70a6fcc26/gpudirect-tcpxo/nccl-test-latest.yaml
+      https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/bd4a7491672b48dfec28f3679b679a614f6cbbc7/gpudirect-tcpxo/nccl-test-latest.yaml
     cat {{ workspace }}/examples/nccl-test.yaml
   register: nccl_test_file_contents
 

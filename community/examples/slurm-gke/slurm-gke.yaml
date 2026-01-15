@@ -1,0 +1,192 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: slurm-gke
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id: ## Set GCP Project ID Here ##
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: slurmgke
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The number of nodes to be created for the Slurm GKE NodeSet.
+  gke_nodeset_replicas: 2
+
+
+  # The pre-built Slinky Image for GKE Nodeset.
+  # Follow instruction in ./images/containers to build this image.
+  slinky_image: ghcr.io/slinkyproject/slurmd-pyxis:24.11-ubuntu24.04
+
+  # Namespace where Slurm GKE NodeSet will be created
+  slurm_namespace: slurm
+
+deployment_groups:
+- group: primary
+  modules:
+
+###### Common resources ######
+
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network, private_service_access]
+    settings:
+      local_mount: /home
+
+###### GKE Setup ######
+
+  - id: gke_service_account
+    source: modules/project/service-account
+    settings:
+      name: slinky-gke-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, gke_service_account]
+    settings:
+      enable_private_endpoint: false
+      enable_gcsfuse_csi: true
+      enable_filestore_csi: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      system_node_pool_enabled: false
+      configure_workload_identity_sa: true
+      enable_dcgm_monitoring: true
+    outputs: [instructions]
+
+  - id: gke_base_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_service_account]
+    settings:
+      initial_node_count: 1
+      disk_type: pd-balanced
+      machine_type: e2-standard-4
+      zones: [$(vars.zone)]
+
+  - id: gke_compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_service_account]
+    settings:
+      name: gke-compute-pool
+      initial_node_count: $(vars.gke_nodeset_replicas)
+      disk_type: pd-balanced
+      machine_type: c2-standard-16
+      zones: [$(vars.zone)]
+
+  - id: gke_ns_manifest
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("./files/slurm-namespace.yaml.tftpl"))
+        template_vars:
+          namespace: $(vars.slurm_namespace)
+
+  - id: slinky
+    source: community/modules/scheduler/slinky
+    use:
+    - gke_cluster
+    - gke_base_pool  # Optionally specify nodepool(s) to avoid operator components running on HPC hardware
+    settings:
+      slurm_operator_namespace: $(vars.slurm_namespace)
+      install_slurm_operator_chart: true
+      install_slurm_chart: false
+
+  - id: gke_compute_nodeset
+    source: community/modules/compute/gke-nodeset
+    use: [gke_compute_pool, slinky, homefs, slurm_controller, network]
+    settings:
+      slurm_cluster_name: $(vars.deployment_name)
+      image: $(vars.slinky_image)
+
+  - id: gke_compute_partition
+    source: community/modules/compute/gke-partition
+    use: [slurm_controller, gke_compute_nodeset]
+
+###### GCE Setup ######
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+      suspend_time: -1 # prevents nodes from suspending while it's idle
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - slurm_login
+    - debug_partition
+    - homefs
+    settings:
+      slurm_cluster_name: $(vars.deployment_name)
+      enable_slurm_auth: true
+      cgroup_conf_tpl: $(ghpc_stage("./files/cgroup.conf.tpl"))
+      enable_controller_public_ips: true

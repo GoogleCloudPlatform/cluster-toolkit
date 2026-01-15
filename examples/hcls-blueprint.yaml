@@ -60,7 +60,7 @@ deployment_groups:
   # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
 
   ### Resource Monitoring ###
@@ -85,7 +85,7 @@ deployment_groups:
       local_mount: /apps
 
   - id: bucket-software
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: hcls-user-provided-software
       random_suffix: true
@@ -94,7 +94,7 @@ deployment_groups:
     outputs: [gcs_bucket_path]
 
   - id: bucket-input
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: hcls-inputs
       random_suffix: true
@@ -103,7 +103,7 @@ deployment_groups:
       force_destroy: $(vars.bucket_force_destroy)
 
   - id: bucket-output
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: hcls-outputs
       random_suffix: true

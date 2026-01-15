@@ -1,3 +1,9 @@
+>[!WARNING]
+>
+>![deprecated-badge] This blueprint is not maintained any longer. The blueprint will be removed by Feb 15, 2026
+>
+>We recommend using the [A3 Ultra Slurm Blueprint](../../machine-learning/a3-ultragpu-8g) instead.
+
 # A3-Ultra Slurm + Ubuntu + GCS
 
 This reference design creates a Slurm cluster with the following design:
@@ -138,3 +144,5 @@ data input loading.
 See the subdirectory `system_benchamrks`, where you will find instructions
 on how to run NCCL, HPL, and NeMo benchmarks via
 [ramble](https://github.com/GoogleCloudPlatform/ramble).
+
+[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic

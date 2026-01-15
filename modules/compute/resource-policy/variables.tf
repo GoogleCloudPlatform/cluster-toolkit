@@ -27,6 +27,15 @@ variable "region" {
 variable "name" {
   description = "The resource policy's name."
   type        = string
+
+  validation {
+    # Check if the variable matches the GCP resource naming regex.
+    condition     = can(regex("^[a-z]([-a-z0-9]{0,52}[a-z0-9])?$", var.name))
+    error_message = <<-EOD
+    The resource policy name must be between 1 and 54 characters, start with a lowercase letter, end with an alphanumeric, and contain only lowercase letters, numbers, and hyphens.
+    Underscores are not allowed. A shorter length is enforced to accommodate a random suffix.
+    EOD
+  }
 }
 
 variable "group_placement_max_distance" {

@@ -81,6 +81,13 @@ The current implementations has the following limitations:
 - General addon configuration is not supported
 - Only regional cluster is supported
 
+### GKE Inference Gateway
+
+Setting `enable_inference_gateway` to `true` will enable the `HttpLoadBalancing`
+addon and deploy the Inference Gateway CRDs. This feature requires a subnet with
+`purpose` set to `REGIONAL_MANAGED_PROXY` in the VPC. For more information, see
+the [GKE Inference Gateway documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/serve-with-gke-inference-gateway).
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -103,23 +110,23 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.16 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.16 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
-| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | ~> 34.0 |
+| <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
 
 ## Resources
 
@@ -150,6 +157,7 @@ limitations under the License.
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
+| <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
 | <a name="input_enable_managed_lustre_csi"></a> [enable\_managed\_lustre\_csi](#input\_enable\_managed\_lustre\_csi) | The status of the Google Compute Engine Managed Lustre Container Storage Interface (CSI) driver addon, which allows the usage of a lustre as volumes. | `bool` | `false` | no |
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
@@ -165,7 +173,7 @@ limitations under the License.
 | <a name="input_k8s_network_names"></a> [k8s\_network\_names](#input\_k8s\_network\_names) | Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values. | <pre>object({<br/>    gvnic_prefix      = optional(string, "")<br/>    gvnic_start_index = optional(number, 1)<br/>    gvnic_postfix     = optional(string, "")<br/>    rdma_prefix       = optional(string, "")<br/>    rdma_start_index  = optional(number, 0)<br/>    rdma_postfix      = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "gvnic_postfix": "",<br/>  "gvnic_prefix": "gvnic-",<br/>  "gvnic_start_index": 1,<br/>  "rdma_postfix": "",<br/>  "rdma_prefix": "rdma-",<br/>  "rdma_start_index": 0<br/>}</pre> | no |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name to use with the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_maintenance_exclusions"></a> [maintenance\_exclusions](#input\_maintenance\_exclusions) | List of maintenance exclusions. A cluster can have up to three. | <pre>list(object({<br/>    name            = string<br/>    start_time      = string<br/>    end_time        = string<br/>    exclusion_scope = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_maintenance_exclusions"></a> [maintenance\_exclusions](#input\_maintenance\_exclusions) | List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`. | <pre>list(object({<br/>    name                        = string<br/>    start_time                  = string<br/>    end_time                    = optional(string)<br/>    exclusion_scope             = string<br/>    exclusion_end_time_behavior = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_maintenance_start_time"></a> [maintenance\_start\_time](#input\_maintenance\_start\_time) | Start time for daily maintenance operations. Specified in GMT with `HH:MM` format. | `string` | `"09:00"` | no |
 | <a name="input_master_authorized_networks"></a> [master\_authorized\_networks](#input\_master\_authorized\_networks) | External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation. | <pre>list(object({<br/>    cidr_block   = string<br/>    display_name = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation to use for the hosted master network. | `string` | `"172.16.0.32/28"` | no |

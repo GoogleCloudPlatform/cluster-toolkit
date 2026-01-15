@@ -17,6 +17,19 @@
 - name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
+  ## Display Terraform Version
+  - name: "Get Terraform Version"
+    ansible.builtin.command: terraform version
+    changed_when: false
+    register: terraform_version_output
+
+  - name: "Print Terraform Version"
+    ansible.builtin.debug:
+      msg: |
+        ---- TERRAFORM VERSION ----
+        {{ terraform_version_output.stdout }}
+        ---------------------------
+
   ## Create SSH Keys
   - name: "Create .ssh folder"
     ansible.builtin.file:
@@ -146,6 +159,15 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+      retries: 5
+      delay: 10
+      until: key_created.rc == 0
+      ignore_errors: yes
+
+    - name: Fail if SSH key add failed after retries
+      ansible.builtin.fail:
+        msg: "Failed to add SSH key to OS Login after multiple retries: {{ key_created.stderr }}"
+      when: key_created.rc != 0
 
     - name: Add Login node as host
       ansible.builtin.add_host:
@@ -189,6 +211,8 @@
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
   ignore_unreachable: true  # ensure always block will run even if SSH fails
+  vars:
+    key_type: "munge"
   tasks:
   - name: Slurm Test Block
     vars:
@@ -202,6 +226,13 @@
       ansible.builtin.wait_for:
         path: /var/run/munge/munge.socket.2
         timeout: 600
+      when: key_type == 'munge'
+
+    - name: Wait until Slurm key exists
+      ansible.builtin.wait_for:
+        path: /etc/slurm/slurm.key
+        timeout: 600  # Waits for up to 10 minutes for the file to appear
+      when: key_type == 'slurm'
 
     - name: Count Slurm nodes
       ansible.builtin.shell:
@@ -214,6 +245,10 @@
       retries: 60
       delay: 15
 
+    - name: Add instance labels for spot instances
+      ansible.builtin.include_tasks: tasks/add-instance-labels.yml
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
@@ -222,6 +257,21 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
+
+    rescue:
+    - name: Conditionally check for spot preemptions after a failure
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+      block:
+      - name: Display test failure message
+        ansible.builtin.debug:
+          msg: "A task within the integration tests failed. Spot VMs are enabled, so running preemption checks."
+
+      - name: Check for recent preemptions
+        ansible.builtin.include_tasks: test-validation/test-preemption.yml
+
+    - name: Propagate original failure after rescue tasks
+      ansible.builtin.fail:
+        msg: "Integration tests failed. Rescue tasks were executed."
 
     ## Always cleanup, even on failure
     always:

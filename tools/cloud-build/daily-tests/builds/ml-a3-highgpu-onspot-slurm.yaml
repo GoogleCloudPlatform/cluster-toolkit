@@ -1,0 +1,75 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- slurm6
+- m.filestore
+- m.multivpc
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.service-account
+- m.startup-script
+- m.vpc
+- m.custom-image
+timeout: 14400s  # 4hr
+steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-highgpu-onspot-slurm.yaml"
+
+- id: ml-a3-highgpu-onspot-slurm
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  - "MACHINE_TYPE=a3-highgpu-8g"
+  - "NUM_NODES=4"
+  - "INSTANCE_PREFIX=a3hsp"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "BUILD_ID=$BUILD_ID"
+  - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3hoptions.txt"
+  args:
+  - -c
+  - |
+    set -e -u -o pipefail
+    echo "Sourcing find_available_zone.sh to determine zone."
+    source /workspace/tools/cloud-build/find_available_zone.sh
+    if [ -z "$${ZONE:-}" ]; then
+      echo "ERROR: ZONE not found" >&2
+      exit 1
+    fi
+    set -x
+    cd /workspace && make
+    REGION="$${ZONE%-*}"
+    BUILD_ID_SHORT="$${BUILD_ID:0:6}"
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
+      --extra-vars="region=$${REGION} zone=$${ZONE}"\
+      --extra-vars="tcpx_kernel_login=$${TCPX_KERNEL_LOGIN} tcpx_kernel_password=$${TCPX_KERNEL_PASSWORD} keyserver_ubuntu_key=$${KEYSERVER_UBUNTU_KEY} "\
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-onspot-slurm.yml"
+  secretEnv: ['TCPX_KERNEL_LOGIN', 'TCPX_KERNEL_PASSWORD', 'KEYSERVER_UBUNTU_KEY']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-login/versions/latest
+    env: 'TCPX_KERNEL_LOGIN'
+  - versionName: projects/${PROJECT_ID}/secrets/tcpx-kernel-ppa-password/versions/latest
+    env: 'TCPX_KERNEL_PASSWORD'
+  - versionName: projects/${PROJECT_ID}/secrets/keyserver-ubuntu-key/versions/latest
+    env: 'KEYSERVER_UBUNTU_KEY'

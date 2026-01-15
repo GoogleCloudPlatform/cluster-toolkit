@@ -1,0 +1,56 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Verify Lustre Mount on Compute Nodes
+  ansible.builtin.shell: |
+    srun -N 1 -p '{{ item }}' stat -f -c %T {{ custom_vars.mounts[0] }}
+  with_items: "{{ custom_vars.partitions }}"
+  register: fs_type
+  changed_when: false
+  failed_when: fs_type.rc != 0 or fs_type.stdout | trim != "lustre"
+
+- name: Create output folder
+  ansible.builtin.shell: |
+    sudo mkdir -p -m a+w /{{ custom_vars.output_dir }}
+  args:
+    executable: /bin/bash
+
+- name: Write canary file
+  with_items: "{{ custom_vars.partitions }}"
+  ansible.builtin.shell: |
+    srun -N 1 -p '{{ item }}' bash -c 'echo {{ item }} > /{{ custom_vars.output_dir }}/{{ item }}.txt'
+  args:
+    executable: /bin/bash
+  register: write_file_output
+
+- name: Read Canary File contents
+  with_items: "{{ custom_vars.partitions }}"
+  ansible.builtin.command: "cat /{{ custom_vars.output_dir }}/{{ item }}.txt"
+  register: canary_contents
+  changed_when: false
+
+- name: Verify and Display Content
+  with_items: "{{ canary_contents.results }}"
+  ansible.builtin.assert:
+    that:
+    - item.stdout == item.item
+    fail_msg: "Verification failed for partition {{ item.item }}. Expected {{ item.item }} but found {{ item.stdout }}"
+    success_msg: "Verification successful for partition {{ item.item }}"
+
+- name: Remove Canary File (Clean Up)
+  with_items: "{{ custom_vars.partitions }}"
+  ansible.builtin.file:
+    path: "/{{ custom_vars.output_dir }}/{{ item }}.txt"
+    state: absent

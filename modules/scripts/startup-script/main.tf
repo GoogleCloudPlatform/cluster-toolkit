@@ -103,7 +103,7 @@ locals {
         export FI_OFI_RXM_USE_RNDV_WRITE=0
         export FI_VERBS_INLINE_SIZE=39
         export I_MPI_FABRICS="shm:ofi"
-        export FI_UNIVERSE_SIZE=3072
+        export FI_UNIVERSE_SIZE=1024
         export I_MPI_ADJUST_ALLTOALL=1
         export I_MPI_ADJUST_IALLTOALL=1
         export I_MPI_ADJUST_BCAST=4

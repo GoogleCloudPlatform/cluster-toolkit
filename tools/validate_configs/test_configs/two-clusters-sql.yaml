@@ -15,6 +15,8 @@
 blueprint_name: two-clusters
 toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
 toolkit_modules_version: v1.41.0
+# NOTE: This blueprint uses the now-deprecated schedmd-slurm-gcp-v5 modules and is no longer
+# actively maintained or supported.
 
 vars:
   project_id: ## Set GCP Project ID Here ##
@@ -49,7 +51,7 @@ deployment_groups:
   - source: modules/network/vpc
     id: hpc_network
 
-  - source: community/modules/network/private-service-access
+  - source: modules/network/private-service-access
     id: ps_connect
     use: [hpc_network]
 

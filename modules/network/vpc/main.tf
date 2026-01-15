@@ -180,7 +180,7 @@ resource "terraform_data" "network_profile_firewall_validation" {
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 10.0"
+  version = "~> 13.0"
 
   depends_on = [terraform_data.network_profile_firewall_validation]
 
@@ -235,7 +235,7 @@ module "nat_ip_addresses" {
 
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 6.0"
+  version = "~> 7.3"
 
   depends_on = [terraform_data.cloud_nat_validation]
 

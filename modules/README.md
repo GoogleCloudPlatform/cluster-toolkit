@@ -54,6 +54,8 @@ Modules that are still in development and less stable are labeled with the
 * **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
+* **[gke-nodeset]** ![community-badge] ![experimental-badge] : Create a slinky nodeset to be used by the [gke-partition] module.
+* **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md
@@ -88,30 +90,28 @@ Modules that are still in development and less stable are labeled with the
 
 * **[filestore]** ![core-badge] : Creates a
   [filestore](https://cloud.google.com/filestore) file system.
-* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a
+* **[parallelstore]** ![core-badge] ![experimental-badge] ![deprecated-badge]: Creates a
   [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
 * **[managed-lustre]** ![core-badge] ![experimental-badge]: Creates a
   [managed-lustred](https://cloud.google.com/managed-lustre) file system.
-* **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
-  a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module is deprecated and will be removed by July 1, 2025. Consider migrating to managed-lustre.
-* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
-  a Google Cloud Storage (GCS) bucket.
+* **[cloud-storage-bucket]** ![core-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
   persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
+* **[weka-client]** ![community-badge] ![experimental-badge] : Installs client
+  and mounts [WEKA](https://www.weka.io/) filesystems.
 
 [filestore]: file-system/filestore/README.md
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [managed-lustre]: file-system/managed-lustre/README.md
-[ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
-[cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
-[gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
+[cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
+[gke-persistent-volume]: file-system/gke-persistent-volume/README.md
+[weka-client]: ../community/modules/file-system/weka-client/README.md
 
 ### Monitoring
 
@@ -132,14 +132,14 @@ Modules that are still in development and less stable are labeled with the
   built components to a pre-existing VPC network.
 * **[firewall-rules]** ![core-badge] ![experimental-badge] : Add custom firewall
   rules to existing networks (commonly used with [pre-existing-vpc]).
-* **[private-service-access]** ![community-badge] ![experimental-badge] :
+* **[private-service-access]** ![core-badge] :
   Configures Private Services Access for a VPC network (commonly used with [filestore] and [slurm-cloudsql-federation]).
 
 [vpc]: network/vpc/README.md
 [multivpc]: network/multivpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
 [firewall-rules]: network/firewall-rules/README.md
-[private-service-access]: ../community/modules/network/private-service-access/README.md
+[private-service-access]: network/private-service-access/README.md
 
 ### Packer
 
@@ -150,13 +150,13 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
-* **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
+* **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
-[service-account]: ../community/modules/project/service-account/README.md
+[service-account]: ../modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
 ### Pub/Sub
@@ -232,6 +232,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   software build using [Spack](https://github.com/spack/spack).
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
+* **[gcloud]** ![community-badge] ![experimental-badge] : Executes arbitrary `gcloud` commands with create/destroy lifecycle.
 
 [startup-script]: scripts/startup-script/README.md
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
@@ -242,6 +243,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+[gcloud]: ../community/modules/scripts/gcloud/README.md
 
 ## Module Fields
 

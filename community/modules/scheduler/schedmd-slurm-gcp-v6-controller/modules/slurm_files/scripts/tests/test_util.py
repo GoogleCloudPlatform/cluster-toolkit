@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -666,3 +666,47 @@ def test_future_reservation_inactive(_):
     
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
     lkp._get_reservation.assert_not_called()
+
+@pytest.mark.parametrize(
+    "v1, v2, expected",
+    [
+        ("22.05", "21.08", True),
+        ("21.08", "22.05", False),
+        ("22.05", "22.05", True),
+        ("22.05", "22.04", True),
+        ("22.04", "22.05", False),
+        ("22.05.1", "22.05", True),
+        ("22.05", "22.05.1", True),
+        ("22.05.1", "22.05.2", True),
+        ("invalid", "22.05", False),
+        ("22.05", "invalid", False),
+        ("21.08.1", "22.05.3", False),
+    ],
+)
+def test_slurm_version_gte(v1, v2, expected):
+    assert util.slurm_version_gte(v1, v2) == expected
+
+@pytest.mark.parametrize(
+    "stdout_data, exception_to_raise, expected_version",
+    [
+        ("slurm 23.02.6", None, "23.02"),
+        ("slurm version 24.11.0-pre1", None, "24.11"),
+        ("Some other output", None, "unknown"),
+        ("", None, "unknown"),
+        (None, FileNotFoundError("slurmctld not found"), "unknown"),
+        (None, Exception("simulated command failure"), "unknown"),
+    ],
+)
+def test_slurm_version(stdout_data, exception_to_raise, expected_version, mocker):
+    mock_run = mocker.patch("util.run")
+
+    if exception_to_raise:
+        mock_run.side_effect = exception_to_raise
+    else:
+        mock_run.return_value = mocker.Mock(stdout=stdout_data)
+
+    lkp = util.Lookup(TstCfg())
+    version = lkp.slurm_version
+    
+    assert version == expected_version
+    mock_run.assert_called_once()

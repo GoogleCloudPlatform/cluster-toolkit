@@ -58,7 +58,12 @@ fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --po
 # finishes on the new guest agent
 FINISH_LINE="startup-script exit status"
 # Match string for failures on the new guest agent
-FINISH_LINE_ERR="Script.*failed with error:"
+FINISH_LINE_ERR="Script \"startup-script\" failed with error:"
+
+# NEW: Accept also these finish lines as success.
+STARTUP_SCRIPT_SUCCEEDED_LINE="google-startup-scripts.service: Succeeded."
+STARTUP_SCRIPT_FINISHED_LINE="Finished Google Compute Engine Startup Scripts."
+STARTUP_SCRIPT_SERVICE_FINISHED_LINE="Finished google-startup-scripts.service - Google Compute Engine Startup Scripts."
 
 NON_FATAL_ERRORS=(
 	"Internal error"
@@ -68,7 +73,7 @@ until [[ now -gt deadline ]]; do
 	ser_log=$(
 		set -o pipefail
 		${fetch_cmd} 2>"${error_file}" |
-			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
+			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}\|${STARTUP_SCRIPT_SUCCEEDED_LINE}\|${STARTUP_SCRIPT_FINISHED_LINE}\|${STARTUP_SCRIPT_SERVICE_FINISHED_LINE}"
 	) || {
 		err=$(cat "${error_file}")
 		echo "$err"
@@ -85,31 +90,49 @@ until [[ now -gt deadline ]]; do
 		fi
 	}
 	if [[ -n "${ser_log}" ]]; then break; fi
-	echo "Could not detect end of startup script. Sleeping."
 	sleep 5
 	now=$(date +%s)
 done
 
 # This line checks for an exit code - the assumption is that there is a number
-# at the end of the line and it is an exit code
-STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
+# at the end of the line and it is an exit code.
+# Modified to correctly extract the last numeric exit status from the relevant log line.
+LAST_EXIT_STATUS=$(echo "${ser_log}" | grep -oP "(?<=Script \"startup-script\" failed with error: exit status )[0-9]+" | tail -n 1)
+if [[ -z "${LAST_EXIT_STATUS}" ]]; then
+	LAST_EXIT_STATUS=$(echo "${ser_log}" | grep -oP "(?<=startup-script exit status )[0-9]+" | tail -n 1)
+fi
+
 # This specific text is monitored for in tests, do not change.
 INSPECT_OUTPUT_TEXT="To inspect the startup script output, please run:"
-if [[ "${STATUS}" == 0 ]]; then
-	echo "startup-script finished successfully"
-elif [[ "${STATUS}" == 1 ]]; then
+
+# --- Prioritize explicit failure from the script itself ---
+if [[ "${LAST_EXIT_STATUS}" == 1 ]]; then
 	echo "startup-script finished with errors, ${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
+	exit 1
+# --- Then explicit success from the script itself ---
+elif [[ "${LAST_EXIT_STATUS}" == 0 ]]; then
+	echo "startup-script finished successfully"
+	exit 0
+elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_SUCCEEDED_LINE}"; then
+	echo "startup-script finished successfully (startup script succeeded line detected)"
+	exit 0
+elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_FINISHED_LINE}"; then
+	echo "startup-script finished successfully (startup script finished line detected)"
+	exit 0
+elif echo "${ser_log}" | grep -qE "${STARTUP_SCRIPT_SERVICE_FINISHED_LINE}"; then
+	echo "startup-script finished successfully (startup script service finished line detected)"
+	exit 0
+# --- If we reached deadline, it's a timeout ---
 elif [[ now -ge deadline ]]; then
 	echo "startup-script timed out after ${TIMEOUT} seconds"
 	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
 	exit 1
+# --- All other cases are considered failure or invalid state ---
 else
-	echo "Invalid return status: '${STATUS}'"
+	echo "Invalid or undetermined startup script status. Last detected exit status: '${LAST_EXIT_STATUS}'"
 	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
-	exit 1
+	exit "${LAST_EXIT_STATUS}"
 fi
-
-exit "${STATUS}"

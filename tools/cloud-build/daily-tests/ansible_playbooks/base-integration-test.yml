@@ -17,6 +17,19 @@
 - name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
+  ## Display Terraform Version
+  - name: "Get Terraform Version"
+    ansible.builtin.command: terraform version
+    changed_when: false
+    register: terraform_version_output
+
+  - name: "Print Terraform Version"
+    ansible.builtin.debug:
+      msg: |
+        ---- TERRAFORM VERSION ----
+        {{ terraform_version_output.stdout }}
+        ---------------------------
+
   ## Create SSH Keys
   - name: "Create .ssh folder"
     ansible.builtin.file:
@@ -181,6 +194,10 @@
       vars:
         timeout_seconds: "{{ startup_timeout_seconds }}"
 
+    - name: Add instance labels for spot instances
+      ansible.builtin.include_tasks: tasks/add-instance-labels.yml
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
@@ -190,6 +207,21 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
+
+    rescue:
+    - name: Conditionally check for spot preemptions after a failure
+      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+      block:
+      - name: Display test failure message
+        ansible.builtin.debug:
+          msg: "A task within the integration tests failed. Spot VMs are enabled, so running preemption checks."
+
+      - name: Check for recent preemptions
+        ansible.builtin.include_tasks: test-validation/test-preemption.yml
+
+    - name: Propagate original failure after rescue tasks
+      ansible.builtin.fail:
+        msg: "Integration tests failed. Rescue tasks were executed."
 
     always:
     - name: Cleanup firewall and infrastructure
