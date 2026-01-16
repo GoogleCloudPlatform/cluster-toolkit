@@ -23,6 +23,7 @@ from common import TstNodeset, TstCfg # needed to import util
 import util
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
+from googleapiclient.errors import HttpError # type: ignore
 from addict import Dict as NSDict # type: ignore
 
 # Note: need to install pytest-mock
@@ -710,3 +711,50 @@ def test_slurm_version(stdout_data, exception_to_raise, expected_version, mocker
     
     assert version == expected_version
     mock_run.assert_called_once()
+
+
+def test_get_reservation_details_403(mocker):
+    lkp = util.Lookup(TstCfg())
+    
+    # Mock HttpError 403
+    mock_resp = Mock()
+    mock_resp.status = 403
+    error = HttpError(mock_resp, b'Forbidden')
+    
+    lkp._get_reservation = Mock(side_effect=error)
+    
+    details = lkp.get_reservation_details(
+        project="my-project",
+        zone="us-central1-a",
+        name="my-reservation",
+        bulk_insert_name="projects/my-project/reservations/my-reservation"
+    )
+    
+    assert details.policies == []
+    assert details.deployment_type is None
+    assert details.reservation_mode is None
+    assert details.assured_count == 0
+    assert details.bulk_insert_name == "projects/my-project/reservations/my-reservation"
+    
+    lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
+
+
+def test_get_reservation_details_error(mocker):
+    lkp = util.Lookup(TstCfg())
+    
+    # Mock HttpError 500
+    mock_resp = Mock()
+    mock_resp.status = 500
+    error = HttpError(mock_resp, b'Internal Server Error')
+    
+    lkp._get_reservation = Mock(side_effect=error)
+    
+    with pytest.raises(HttpError):
+        lkp.get_reservation_details(
+            project="my-project",
+            zone="us-central1-a",
+            name="my-reservation",
+            bulk_insert_name="projects/my-project/reservations/my-reservation"
+        )
+    
+    lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
