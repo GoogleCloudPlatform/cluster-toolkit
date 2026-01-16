@@ -1,4 +1,4 @@
-// Copyright 2025 "Google LLC"
+// Copyright 2025, 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ func evaluateAndFlatten(val cty.Value) []cty.Value {
 
 // getModuleSettingValues retrieves a cty.Value from module settings using a dot-separated path,
 // evaluates expressions via bp.Eval and returns flattened slice + path for errors.
-func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int, mod config.Module, settingName string) ([]cty.Value, config.Path, error) {
+func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int, mod config.Module, settingName string) (cty.Value, config.Path, error) {
 	var nilPath config.Path
 
 	// Determine canonical path for this module.setting in the blueprint.
@@ -76,7 +76,7 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 
 	if bp.YamlCtx != nil {
 		if _, ok := bp.YamlCtx.Pos(path); !ok {
-			return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
+			return cty.NilVal, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
 		}
 	}
 
@@ -85,9 +85,7 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
 	}
-	values := evaluateAndFlatten(val)
-
-	return values, path, nil
+	return val, path, nil
 }
 
 // parseStringList normalizes an input that may be a single string, []interface{} or nil into []string.
@@ -118,33 +116,35 @@ func parseStringList(v interface{}) ([]string, bool) {
 // Target represents a resolved target (module-setting or blueprint var) for validation.
 type Target struct {
 	Name        string
-	Values      []cty.Value
+	Value       cty.Value
 	Path        config.Path
 	IsBlueprint bool // true if came from blueprint vars, false if module.settings
 }
 
-// parseIntInput retrieves an integer value from a map by key.
-// If the key is missing, it returns the defaultVal.
-func parseIntInput(inputs map[string]interface{}, key string, defaultVal int) (int, error) {
+// parseIntInputRefactor parses an integer from the input map and returns a pointer.
+// It returns nil if the key is not found.
+func parseIntInput(inputs map[string]interface{}, key string) (*int, error) {
 	v, ok := inputs[key]
 	if !ok {
-		return defaultVal, nil
+		return nil, nil
 	}
 
+	var val int
 	switch t := v.(type) {
 	case int:
-		return t, nil
+		val = t
 	case float64:
-		return int(t), nil
+		val = int(t)
 	default:
-		return 0, fmt.Errorf("'%s' must be an integer, not %T", key, v)
+		return nil, fmt.Errorf("'%s' must be an integer, not %T", key, v)
 	}
+	return &val, nil
 }
 
 // processModuleSettings processes a list of names interpreted as module settings.
 func processModuleSettings(bp config.Blueprint, mod config.Module, group config.Group, modIdx int, list []string, optional bool, handler func(Target) error) error {
 	for _, s := range list {
-		values, path, err := getModuleSettingValues(bp, group, modIdx, mod, s)
+		value, path, err := getModuleSettingValues(bp, group, modIdx, mod, s)
 		if err != nil {
 			if optional {
 				continue
@@ -155,7 +155,7 @@ func processModuleSettings(bp config.Blueprint, mod config.Module, group config.
 				Path: missingPath,
 			}
 		}
-		if err := handler(Target{Name: s, Values: values, Path: path, IsBlueprint: false}); err != nil {
+		if err := handler(Target{Name: s, Value: value, Path: path, IsBlueprint: false}); err != nil {
 			return err
 		}
 	}

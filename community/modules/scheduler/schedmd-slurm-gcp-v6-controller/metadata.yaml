@@ -25,6 +25,7 @@ ghpc:
     inputs:
       vars: [static_ips]
       max: 1
+      length_check: true
     error_message: "The Slurm modules supports 0 or 1 static IPs on controller instance."
   - validator: regex
     inputs:

@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2025, 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@ package validators
 
 import (
 	"fmt"
-	"math"
 	"regexp"
 	"strings"
 
@@ -55,7 +54,8 @@ func (r *RegexValidator) Validate(
 	}
 
 	// helper: validate flattened cty.Values against regex, returning first error
-	validateValues := func(values []cty.Value, path config.Path) error {
+	validateValues := func(value cty.Value, path config.Path) error {
+		values := evaluateAndFlatten(value)
 		for _, val := range values {
 			if val.Type() != cty.String {
 				continue
@@ -73,7 +73,7 @@ func (r *RegexValidator) Validate(
 
 	// iterate targets using shared logic
 	err = IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return validateValues(t.Values, t.Path)
+		return validateValues(t.Value, t.Path)
 	})
 	return err
 }
@@ -100,7 +100,8 @@ func (v *AllowedEnumValidator) normalizeAllowed(allowedRaw interface{}) ([]strin
 }
 
 // checkValues iterates through cty.Values to ensure they exist within the allowed set, handling nulls and casing.
-func (v *AllowedEnumValidator) checkValues(values []cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
+func (v *AllowedEnumValidator) checkValues(value cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
+	values := evaluateAndFlatten(value)
 	for _, val := range values {
 		if val.IsNull() {
 			if allowNull {
@@ -190,15 +191,72 @@ func (v *AllowedEnumValidator) Validate(
 
 	// 4. Iterate and validate user-provided values
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return v.checkValues(t.Values, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
+		return v.checkValues(t.Value, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
 	})
 }
 
 // RangeValidator implements the Validator interface for 'range' type.
 type RangeValidator struct{}
 
+// checkBounds validates a single integer value against the provided min and max bounds.
+func (r *RangeValidator) checkBounds(value int, min *int, max *int, customErrMsg string, path config.Path) error {
+	if min != nil && value < *min {
+		msg := customErrMsg
+		if msg == "" {
+			msg = fmt.Sprintf("value %d is less than the minimum allowed value of %d", value, *min)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	if max != nil && value > *max {
+		msg := customErrMsg
+		if msg == "" {
+			msg = fmt.Sprintf("value %d is greater than the maximum allowed value of %d", value, *max)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	return nil
+}
+
+// validateTarget applies range validation to a given cty.Value.
+func (r *RangeValidator) validateTarget(
+	value cty.Value,
+	path config.Path,
+	min *int,
+	max *int,
+	lengthCheck bool,
+	customErrMsg string) error {
+
+	if lengthCheck {
+		if !value.Type().IsListType() && !value.Type().IsTupleType() {
+			return config.BpError{
+				Err:  fmt.Errorf("length_check can only be used with list types, not %s", value.Type().FriendlyName()),
+				Path: path,
+			}
+		}
+		return r.checkBounds(value.LengthInt(), min, max, customErrMsg, path)
+	}
+
+	values := evaluateAndFlatten(value)
+	for _, val := range values {
+		if val.IsNull() || !val.IsKnown() {
+			continue
+		}
+		if val.Type() == cty.Number {
+			f, _ := val.AsBigFloat().Float64()
+			if err := r.checkBounds(int(f), min, max, customErrMsg, path); err != nil {
+				return err
+			}
+		} else {
+			return config.BpError{
+				Err:  fmt.Errorf("range validator only supports numbers, not %s", val.Type().FriendlyName()),
+				Path: path,
+			}
+		}
+	}
+	return nil
+}
+
 // Validate checks if the variables specified in the rule match the provided range pattern.
-// This function focuses on the predicate and uses IterateRuleTargets from targets.go to resolve targets.
 func (r *RangeValidator) Validate(
 	bp config.Blueprint,
 	mod config.Module,
@@ -207,65 +265,30 @@ func (r *RangeValidator) Validate(
 	modIdx int) error {
 
 	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
-	// Extract min
 
-	min, err := parseIntInput(rule.Inputs, "min", math.MinInt)
+	min, err := parseIntInput(rule.Inputs, "min")
 	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	max, err := parseIntInput(rule.Inputs, "max")
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	if min == nil && max == nil {
 		return config.BpError{
-			Err: fmt.Errorf(
-				"validation rule for module %q: %v", mod.ID, err),
+			Err:  fmt.Errorf("range validator for module %q must have at least one of 'min' or 'max' defined", mod.ID),
 			Path: modPath,
 		}
 	}
-	// Extract max
-	max, err := parseIntInput(rule.Inputs, "max", math.MaxInt)
+
+	checkListLength, err := parseBoolInput(rule.Inputs, "length_check", false)
 	if err != nil {
-		return config.BpError{
-			Err: fmt.Errorf(
-				"validation rule for module %q: %v", mod.ID, err),
-			Path: modPath,
-		}
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
 	}
 
-	// helper: validate flattened cty.Values against range, returning first error
-	validateValues := func(values []cty.Value, path config.Path) error {
-		for _, val := range values {
-			if val.IsNull() || !val.IsKnown() {
-				continue
-			}
-			var checkValue int
-			var isList bool
-			if val.Type().IsListType() {
-				checkValue = val.LengthInt()
-				isList = true
-			} else if val.Type() == cty.Number {
-				f, _ := val.AsBigFloat().Float64()
-				checkValue = int(f)
-			} else {
-				return config.BpError{
-					Err:  fmt.Errorf("range validator only supports numbers or lists, not %s", val.Type().FriendlyName()),
-					Path: path,
-				}
-			}
-			effectiveMin := min
-			if isList {
-				effectiveMin = 0 // Default min is 0 for lists if not specified
-			}
-
-			if checkValue < effectiveMin || checkValue > max {
-				msg := rule.ErrorMessage
-				if msg == "" {
-					msg = fmt.Sprintf("value %d is out of range [%d, %d]", checkValue, effectiveMin, max)
-				}
-				return config.BpError{Err: fmt.Errorf("error: %s", msg), Path: path}
-			}
-		}
-		return nil
-	}
-
-	// iterate targets using shared logic
-	err = IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return validateValues(t.Values, t.Path)
+	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
+		return r.validateTarget(t.Value, t.Path, min, max, checkListLength, rule.ErrorMessage)
 	})
-	return err
 }
