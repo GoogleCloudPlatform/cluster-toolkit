@@ -242,6 +242,16 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
+func handleSoftWarning(err error, validatorName, projectID, apiName, permission string) bool {
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
+		fmt.Printf("\n[!] WARNING: validator %q for project %q\n", validatorName, projectID)
+		fmt.Printf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s).\n Please ensure the API is enabled and check your permissions.\n\n", apiName, permission)
+		return true
+	}
+	return false
+}
+
 // 1. Helper for cty resolution
 func resolveMachineTypeString(bp config.Blueprint, val cty.Value) string {
 	v := val
@@ -261,10 +271,8 @@ func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType 
 		return nil
 	}
 
-	var gerr *googleapi.Error
-	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		fmt.Printf("WARNING: validator \"test_machine_type_in_zone\" skipped: could not access Compute Engine API for project %q (%v)\n", projectID, gerr.Message)
-		fmt.Println("Check IAM permissions (compute.machineTypes.get) and ensure the API is enabled to use this validator.")
+	// Use the generic helper
+	if handleSoftWarning(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get") {
 		return nil
 	}
 
