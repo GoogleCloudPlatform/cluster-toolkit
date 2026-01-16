@@ -38,4 +38,3 @@ ghpc:
       - TERMINATE
       allow_null: false
     error_message: "Allowed values for on_host_maintenance are 'MIGRATE' or 'TERMINATE'."
-
