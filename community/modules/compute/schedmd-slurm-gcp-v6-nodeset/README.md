@@ -94,9 +94,9 @@ The format of the `reservation_name` input determines the type of reservation us
   * `RESERVATION_NAME` is the name assigned to the specific reservation.
   * `BLOCK_ID` (Optional) is the identifier for a specific reservation block, if the reservation is composed of multiple blocks.
 
-> **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get'
-> permission for the node service account in the host project (HOST_PROJECT_ID).
-> Ensure this permission is granted before deploying.
+> **_NOTE:_** Using a shared reservation ideally requires the 'compute.reservations.get'
+> permission for the node service account in the host project (HOST_PROJECT_ID) to fetch full reservation details.
+> However, if this permission is missing, the system will fall back to minimal reservation settings and proceed.
 
 ### No Reservation
 

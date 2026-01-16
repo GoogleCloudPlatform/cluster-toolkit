@@ -524,7 +524,7 @@ variable "reservation_name" {
     - RESERVATION_NAME: The name assigned to the specific reservation.
     - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
 
-    Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project.
+    Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
   EOD
   type        = string
   default     = ""
