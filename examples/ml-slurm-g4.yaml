@@ -42,7 +42,7 @@ vars:
   #Provisioning models (set to true or fill in reservation name, pick only one)
   g4_reservation_name: "" # To use a reservation, provide its name here.
   g4_enable_spot_vm: false # To use Spot VMs, set this to true.
-  g4_dws_flex_enabled: false #To use DWS Flex Provisioning
+  g4_dws_flex_enabled: false # To use DWS Flex Provisioning
 
 deployment_groups:
 - group: image-env
