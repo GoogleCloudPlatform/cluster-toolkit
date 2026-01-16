@@ -274,6 +274,14 @@ The blueprint provisions several key technologies to create a robust data pipeli
 - [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
 - [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
 
+### Understanding DWS Flex Start Integration
+
+Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training), which allows you to request TPU resources using a flexible "Flex Start" model. This is ideal for training jobs that can wait for capacity and require lower costs.
+
+For a pre-configured example and detailed documentation on using Flex Start with TPU 7x, please refer to:
+- [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
+
 ### Understanding Managed Lustre integration
 
 The advanced blueprint `gke-tpu-7x-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.

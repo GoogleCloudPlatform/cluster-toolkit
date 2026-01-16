@@ -53,7 +53,7 @@ jobs:
         check-latest: true
     - uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: "1.5.7"
+        terraform_version: "1.12.2"
         terraform_wrapper: false
     - run: make install-dev-deps
     - uses: terraform-linters/setup-tflint@v4
