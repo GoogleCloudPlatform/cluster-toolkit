@@ -452,6 +452,11 @@ deployment_groups:
             "data-root": "$(vars.localssd_mountpoint)/docker"
           }
       runners:
+      - type: shell
+        destination: enable_fabric_manager.sh
+        content: |
+          #!/bin/bash
+          systemctl enable nvidia-fabricmanager
       - type: ansible-local
         destination: slurm_aperture.yml
         content: |
@@ -469,7 +474,7 @@ deployment_groups:
                 mode: 0o644
                 content: |
                   [Service]
-                  ExecCondition=/usr/bin/test -d /dev/aperture_devices/
+                  ExecCondition="/usr/bin/bash -c 'for i in \$(seq 30); do if [ -n \"\$(ls -A /dev/aperture_devices 2>/dev/null)\" ]; then exit 0; fi; sleep 2; done; exit 1'"
               notify: Reload SystemD
             handlers:
             - name: Reload SystemD
