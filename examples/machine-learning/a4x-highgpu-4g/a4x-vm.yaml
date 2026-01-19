@@ -170,9 +170,7 @@ deployment_groups:
           cd /opt/src
           wget https://www.mellanox.com/downloads/MFT/mft-4.34.0-145-aarch64-deb.tgz
           tar -xvf mft-4.34.0-145-aarch64-deb.tgz
-          cd mft-4.34.0-145-aarch64-deb
-          ./install.sh
-          cd ..
+          ./mft-4.34.0-145-aarch64-deb/install.sh
           rm -rf mft-4.34.0-145-aarch64-deb
           DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
           BASE_URL=https://linux.mellanox.com/public/repo/doca
