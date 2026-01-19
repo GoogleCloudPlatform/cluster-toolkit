@@ -245,7 +245,7 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 func handleSoftWarning(err error, validatorName, projectID, apiName, permission string) bool {
 	var gerr *googleapi.Error
 	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		fmt.Printf("\n[!] WARNING: validator %q for project %q\n", validatorName, projectID)
+		fmt.Printf("\n[!] WARNING: validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", validatorName, projectID)
 		fmt.Printf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s).\n Please ensure the API is enabled and check your permissions.\n\n", apiName, permission)
 		return true
 	}
