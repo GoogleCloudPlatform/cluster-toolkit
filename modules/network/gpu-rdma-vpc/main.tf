@@ -82,3 +82,16 @@ module "vpc" {
   firewall_rules                         = local.firewall_rules
   network_profile                        = var.network_profile
 }
+
+resource "terraform_data" "network_profile_validation" {
+  lifecycle {
+    precondition {
+      condition = (
+        can(regex("vpc-roce-metal", var.network_profile)) ?
+        var.subnetworks_template == null :
+        var.subnetworks_template != null
+      )
+      error_message = "subnetworks_template must be null when using 'vpc-roce-metal' network profile and non-null for all other profiles."
+    }
+  }
+}
