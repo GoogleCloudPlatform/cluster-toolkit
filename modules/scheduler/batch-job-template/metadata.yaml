@@ -20,3 +20,32 @@ spec:
     - compute.googleapis.com
 ghpc:
   inject_module_id: job_id
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [on_host_maintenance]
+      allowed:
+      - MIGRATE
+      - TERMINATE
+      allow_null: true
+    error_message: "on_host_maintenance must be either 'MIGRATE' or 'TERMINATE'. If omitted, the system will choose the appropriate default based on your hardware configuration."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [gcloud_version]
+      allowed:
+      - alpha
+      - beta
+      - ""
+      allow_null: false
+    error_message: "Allowed values for gcloud_version are 'alpha', 'beta', or '' (empty string)."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [log_policy]
+      allowed:
+      - CLOUD_LOGGING
+      - PATH
+      - DESTINATION_UNSPECIFIED
+      allow_null: false
+    error_message: "Allowed values for log_policy are 'CLOUD_LOGGING', 'PATH', or 'DESTINATION_UNSPECIFIED'."

@@ -17,3 +17,23 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [on_host_maintenance]
+      allowed:
+      - MIGRATE
+      - TERMINATE
+      allow_null: true
+    error_message: "on_host_maintenance must be either 'MIGRATE' or 'TERMINATE'."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [bandwidth_tier]
+      allowed:
+      - not_enabled
+      - gvnic_enabled
+      - tier_1_enabled
+      allow_null: false
+    error_message: "Allowed values for bandwidth_tier are 'not_enabled', 'gvnic_enabled', or 'tier_1_enabled'."
