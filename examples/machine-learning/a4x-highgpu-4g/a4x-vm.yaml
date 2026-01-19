@@ -116,7 +116,7 @@ deployment_groups:
                 name: "{{ item }}"
                 state: present
               loop: "{{ nvidia_packages }}"
-            # Freeze NVIDIA fabric and CUDA  
+            # Freeze NVIDIA fabric and CUDA
             - name: Freeze NVIDIA fabric and CUDA
               ansible.builtin.dpkg_selections:
                 name: "{{ item }}"
@@ -142,7 +142,6 @@ deployment_groups:
                 name:
                 - ibverbs-utils
                 state: present
-
      # Prerequisites for Mellanox/DOCA
       - type: ansible-local
         destination: install_mellanox_deps.yml
@@ -266,11 +265,10 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       state_timeout: 45m  # Give the build plenty of time to finish
       # Start from this source image
-      source_image_family: $(vars.build_from_image_family)
-      source_image_project_id: [$(vars.build_from_image_project)]
-      image_family: $(vars.built_image_family)
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project_id)]
+      image_family: $(vars.instance_image.family)
       omit_external_ip: false
-
       metadata:
         user-data: |
           #cloud-config
