@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,16 @@
 
 blueprint_name: a4x-jbvm
 vars:
-  project_id:
-  deployment_name: a4x-jbvm
-  region: us-central1
-  zone: us-central1-b
+  deployment_name: # supply deployment name
+  project_id: # supply project ID
+  region: # supply region
+  zone: # supply zone
+  instance_count: # supply cluster size
+  reservation_name: # supply reservation name
   machine_type: 'a4x-highgpu-4g'
   hostname_prefix: $(vars.deployment_name)
-  instance_count: 2
-  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
-  build_from_image_project: ubuntu-os-accelerator-images
-  built_image_family: jbvm-ubuntu2404-accelerator-arm64
+  source_image_project_id: ubuntu-os-accelerator-images
+  source_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
   instance_image:
     project: $(vars.project_id)
     family: jbvm-ubuntu2404-accelerator-arm64
@@ -33,12 +33,43 @@ vars:
   filestore_ip_range: 192.168.32.0/24
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/19
-  reservation_name:
 deployment_groups:
+- group: primary
+  modules:
+  - id: a4x_net_0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-a4x-net-0
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-a4x-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+  - id: a4x_net_1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-a4x-net-1
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-a4x-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
 - group: image-env
   modules:
-  - id: a4x-image-net
-    source: modules/network/vpc
   - id: image-build-script
     source: modules/scripts/startup-script
     settings:
@@ -52,7 +83,7 @@ deployment_groups:
         destination: setup_nvidia_cuda_environment.yml
         content: |
           # ---
-          - name: Installing keyring
+          - name: Install NVIDIA repository packages
             hosts: all
             become: true
             vars:
@@ -71,7 +102,7 @@ deployment_groups:
                 url: "{{ cuda_repo_url }}"
                 dest: "{{ cuda_repo_filename }}"
             # Install the NVIDIA repo
-            - name: Install NVIDIA repository package
+            - name: Installing the keyring
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
@@ -85,8 +116,7 @@ deployment_groups:
                 name: "{{ item }}"
                 state: present
               loop: "{{ nvidia_packages }}"
-            # This section will optionally freeze the packages with
-            # an apt-mark hold.
+            # Freeze NVIDIA fabric and CUDA  
             - name: Freeze NVIDIA fabric and CUDA
               ansible.builtin.dpkg_selections:
                 name: "{{ item }}"
@@ -154,7 +184,6 @@ deployment_groups:
           sudo apt-get update
           sudo apt-get -y install doca-ofed
 
-
       # Install OpenMPI from source.
       - type: shell
         destination: install_openmpi.sh
@@ -174,22 +203,6 @@ deployment_groups:
           make install
           cd ../
           rm -rf openmpi-5.0.8.tar.bz2 openmpi-5.0.8
-
-      # Install NCCL
-      - type: ansible-local
-        destination: install_nccl.yml
-        content: |
-          ---
-          - name: Install NCCL
-            hosts: all
-            become: true
-            tasks:
-            - name: Install NCCL Libraries
-              ansible.builtin.package:
-                name:
-                - libnccl2
-                - libnccl-dev
-                state: present
 
       # Install NCCL-GIB network plugin as per nccl-gib specification for a4x
       - type: ansible-local
@@ -238,20 +251,6 @@ deployment_groups:
             tasks:
             - name: Configure ldconfig
               ansible.builtin.command: /usr/sbin/ldconfig
-      # Install linux modules
-      - type: ansible-local
-        destination: install_linux_extra.yml
-        content: |
-          ---
-          - name: Install linux extra
-            hosts: all
-            become: true
-            tasks:
-            - name: Install linux extra
-              ansible.builtin.package:
-                name:
-                - "linux-modules-{{ ansible_kernel }}"
-                state: present
 
 # This deployment group builds a custom image using Packer + Ansible + Bash
 - group: image
@@ -260,7 +259,7 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - a4x-image-net
+    - a4x_net_0
     - image-build-script  # From the above image-build-script
     settings:
       machine_type: t2a-standard-16
@@ -285,38 +284,6 @@ deployment_groups:
               APT::Periodic::Unattended-Upgrade "0";
 - group: vm-env
   modules:
-  - id: a4x_net_0
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-a4x-net-0
-      mtu: 8896
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-a4x-sub-0
-        subnet_region: $(vars.region)
-        subnet_ip: $(vars.net0_range)
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-0
-        ranges: [$(vars.net0_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
-  - id: a4x_net_1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-a4x-net-1
-      mtu: 8896
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-a4x-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: $(vars.net1_range)
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
-        ranges: [$(vars.net1_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
   - id: a4x_rdma_net
     source: modules/network/gpu-rdma-vpc
     settings:
