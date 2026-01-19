@@ -97,12 +97,12 @@ deployment_groups:
               - datacenter-gpu-manager-4-cuda13
             tasks:
             # Download the NVIDIA repo
-            - name: Download NVIDIA repository package
+            - name: Download NVIDIA CUDA repository keyring
               ansible.builtin.get_url:
                 url: "{{ cuda_repo_url }}"
                 dest: "{{ cuda_repo_filename }}"
             # Install the NVIDIA repo
-            - name: Installing the keyring
+            - name: Installing NVIDIA CUDA repository keyring
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
