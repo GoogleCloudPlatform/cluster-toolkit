@@ -193,10 +193,10 @@ func (v *AllowedEnumValidator) Validate(
 	})
 }
 
-// RangeValidator implements the Validator interface for 'range' type.
+// RangeValidator implements the RuleValidator interface for the 'range' validation type.
 type RangeValidator struct{}
 
-// checkBounds validates a single integer value against the provided min and max bounds.
+// checkBounds validates a single integer value against the optional minimum and maximum bounds.
 func (r *RangeValidator) checkBounds(value int, min *int, max *int, customErrMsg string, path config.Path) error {
 	if min != nil && value < *min {
 		msg := customErrMsg
@@ -215,7 +215,7 @@ func (r *RangeValidator) checkBounds(value int, min *int, max *int, customErrMsg
 	return nil
 }
 
-// validateTarget applies range validation to a given cty.Value.
+// validateTarget applies range validation to a list of cty.Values.
 func (r *RangeValidator) validateTarget(
 	values []cty.Value,
 	path config.Path,
@@ -253,7 +253,7 @@ func (r *RangeValidator) validateTarget(
 	return nil
 }
 
-// Validate checks if the variables specified in the rule match the provided range pattern.
+// Validate checks if the variables specified in the rule fall within the specified numeric range or length constraints.
 func (r *RangeValidator) Validate(
 	bp config.Blueprint,
 	mod config.Module,

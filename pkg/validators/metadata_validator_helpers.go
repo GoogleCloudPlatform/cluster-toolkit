@@ -123,7 +123,7 @@ type Target struct {
 	IsBlueprint bool // true if came from blueprint vars, false if module.settings
 }
 
-// parseIntInputRefactor parses an integer from the input map and returns a pointer.
+// parseIntInput parses an integer from the input map and returns a pointer.
 // It returns nil if the key is not found.
 func parseIntInput(inputs map[string]interface{}, key string) (*int, error) {
 	v, ok := inputs[key]
