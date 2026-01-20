@@ -453,6 +453,28 @@ func TestRangeValidator_Numeric(t *testing.T) {
 			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
 		}
 	})
+
+	t.Run("fails_on_float_value", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"float_var": cty.NumberFloatVal(2.5),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "range",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"float_var"},
+				"min":  1,
+				"max":  5,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected failure for non-integer numeric value")
+		}
+		if !strings.Contains(err.Error(), "range validator only supports integer numbers") {
+			t.Fatalf("expected error message to contain 'range validator only supports integer numbers', got: %q", err.Error())
+		}
+	})
 }
 
 func TestRangeValidator_Length(t *testing.T) {
@@ -554,12 +576,29 @@ func TestRangeValidator_Length(t *testing.T) {
 			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
 		}
 	})
+}
+func TestRangeValidator_Delimiter(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"csv_string": cty.StringVal("one,two"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := RangeValidator{}
 
 	t.Run("passes_on_valid_segments_count", func(t *testing.T) {
-		bp := baseBP
-		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
-			"csv_string": cty.StringVal("one,two"),
-		})
 		rule := modulereader.ValidationRule{
 			Validator:    "range",
 			ErrorMessage: "'csv_string' segment count is too low",
@@ -571,7 +610,7 @@ func TestRangeValidator_Length(t *testing.T) {
 				"delimiter":    ",",
 			},
 		}
-		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
 			t.Fatalf("unexpected validation error: %v", err)
 		}
 	})
@@ -624,6 +663,52 @@ func TestRangeValidator_Length(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "too high") {
 			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_list_of_strings_with_delimiter", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_var": cty.TupleVal([]cty.Value{cty.StringVal("a,b"), cty.StringVal("c,d")}),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "range",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"list_var"},
+				"min":          2,
+				"length_check": true,
+				"delimiter":    ",",
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected failure when delimiter is used on a list of strings")
+		}
+		if !strings.Contains(err.Error(), "not a list of values") {
+			t.Fatalf("expected error message to contain 'not a list of values', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_non_string_with_delimiter", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"num_var": cty.NumberIntVal(123),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "range",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"num_var"},
+				"min":          1,
+				"length_check": true,
+				"delimiter":    ",",
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected failure when delimiter is used on a non-string value")
+		}
+		if !strings.Contains(err.Error(), "expects a string value") {
+			t.Fatalf("expected error message to contain 'expects a string value', got: %q", err.Error())
 		}
 	})
 }

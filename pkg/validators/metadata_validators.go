@@ -225,10 +225,24 @@ func (r *RangeValidator) validateTarget(
 	delimiter *string,
 	customErrMsg string) error {
 	if lengthCheck {
-		if delimiter != nil && len(values) > 0 {
-			stringVal := values[0].AsString()
-			segments := strings.Split(stringVal, *delimiter)
-			return r.checkBounds(len(segments), min, max, customErrMsg, path)
+		if delimiter != nil {
+			if len(values) > 1 {
+				return config.BpError{
+					Err:  fmt.Errorf("range validator with 'delimiter' option can only be used on a single string, not a list of values"),
+					Path: path,
+				}
+			}
+			if len(values) == 1 {
+				if values[0].Type() != cty.String {
+					return config.BpError{
+						Err:  fmt.Errorf("range validator with 'delimiter' expects a string value, but got %s", values[0].Type().FriendlyName()),
+						Path: path,
+					}
+				}
+				stringVal := values[0].AsString()
+				segments := strings.Split(stringVal, *delimiter)
+				return r.checkBounds(len(segments), min, max, customErrMsg, path)
+			}
 		}
 
 		return r.checkBounds(len(values), min, max, customErrMsg, path)
@@ -240,6 +254,12 @@ func (r *RangeValidator) validateTarget(
 		}
 		if val.Type() == cty.Number {
 			f, _ := val.AsBigFloat().Float64()
+			if f != float64(int64(f)) {
+				return config.BpError{
+					Err:  fmt.Errorf("range validator only supports integer numbers, not %v", f),
+					Path: path,
+				}
+			}
 			if err := r.checkBounds(int(f), min, max, customErrMsg, path); err != nil {
 				return err
 			}
