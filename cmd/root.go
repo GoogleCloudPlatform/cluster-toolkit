@@ -52,7 +52,7 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.78.0",
+		Version:     "v1.79.0",
 		Annotations: annotation,
 	}
 )
