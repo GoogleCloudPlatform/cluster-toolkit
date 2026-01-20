@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -285,6 +285,345 @@ func TestAllowedEnumValidator(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "missing an 'allowed' list") {
 			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
+}
+
+func TestRangeValidator_Numeric(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"single_value": cty.NumberIntVal(7),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := RangeValidator{}
+	t.Run("passes_on_valid_value", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'single_value' value is too high",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"single_value"},
+				"min":  2,
+				"max":  10,
+			},
+		}
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_on_value_below_min", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"single_value": cty.NumberIntVal(1),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'single_value' value is too low",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"single_value"},
+				"min":  2,
+				"max":  10,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "value is too low") {
+			t.Fatalf("expected error message to contain 'value is too low', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_value_above_max", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"single_value": cty.NumberIntVal(14),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'single_value' value is too high",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"single_value"},
+				"min":  2,
+				"max":  10,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "value is too high") {
+			t.Fatalf("expected error message to contain 'value is too high', got: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_on_valid_list_values", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_values": cty.ListVal([]cty.Value{
+				cty.NumberIntVal(100),
+				cty.NumberIntVal(150),
+				cty.NumberIntVal(200),
+			}),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_values' contains values that are too low",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"list_values"},
+				"min":          100,
+				"max":          200,
+				"length_check": false,
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_on_list_values_below_min", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_values": cty.ListVal([]cty.Value{
+				cty.NumberIntVal(90),
+				cty.NumberIntVal(150),
+			}),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_values' contains values that are too low",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"list_values"},
+				"min":  100,
+				"max":  200,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too low") {
+			t.Fatalf("expected error message to contain 'too low', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_list_values_above_max", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_values": cty.ListVal([]cty.Value{
+				cty.NumberIntVal(148),
+				cty.NumberIntVal(4675),
+			}),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_values' contains values that are too high",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"list_values"},
+				"min":  100,
+				"max":  200,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too high") {
+			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
+		}
+	})
+}
+
+func TestRangeValidator_Length(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"list_strings": cty.ListVal([]cty.Value{
+								cty.StringVal("net-a"),
+								cty.StringVal("net-b"),
+								cty.StringVal("net-c"),
+							}),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := RangeValidator{}
+
+	t.Run("passes_on_valid_list_length", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_strings' list length is too low",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"list_strings"},
+				"min":          2,
+				"max":          4,
+				"length_check": true,
+			},
+		}
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_on_list_length_below_min", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_strings": cty.ListVal([]cty.Value{
+				cty.StringVal("net-a"),
+			}),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_strings' list length is too low",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"list_strings"},
+				"min":          2,
+				"max":          4,
+				"length_check": true,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too low") {
+			t.Fatalf("expected error message to contain 'too low', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_list_length_above_max", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"list_strings": cty.ListVal([]cty.Value{
+				cty.StringVal("net-a"),
+				cty.StringVal("net-b"),
+				cty.StringVal("net-c"),
+				cty.StringVal("net-d"),
+				cty.StringVal("net-e"),
+				cty.StringVal("net-f"),
+			}),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'list_strings' list length is too high",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"list_strings"},
+				"min":          2,
+				"max":          4,
+				"length_check": true,
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too high") {
+			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_on_valid_segments_count", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"csv_string": cty.StringVal("one,two"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'csv_string' segment count is too low",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"csv_string"},
+				"min":          2,
+				"max":          4,
+				"length_check": true,
+				"delimiter":    ",",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_on_segments_count_below_min", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"file_path": cty.StringVal("C:/Users/MyPC/Downloads"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'file_path' segment count is too low",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"file_path"},
+				"min":          5,
+				"length_check": true,
+				"delimiter":    "/",
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too low") {
+			t.Fatalf("expected error message to contain 'too low', got: %q", err.Error())
+		}
+	})
+
+	t.Run("fails_on_segments_count_above_max", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_id": cty.StringVal("projects/my-project/global/networks/local/default"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "range",
+			ErrorMessage: "'network_id' segment count is too high",
+			Inputs: map[string]interface{}{
+				"vars":         []interface{}{"network_id"},
+				"min":          5,
+				"max":          5,
+				"length_check": true,
+				"delimiter":    "/",
+			},
+		}
+
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "too high") {
+			t.Fatalf("expected error message to contain 'too high', got: %q", err.Error())
 		}
 	})
 }

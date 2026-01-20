@@ -1,4 +1,4 @@
-# Copyright 2023 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,3 +17,12 @@ spec:
   requirements:
     services:
     - file.googleapis.com
+
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [size_gb]
+      min: 1024
+      length_check: false
+    error_message: "The 'size_gb' value must be at least 1024 GiB. See https://cloud.google.com/filestore/docs/service-tiers for details."

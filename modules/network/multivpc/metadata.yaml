@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,3 +17,12 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [network_count]
+      min: 2
+      max: 8
+      length_check: false
+    error_message: "The 'network_count' must be between 2 and 8. Use the standard Toolkit module at 'modules/network/vpc' for count = 1."

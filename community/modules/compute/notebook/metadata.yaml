@@ -1,4 +1,4 @@
-# Copyright 2023 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,3 +18,13 @@ spec:
     services:
     - notebooks.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [mount_runner.args]
+      min: 5
+      max: 5
+      length_check: true
+      delimiter: " "
+    error_message: "The 'mount_runner.args' field must contain exactly 5 elements."

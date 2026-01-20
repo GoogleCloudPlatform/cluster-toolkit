@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,3 +25,17 @@ ghpc:
       vars: [slurm_cluster_name]
       pattern: "^[a-z](?:[a-z0-9]{0,9})$"
     error_message: "'slurm_cluster_name' must contain only lowercase letters and numbers, start with a letter, and be 1-10 characters long."
+  - validator: range
+    inputs:
+      vars: [network_storage]
+      min: 1
+      max: 1
+      length_check: true
+    error_message: "The 'network_storage' list must contain exactly one element."
+  - validator: range
+    inputs:
+      vars: [filestore_id]
+      min: 1
+      max: 1
+      length_check: true
+    error_message: "The 'filestore_id' list must contain exactly one element."

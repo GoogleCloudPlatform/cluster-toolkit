@@ -121,6 +121,24 @@ ghpc:
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
 ```
 
+### Range Validator
+The `range` validator ensures that input variables (or their computed lengths/segment counts) fall within a specified numerical minimum and/or maximum. It supports validating individual numeric values, the number of elements in a list, or the count of segments in a delimited string (when an optional delimiter is specified). The optional length_check field (defaulting to false) determines whether to validate the value itself or the count of its elements/segments.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+validators:
+  - validator: range
+    inputs:
+      vars: [mount_runner.args]
+      min: 5
+      max: 5
+      length_check: true
+      delimiter: " "
+    error_message: "The 'mount_runner.args' field must contain exactly 5 elements."
+```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators

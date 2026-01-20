@@ -1,4 +1,4 @@
-// Copyright 2025, 2026 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,8 +54,7 @@ func (r *RegexValidator) Validate(
 	}
 
 	// helper: validate flattened cty.Values against regex, returning first error
-	validateValues := func(value cty.Value, path config.Path) error {
-		values := evaluateAndFlatten(value)
+	validateValues := func(values []cty.Value, path config.Path) error {
 		for _, val := range values {
 			if val.Type() != cty.String {
 				continue
@@ -73,7 +72,7 @@ func (r *RegexValidator) Validate(
 
 	// iterate targets using shared logic
 	err = IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return validateValues(t.Value, t.Path)
+		return validateValues(t.Values, t.Path)
 	})
 	return err
 }
@@ -100,8 +99,7 @@ func (v *AllowedEnumValidator) normalizeAllowed(allowedRaw interface{}) ([]strin
 }
 
 // checkValues iterates through cty.Values to ensure they exist within the allowed set, handling nulls and casing.
-func (v *AllowedEnumValidator) checkValues(value cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
-	values := evaluateAndFlatten(value)
+func (v *AllowedEnumValidator) checkValues(values []cty.Value, path config.Path, allowedSet map[string]struct{}, allowedList []string, caseSensitive bool, allowNull bool, errMsg string) error {
 	for _, val := range values {
 		if val.IsNull() {
 			if allowNull {
@@ -191,7 +189,7 @@ func (v *AllowedEnumValidator) Validate(
 
 	// 4. Iterate and validate user-provided values
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return v.checkValues(t.Value, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
+		return v.checkValues(t.Values, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
 	})
 }
 
@@ -219,24 +217,23 @@ func (r *RangeValidator) checkBounds(value int, min *int, max *int, customErrMsg
 
 // validateTarget applies range validation to a given cty.Value.
 func (r *RangeValidator) validateTarget(
-	value cty.Value,
+	values []cty.Value,
 	path config.Path,
 	min *int,
 	max *int,
 	lengthCheck bool,
+	delimiter *string,
 	customErrMsg string) error {
-
 	if lengthCheck {
-		if !value.Type().IsListType() && !value.Type().IsTupleType() {
-			return config.BpError{
-				Err:  fmt.Errorf("length_check can only be used with list types, not %s", value.Type().FriendlyName()),
-				Path: path,
-			}
+		if delimiter != nil && len(values) > 0 {
+			stringVal := values[0].AsString()
+			segments := strings.Split(stringVal, *delimiter)
+			return r.checkBounds(len(segments), min, max, customErrMsg, path)
 		}
-		return r.checkBounds(value.LengthInt(), min, max, customErrMsg, path)
+
+		return r.checkBounds(len(values), min, max, customErrMsg, path)
 	}
 
-	values := evaluateAndFlatten(value)
 	for _, val := range values {
 		if val.IsNull() || !val.IsKnown() {
 			continue
@@ -283,12 +280,29 @@ func (r *RangeValidator) Validate(
 		}
 	}
 
+	if min != nil && max != nil && *max < *min {
+		return config.BpError{
+			Err:  fmt.Errorf("range validator for module %q must have 'min' less than or equal to 'max' defined", mod.ID),
+			Path: modPath,
+		}
+	}
+
 	checkListLength, err := parseBoolInput(rule.Inputs, "length_check", false)
 	if err != nil {
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
 	}
 
+	delimiterRaw, hasDelimiter := rule.Inputs["delimiter"]
+	var delimiter *string
+	if hasDelimiter {
+		delim, ok := delimiterRaw.(string)
+		if !ok {
+			return config.BpError{Err: fmt.Errorf("validation rule for module %q: 'delimiter' must be a string", mod.ID), Path: modPath}
+		}
+		delimiter = &delim
+	}
+
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return r.validateTarget(t.Value, t.Path, min, max, checkListLength, rule.ErrorMessage)
+		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, delimiter, rule.ErrorMessage)
 	})
 }
