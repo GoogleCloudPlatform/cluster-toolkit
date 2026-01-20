@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -479,8 +479,8 @@ deployment_groups:
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
               nvidia_packages:
               - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
-              - datacenter-gpu-manager-4-dev
+              - datacenter-gpu-manager=1:4.5.0
+              - datacenter-gpu-manager-dev=1:4.5.0
               - libnvidia-cfg1-570-server
               - libnvidia-nscq-570
               - nvidia-compute-utils-570-server
