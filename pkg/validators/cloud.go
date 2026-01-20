@@ -72,6 +72,15 @@ func handleServiceUsageError(err error, pid string) error {
 	return fmt.Errorf("unhandled error: %s", herr)
 }
 
+func isValidatorExplicit(bp config.Blueprint, validatorName string) bool {
+	for _, v := range bp.Validators {
+		if v.Validator == validatorName {
+			return true
+		}
+	}
+	return false
+}
+
 // TestApisEnabled tests whether APIs are enabled in given project
 func TestApisEnabled(projectID string, requiredAPIs []string) error {
 	// can return immediately if there are 0 APIs to test
@@ -242,10 +251,18 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
+// errSoftWarning is a private sentinel error used to signal that a soft warning
+// was triggered and discovery should stop immediately to avoid console spam.
+var errSoftWarning = errors.New("abort")
+
+// handleSoftWarning checks if a Google Cloud API error represents a permission issue (403)
+// or a disabled API (400). When these occur, it prints a warning to the console
+// and returns true, signaling the validator to "skip" the check rather than failing the deployment.
 func handleSoftWarning(err error, validatorName, projectID, apiName, permission string) bool {
 	var gerr *googleapi.Error
+	// 403 = Forbidden (Permission missing), 400 = Bad Request (API often disabled)
 	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		fmt.Printf("\n[!] WARNING: validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", validatorName, projectID)
+		fmt.Printf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
 		fmt.Printf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s).\n Please ensure the API is enabled and check your permissions.\n\n", apiName, permission)
 		return true
 	}
@@ -253,7 +270,7 @@ func handleSoftWarning(err error, validatorName, projectID, apiName, permission 
 }
 
 // 1. Helper for cty resolution
-func resolveMachineTypeString(bp config.Blueprint, val cty.Value) string {
+func resolveStringSetting(bp config.Blueprint, val cty.Value) string {
 	v := val
 	if resolved, err := bp.Eval(v); err == nil {
 		v = resolved
@@ -264,22 +281,94 @@ func resolveMachineTypeString(bp config.Blueprint, val cty.Value) string {
 	return ""
 }
 
-// checkMachineType checks if a machine type exists in a specific zone using an existing service client.
+func validateSettingsInModules(
+	blueprint config.Blueprint,
+	globalZone string,
+	projectID string,
+	suffix string,
+	validateResource func(zone string, name string) error,
+) error {
+	validationErrors := config.Errors{}
+	// Anti-Spam Logic: The aborted flag ensures that once a soft warning is hit,
+	// we stop processing any more modules or settings.
+	var aborted bool
+
+	blueprint.WalkModulesSafe(func(path config.ModulePath, module *config.Module) {
+		// Exit immediately if we hit a soft warning in a previous module
+		if aborted {
+			return
+		}
+		targetZone := globalZone
+		moduleZone := resolveStringSetting(blueprint, module.Settings.Get("zone"))
+
+		// If module overrides global zone, validate the override as a hard error
+		if moduleZone != "" && moduleZone != globalZone {
+			targetZone = moduleZone
+			if err := TestZoneExists(projectID, targetZone); err != nil {
+				validationErrors.Add(fmt.Errorf("in module %q: %w", module.ID, err))
+				return
+			}
+		}
+
+		if targetZone == "" {
+			return
+		}
+
+		for key, val := range module.Settings.Items() {
+			if aborted || !strings.HasSuffix(key, suffix) {
+				continue
+			}
+
+			if resourceName := resolveStringSetting(blueprint, val); resourceName != "" {
+				err := validateResource(targetZone, resourceName)
+
+				// Short-circuit on soft warning to prevent duplicate console spam.
+				if errors.Is(err, errSoftWarning) {
+					aborted = true
+					return
+				}
+
+				if err != nil {
+					validationErrors.Add(fmt.Errorf("in module %q setting %q: %w", module.ID, key, err))
+				}
+			}
+		}
+	})
+
+	return validationErrors.OrNil()
+}
+
+// validateMachineTypeInZone calls the Compute Engine API to verify if a specific
+// machine type is available in the given zone and project.
 func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string) error {
 	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
+
+	// Case 1: Success - The machine type exists
 	if err == nil {
 		return nil
 	}
 
-	// Use the generic helper
+	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
 	if handleSoftWarning(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get") {
-		return nil
+		return errSoftWarning
 	}
 
+	// Case 3: Validation Failure - The machine type is genuinely invalid or unavailable
 	return fmt.Errorf("machine type %q is not available in zone %q for project %q", machineType, zone, projectID)
 }
 
-func testMachineTypeAvailability(bp config.Blueprint, inputs config.Dict) error {
+func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Determine if the validator was explicitly added to the blueprint YAML
+	const validatorName = "test_machine_type_in_zone"
+	required := []string{"project_id", "zone"}
+	if isValidatorExplicit(bp, validatorName) {
+		required = append(required, "machine_type")
+	}
+
+	if err := checkInputs(inputs, required); err != nil {
+		return err
+	}
+
 	s, err := compute.NewService(context.Background())
 	if err != nil {
 		return handleClientError(err)
@@ -289,39 +378,23 @@ func testMachineTypeAvailability(bp config.Blueprint, inputs config.Dict) error 
 		return err
 	}
 
-	pID, gZone, exMT := m["project_id"], m["zone"], m["machine_type"]
+	projectID, globalZone, explicitMachineType := m["project_id"], m["zone"], m["machine_type"]
 
-	if exMT != "" {
-		if gZone == "" {
-			return fmt.Errorf("zone must be provided when validating explicit machine_type")
+	if explicitMachineType != "" {
+		// When explicitly called, we MUST validate the zone provided in the inputs
+		if err := TestZoneExists(projectID, globalZone); err != nil {
+			return err
 		}
-		return validateMachineTypeInZone(s, pID, gZone, exMT)
+		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType)
+
+		// Catch the sentinel and return nil so the deployment proceeds
+		if errors.Is(err, errSoftWarning) {
+			return nil
+		}
+		return err
 	}
 
-	errs := config.Errors{}
-	bp.WalkModulesSafe(func(path config.ModulePath, mod *config.Module) {
-		tZone := gZone
-		if resZone := resolveMachineTypeString(bp, mod.Settings.Get("zone")); resZone != "" {
-			tZone = resZone
-		}
-
-		if tZone == "" {
-			return
-		}
-
-		for key, val := range mod.Settings.Items() {
-			// matches exact "machine_type" or suffixes with underscore
-			if key != "machine_type" && !strings.HasSuffix(key, "_machine_type") {
-				continue
-			}
-
-			if mtName := resolveMachineTypeString(bp, val); mtName != "" {
-				if err := validateMachineTypeInZone(s, pID, tZone, mtName); err != nil {
-					errs.Add(fmt.Errorf("in module %q setting %q: %w", mod.ID, key, err))
-				}
-			}
-		}
+	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", func(z, name string) error {
+		return validateMachineTypeInZone(s, projectID, z, name)
 	})
-
-	return errs.OrNil()
 }

@@ -89,7 +89,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		Validator: testZoneExistsName, Inputs: zoneInp}
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
-	// Correctly defined based on your snippet
 	machineTypeInZone := config.Validator{
 		Validator: "test_machine_type_in_zone", Inputs: zoneInp}
 
@@ -120,7 +119,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("project_id", cty.StringVal("f00b")).
 			With("zone", cty.StringVal("danger"))}
 
-		// FIX: Added machineTypeInZone here
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
 			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone})
 	}
@@ -131,7 +129,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("region", cty.StringVal("narnia")).
 			With("zone", cty.StringVal("danger"))}
 
-		// FIX: Added machineTypeInZone here. Note it appears before zoneInRegion.
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
 			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, machineTypeInZone, zoneInRegion})
 	}

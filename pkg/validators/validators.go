@@ -67,7 +67,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
-		testMachineTypeInZone:             testMachineTypeAvailability,
+		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 	}
 }
 
