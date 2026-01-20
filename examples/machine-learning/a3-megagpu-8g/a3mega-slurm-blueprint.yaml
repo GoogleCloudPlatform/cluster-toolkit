@@ -184,11 +184,12 @@ deployment_groups:
           apt update -y
           apt install -y cuda-toolkit-12-8
           apt install -y nvidia-container-toolkit
-          apt install -y datacenter-gpu-manager=1:4.5.0
-          apt install -y datacenter-gpu-manager-dev=1:4.5.0
+          #Pin the package to latest DCGMI version 4.5.0
+          apt install -y datacenter-gpu-manager-4-cuda12=1:4.5.0-1
+          apt install -y datacenter-gpu-manager-4-dev=1:4.5.0-1
 
           #Hold packages to prevent auto-updates
-          apt-mark hold datacenter-gpu-manager datacenter-gpu-manager-dev
+          apt-mark hold datacenter-gpu-manager-4-cuda12 datacenter-gpu-manager-4-dev
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
