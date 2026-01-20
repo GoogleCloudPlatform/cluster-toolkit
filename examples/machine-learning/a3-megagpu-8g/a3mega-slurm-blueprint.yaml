@@ -187,8 +187,7 @@ deployment_groups:
           apt install -y datacenter-gpu-manager=1:4.5.0
           apt install -y datacenter-gpu-manager-dev=1:4.5.0
 
-          # We Adding apt-mark hold to "freeze" the version so it 
-          # doesn't auto-update during future 'apt upgrade' calls.
+          #Hold packages to prevent auto-updates
           apt-mark hold datacenter-gpu-manager datacenter-gpu-manager-dev
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
