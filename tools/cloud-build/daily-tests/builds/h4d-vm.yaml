@@ -52,7 +52,8 @@ steps:
     fi
     set -x
     cd /workspace
-    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster .
+    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+    unzip -o gcluster-bundle.zip
     # Grant execution permissions to the binary
     chmod +x gcluster
     REGION="$${ZONE%-*}"
