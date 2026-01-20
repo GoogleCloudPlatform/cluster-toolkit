@@ -29,7 +29,9 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     dnsutils && \
     # install terraform and packer
     apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com bullseye main" && \
-    apt-get -y update && apt-get install -y unzip python3-pip python3-netaddr terraform packer jq && \
+    apt-get -y update && \
+    # Pin Terraform version to 1.12.2
+    apt-get install -y unzip python3-pip python3-netaddr terraform=1.12.2 packer jq && \
     # install gcloud
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
       | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
@@ -38,7 +40,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get -y update && apt-get -y install google-cloud-sdk && \
     apt-get -y install kubectl && \
     # following is required to execute kubectl commands
-    apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \ 
+    apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # install ansible and python dependencies
     pip install --no-cache-dir --upgrade pip && \
