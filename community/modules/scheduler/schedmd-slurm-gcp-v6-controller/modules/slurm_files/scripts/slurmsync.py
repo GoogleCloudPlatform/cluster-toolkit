@@ -251,17 +251,24 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
     return NodeActionUnchanged()
 
 def get_node_reason(nodename: str) -> Optional[str]:
-    """Get the reason for a node's state."""
+    """Get the reason for a node's state using JSON output."""
     try:
-        result = run(f"{lookup().scontrol} show node {nodename}")
-        for line in result.stdout.splitlines():
-            if "Reason=" in line:
-                reason = line.split("Reason=")[1].strip()
-                if "[" in reason:
-                    return reason.split("[")[0].strip()
-                return reason
+        # Use --json to get structured data
+        result = run(f"{lookup().scontrol} show node {nodename} --json")
+        data = json.loads(result.stdout)
+
+        # Access the reason field directly from the JSON structure
+        nodes = data.get('nodes', [])
+        if nodes:
+            reason = nodes[0].get('reason')
+            # Handle the specific formatting logic for brackets if needed
+            if reason and "[" in reason:
+                return reason.split("[")[0].strip()
+            return reason
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        log.error(f"Failed to execute scontrol or parse its JSON output for node {nodename}: {e}")
     except Exception as e:
-        log.error(f"Failed to get reason for node {nodename}: {e}")
+        log.error(f"An unexpected error occurred while getting reason for node {nodename}: {e}")
     return None
 
 
@@ -269,15 +276,6 @@ def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     lkp = lookup()
     state = lkp.node_state(nodename)
-    if state is not None and "DRAIN" in state.flags:
-        reason = get_node_reason(nodename)
-        if reason in repair.REPAIR_REASONS:
-            if repair.is_node_being_repaired(nodename):
-                return NodeActionUnchanged()
-            inst = lkp.instance(nodename.split(".")[0])
-            if inst:
-                return NodeActionRepair(reason=reason)
-
     if lkp.node_is_gke(nodename):
         return NodeActionUnchanged()
 
@@ -298,6 +296,14 @@ def get_node_action(nodename: str) -> NodeAction:
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
+
+    if state is not None and "DRAIN" in state.flags:
+        reason = get_node_reason(nodename)
+        if reason in repair.REPAIR_REASONS:
+            if repair.is_node_being_repaired(nodename):
+                return NodeActionUnchanged()
+            if inst:
+                return NodeActionRepair(reason=reason)
 
     if (state is None) and (inst is None):
         # Should never happen

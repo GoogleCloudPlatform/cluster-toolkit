@@ -43,12 +43,20 @@ def _get_operations():
             return {}
 
 def _write_all_operations(operations):
-    """Store the operations to the file."""
+    """Store the operations to the file safely."""
     try:
-        with open(REPAIR_FILE, 'w', encoding='utf-8') as f:
-            fcntl.lockf(f, fcntl.LOCK_EX)
+        with open(REPAIR_FILE, 'a', encoding='utf-8') as f:
             try:
+                fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (IOError, BlockingIOError):
+                log.warning(f"Could not acquire lock on {REPAIR_FILE}. Another process may be running.")
+                return False
+
+            try:
+                f.seek(0)
+                f.truncate()
                 json.dump(operations, f, indent=4)
+                f.flush()
                 return True
             finally:
                 fcntl.lockf(f, fcntl.LOCK_UN)
