@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,10 +28,10 @@ REPAIR_REASONS = frozenset(["PERFORMANCE", "SDC", "XID", "unspecified"])
 
 def is_node_being_repaired(node):
     """Check if a node is currently being repaired."""
-    operations = get_operations()
+    operations = _get_operations()
     return node in operations and operations[node]["status"] == "REPAIR_IN_PROGRESS"
 
-def get_operations():
+def _get_operations():
     """Get all repair operations from the file."""
     if not REPAIR_FILE.exists():
         return {}
@@ -39,29 +39,36 @@ def get_operations():
         try:
             return json.load(f)
         except json.JSONDecodeError:
+            log.error(f"Failed to decode JSON from {REPAIR_FILE}, returning empty operations list.")
             return {}
 
-def store_operations(operations):
+def _write_all_operations(operations):
     """Store the operations to the file."""
-    with open(REPAIR_FILE, 'w', encoding='utf-8') as f:
-        fcntl.lockf(f, fcntl.LOCK_EX)
-        try:
-            json.dump(operations, f, indent=4)
-        finally:
-            fcntl.lockf(f, fcntl.LOCK_UN)
+    try:
+        with open(REPAIR_FILE, 'w', encoding='utf-8') as f:
+            fcntl.lockf(f, fcntl.LOCK_EX)
+            try:
+                json.dump(operations, f, indent=4)
+                return True
+            finally:
+                fcntl.lockf(f, fcntl.LOCK_UN)
+    except (IOError, TypeError) as e:
+        log.error(f"Failed to store repair operations to {REPAIR_FILE}: {e}")
+        return False
 
 def store_operation(node, operation_id, reason):
     """Store a single repair operation."""
-    operations = get_operations()
+    operations = _get_operations()
     operations[node] = {
         "operation_id": operation_id,
         "reason": reason,
         "status": "REPAIR_IN_PROGRESS",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    store_operations(operations)
+    if not _write_all_operations(operations):
+        log.error(f"Failed to persist repair operation for node {node}.")
 
-def call_rr_api(node, reason):
+def _call_rr_api(node, reason):
     """Call the R&R API for a given node."""
     log.info(f"Calling R&R API for node {node} with reason {reason}")
     inst = lookup().instance(node)
@@ -71,35 +78,30 @@ def call_rr_api(node, reason):
     cmd = f"gcloud compute instances report-host-as-faulty {node} --async --disruption-schedule=IMMEDIATE --fault-reasons=behavior={reason},description='VM is managed by Slurm' --zone={inst.zone} --format=json"
     try:
         result = run(cmd)
+        log.info(f"gcloud compute instances report-host-as-faulty stdout: {result.stdout.strip()}")
         op = json.loads(result.stdout)
         if isinstance(op, list):
             op = op[0]
         return op["name"]
-    except subprocess.CalledProcessError as e:
-        log.error(f"Failed to call R&R API for {node} due to command execution error: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        log.error(f"Failed to parse R&R API response for {node} due to JSON decode error: {e}")
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        log.error(f"Failed to call or parse R&R API response for {node}: {e}")
         return None
     except Exception as e:
         log.error(f"An unexpected error occurred while calling R&R API for {node}: {e}")
         return None
 
-def get_operation_status(operation_id):
+def _get_operation_status(operation_id):
     """Get the status of a GCP operation."""
     cmd = f'gcloud compute operations list --filter="name={operation_id}" --format=json'
     try:
         result = run(cmd)
         operations_list = json.loads(result.stdout)
-        if operations_list and len(operations_list) > 0:
+        if operations_list:
             return operations_list[0]
 
         return None 
-    except subprocess.CalledProcessError as e:
-        log.error(f"Failed to get operation status for {operation_id} due to command execution error: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        log.error(f"Failed to parse operation status for {operation_id} due to JSON decode error: {e}")
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        log.error(f"Failed to get or parse operation status for {operation_id}: {e}")
         return None
     except Exception as e:
         log.error(f"An unexpected error occurred while getting operation status for {operation_id}: {e}")
@@ -107,30 +109,26 @@ def get_operation_status(operation_id):
 
 def poll_operations():
     """Poll the status of ongoing repair operations."""
-    operations = get_operations()
+    operations = _get_operations()
     if not operations:
         return
 
     log.info("Polling repair operations")
     for node, op_details in operations.items():
         if op_details["status"] == "REPAIR_IN_PROGRESS":
-            op_status = get_operation_status(op_details["operation_id"])
-            if not op_status:
+            gcp_op_status = _get_operation_status(op_details["operation_id"])
+            if not gcp_op_status:
                 continue
 
-            if op_status.get("status") == "DONE":
-                if op_status.get("error"):
-                    log.error(f"Repair operation for {node} failed: {op_status['error']}")
+            if gcp_op_status.get("status") == "DONE":
+                if gcp_op_status.get("error"):
+                    log.error(f"Repair operation for {node} failed: {gcp_op_status['error']}")
                     op_details["status"] = "FAILURE"
                     run(f"{lookup().scontrol} update nodename={node} state=down reason='Repair failed'")
                 else:
                     log.info(f"Repair operation for {node} succeeded. Powering down the VM")
                     run(f"{lookup().scontrol} update nodename={node} state=power_down reason='Repair succeeded'")
                     op_details["status"] = "SUCCESS"
-        elif op_details["status"] == "SUCCESS":
-            inst = lookup().instance(node)
-            if inst and inst.status == "RUNNING":
-                log.info(f"Node {node} is back online.")
-                op_details["status"] = "RECOVERED"
 
-    store_operations(operations)
+    if not _write_all_operations(operations):
+        log.error("Failed to persist updated repair operations state after polling.")

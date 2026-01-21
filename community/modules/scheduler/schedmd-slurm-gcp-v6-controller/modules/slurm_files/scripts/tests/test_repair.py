@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ class RepairScriptTest(unittest.TestCase):
         # Reset the REPAIR_FILE path for each test
         repair.REPAIR_FILE = Path("/slurm/repair_operations.json")
 
-    @patch('repair.get_operations')
+    @patch('repair._get_operations')
     def test_is_node_being_repaired(self, mock_get_operations):
         mock_get_operations.return_value = {
             "node-1": {"status": "REPAIR_IN_PROGRESS"},
@@ -43,26 +43,26 @@ class RepairScriptTest(unittest.TestCase):
     @patch('builtins.open', new_callable=mock_open, read_data='{"node-1": {"status": "REPAIR_IN_PROGRESS"}}')
     @patch('pathlib.Path.exists', return_value=True)
     def test_get_operations_success(self, mock_exists, mock_open_file):
-        ops = repair.get_operations()
+        ops = repair._get_operations()
         self.assertEqual(ops, {"node-1": {"status": "REPAIR_IN_PROGRESS"}})
         mock_open_file.assert_called_with(repair.REPAIR_FILE, 'r', encoding='utf-8')
 
     @patch('builtins.open', new_callable=mock_open, read_data='invalid json')
     @patch('pathlib.Path.exists', return_value=True)
     def test_get_operations_json_decode_error(self, mock_exists, mock_open_file):
-        ops = repair.get_operations()
+        ops = repair._get_operations()
         self.assertEqual(ops, {})
 
     @patch('pathlib.Path.exists', return_value=False)
     def test_get_operations_file_not_found(self, mock_exists):
-        ops = repair.get_operations()
+        ops = repair._get_operations()
         self.assertEqual(ops, {})
 
     @patch('builtins.open', new_callable=mock_open)
     @patch('fcntl.lockf')
-    def test_store_operations(self, mock_lockf, mock_open_file):
+    def test_write_all_operations(self, mock_lockf, mock_open_file):
         operations = {"node-1": {"status": "SUCCESS"}}
-        repair.store_operations(operations)
+        repair._write_all_operations(operations)
         mock_open_file.assert_called_with(repair.REPAIR_FILE, 'w', encoding='utf-8')
         handle = mock_open_file()
         expected_json_string = json.dumps(operations, indent=4)
@@ -72,10 +72,10 @@ class RepairScriptTest(unittest.TestCase):
         mock_lockf.assert_any_call(handle, fcntl.LOCK_EX)
         mock_lockf.assert_any_call(handle, fcntl.LOCK_UN)
 
-    @patch('repair.get_operations', return_value={})
-    @patch('repair.store_operations')
+    @patch('repair._get_operations', return_value={})
+    @patch('repair._write_all_operations')
     @patch('repair.datetime')
-    def test_store_operation(self, mock_datetime, mock_store_operations, mock_get_operations):
+    def test_store_operation(self, mock_datetime, mock_write_all_operations, mock_get_operations):
         mock_now = datetime(2025, 1, 1, tzinfo=timezone.utc)
         mock_datetime.now.return_value = mock_now
 
@@ -89,7 +89,7 @@ class RepairScriptTest(unittest.TestCase):
                 "timestamp": mock_now.isoformat(),
             }
         }
-        mock_store_operations.assert_called_with(expected_operations)
+        mock_write_all_operations.assert_called_with(expected_operations)
 
     @patch('repair.lookup')
     @patch('repair.run')
@@ -104,14 +104,14 @@ class RepairScriptTest(unittest.TestCase):
             returncode=0
         )
         
-        op_id = repair.call_rr_api("node-1", "XID")
+        op_id = repair._call_rr_api("node-1", "XID")
         self.assertEqual(op_id, "op-123")
         mock_run.assert_called_once()
 
     @patch('repair.lookup')
     def test_call_rr_api_instance_not_found(self, mock_lookup):
         mock_lookup.return_value.instance.return_value = None
-        op_id = repair.call_rr_api("node-1", "XID")
+        op_id = repair._call_rr_api("node-1", "XID")
         self.assertIsNone(op_id)
 
     @patch('repair.lookup')
@@ -120,24 +120,24 @@ class RepairScriptTest(unittest.TestCase):
         mock_instance = MagicMock()
         mock_instance.zone = "us-central1-a"
         mock_lookup.return_value.instance.return_value = mock_instance
-        op_id = repair.call_rr_api("node-1", "XID")
+        op_id = repair._call_rr_api("node-1", "XID")
         self.assertIsNone(op_id)
 
     @patch('repair.run')
     def test_get_operation_status_success(self, mock_run):
         mock_run.return_value.stdout = '[{"status": "DONE"}]'
-        status = repair.get_operation_status("op-123")
+        status = repair._get_operation_status("op-123")
         self.assertEqual(status, {"status": "DONE"})
         
     @patch('repair.run')
     def test_get_operation_status_empty_list(self, mock_run):
         mock_run.return_value.stdout = '[]'
-        status = repair.get_operation_status("op-123")
+        status = repair._get_operation_status("op-123")
         self.assertIsNone(status)
 
-    @patch('repair.get_operations')
-    @patch('repair.store_operations')
-    @patch('repair.get_operation_status')
+    @patch('repair._get_operations')
+    @patch('repair._write_all_operations')
+    @patch('repair._get_operation_status')
     @patch('repair.lookup')
     @patch('repair.run')
     def test_poll_operations(self, mock_run, mock_lookup, mock_get_op_status, mock_store_ops, mock_get_ops):
