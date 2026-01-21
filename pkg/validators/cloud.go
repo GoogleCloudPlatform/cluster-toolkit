@@ -258,15 +258,15 @@ var errSoftWarning = errors.New("abort")
 // handleSoftWarning checks if a Google Cloud API error represents a permission issue (403)
 // or a disabled API (400). When these occur, it prints a warning to the console
 // and returns true, signaling the validator to "skip" the check rather than failing the deployment.
-func handleSoftWarning(err error, validatorName, projectID, apiName, permission string) bool {
+func getSoftWarningMessage(err error, validatorName, projectID, apiName, permission string) (string, bool) {
 	var gerr *googleapi.Error
 	// 403 = Forbidden (Permission missing), 400 = Bad Request (API often disabled)
 	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		fmt.Printf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
-		fmt.Printf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s).\n Please ensure the API is enabled and check your permissions.\n\n", apiName, permission)
-		return true
+		msg := fmt.Sprintf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
+		msg += fmt.Sprintf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s). Please ensure the API is enabled and check your permissions.\n", apiName, permission)
+		return msg, true
 	}
-	return false
+	return "", false
 }
 
 // 1. Helper for cty resolution
@@ -349,7 +349,8 @@ func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType 
 	}
 
 	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
-	if handleSoftWarning(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get") {
+	if msg, isSoft := getSoftWarningMessage(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get"); isSoft {
+		fmt.Println(msg)
 		return errSoftWarning
 	}
 
