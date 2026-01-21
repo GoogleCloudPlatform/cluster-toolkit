@@ -122,21 +122,20 @@ ghpc:
 ```
 
 ### Range Validator
-The `range` validator ensures that input variables (or their computed lengths/segment counts) fall within a specified numerical minimum and/or maximum. It supports validating individual numeric values, the number of elements in a list, or the count of segments in a delimited string (when an optional delimiter is specified). The optional length_check field (defaulting to false) determines whether to validate the value itself or the count of its elements/segments.
+The `range` validator ensures input variables either their values or lengths fall within specified numerical minimum and/or maximum bounds. It supports validating individual numeric values, lists of numeric values, and the number of elements in a list. The optional length_check field (defaulting to false) determines whether to validate the values themselves or the length of the variable.
 
 **Example definition in `metadata.yaml`:**
 
 ```yaml
 ghpc:
-validators:
+  validators:
   - validator: range
     inputs:
-      vars: [mount_runner.args]
-      min: 5
-      max: 5
-      length_check: true
-      delimiter: " "
-    error_message: "The 'mount_runner.args' field must contain exactly 5 elements."
+      vars: [versions]
+      min: 1
+      max: 8
+      length_check: true # enables validation of the list's length rather than the individual values it contains.
+    error_message: "The 'versions' list must contain at least one version."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.

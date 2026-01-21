@@ -20,11 +20,8 @@ spec:
     - storage.googleapis.com
 ghpc:
   validators:
-  - validator: range
+  - validator: regex
     inputs:
       vars: [mount_runner.args]
-      min: 5
-      max: 5
-      length_check: true
-      delimiter: " "
+      pattern: "^[^ ]+( [^ ]+){4}$"
     error_message: "The 'mount_runner.args' field must contain exactly 5 elements."

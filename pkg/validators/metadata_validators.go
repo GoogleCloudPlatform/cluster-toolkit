@@ -222,29 +222,8 @@ func (r *RangeValidator) validateTarget(
 	min *int,
 	max *int,
 	lengthCheck bool,
-	delimiter *string,
 	customErrMsg string) error {
 	if lengthCheck {
-		if delimiter != nil {
-			if len(values) > 1 {
-				return config.BpError{
-					Err:  fmt.Errorf("range validator with 'delimiter' option can only be used on a single string, not a list of values"),
-					Path: path,
-				}
-			}
-			if len(values) == 1 {
-				if values[0].Type() != cty.String {
-					return config.BpError{
-						Err:  fmt.Errorf("range validator with 'delimiter' expects a string value, but got %s", values[0].Type().FriendlyName()),
-						Path: path,
-					}
-				}
-				stringVal := values[0].AsString()
-				segments := strings.Split(stringVal, *delimiter)
-				return r.checkBounds(len(segments), min, max, customErrMsg, path)
-			}
-		}
-
 		return r.checkBounds(len(values), min, max, customErrMsg, path)
 	}
 
@@ -312,17 +291,7 @@ func (r *RangeValidator) Validate(
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
 	}
 
-	delimiterRaw, hasDelimiter := rule.Inputs["delimiter"]
-	var delimiter *string
-	if hasDelimiter {
-		delim, ok := delimiterRaw.(string)
-		if !ok {
-			return config.BpError{Err: fmt.Errorf("validation rule for module %q: 'delimiter' must be a string", mod.ID), Path: modPath}
-		}
-		delimiter = &delim
-	}
-
 	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
-		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, delimiter, rule.ErrorMessage)
+		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, rule.ErrorMessage)
 	})
 }

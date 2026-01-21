@@ -19,11 +19,9 @@ ghpc:
     inputs:
       vars: [node_count_static]
       min: 0
-      length_check: false
     error_message: "The 'node_count_static' value must be at least 0."
   - validator: range
     inputs:
       vars: [node_count_dynamic_max]
       min: 0
-      length_check: false
     error_message: "The 'node_count_dynamic_max' value must be at least 0."
