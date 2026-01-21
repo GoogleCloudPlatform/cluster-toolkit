@@ -255,7 +255,7 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 // was triggered and discovery should stop immediately to avoid console spam.
 var errSoftWarning = errors.New("abort")
 
-// handleSoftWarning checks if a Google Cloud API error represents a permission issue (403)
+// getSoftWarningMessage checks if a Google Cloud API error represents a permission issue (403)
 // or a disabled API (400). When these occur, it prints a warning to the console
 // and returns true, signaling the validator to "skip" the check rather than failing the deployment.
 func getSoftWarningMessage(err error, validatorName, projectID, apiName, permission string) (string, bool) {
