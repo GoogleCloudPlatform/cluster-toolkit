@@ -39,14 +39,14 @@ deployment_groups:
     terraform_providers:
       google:
         source: hashicorp/google
-        version: '>= 6.9.0, <= 7.15.0'
+        version: '>= 6.9.0, <= 7.16.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
       google-beta:
         source: hashicorp/google-beta
-        version: '>= 6.9.0, <= 7.15.0'
+        version: '>= 6.9.0, <= 7.16.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))

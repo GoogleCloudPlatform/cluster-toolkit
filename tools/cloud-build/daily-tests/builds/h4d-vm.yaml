@@ -52,7 +52,7 @@ steps:
     fi
     set -x
     cd /workspace
-    gsutil cp gs://cluster-toolkit-gcluster/latest/gcluster .
+    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster .
     # Grant execution permissions to the binary
     chmod +x gcluster
     REGION="$${ZONE%-*}"
@@ -68,3 +68,8 @@ steps:
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/h4d-vm.yml"
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'

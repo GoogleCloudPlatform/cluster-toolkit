@@ -17,3 +17,10 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [network_routing_mode]
+      allowed: [GLOBAL, REGIONAL]
+    error_message: "'network_routing_mode' must be GLOBAL or REGIONAL."

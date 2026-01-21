@@ -93,10 +93,10 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		c.Check(g.TerraformProviders, DeepEquals, map[string]PR{
 			"google": TerraformProvider{
 				Source:  "hashicorp/google",
-				Version: ">= 6.9.0, <= 7.15.0"},
+				Version: ">= 6.9.0, <= 7.16.0"},
 			"google-beta": TerraformProvider{
 				Source:  "hashicorp/google-beta",
-				Version: ">= 6.9.0, <= 7.15.0"}})
+				Version: ">= 6.9.0, <= 7.16.0"}})
 	}
 
 	{ // no def PR, group PR

@@ -17,6 +17,19 @@
 - name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
+  ## Display Terraform Version
+  - name: "Get Terraform Version"
+    ansible.builtin.command: terraform version
+    changed_when: false
+    register: terraform_version_output
+
+  - name: "Print Terraform Version"
+    ansible.builtin.debug:
+      msg: |
+        ---- TERRAFORM VERSION ----
+        {{ terraform_version_output.stdout }}
+        ---------------------------
+
   ## Create SSH Keys
   - name: "Create .ssh folder"
     ansible.builtin.file:

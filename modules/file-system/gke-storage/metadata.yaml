@@ -16,3 +16,43 @@
 spec:
   requirements:
     services: []
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [storage_type]
+      allowed: [parallelstore, hyperdisk-balanced, hyperdisk-throughput, hyperdisk-extreme]
+      case_sensitive: false
+    error_message: "Invalid storage_type. Allowed: Parallelstore, Hyperdisk-balanced, Hyperdisk-throughput, Hyperdisk-extreme."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [access_mode]
+      allowed:
+      - ReadWriteOnce
+      - ReadOnlyMany
+      - ReadWriteMany
+      - ReadWriteOncePod
+      case_sensitive: false
+      allow_null: false
+    error_message: "Allowed values for access_mode are 'ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany', or 'ReadWriteOncePod'."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [sc_volume_binding_mode]
+      allowed:
+      - Immediate
+      - WaitForFirstConsumer
+      case_sensitive: false
+      allow_null: false
+    error_message: "Allowed values for sc_volume_binding_mode are 'Immediate' or 'WaitForFirstConsumer'."
+
+  - validator: allowed_enum
+    inputs:
+      vars: [sc_reclaim_policy]
+      allowed:
+      - Retain
+      - Delete
+      case_sensitive: false
+      allow_null: false
+    error_message: "Allowed values for sc_reclaim_policy are 'Retain' or 'Delete'."

@@ -30,7 +30,6 @@ vars:
   image_build_machine_type: n2-standard-4
   image_disk_size_gb: 50
   built_image_family: slurm-g4-ubuntu2404
-
   build_slurm_from_git_ref: 6.10.6 # Or a newer stable tag
 
   # Cluster env settings
@@ -40,6 +39,10 @@ vars:
 
   # Cluster Settings
   disk_size_gb: 100
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  g4_reservation_name: "" # To use a reservation, provide its name here.
+  g4_enable_spot_vm: false # To use Spot VMs, set this to true.
+  g4_dws_flex_enabled: false # To use DWS Flex Provisioning
 
 deployment_groups:
 - group: image-env
@@ -108,8 +111,6 @@ deployment_groups:
                 name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
-
-
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -287,6 +288,11 @@ deployment_groups:
         family: $(vars.built_image_family)
       instance_image_custom: true
       enable_placement: false
+      #Provisioning models
+      reservation_name: $(vars.g4_reservation_name)
+      enable_spot_vm: $(vars.g4_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.g4_dws_flex_enabled)
 
       # Instructions for Dual NIC on g4-standard-384:
       # 4. Uncomment the 'network_interfaces' block below to define the two NICs.

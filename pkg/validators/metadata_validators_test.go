@@ -140,3 +140,151 @@ func TestRegexValidator(t *testing.T) {
 		}
 	})
 }
+
+func TestAllowedEnumValidator(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"network_routing_mode": cty.StringVal("GLOBAL"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := AllowedEnumValidator{}
+
+	t.Run("validates_network_routing_mode_from_metadata_example", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_routing_mode": cty.StringVal("INVALID_MODE"),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator:    "allowed_enum",
+			ErrorMessage: "'network_routing_mode' must be GLOBAL or REGIONAL.",
+			Inputs: map[string]interface{}{
+				"vars":    []interface{}{"network_routing_mode"},
+				"allowed": []interface{}{"GLOBAL", "REGIONAL"},
+			},
+		}
+
+		// 1. Test failure with invalid value
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatal("expected error for invalid routing mode, got nil")
+		}
+		if !strings.Contains(err.Error(), "'network_routing_mode' must be GLOBAL or REGIONAL.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+
+		// 2. Test failure with lowercase value (default case_sensitive is true)
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_routing_mode": cty.StringVal("global"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected error for lowercase 'global' due to default case sensitivity, got nil")
+		}
+
+		// 3. Test success with correct uppercase value
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_routing_mode": cty.StringVal("GLOBAL"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error for valid routing mode 'GLOBAL': %v", err)
+		}
+
+		// 4. Test success with correct uppercase value 'REGIONAL'
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"network_routing_mode": cty.StringVal("REGIONAL"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error for valid routing mode 'REGIONAL': %v", err)
+		}
+	})
+
+	t.Run("handles_explicit_case_insensitive_matching", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"tier": cty.StringVal("basic_ssd"),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator: "allowed_enum",
+			Inputs: map[string]interface{}{
+				"vars":           []interface{}{"tier"},
+				"allowed":        []interface{}{"BASIC_SSD"},
+				"case_sensitive": false,
+			},
+		}
+
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected case-insensitive match to pass, got: %v", err)
+		}
+	})
+
+	t.Run("fails_on_null_when_allow_null_is_false", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"tier": cty.NullVal(cty.String),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator: "allowed_enum",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"tier"},
+				"allowed":    []interface{}{"BASIC_SSD"},
+				"allow_null": false,
+			},
+		}
+
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected error for null value when allow_null is false, got nil")
+		}
+	})
+
+	t.Run("passes_on_null_when_allow_null_is_true", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"tier": cty.NullVal(cty.String),
+		})
+
+		rule := modulereader.ValidationRule{
+			Validator: "allowed_enum",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"tier"},
+				"allowed":    []interface{}{"BASIC_SSD"},
+				"allow_null": true,
+			},
+		}
+
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error for null value when allow_null is true: %v", err)
+		}
+	})
+
+	t.Run("fails_with_missing_allowed_input", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "allowed_enum",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"tier"},
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatal("expected error for missing 'allowed' input, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing an 'allowed' list") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
+}
