@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
 	"regexp"
 	"strings"
 
@@ -246,6 +245,19 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
+// getSoftWarningMessage checks if a Google Cloud API error represents a permission issue (403)
+// or a disabled API (400). When these occur, it prints a warning to the console
+// and returns true, signaling the validator to "skip" the check rather than failing the deployment.
+func getSoftWarningMessage(err error, validatorName, projectID, apiName, permission string) (string, bool) {
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
+		msg := fmt.Sprintf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
+		msg += fmt.Sprintf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s). Please ensure the API is enabled and check your permissions.\n", apiName, permission)
+		return msg, true
+	}
+	return "", false
+}
+
 func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
 	aggList, err := s.Reservations.AggregatedList(projectID).Do()
 	if err != nil {
@@ -266,8 +278,7 @@ func findReservationInOtherZones(s *compute.Service, projectID string, name stri
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
-// It uses TestProjectExists for diagnosis if the specific reservation is missing.
-func TestReservationExists(projectID string, zone string, reservationName string) error {
+func TestReservationExists(reservationProjectID string, zone string, reservationName string, deploymentProjectID string) error {
 	if reservationName == "" {
 		return nil
 	}
@@ -278,79 +289,83 @@ func TestReservationExists(projectID string, zone string, reservationName string
 		return handleClientError(err)
 	}
 
-	// 1. Direct check: Fast Path
-	_, err = s.Reservations.Get(projectID, zone, reservationName).Do()
+	// 1. Direct check: Try to Get the specific reservation
+	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Do()
 	if err == nil {
 		return nil // Success
 	}
 
-	// 2. Handle Permission Denied on GET
-	var gerr *googleapi.Error
-	if errors.As(err, &gerr) && gerr.Code == 403 {
-		logging.Info("HINT: Identity lacks permission to verify reservation %q in project %q. Skipping validator 'test_reservation_exists'.", reservationName, projectID)
-		return nil
+	// 2. Access Check: If we can't even reach the project/API, issue soft warning
+	if msg, isSoft := getSoftWarningMessage(err, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.reservations.get"); isSoft {
+		fmt.Println(msg)
+		return nil // Skip and continue
 	}
 
-	// 3. Diagnostic Path: Project validation
-	if pErr := TestProjectExists(projectID); pErr != nil {
-		return pErr
-	}
+	// 3. Diagnostic Search: The reservation was not in the expected zone (404).
+	// We try to find where it actually is.
+	foundInZones, aggErr := findReservationInOtherZones(s, reservationProjectID, reservationName)
 
-	// 4. Search other zones
-	foundInZones, aggErr := findReservationInOtherZones(s, projectID, reservationName)
 	if aggErr != nil {
-		if errors.As(aggErr, &gerr) && gerr.Code == 403 {
-			return fmt.Errorf("reservation %q not found in project %q and zone %q (Note: identity lacks permission to search other zones)", reservationName, projectID, zone)
+		// If Discovery fails (403/400) and it's a SHARED project, we must skip
+		// because we can't prove the user has a typo; we just can't list resources.
+		if reservationProjectID != deploymentProjectID {
+			fmt.Printf("\n[!] WARNING: Identity cannot verify shared reservation in project %q (%v). Skipping this check.\n", reservationProjectID, err)
+			return nil
 		}
-		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, projectID, zone)
+
+		// For Local Project: If List fails, we report the original 404 but note the permission issue.
+		var gerr *googleapi.Error
+		if errors.As(aggErr, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
+			return fmt.Errorf("reservation %q not found in zone %q (Note: identity lacks permission to search other zones)", reservationName, zone)
+		}
+		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, reservationProjectID, zone)
 	}
 
-	// 5. Construct help message if found elsewhere
+	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
+	// This will now trigger for your "hpc-toolkit-dev" case!
 	if len(foundInZones) > 0 {
 		return config.HintError{
 			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) %s instead of %q",
-				reservationName, projectID, strings.Join(foundInZones, ", "), zone),
+				reservationName, reservationProjectID, strings.Join(foundInZones, ", "), zone),
 			Hint: fmt.Sprintf("The blueprint is configured for %q. Change your zone or use a reservation located in %q.", zone, zone),
 		}
 	}
 
-	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, projectID)
+	// 5. Not Found Anywhere: Hard Failure
+	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
 }
 
-// // Wrapper for the blueprint validator logic
 func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
-	// 1. Get inputs
 	if err := checkInputs(inputs, []string{"project_id", "zone", "reservation_name"}); err != nil {
 		return err
 	}
-	m, err := inputsAsStrings(inputs)
+	inputMap, err := inputsAsStrings(inputs)
 	if err != nil {
 		return err
 	}
 
-	projectID := m["project_id"]
-	zone := m["zone"]
-	resInput := m["reservation_name"]
+	// The primary project defined in the blueprint vars
+	deploymentProjectID := inputMap["project_id"]
+	zone := inputMap["zone"]
+	resInput := inputMap["reservation_name"]
 
 	if resInput == "" {
-		return nil // Skip validation if no reservation is provided
+		return nil
 	}
 
-	// Handle hierarchical formats (e.g., <name>/reservationBlocks/<block>)
-	// by stripping the block suffix.
+	// Handle hierarchical formats
 	resInput = strings.Split(resInput, "/reservationBlocks/")[0]
 
-	// 2. Determine if it's a Shared Reservation (Resource Path) or Local (Simple Name)
-	// Regex matches: projects/{PROJECT}/reservations/{NAME}
+	// Determine if it's a Shared Reservation path or a simple name
 	matches := reservationNameRegex.FindStringSubmatch(resInput)
-
-	targetProject := projectID
+	reservationProjectID := deploymentProjectID
 	targetName := resInput
 
 	if len(matches) == 3 {
-		// It's a shared reservation path
-		targetProject = matches[1]
+		reservationProjectID = matches[1] // Extract project 'B'
 		targetName = matches[2]
 	}
-	return TestReservationExists(targetProject, zone, targetName)
+
+	// Pass both the owner project and the deployment project
+	return TestReservationExists(reservationProjectID, zone, targetName, deploymentProjectID)
 }
