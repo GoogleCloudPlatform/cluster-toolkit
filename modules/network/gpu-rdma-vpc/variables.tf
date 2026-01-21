@@ -50,7 +50,7 @@ variable "subnetworks_template" {
   ip_range    (string, required, range of IPs for all subnets to share (CIDR format), default is 192.168.0.0/16)
   region      (string, optional, region to deploy subnets to, defaults to vars.region)
   EOT
-  nullable    = false
+  nullable    = true
   type = object({
     count       = number
     name_prefix = string
@@ -65,12 +65,15 @@ variable "subnetworks_template" {
   }
 
   validation {
-    condition     = var.subnetworks_template.count > 0
-    error_message = "Number of subnetworks must be greater than 0"
+    # If template is provided, count must be > 0
+    condition     = var.subnetworks_template == null ? true : var.subnetworks_template.count > 0
+    error_message = "Number of subnetworks must be greater than 0."
   }
 
   validation {
-    condition     = can(cidrhost(var.subnetworks_template.ip_range, 0))
+    # If the template is null, return true (pass). 
+    # Otherwise, check if the CIDR format is valid.
+    condition     = var.subnetworks_template == null ? true : can(cidrhost(var.subnetworks_template.ip_range, 0))
     error_message = "IP address range must be in CIDR format."
   }
 }

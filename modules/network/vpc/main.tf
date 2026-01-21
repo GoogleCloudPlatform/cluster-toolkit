@@ -191,6 +191,8 @@ module "vpc" {
   secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
+  enable_ipv6_ula                        = var.enable_ipv6_ula
+  internal_ipv6_range                    = var.internal_ipv6_range
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
