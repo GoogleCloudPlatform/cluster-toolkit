@@ -56,7 +56,11 @@ steps:
       exit 1
     fi
     set -x
-    cd /workspace && make
+    cd /workspace
+    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+    unzip -o gcluster-bundle.zip
+    # Grant execution permissions to the binary
+    chmod +x gcluster
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     EXAMPLE_BP=examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml
@@ -86,3 +90,8 @@ steps:
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-ultragpu-onspot.yml"
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
