@@ -89,6 +89,13 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		Validator: testZoneExistsName, Inputs: zoneInp}
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
+	resInp := zoneInp.With("reservation_name", config.GlobalRef("reservation_name").AsValue())
+	resExists := config.Validator{
+		Validator: testReservationExistsName, Inputs: resInp}
+
+	myResInp := zoneInp.With("reservation_name", config.GlobalRef("my_reservation").AsValue())
+	myResExists := config.Validator{
+		Validator: testReservationExistsName, Inputs: myResInp}
 
 	{
 		bp := config.Blueprint{}
@@ -129,5 +136,25 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
 			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion})
+	}
+
+	{
+		bp := config.Blueprint{Vars: config.Dict{}.
+			With("project_id", cty.StringVal("f00b")).
+			With("zone", cty.StringVal("danger")).
+			With("reservation_name", cty.StringVal("my-res"))}
+
+		c.Check(defaults(bp), DeepEquals, []config.Validator{
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, resExists})
+	}
+
+	{
+		bp := config.Blueprint{Vars: config.Dict{}.
+			With("project_id", cty.StringVal("f00b")).
+			With("zone", cty.StringVal("danger")).
+			With("my_reservation", cty.StringVal("my-res"))}
+
+		c.Check(defaults(bp), DeepEquals, []config.Validator{
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, myResExists})
 	}
 }

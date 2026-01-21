@@ -309,7 +309,7 @@ func TestReservationExists(reservationProjectID string, zone string, reservation
 		// If Discovery fails (403/400) and it's a SHARED project, we must skip
 		// because we can't prove the user has a typo; we just can't list resources.
 		if reservationProjectID != deploymentProjectID {
-			fmt.Printf("\n[!] WARNING: Identity cannot verify shared reservation in project %q (%v). Skipping this check.\n", reservationProjectID, err)
+			fmt.Printf("\n[!] WARNING: Identity cannot verify shared reservation in project %q (%v). Skipping this check.\n", reservationProjectID, aggErr)
 			return nil
 		}
 
@@ -322,12 +322,13 @@ func TestReservationExists(reservationProjectID string, zone string, reservation
 	}
 
 	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
-	// This will now trigger for your "hpc-toolkit-dev" case!
 	if len(foundInZones) > 0 {
+		zonesList := strings.Join(foundInZones, ", ")
 		return config.HintError{
-			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) %s instead of %q",
-				reservationName, reservationProjectID, strings.Join(foundInZones, ", "), zone),
-			Hint: fmt.Sprintf("The blueprint is configured for %q. Change your zone or use a reservation located in %q.", zone, zone),
+			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) [%s] instead of %q",
+				reservationName, reservationProjectID, zonesList, zone),
+			Hint: fmt.Sprintf("Change the zone in your blueprint to one of [%s], or use a reservation that is located in zone %q.",
+				zonesList, zone),
 		}
 	}
 
