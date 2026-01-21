@@ -106,7 +106,7 @@ module "install_kueue" {
 
 module "configure_kueue" {
   source           = "./helm_install"
-  count            = local.install_kueue ? (coalesce(var.kueue.config_path, "") != "" ? 1 : 0) : 0
+  count            = local.install_kueue ? ((var.kueue.config_path == null ? "" : var.kueue.config_path) != "" ? 1 : 0) : 0
   release_name     = "kueue-config"
   chart_name       = "${path.module}/raw-config-chart"
   chart_version    = "0.1.0"
@@ -118,9 +118,9 @@ module "configure_kueue" {
     yamlencode({
       manifests = [
         for doc in split("\n---", (
-          coalesce(var.kueue.config_path, "") != ""
-          ? (length(coalesce(var.kueue.config_template_vars, {})) > 0 || length(regexall("\\.tftpl$", coalesce(var.kueue.config_path, ""))) > 0
-            ? templatefile(var.kueue.config_path, coalesce(var.kueue.config_template_vars, {}))
+          (var.kueue.config_path == null ? "" : var.kueue.config_path) != ""
+          ? (length(var.kueue.config_template_vars == null ? {} : var.kueue.config_template_vars) > 0 || length(regexall("\\.tftpl$", var.kueue.config_path == null ? "" : var.kueue.config_path)) > 0
+            ? templatefile(var.kueue.config_path, var.kueue.config_template_vars == null ? {} : var.kueue.config_template_vars)
           : file(var.kueue.config_path))
           : ""
         )) : trimspace(doc)
