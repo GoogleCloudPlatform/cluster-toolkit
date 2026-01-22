@@ -53,8 +53,6 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net
-      mtu: 1460
-      network_routing_mode: "REGIONAL"
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub
         subnet_region: $(vars.region)
