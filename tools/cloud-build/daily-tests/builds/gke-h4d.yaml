@@ -19,6 +19,7 @@ tags:
 - m.gke-node-pool
 - m.service-account
 - m.vpc
+- m.multivpc
 - m.kubectl-apply
 - m.filestore
 - m.gke-job-template
