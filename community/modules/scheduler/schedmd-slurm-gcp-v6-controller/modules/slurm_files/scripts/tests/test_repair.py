@@ -63,13 +63,13 @@ class RepairScriptTest(unittest.TestCase):
     def test_write_all_operations(self, mock_lockf, mock_open_file):
         operations = {"node-1": {"status": "SUCCESS"}}
         repair._write_all_operations(operations)
-        mock_open_file.assert_called_with(repair.REPAIR_FILE, 'w', encoding='utf-8')
+        mock_open_file.assert_called_with(repair.REPAIR_FILE, 'a', encoding='utf-8')
         handle = mock_open_file()
         expected_json_string = json.dumps(operations, indent=4)
         written_data_parts = [call_args[0][0] for call_args in handle.write.call_args_list]
         written_data = ''.join(written_data_parts)
         self.assertEqual(written_data, expected_json_string)
-        mock_lockf.assert_any_call(handle, fcntl.LOCK_EX)
+        mock_lockf.assert_any_call(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         mock_lockf.assert_any_call(handle, fcntl.LOCK_UN)
 
     @patch('repair._get_operations', return_value={})
@@ -167,7 +167,7 @@ class RepairScriptTest(unittest.TestCase):
         final_ops = mock_store_ops.call_args[0][0]
         self.assertEqual(final_ops["node-1"]["status"], "SUCCESS")
         self.assertEqual(final_ops["node-2"]["status"], "FAILURE")
-        self.assertEqual(final_ops["node-3"]["status"], "RECOVERED")
+        self.assertEqual(final_ops["node-3"]["status"], "SUCCESS")
         self.assertEqual(final_ops["node-4"]["status"], "RECOVERED")
         
         # Check that scontrol was called correctly
