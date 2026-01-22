@@ -58,17 +58,17 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub
         subnet_region: $(vars.region)
-        subnet_ip: 10.132.0.0/20
+        subnet_ip: 10.10.0.0/20
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-sub
         ranges:
         - range_name: pods
-          ip_cidr_range: 10.64.0.0/19
+          ip_cidr_range: 10.11.0.0/16
         - range_name: services
-          ip_cidr_range: 10.65.0.0/19
+          ip_cidr_range: 10.10.16.0/20
       firewall_rules:
       - name: $(vars.deployment_name)-internal
-        ranges: [10.0.0.0/8]
+        ranges: ["10.10.0.0/15", "10.20.0.0/16"]
         allow:
         - protocol: tcp
           ports: ["0-65535"]
@@ -85,8 +85,8 @@ deployment_groups:
       network_count: 1
       enable_cloud_router: false
       enable_cloud_nat: false
-      global_ip_address_range: 192.168.1.0/24
-      subnetwork_cidr_suffix: 28
+      global_ip_address_range: 10.20.0.0/16
+      subnetwork_cidr_suffix: 24
       subnetwork_private_access: false
       network_interface_defaults:
         nic_type: "IRDMA"
