@@ -76,7 +76,7 @@ def store_operation(node, operation_id, reason):
     if not _write_all_operations(operations):
         log.error(f"Failed to persist repair operation for node {node}.")
 
-def _call_rr_api(node, reason):
+def call_rr_api(node, reason):
     """Call the R&R API for a given node."""
     log.info(f"Calling R&R API for node {node} with reason {reason}")
     inst = lookup().instance(node)

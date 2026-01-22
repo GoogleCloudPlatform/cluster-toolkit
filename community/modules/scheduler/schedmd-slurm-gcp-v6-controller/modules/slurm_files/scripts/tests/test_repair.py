@@ -104,14 +104,14 @@ class RepairScriptTest(unittest.TestCase):
             returncode=0
         )
         
-        op_id = repair._call_rr_api("node-1", "XID")
+        op_id = repair.call_rr_api("node-1", "XID")
         self.assertEqual(op_id, "op-123")
         mock_run.assert_called_once()
 
     @patch('repair.lookup')
     def test_call_rr_api_instance_not_found(self, mock_lookup):
         mock_lookup.return_value.instance.return_value = None
-        op_id = repair._call_rr_api("node-1", "XID")
+        op_id = repair.call_rr_api("node-1", "XID")
         self.assertIsNone(op_id)
 
     @patch('repair.lookup')
@@ -120,7 +120,7 @@ class RepairScriptTest(unittest.TestCase):
         mock_instance = MagicMock()
         mock_instance.zone = "us-central1-a"
         mock_lookup.return_value.instance.return_value = mock_instance
-        op_id = repair._call_rr_api("node-1", "XID")
+        op_id = repair.call_rr_api("node-1", "XID")
         self.assertIsNone(op_id)
 
     @patch('repair.run')

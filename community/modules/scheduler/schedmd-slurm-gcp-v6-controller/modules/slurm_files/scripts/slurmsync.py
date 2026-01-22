@@ -21,6 +21,7 @@ import logging
 import re
 import sys
 import shlex
+import subprocess
 from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
