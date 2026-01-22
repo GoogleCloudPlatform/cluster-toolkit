@@ -311,3 +311,9 @@ variable "network_profile" {
   EOT
   default     = null
 }
+
+variable "subnetwork_private_access" {
+  type        = bool
+  description = "Enable Private Google Access on the subnetworks"
+  default     = true
+}

@@ -75,4 +75,7 @@ module "vpcs" {
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode
   network_profile                        = var.network_profile
+  enable_cloud_router                    = var.enable_cloud_router
+  enable_cloud_nat                       = var.enable_cloud_nat
+  subnetwork_private_access              = var.subnetwork_private_access
 }
