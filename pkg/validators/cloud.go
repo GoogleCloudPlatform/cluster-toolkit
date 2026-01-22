@@ -1,4 +1,4 @@
-// Copyright 2023 "Google LLC"
+// Copyright 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"strings"
 
-	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -249,113 +248,6 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
-}
-
-// errSoftWarning is a private sentinel error used to signal that a soft warning
-// was triggered and discovery should stop immediately to avoid console spam.
-var errSoftWarning = errors.New("abort")
-
-// getSoftWarningMessage checks if a Google Cloud API error represents a permission issue (403)
-// or a disabled API (400). When these occur, it prints a warning to the console
-// and returns true, signaling the validator to "skip" the check rather than failing the deployment.
-func getSoftWarningMessage(err error, validatorName, projectID, apiName, permission string) (string, bool) {
-	var gerr *googleapi.Error
-	// 403 = Forbidden (Permission missing), 400 = Bad Request (API often disabled)
-	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		msg := fmt.Sprintf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
-		msg += fmt.Sprintf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s). Please ensure the API is enabled and check your permissions.\n", apiName, permission)
-		return msg, true
-	}
-	return "", false
-}
-
-// 1. Helper for cty resolution
-func resolveStringSetting(bp config.Blueprint, val cty.Value) string {
-	v := val
-	if resolved, err := bp.Eval(v); err == nil {
-		v = resolved
-	}
-	if v != cty.NilVal && !v.IsNull() && v.Type() == cty.String {
-		return v.AsString()
-	}
-	return ""
-}
-
-func validateSettingsInModules(
-	blueprint config.Blueprint,
-	globalZone string,
-	projectID string,
-	suffix string,
-	validateResource func(zone string, name string) error,
-) error {
-	validationErrors := config.Errors{}
-	// Anti-Spam Logic: The aborted flag ensures that once a soft warning is hit,
-	// we stop processing any more modules or settings.
-	var aborted bool
-
-	blueprint.WalkModulesSafe(func(path config.ModulePath, module *config.Module) {
-		// Exit immediately if we hit a soft warning in a previous module
-		if aborted {
-			return
-		}
-		targetZone := globalZone
-		moduleZone := resolveStringSetting(blueprint, module.Settings.Get("zone"))
-
-		// If module overrides global zone, validate the override as a hard error
-		if moduleZone != "" && moduleZone != globalZone {
-			targetZone = moduleZone
-			if err := TestZoneExists(projectID, targetZone); err != nil {
-				validationErrors.Add(fmt.Errorf("in module %q: %w", module.ID, err))
-				return
-			}
-		}
-
-		if targetZone == "" {
-			return
-		}
-
-		for key, val := range module.Settings.Items() {
-			if aborted || !strings.HasSuffix(key, suffix) {
-				continue
-			}
-
-			if resourceName := resolveStringSetting(blueprint, val); resourceName != "" {
-				err := validateResource(targetZone, resourceName)
-
-				// Short-circuit on soft warning to prevent duplicate console spam.
-				if errors.Is(err, errSoftWarning) {
-					aborted = true
-					return
-				}
-
-				if err != nil {
-					validationErrors.Add(fmt.Errorf("in module %q setting %q: %w", module.ID, key, err))
-				}
-			}
-		}
-	})
-
-	return validationErrors.OrNil()
-}
-
-// validateMachineTypeInZone calls the Compute Engine API to verify if a specific
-// machine type is available in the given zone and project.
-func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string) error {
-	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
-
-	// Case 1: Success - The machine type exists
-	if err == nil {
-		return nil
-	}
-
-	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
-	if msg, isSoft := getSoftWarningMessage(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get"); isSoft {
-		fmt.Println(msg)
-		return errSoftWarning
-	}
-
-	// Case 3: Validation Failure - The machine type is genuinely invalid or unavailable
-	return fmt.Errorf("machine type %q is not available in zone %q for project %q", machineType, zone, projectID)
 }
 
 func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
