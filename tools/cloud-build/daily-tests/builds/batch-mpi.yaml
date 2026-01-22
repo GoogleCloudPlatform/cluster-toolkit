@@ -30,6 +30,8 @@ availableSecrets:
   secretManager:
   - versionName: projects/$PROJECT_ID/secrets/spack_cache_url_wrf/versions/1
     env: SPACK_CACHE_WRF
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
 
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -44,12 +46,16 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  secretEnv: ['SPACK_CACHE_WRF']
+  secretEnv: ['SPACK_CACHE_WRF', 'GCLUSTER_GCS_PATH']
   args:
   - -c
   - |
     set -x -e
-    cd /workspace && make
+    cd /workspace
+    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+    unzip -o gcluster-bundle.zip
+    # Grant execution permissions to the binary
+    chmod +x gcluster
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/serverless-batch-mpi.yaml

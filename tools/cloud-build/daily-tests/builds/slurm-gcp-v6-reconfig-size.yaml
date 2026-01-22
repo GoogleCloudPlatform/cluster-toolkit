@@ -35,7 +35,16 @@ steps:
   - -c
   - |
     set -x -e
-    cd /workspace && make
+    cd /workspace
+    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+    unzip -o gcluster-bundle.zip
+    # Grant execution permissions to the binary
+    chmod +x gcluster
     export BUILD_ID="${BUILD_ID}"
 
     python3 tools/python-integration-tests/slurm_reconfig_size.py
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
