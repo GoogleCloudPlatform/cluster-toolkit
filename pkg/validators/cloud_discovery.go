@@ -140,8 +140,10 @@ func resolveZones(blueprint config.Blueprint, module *config.Module, globalZone 
 func checkResourceInZones(projectID string, zones []string, globalZone, resourceLabel, resourceName string, validateFn func(string, string) error) (bool, error) {
 	var attempted []string
 	for _, z := range zones {
-		if z == "" { continue }
-		
+		if z == "" {
+			continue
+		}
+
 		if z != globalZone {
 			if err := TestZoneExists(projectID, z); err != nil {
 				// Check if the zone-check error is actually a permission issue (403)
@@ -150,17 +152,17 @@ func checkResourceInZones(projectID string, zones []string, globalZone, resource
 					return true, errSoftWarning // Trigger the abort sentinel
 				}
 				// If it's a real typo (not a 403), return it as a Hard Failure
-				return false, err 
+				return false, err
 			}
 		}
 
 		attempted = append(attempted, z)
 		err := validateFn(z, resourceName)
 		if err == nil {
-			return true, nil 
+			return true, nil
 		}
 		if errors.Is(err, errSoftWarning) {
-			return true, errSoftWarning 
+			return true, errSoftWarning
 		}
 	}
 
@@ -173,7 +175,7 @@ func checkResourceInZones(projectID string, zones []string, globalZone, resource
 // validateSettingsInModules  walks through every module in the blueprint,
 // identifies settings that match a specific suffix (e.g., "machine_type"),
 // and validates them against the zones where that module is allowed to reside.
-func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID, suffix string, validateResource func(zone string, name string) error) error {
+func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID, suffix, resourceLabel string, validateResource func(zone string, name string) error) error {
 	validationErrors := config.Errors{}
 	// Anti-Spam Logic: This flag is set if we encounter an environmental issue
 	// (like a 403 Permission Denied). It allows us to stop making slow API calls
@@ -203,7 +205,7 @@ func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID
 				continue
 			}
 
-			found, err := checkResourceInZones(projectID, targetZones, globalZone, resourceName, validateResource)
+			found, err := checkResourceInZones(projectID, targetZones, globalZone, resourceLabel, resourceName, validateResource)
 			// If we hit the private sentinel error (403/400), set the abort flag.
 			if errors.Is(err, errSoftWarning) {
 				aborted = true

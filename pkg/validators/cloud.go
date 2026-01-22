@@ -287,7 +287,7 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 		return err
 	}
 
-	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", func(z, name string) error {
+	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", func(z, name string) error {
 		return validateMachineTypeInZone(s, projectID, z, name)
 	})
 }
