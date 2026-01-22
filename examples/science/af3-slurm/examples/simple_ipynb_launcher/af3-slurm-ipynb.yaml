@@ -1,0 +1,47 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: af3-slurm-ipynb
+
+validators:
+- validator: test_deployment_variable_not_used
+  skip: true # skipping this validator, since we use a common deployment yaml.
+
+# this blueprint should be used with the extra variables defined in
+# af3-slurm-deployment.yaml
+vars:
+  deployment_name: af3-slurm-ipynb # adjust if necessary
+  notebook_machine_type: n1-standard-4
+
+deployment_groups:
+- group: jupyter_notebook
+  modules:
+  - id: slurmrestapi_bucket
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: gs://$(vars.af3ipynb_bucket)
+      local_mount: $(vars.af3ipynb_bucket_local_mount)
+      fs_type: gcsfuse
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=777
+
+  - id: slurmrestapi_notebook
+    source: community/modules/compute/notebook
+    use: [slurmrestapi_bucket]
+    settings:
+      gcs_bucket_path: $(slurmrestapi_bucket.network_storage.remote_mount)
+      machine_type: $(vars.notebook_machine_type)
+      instance_image:
+        project: deeplearning-platform-release
+        family: tf-ent-latest-cpu-ubuntu-2204-py310-conda

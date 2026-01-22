@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,21 +20,25 @@
 
 vars:
   # Define overall deployment variables
-  deployment_name: af3-slurm         # adjust if necessary
-  project_id:                        # supply existing project id
-  region: us-central1                # supply region with C3D-highmem and GPU capacity
-  zone: us-central1-a                # supply zone with C3D-highmem and GPU capacity
+  project_id: # supply existing project id
+  region: us-central1 # supply region with C3D-highmem and GPU capacity
+  zone: us-central1-a # supply zone with C3D-highmem and GPU capacity
 
   # Required buckets for weights and databases
-  modelweights_bucket: ""            # name of your bucket with af3 model weights
-  database_bucket: ""                # name of your bucket with the database files
+  modelweights_bucket: # name of your bucket with af3 model weights
+  database_bucket: # name of your bucket with the database files
+
+  # Set to True to enable unified memory during inference.
+  # This is recommended when processing large input data or when running on machines with limited GPU memory.
+  # Reference: https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory
+  inference_enable_unified_memory: false
 
   # AF3 model - architecture mappings - typically do not need to be modified
-  sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image
-  model_dir: /opt/apps/af3/models    # default path for the local copy of the model weights
-  db_dir: /dev/shm/public_databases  # default path for the local copy of the public databases
-  pdb_database_path: /mnt/databases/v3.0/uncompressed/mmcif_files  # default path for pdb database
-  jax_compilation_cache_path: ""     # give "" if you do not want to use jax compilation path
+  sif_dir: /opt/apps/af3/containers # default path for the local copy of the container image
+  model_dir: /opt/apps/af3/models # default path for the local copy of the model weights
+  db_dir: /dev/shm/public_databases # default path for the local copy of the public databases
+  pdb_database_path: /mnt/databases/v3.0/uncompressed/mmcif_files # default path for pdb database
+  jax_compilation_cache_dir: "" # give "" if you do not want to use jax compilation path
 
   # AF science parameters - use AF3 defaults if "", see AlphaFold 3 documentation
   max_template_date: ""
@@ -46,8 +50,19 @@ vars:
 
   # Choose if you want the AF3 Simple Service daemon started
   af3service_activate: false
-  af3service_jobbucket: ""           # set to "" if not used
+  af3service_jobbucket: "" # set to "" if not used
   af3service_user: af3
+
+  # AF3 Ipynb Service config
+  af3ipynb_bucket: "" # bucket name to use for AF3 Ipynb service, set to "" if AF3 Ipynb service is not used
+  af3ipynb_bucket_local_mount: /home/jupyter/alphafold # local mount point of bucket on jupyter notebook, expect to be ended without /
+
+  # Slurm REST API Service config
+  slurm_rest_server_activate: false # enable slurm REST API server
+  slurm_rest_user: af3ipynb
+  slurm_rest_token_secret_name: "" # name of the secret manager to be used for saving the slurm auth token, set to "" if SLURM REST API is not used
+  slurm_rest_api_port: 7080 # port for the slurm REST API service
+  slurm_rest_info_path: /tmp/slurm_info.json # path to save slurm info, such as public ip
 
   # Choose Default Datapipeline Partition
   default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)
@@ -60,33 +75,33 @@ vars:
   # Datapipeline Partition Presets
   datapipeline_c3dhm_partition:
     name: datac3d
-    machine_type: c3d-highmem-180    # minimal sku to hold databases in in memory file system
+    machine_type: c3d-highmem-180 # minimal sku to hold databases in in memory file system
     memory: 60
     cpu_count: 8
-    node_count_static: 0             # number of datapipeline nodes; 1 node can run multiple concurrent datapipeline jobs
-    node_count_dynamic: 3            # number of dynamic datapipeline nodes
+    node_count_static: 0 # number of datapipeline nodes; 1 node can run multiple concurrent datapipeline jobs
+    node_count_dynamic: 3 # number of dynamic datapipeline nodes
 
   # Inference Partitions Presets
   inference_g2_partition:
     name: infg2
-    machine_type: g2-standard-12     # g2 with L4 GPUs has 24GB of GPU memory; see README.md for recommendation
+    machine_type: g2-standard-12 # g2 with L4 GPUs has 24GB of GPU memory; see README.md for recommendation
     memory: 46
     cpu_count: 12
-    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
-    node_count_dynamic: 10           # number of dynamic inference nodes
+    node_count_static: 0 # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 10 # number of dynamic inference nodes
 
   inference_a2_partition:
     name: infa2
-    machine_type: a2-highgpu-1g      # a2-high with A100 GPUs has 40GB of GPU memory
+    machine_type: a2-highgpu-1g # a2-high with A100 GPUs has 40GB of GPU memory
     memory: 80
     cpu_count: 12
-    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
-    node_count_dynamic: 5           # number of dynamic inference nodes
+    node_count_static: 0 # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 5 # number of dynamic inference nodes
 
   inference_a2u_partition:
     name: infa2u
-    machine_type: a2-ultragpu-1g     # a2-ultra with A100 GPUs has 80GB of GPU memory
+    machine_type: a2-ultragpu-1g # a2-ultra with A100 GPUs has 80GB of GPU memory
     memory: 160
     cpu_count: 12
-    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
-    node_count_dynamic: 5           # number of dynamic inference nodes
+    node_count_static: 0 # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 5 # number of dynamic inference nodes

@@ -1,0 +1,125 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-slurm-rest-api-service
+  hosts: localhost
+  become: true
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    project_id:
+    slurm_rest_server_activate:
+    service_user:
+    slurm_rest_api_port:
+    af3ipynb_bucket:
+    slurm_rest_info_path:
+
+    # fixed variables, not intended to be modified
+    service_name: af3slurmrestapi
+    service_type: simple
+    exec_start: "slurmrestd -u {{ service_user }} 0.0.0.0:{{ slurm_rest_api_port }}"
+    start_after: network.target
+    slurmrestapi_environment: "SLURM_JWT=daemon"
+    slurm_node_working_directory: "/home/{{ service_user }}"
+
+
+  tasks:
+  - name: Ensure slurm_rest_server_activate is boolean
+    set_fact:
+      activate: "{{ slurm_rest_server_activate | bool }}"
+
+  - name: Run all slurm rest service required operation only if activated
+    block:
+    - name: Create the service file
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ service_name }}.service"
+        content: |
+          [Unit]
+          Description={{ service_name }} Service
+          After={{ start_after }}
+          [Service]
+          Type={{ service_type }}
+          Environment={{ slurmrestapi_environment }}
+          ExecStart={{ exec_start }}
+          StandardOutput=append:/var/log/{{ service_name }}/{{ service_name }}.stdout.log
+          StandardError=append:/var/log/{{ service_name }}/{{ service_name }}.stderr.log
+          Restart=on-failure
+          RestartSec=30s
+          ExecReload=/bin/kill -HUP $MAINPID
+          User={{ service_user }}
+          WorkingDirectory={{ slurm_node_working_directory }}
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Create /var/log/{{ service_name }} directory
+      ansible.builtin.file:
+        path: "/var/log/{{ service_name }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0755"
+
+    - name: Create logrotate configuration
+      ansible.builtin.copy:
+        dest: "/etc/logrotate.d/{{ service_name }}"
+        content: |
+          /var/log/{{ service_name }}/*.log {
+            daily
+            rotate 7
+            compress
+            delaycompress
+            missingok
+            notifempty
+            create 0640 {{ service_user }} {{ service_user }}
+          }
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Get public IP address from GCP metadata
+      ansible.builtin.uri:
+        url: http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip
+        method: GET
+        headers:
+          Metadata-Flavor: Google
+        return_content: yes
+      register: gcp_metadata_response
+
+    - name: Save public IP address to JSON file
+      ansible.builtin.copy:
+        dest: "{{ slurm_rest_info_path }}"
+        content: |
+          {
+            "hostname": "{{ gcp_metadata_response.content }}"
+          }
+        mode: "0644"
+
+    when: activate
+
+  handlers:
+  - name: Reload systemd
+    listen: Reload systemd
+    ansible.builtin.systemd:
+      daemon_reload: yes
+
+  post_tasks:
+  - name: Enable and start the service conditionally
+    ansible.builtin.systemd:
+      name: "{{ service_name }}.service"
+      enabled: yes
+      state: started
+    when: activate

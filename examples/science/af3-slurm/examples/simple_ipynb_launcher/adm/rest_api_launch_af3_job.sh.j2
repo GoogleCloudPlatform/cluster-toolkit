@@ -32,7 +32,7 @@ DEFAULT_GRES="{{ af3_default_gres | default('') }}"
 DEFAULT_LOG_BASE_DIR="{{ af3_log_base_dir | default('$HOME/slurm_logs') }}"
 DEFAULT_JOB_NAME_BASE="{{ af3_job_name_base | default('alphafold3') }}"
 
-# --- AlphaFold 3 Science Variables (Set via Ansible Variables) ---
+# --- AlphaFold 3 Science Variables (Set via Jupyter Notebook Variables) ---
 DEFAULT_MAX_TEMPLATE_DATE="{{ max_template_date }}"
 DEFAULT_CONFORMER_MAX_ITERATIONS="{{ conformer_max_iterations }}"
 DEFAULT_NUM_RECYCLES="{{ num_recycles }}"
@@ -50,11 +50,13 @@ PDB_DATABASE_PATH="{{ pdb_database_path }}"
 DEFAULT_JAX_COMPILATION_CACHE_DIR="{{ jax_compilation_cache_dir }}"
 
 # --- Initialize variables ---
-JOB_TYPE="" PARTITION="" MEM="" CPUS=""
+JOB_TYPE="{{ job_type }}" 
+PARTITION="" MEM="" CPUS=""
 TIME_SECONDS="" # Initialize as empty - will hold user input OR default
 GRES="${DEFAULT_GRES}" LOG_BASE_DIR="${DEFAULT_LOG_BASE_DIR}"
 JOB_NAME_BASE="${DEFAULT_JOB_NAME_BASE}" JAX_COMPILATION_CACHE_DIR="${DEFAULT_JAX_COMPILATION_CACHE_DIR}"
-INPUT_PATH="" OUTPUT_DIR=""
+INPUT_PATH="{{ input_path }}" 
+OUTPUT_DIR="{{ output_dir }}/results"
 GRES_USER_SET="false" # Flag to track if user provided --gres
 
 # Initialize AF3 science variables with defaults
@@ -65,6 +67,34 @@ NUM_DIFFUSION_SAMPLES="${DEFAULT_NUM_DIFFUSION_SAMPLES}"
 NUM_SEEDS="${DEFAULT_NUM_SEEDS}"
 SAVE_EMBEDDINGS="${DEFAULT_SAVE_EMBEDDINGS}"
 INFERENCE_ENABLE_UNIFIED_MEMORY="${DEFAULT_INFERENCE_ENABLE_UNIFIED_MEMORY}"
+
+# --- GCS Download (if REMOTE_INPUT_PATH is provided) ---
+REMOTE_BUCKET_NAME="{{ remote_bucket_name | default('') }}"
+REMOTE_INPUT_PATH="{{ remote_input_path | default('') }}"
+REMOTE_OUTPUT_DIR="{{ remote_output_dir | default('') }}"
+
+# Create folder for INPUT_PATH directory
+mkdir -p "$(dirname "$INPUT_PATH")"
+
+# Create folder for OUTPUT_DIR
+mkdir -p "$OUTPUT_DIR"
+
+# --- Resolve full GCS URIs if paths are relative ---
+if [[ "$REMOTE_INPUT_PATH" != gs://* && -n "$REMOTE_BUCKET_NAME" ]]; then
+  REMOTE_INPUT_PATH="gs://${REMOTE_BUCKET_NAME}/${REMOTE_INPUT_PATH}"
+fi
+
+if [[ "$REMOTE_OUTPUT_DIR" != gs://* && -n "$REMOTE_BUCKET_NAME" ]]; then
+  REMOTE_OUTPUT_DIR="gs://${REMOTE_BUCKET_NAME}/${REMOTE_OUTPUT_DIR}"
+fi
+
+# --- GCS Download ---
+if [ -n "$REMOTE_INPUT_PATH" ]; then
+  echo "Info: Downloading input from GCS: $REMOTE_INPUT_PATH"
+  mkdir -p "$INPUT_PATH"
+  gcloud storage cp -r "$REMOTE_INPUT_PATH" "$INPUT_PATH"
+fi
+
 
 # --- Helper Functions ---
 error_exit() { echo "Error: $1" >&2; usage >&2; exit 1; }
@@ -106,6 +136,7 @@ usage() {
   local default_num_diffusion_disp="${DEFAULT_NUM_DIFFUSION_SAMPLES:-using AF3 run_alphafold.py defaults}"
   local default_num_seeds_disp="${DEFAULT_NUM_SEEDS:-using AF3 run_alphafold.py defaults}"
   local default_save_embeddings_disp="${DEFAULT_SAVE_EMBEDDINGS:-using AF3 run_alphafold.py defaults}"
+
   # --- End Pre-calculation ---
 
   cat << EOF
@@ -268,7 +299,7 @@ elif [ "$JOB_TYPE" = "inference" ]; then
     [ -n "$GRES" ] && apptainer_nv_flag="--nv"
     apptainer_binds+=("--bind" "${MODEL_DIR}")
 
-    # --- Add JAX cache path if set ---
+    # Add JAX cache path if set
     if [ -n "$JAX_COMPILATION_CACHE_DIR" ]; then
         job_specific_python_opts+=" --jax_compilation_cache_dir='${JAX_COMPILATION_CACHE_DIR}'"
         apptainer_binds+=("--bind" "${JAX_COMPILATION_CACHE_DIR}")
@@ -295,23 +326,7 @@ mkdir -p "$LOG_BASE_DIR" || echo "Warning: Could not create log base dir '$LOG_B
 [ ! -f "${CONTAINER_IMAGE}" ] && { echo "Error: Container image '${CONTAINER_IMAGE}' not found." >&2; exit 1; }
 
 
-# --- Assemble sbatch Command ---
-SBATCH_DIRECTIVES=$(cat << SBD
-#!/bin/bash
-#SBATCH --job-name=${final_job_name}
-#SBATCH --partition=${PARTITION}
-#SBATCH --time=${TIME_HMS}
-#SBATCH --mem=${MEM}G
-#SBATCH --cpus-per-task=${CPUS}
-#SBATCH --output=${LOG_BASE_DIR}/job_%j/out.txt
-#SBATCH --error=${LOG_BASE_DIR}/job_%j/err.txt
-SBD
-)
-# Only add --gres directive if GRES is non-empty
-[ -n "$GRES" ] && SBATCH_DIRECTIVES+=$'\n'"#SBATCH --gres=${GRES}"
-
-
-# --- Submit sbatch Command ---
+# --- Submit Command ---
 bind_args_str=$(printf "%s " "${apptainer_binds[@]}")
 echo "Submitting job ${final_job_name} to partition ${PARTITION}..."
 echo "Time Limit:       ${TIME_HMS} (${TIME_SECONDS} seconds)"
@@ -323,26 +338,24 @@ echo "Log File Pattern: ${LOG_BASE_DIR}/job_%j/{out.txt,err.txt}"
 # Combine all python options
 all_python_opts="${base_python_opts} ${job_specific_python_opts}"
 
-sbatch << EOF
-${SBATCH_DIRECTIVES}
-
 # --- Job Environment & Setup ---
 echo "--- Job Info ---"
+echo "Job user: $SLURM_JOB_USER"
 echo "Job Type: $JOB_TYPE"
-echo "ID: \$SLURM_JOB_ID (\${final_job_name}), Host: \$(hostname), Partition: \${SLURM_JOB_PARTITION}"
-echo "Allocated CPUs: \$SLURM_CPUS_PER_TASK, Mem: \$SLURM_MEM_PER_NODE G"
-[ -n "\$SLURM_JOB_GPUS" ] && echo "Allocated GPUs: \$SLURM_JOB_GPUS (\`nvidia-smi -L 2>/dev/null | grep \${CUDA_VISIBLE_DEVICES:-NONE} || echo 'GPU details unavailable'\`)" || echo "Allocated GPUs: None"
+echo "ID: $SLURM_JOB_ID (${final_job_name}), Host: $(hostname), Partition: ${SLURM_JOB_PARTITION}"
+echo "Allocated CPUs: $SLURM_CPUS_PER_TASK, Mem: $SLURM_MEM_PER_NODE G"
+[ -n "$SLURM_JOB_GPUS" ] && echo "Allocated GPUs: $SLURM_JOB_GPUS `nvidia-smi -L 2>/dev/null | grep ${CUDA_VISIBLE_DEVICES:-NONE} || echo 'GPU details unavailable'`)" || echo "Allocated GPUs: None"
 echo "Input Path (${python_input_flag}): ${python_input_value}"
 echo "Output Dir: ${OUTPUT_DIR}"
 if [ "$JOB_TYPE" = "inference" ]; then
     JAX_CACHE_DIR_ACTUAL="${JAX_COMPILATION_CACHE_DIR:-}" # Use shell parameter expansion for safety
-    if [ -n "\${JAX_CACHE_DIR_ACTUAL}" ]; then
-        echo "JAX Cache: \${JAX_CACHE_DIR_ACTUAL}"
-        mkdir -p "\${JAX_CACHE_DIR_ACTUAL}" # Ensure JAX cache dir exists on compute node
-        export XLA_FLAGS="--xla_gpu_force_compilation_cache_path=\${JAX_CACHE_DIR_ACTUAL}"
-        export JAX_CACHE_DIR="\${JAX_CACHE_DIR_ACTUAL}" # Also set JAX_CACHE_DIR just in case
-        echo "Set XLA_FLAGS: \$XLA_FLAGS"
-        echo "Set JAX_CACHE_DIR: \$JAX_CACHE_DIR"
+    if [ -n "${JAX_CACHE_DIR_ACTUAL}" ]; then
+        echo "JAX Cache: ${JAX_CACHE_DIR_ACTUAL}"
+        mkdir -p "${JAX_CACHE_DIR_ACTUAL}" # Ensure JAX cache dir exists on compute node
+        export XLA_FLAGS="--xla_gpu_force_compilation_cache_path=${JAX_CACHE_DIR_ACTUAL}"
+        export JAX_CACHE_DIR="${JAX_CACHE_DIR_ACTUAL}" # Also set JAX_CACHE_DIR just in case
+        echo "Set XLA_FLAGS: $XLA_FLAGS"
+        echo "Set JAX_CACHE_DIR: $JAX_CACHE_DIR"
     else
         echo "JAX Cache: Disabled (JAX_COMPILATION_CACHE_DIR not set)"
     fi
@@ -356,7 +369,7 @@ if [ "$JOB_TYPE" = "inference" ]; then
     echo "Save Embeddings: ${SAVE_EMBEDDINGS:-AF3 default}"
     echo "-------------------------------------"
 fi
-echo "--- Start: \$(date) ---"
+echo "--- Start: $(date) ---"
 mkdir -p "${OUTPUT_DIR}"
 
 # --- Execute the AlphaFold Command ---
@@ -364,30 +377,41 @@ echo "Launching AlphaFold ($JOB_TYPE)..."
 set -e # Exit on error
 set -x # Print command being executed
 
-apptainer run ${apptainer_nv_flag} \\
-    ${bind_args_str} \\
-    ${apptainer_env_flag} \\
-  "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \\
-    ${python_input_flag} "${python_input_value}" \\
-    --output_dir "${OUTPUT_DIR}" \\
-    ${run_data_pipeline_flag} \\
-    ${run_inference_flag} \\
-    --model_dir="${MODEL_DIR}" \\
-    --db_dir="${DB_DIR}" \\
-    --pdb_database_path="${PDB_DATABASE_PATH}" \\
+
+# --- Run AlphaFold via Apptainer ---
+apptainer run ${apptainer_nv_flag} \
+    ${bind_args_str} \
+    ${apptainer_env_flag} \
+    "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \
+    ${python_input_flag} "${python_input_value}" \
+    --output_dir "${OUTPUT_DIR}" \
+    ${run_data_pipeline_flag} \
+    ${run_inference_flag} \
+    --model_dir="${MODEL_DIR}" \
+    --db_dir="${DB_DIR}" \
+    --pdb_database_path="${PDB_DATABASE_PATH}" \
     ${all_python_opts}
 
+# --- Capture Exit Code ---
+EXIT_CODE=$?
 set +x
-echo "--- End: \$(date), Exit Code: \$? ---"
-exit 0
-EOF
 
-# --- Post-submission Check ---
-if [ $? -eq 0 ]; then
-    echo "Job successfully submitted (Job ID printed above by sbatch)."
-else
-    echo "Error submitting job to Slurm." >&2
-    exit 1
+# --- Upload Output to GCS if Successful ---
+if [ "$EXIT_CODE" -eq 0 ] && [ -n "${REMOTE_OUTPUT_DIR:-}" ]; then
+  echo "Info: Uploading output to GCS: $REMOTE_OUTPUT_DIR"
+  gcloud storage cp -r "${OUTPUT_DIR}/*" "${REMOTE_OUTPUT_DIR}/"
+
+  if [ $? -eq 0 ]; then
+    echo "Info: Upload $OUTPUT_DIR into $REMOTE_OUTPUT_DIR successful."
+  else
+    echo "Warning: Upload  $OUTPUT_DIR into $REMOTE_OUTPUT_DIR failed"
+  fi
 fi
 
-exit 0
+# Always remove af3 folding output directory from node local storage
+rm -rf "${OUTPUT_DIR}"
+
+# --- Final log and cleanup ---
+echo "--- Alphafold apptainer process end: $(date), Exit Code: $EXIT_CODE ---"
+
+exit $EXIT_CODE
