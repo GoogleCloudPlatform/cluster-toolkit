@@ -24,7 +24,7 @@ from datetime import datetime
 
 CURRENT_YEAR = datetime.now().year
 COPYRIGHT_PATTERN = re.compile(
-    r"(?i)(Copyright\s+)(\d{4})(\s+\"?Google LLC\"?)"
+    r"(?i)(Copyright\s+)(\d{4})(\s+Google(?: LLC\"?| Inc\..*))"
 )
 
 def update_license_year(file_path):
