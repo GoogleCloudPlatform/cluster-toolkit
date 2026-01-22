@@ -40,10 +40,6 @@ variable "network_count" {
   type        = number
   default     = 4
 
-  # validation {
-  #   condition     = var.network_count > 1
-  #   error_message = "The minimum VPCs able to be created by this module is 2. Use the standard Toolkit module at modules/network/vpc for count = 1"
-  # }
   validation {
     condition     = var.network_count <= 8
     error_message = "The maximum VPCs able to be created by this module is 8"
