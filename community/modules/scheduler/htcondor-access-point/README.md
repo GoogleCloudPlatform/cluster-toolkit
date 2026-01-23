@@ -122,8 +122,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
-| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | ~> 12.1 |
+| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | >= 12.1 |
+| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | >= 12.1 |
 | <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources

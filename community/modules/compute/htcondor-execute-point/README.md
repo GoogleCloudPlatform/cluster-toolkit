@@ -212,9 +212,9 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | >= 12.1 |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
-| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 12.1 |
+| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | >= 12.1 |
 | <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
@@ -249,6 +249,7 @@ limitations under the License.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor execute points | `map(string)` | `{}` | no |
 | <a name="input_min_idle"></a> [min\_idle](#input\_min\_idle) | Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max\_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly. | `number` | `0` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module | `string` | n/a | yes |
+| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces to attach to HTCondor execute point instances.<br/>Each network interface should have the following fields:<br/>- network: The self link of the network (required)<br/>- subnetwork: The self link of the subnetwork (optional)<br/>If not specified, will use var.network\_self\_link and var.subnetwork\_self\_link for backward compatibility. | <pre>list(object({<br/>    network    = string<br/>    subnetwork = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network HTCondor execute points will join | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HTCondor execute points will be created | `string` | n/a | yes |

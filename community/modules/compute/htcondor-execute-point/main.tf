@@ -115,6 +115,14 @@ locals {
   )
 
   name_prefix = "${var.deployment_name}-${var.name_prefix}-ep"
+
+  # Handle backward compatibility for network configuration
+  network_interfaces = length(var.network_interfaces) > 0 ? var.network_interfaces : [
+    {
+      network    = var.network_self_link
+      subnetwork = var.subnetwork_self_link
+    }
+  ]
 }
 
 data "google_compute_zones" "available" {
@@ -147,12 +155,23 @@ module "startup_script" {
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 12.1"
+  version = ">= 12.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
-  network     = var.network_self_link
-  subnetwork  = var.subnetwork_self_link
+  region      = var.region
+  network     = local.network_interfaces[0].network
+  subnetwork  = local.network_interfaces[0].subnetwork
+
+  additional_networks = [
+    for network_interface in slice(local.network_interfaces, 1, length(local.network_interfaces)) : {
+      network            = network_interface.network
+      subnetwork         = network_interface.subnetwork
+      subnetwork_project = var.project_id
+      access_config      = []
+    }
+  ]
+
   service_account = {
     email  = var.execute_point_service_account_email
     scopes = var.service_account_scopes
@@ -175,7 +194,7 @@ module "execute_point_instance_template" {
 
 module "mig" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "~> 12.1"
+  version = ">= 12.1"
 
   project_id                       = var.project_id
   region                           = var.region

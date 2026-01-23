@@ -135,6 +135,21 @@ variable "subnetwork_self_link" {
   default     = null
 }
 
+variable "network_interfaces" {
+  description = <<-EOT
+    A list of network interfaces to attach to HTCondor execute point instances.
+    Each network interface should have the following fields:
+    - network: The self link of the network (required)
+    - subnetwork: The self link of the subnetwork (optional)
+    If not specified, will use var.network_self_link and var.subnetwork_self_link for backward compatibility.
+    EOT
+  type = list(object({
+    network    = string
+    subnetwork = optional(string)
+  }))
+  default = []
+}
+
 variable "target_size" {
   description = "Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size."
   type        = number
