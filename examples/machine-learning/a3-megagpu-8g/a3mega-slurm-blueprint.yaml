@@ -452,11 +452,6 @@ deployment_groups:
             "data-root": "$(vars.localssd_mountpoint)/docker"
           }
       runners:
-      - type: shell
-        destination: enable_fabric_manager.sh
-        content: |
-          #!/bin/bash
-          systemctl enable nvidia-fabricmanager
       - type: ansible-local
         destination: slurm_aperture.yml
         content: |
