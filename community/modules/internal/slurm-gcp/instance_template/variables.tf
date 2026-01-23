@@ -128,6 +128,7 @@ variable "additional_networks" {
     subnetwork_project = string
     network_ip         = string
     nic_type           = string
+    stack_type         = optional(string)
     access_config = list(object({
       nat_ip       = string
       network_tier = string
