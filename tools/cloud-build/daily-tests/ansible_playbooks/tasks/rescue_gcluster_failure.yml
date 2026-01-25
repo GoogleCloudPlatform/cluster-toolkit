@@ -37,7 +37,7 @@
     register: gcluster_destroy
     changed_when: gcluster_destroy.changed
     run_once: true
-    ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
+    ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --robust --auto-approve
     # Temporarily add retry due to K8S deletion issue.
     until: gcluster_destroy.rc == 0
     retries: 1
