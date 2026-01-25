@@ -103,7 +103,7 @@ module "install_kueue" {
 }
 
 resource "time_sleep" "wait_for_webhook" {
-  create_duration = "180s"
+  create_duration = "120s"
   depends_on      = [module.install_kueue]
 }
 
