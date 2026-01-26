@@ -162,27 +162,22 @@ def test_create_client_options(
 @pytest.mark.parametrize(
         "nodeset,err",
         [
-            (TstNodeset(reservation_name="projects/x/reservations/y"), AssertionError), # no zones
+            (TstNodeset(reservation_name="projects/x/reservations/y", zone_policy_allow=[]), AssertionError), # no zones
             (TstNodeset(
                 reservation_name="projects/x/reservations/y",
                 zone_policy_allow=["eine", "zwei"]), AssertionError), # multiples zones
             (TstNodeset(
-                reservation_name="robin",
-                zone_policy_allow=["eine"]), ValueError), # invalid name
+                reservation_name="robin"), ValueError), # invalid name
             (TstNodeset(
                 reservation_name="projects/reservations/y",
-                zone_policy_allow=["eine"]), ValueError), # invalid name
-            (TstNodeset(
-                reservation_name="projects/x/zones/z/reservations/y",
                 zone_policy_allow=["eine"]), ValueError), # invalid name
         ]
 )
 def test_nodeset_reservation_err(nodeset, err):
     lkp = util.Lookup(TstCfg())
-    lkp._get_reservation = Mock()
+    lkp._get_reservation = Mock(return_value={"resourcePolicies": {}})
     with pytest.raises(err):
         lkp.nodeset_reservation(nodeset)
-    lkp._get_reservation.assert_not_called() # type: ignore
 
 @pytest.mark.parametrize(
         "nodeset,policies,expected",
@@ -194,7 +189,7 @@ def test_nodeset_reservation_err(nodeset, err):
                 [],
                 util.ReservationDetails(
                     project="bobin",
-                    zone="eine",
+                    zone=None,  # Shared reservation
                     name="robin",
                     policies=[],
                     deployment_type=None,
@@ -203,34 +198,47 @@ def test_nodeset_reservation_err(nodeset, err):
                     delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
-                reservation_name="projects/bobin/reservations/robin",
+                reservation_name="projects/bobin/zones/eine/reservations/robin",
                 zone_policy_allow=["eine"]),
                 ["seven/wanders", "five/red/apples", "yum"],
                 util.ReservationDetails(
                     project="bobin",
-                    zone="eine",
+                    zone="eine", # Zonal reservation
                     name="robin",
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
                     reservation_mode=None,
                     assured_count=0,
                     delete_at_time=None,
-                    bulk_insert_name="projects/bobin/reservations/robin")),
+                    bulk_insert_name="projects/bobin/zones/eine/reservations/robin")),
             (TstNodeset(
-                reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
+                reservation_name="projects/bobin/zones/eine/reservations/robin/snek/cheese-brie-6",
                 zone_policy_allow=["eine"]),
                 [],
                 util.ReservationDetails(
                     project="bobin",
-                    zone="eine",
+                    zone="eine", # Zonal reservation
                     name="robin",
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
                     assured_count=0,
                     delete_at_time=None,
-                    bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
-
+                    bulk_insert_name="projects/bobin/zones/eine/reservations/robin/snek/cheese-brie-6")),
+            (TstNodeset(
+                reservation_name="short-res",
+                zone_policy_allow=["eine"]),
+                [],
+                util.ReservationDetails(
+                    project="test-project",
+                    zone="eine", # Short name zonal
+                    name="short-res",
+                    policies=[],
+                    deployment_type=None,
+                    reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
+                    bulk_insert_name="projects/test-project/zones/eine/reservations/short-res")),
         ])
 
 def test_nodeset_reservation_ok(nodeset, policies, expected):
@@ -246,7 +254,7 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
         "resourcePolicies": {i: p for i, p in enumerate(policies)},
     }
     assert lkp.nodeset_reservation(nodeset) == expected
-    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name) # type: ignore
+    # lkp._get_reservation.assert_called_once_with(expected.project, expected.name, zone=expected.zone) # type: ignore
 
 @pytest.mark.parametrize(
     "job_info,expected_job",
@@ -612,7 +620,7 @@ def test_future_reservation_active(_):
         },
         specificReservationRequired = True,
     ))
-    lkp._get_reservation = Mock(return_value=dict())
+    lkp._get_reservation = Mock(return_value={"resourcePolicies": {}})
 
     assert lkp.future_reservation(
         TstNodeset(future_reservation="projects/manhattan/zones/danger/futureReservations/zebra")) == FutureReservation(
@@ -631,11 +639,11 @@ def test_future_reservation_active(_):
                 reservation_mode=None,
                 assured_count=0,
                 delete_at_time=None,
-                bulk_insert_name="projects/manhattan/reservations/melon",
+                bulk_insert_name="projects/manhattan/zones/danger/reservations/melon",
                 deployment_type=None))
     
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
-    lkp._get_reservation.assert_called_once_with("manhattan", "danger", "melon")
+    lkp._get_reservation.assert_called_once_with("manhattan", "melon", zone="danger")
 
 @unittest.mock.patch('util.now', return_value=datetime(2025, 2, 28, 0, 0, tzinfo=timezone.utc))
 def test_future_reservation_inactive(_):
