@@ -680,6 +680,11 @@ deployment_groups:
   - id: controller_startup
     source: modules/scripts/startup-script
     settings:
+      prepare_slurm_scripts:
+        accelerator_profile: a3-ultragpu-8g
+        common_scripts: [
+          "sudo-oslogin"
+        ]
       runners:
       - type: shell
         destination: stage_scripts.sh
@@ -696,9 +701,9 @@ deployment_groups:
           # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
           mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
           mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
-          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
-              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
-          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          # curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+          #     https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          # chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
 

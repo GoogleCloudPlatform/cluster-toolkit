@@ -194,6 +194,39 @@ locals {
     destination = "early_run_hotfixes.sh"
   }]
 
+  slurm_profile        = var.prepare_slurm_scripts.accelerator_profile
+  slurm_profile_exists = local.slurm_profile != ""
+  slurm_common_files   = local.slurm_profile_exists ? var.prepare_slurm_scripts.common_scripts : []
+  profile_files        = local.slurm_profile_exists ? fileset("${path.module}/files/slurm-scripts/${local.slurm_profile}", "*") : []
+
+  slurm_common_runner = [
+    for f in local.slurm_common_files : {
+      type = "data"
+      # Local Path:
+      source = "${path.module}/files/slurm-scripts/common/${f}"
+      # Remote Path:
+      destination = "/var/tmp/slurm-scripts/common/${f}"
+    }
+  ]
+
+  slurm_profile_runner = [
+    for f in local.profile_files : {
+      type        = "data"
+      source      = "${path.module}/files/slurm-scripts/${local.slurm_profile}/${f}"
+      destination = "/var/tmp/slurm-scripts/${local.slurm_profile}/${f}"
+    }
+  ]
+
+  slurm_ansible_profile = local.slurm_profile_exists && length(local.profile_files) > 0 ? local.slurm_profile : ""
+  slurm_prolog_epilog_runner = local.slurm_profile_exists ? [{
+    type        = "ansible-local"
+    source      = "${path.module}/files/install_slurm_scripts.yml"
+    destination = "install_slurm_scripts.yml"
+    args = join(" ", [
+      "-e profile=${local.slurm_ansible_profile}"
+    ])
+  }] : []
+
   runners = concat(
     local.warnings,
     local.hotfix_runner,
@@ -207,6 +240,9 @@ locals {
     local.configure_ssh_runners,
     local.docker_runner,
     local.gpu_network_wait_online_runner,
+    local.slurm_common_runner,
+    local.slurm_profile_runner,
+    local.slurm_prolog_epilog_runner,
     var.runners
   )
 

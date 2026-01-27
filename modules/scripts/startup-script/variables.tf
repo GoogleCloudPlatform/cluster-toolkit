@@ -272,6 +272,20 @@ variable "http_proxy" {
   nullable    = false
 }
 
+variable "prepare_slurm_scripts" {
+  description = "Configures Slurm Prolog & Epilog Scripts across different machine types"
+  type = object({
+    accelerator_profile = optional(string, "")
+    common_scripts      = optional(list(string), [])
+  })
+
+  default = {
+    accelerator_profile = ""
+    common_scripts      = []
+  }
+
+}
+
 variable "http_no_proxy" {
   description = "Domains for which to disable http_proxy behavior. Honored only if var.http_proxy is set"
   type        = string
