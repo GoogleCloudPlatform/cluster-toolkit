@@ -51,6 +51,7 @@ from google.oauth2 import service_account # type: ignore
 import googleapiclient.discovery # type: ignore
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
+from googleapiclient.errors import HttpError # type: ignore
 from google.api_core.client_options import ClientOptions
 import httplib2
 
@@ -1887,7 +1888,22 @@ class Lookup:
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
     def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
-        reservation = self._get_reservation(project, zone, name)
+        try:
+            reservation = self._get_reservation(project, zone, name)
+        except HttpError as e:
+            if e.resp.status == 403:
+                log.warning(f"Could not fetch reservation details for {project}/{zone}/{name}: {e}. Proceeding with minimal reservation settings.")
+                return ReservationDetails(
+                    project=project,
+                    zone=zone,
+                    name=name,
+                    policies=[],
+                    bulk_insert_name=bulk_insert_name,
+                    deployment_type=None,
+                    reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None)
+            raise e
 
         # Converts policy URLs to names, e.g.:
         # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
