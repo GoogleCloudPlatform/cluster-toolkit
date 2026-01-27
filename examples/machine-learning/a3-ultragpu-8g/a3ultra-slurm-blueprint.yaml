@@ -359,6 +359,8 @@ deployment_groups:
   # (Optional) The following creates a GCS bucket that will be mounted
   # using gcsfuse. If you prefer to use a pre-existing bucket, use the
   # modules/file-system/pre-existing-network-storage module.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
   - id: gcs_bucket
     source: modules/file-system/cloud-storage-bucket
     settings:
@@ -378,6 +380,8 @@ deployment_groups:
   # local-ssd for and enables parallel downloads.  For more information on
   # these flags, see
   # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_checkpoints
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -399,6 +403,10 @@ deployment_groups:
   # file-cache-max-size-mb=<DATASET_SIZE>,\
   # file-cache-cache-file-for-range-read=true,\
   # to the mount_options.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_training_data
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -413,6 +421,8 @@ deployment_groups:
   # (Optional) Create a mount-point optimized for model serving.
   # For more information on these flags, see
   # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_model_serving
     source: modules/file-system/pre-existing-network-storage
     settings:
