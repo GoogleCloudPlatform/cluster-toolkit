@@ -40,7 +40,7 @@ locals {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.default_primary_subnetwork_cidr_block
     subnet_region         = var.region
-    subnet_private_access = true
+    subnet_private_access = var.subnetwork_private_access
     subnet_flow_logs      = false
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null

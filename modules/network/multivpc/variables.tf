@@ -41,10 +41,6 @@ variable "network_count" {
   default     = 4
 
   validation {
-    condition     = var.network_count > 1
-    error_message = "The minimum VPCs able to be created by this module is 2. Use the standard Toolkit module at modules/network/vpc for count = 1"
-  }
-  validation {
     condition     = var.network_count <= 8
     error_message = "The maximum VPCs able to be created by this module is 8"
   }
@@ -198,4 +194,22 @@ variable "network_profile" {
   When using a Mellanox network profile (contains 'roce'), if firewall_rules is specified or enable_internal_traffic is true, an error will be thrown
   EOT
   default     = null
+}
+
+variable "enable_cloud_router" {
+  type        = bool
+  description = "Enable the creation of a Cloud Router for your VPC. For more information on Cloud Routers see https://cloud.google.com/network-connectivity/docs/router/concepts/overview"
+  default     = true
+}
+
+variable "enable_cloud_nat" {
+  type        = bool
+  description = "Enable the creation of Cloud NATs."
+  default     = true
+}
+
+variable "subnetwork_private_access" {
+  type        = bool
+  description = "Enable Private Google Access on the subnetworks"
+  default     = true
 }

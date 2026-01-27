@@ -103,6 +103,8 @@ limitations under the License.
 | <a name="input_allowed_ssh_ip_ranges"></a> [allowed\_ssh\_ip\_ranges](#input\_allowed\_ssh\_ip\_ranges) | A list of CIDR IP ranges from which to allow ssh access | `list(string)` | `[]` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
+| <a name="input_enable_cloud_nat"></a> [enable\_cloud\_nat](#input\_enable\_cloud\_nat) | Enable the creation of Cloud NATs. | `bool` | `true` | no |
+| <a name="input_enable_cloud_router"></a> [enable\_cloud\_router](#input\_enable\_cloud\_router) | Enable the creation of a Cloud Router for your VPC. For more information on Cloud Routers see https://cloud.google.com/network-connectivity/docs/router/concepts/overview | `bool` | `true` | no |
 | <a name="input_enable_iap_rdp_ingress"></a> [enable\_iap\_rdp\_ingress](#input\_enable\_iap\_rdp\_ingress) | Enable a firewall rule to allow Windows Remote Desktop Protocol access using IAP tunnels | `bool` | `false` | no |
 | <a name="input_enable_iap_ssh_ingress"></a> [enable\_iap\_ssh\_ingress](#input\_enable\_iap\_ssh\_ingress) | Enable a firewall rule to allow SSH access using IAP tunnels | `bool` | `true` | no |
 | <a name="input_enable_iap_winrm_ingress"></a> [enable\_iap\_winrm\_ingress](#input\_enable\_iap\_winrm\_ingress) | Enable a firewall rule to allow Windows Remote Management (WinRM) access using IAP tunnels | `bool` | `false` | no |
@@ -121,6 +123,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_subnetwork_cidr_suffix"></a> [subnetwork\_cidr\_suffix](#input\_subnetwork\_cidr\_suffix) | The size, in CIDR suffix notation, for each network (e.g. 24 for 172.16.0.0/24); changing this will destroy every network. | `number` | `16` | no |
+| <a name="input_subnetwork_private_access"></a> [subnetwork\_private\_access](#input\_subnetwork\_private\_access) | Enable Private Google Access on the subnetworks | `bool` | `true` | no |
 
 ## Outputs
 
