@@ -123,7 +123,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path "*/build-service-images/*")
+TARGET_BLUEPRINTS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path "*/build-service-images/*")
 
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
@@ -137,7 +137,7 @@ cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
 pids=()
-for example in $CONFIGS; do
+for example in $TARGET_BLUEPRINTS; do
 	if [[ ${EXCLUDE_EXAMPLE[$example]+_} ]]; then
 		echo "Skipping example: $example"
 		continue
