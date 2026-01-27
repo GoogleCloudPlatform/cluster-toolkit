@@ -35,6 +35,7 @@ locals {
   mount_options    = var.mount_options
   instance_id      = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
   destination_path = "/"
+  lustre_timeout   = contains([125, 250], var.per_unit_storage_throughput) ? "2h" : "1h"
 
   install_managed_lustre_client_runner = {
     "type"        = "shell"
@@ -75,9 +76,9 @@ resource "google_lustre_instance" "lustre_instance" {
   gke_support_enabled = var.gke_support_enabled
 
   timeouts {
-    create = "1h"
-    update = "1h"
-    delete = "1h"
+    create = local.lustre_timeout
+    update = local.lustre_timeout
+    delete = local.lustre_timeout
   }
 
   depends_on = [var.private_vpc_connection_peering, data.google_storage_bucket.lustre_import_bucket]
