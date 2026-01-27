@@ -236,5 +236,5 @@ func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType 
 	}
 
 	// Case 3: Validation Failure - The machine type is genuinely invalid or unavailable
-	return fmt.Errorf("machine type %q is not available in zone %q for project %q", machineType, zone, projectID)
+	return fmt.Errorf(config.ErrMsgResourceInZone, "machine type", machineType, zone, projectID)
 }
