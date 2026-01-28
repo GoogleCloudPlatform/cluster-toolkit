@@ -28,6 +28,21 @@ locals {
   universe_domain = { "universe_domain" = var.universe_domain }
 }
 
+locals {
+  # Large size cluster with dynamic nodes can cause frequent controller reconfigures if topology plugin is enabled.
+  total_nodes = sum([for ns in var.nodeset : (ns.node_count_dynamic_max)])
+
+  cloud_parameters_override = {
+    topology_plugin = (var.cloud_parameters.topology_plugin == null && local.total_nodes > 50) ? "" : var.cloud_parameters.topology_plugin
+    suspend_timeout = (var.cloud_parameters.suspend_timeout == null && local.total_nodes > 50) ? 500 : var.cloud_parameters.suspend_timeout
+  }
+
+  cloud_parameters = merge(
+    var.cloud_parameters,
+    local.cloud_parameters_override
+  )
+}
+
 # See 
 # * slurm_files.tf
 # * controller.tf
