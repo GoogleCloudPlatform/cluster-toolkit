@@ -117,7 +117,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		bp := config.Blueprint{Vars: config.Dict{}.
 			With("project_id", cty.StringVal("f00b"))}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled})
+			unusedMods, unusedVars, projectExists, apisEnabled, quotaProjectOnly})
 	}
 
 	{
@@ -126,7 +126,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("region", cty.StringVal("narnia"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, quotaRegion})
 	}
 
 	{
@@ -135,7 +135,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone})
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, quotaProjectOnly, machineTypeInZone, diskTypeInZone})
 	}
 
 	{

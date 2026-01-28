@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -76,6 +77,9 @@ func doDeploy(deplRoot string) {
 	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
+
+	// Validators run at the beginning to fail fast if something is wrong.
+	checkErr(validators.Execute(bp), ctx)
 
 	for ig, group := range groups {
 		if !isGroupSelected(group.Name) {
