@@ -224,7 +224,7 @@ func TestCollectRequirements(t *testing.T) {
 
 				{ProjectID: "test-project", Region: "us-east1", Metric: "NVIDIA_A100_GPUS", Needed: 1},
 				{ProjectID: "test-project", Region: "us-east1", Metric: "A2_CPUS", Needed: 12},
-				
+
 				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 2},
 			},
 		},
