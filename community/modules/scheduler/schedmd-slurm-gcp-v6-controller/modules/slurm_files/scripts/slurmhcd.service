@@ -1,0 +1,10 @@
+[Unit]
+Description=slurmhcd (A Slurm Healthcheck Daemon)
+
+[Service]
+User=root
+ExecStart=/usr/bin/python3 /slurm/scripts/slurmhcd.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

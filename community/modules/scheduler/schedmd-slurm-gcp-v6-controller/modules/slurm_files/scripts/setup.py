@@ -205,21 +205,120 @@ def mount_save_state_disk():
 
     util.chown_slurm(mount_point)
 
+def mount_save_state_disk_gfs2(lkp: util.Lookup):
+    mount_point = util.slurmdirs.state
+    cluster_name = "statecluster"
+    fs_name = "statefs"
+    disk_name = f"/dev/disk/by-id/google-{lkp.cfg.controller_state_disk.device_name}"
+    hosts = lkp.cfg.slurm_control_hosts
 
-def setup_jwt_key():
-    jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
+    log.info("Starting GFS2 setup...")
 
-    if jwt_key.exists():
-        log.info("JWT key already exists. Skipping key generation.")
+    util.run("systemctl enable --now pcsd")
+    util.run("passwd -u -f hacluster")
+    util.run(f"echo 'hacluster:{lkp.cfg.gfs2_pass}' | chpasswd")
+    util.run("systemctl restart pcsd")
+    time.sleep(5)
+
+    hosts_str = " ".join(hosts)
+    log.info(f"Authenticating hosts: {hosts_str}")
+
+    max_retries = 20
+    retry_delay = 10
+    for attempt in range(max_retries):
+        try:
+            util.run(f"pcs host auth {hosts_str} -u hacluster -p {lkp.cfg.gfs2_pass}")
+            log.info("Authentication successful")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                log.warning(f"Authentication attempt {attempt + 1} failed, retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                log.error(f"Authentication failed after {max_retries} attempts")
+                raise
+
+    os.makedirs(mount_point, exist_ok=True)
+    
+    if lkp.is_primary_controller:
+        log.info("Primary controller: setting up cluster")
+        util.run(f"pcs cluster setup {cluster_name} {hosts_str}")
+        util.run("pcs cluster start --all")
+        util.run("pcs cluster enable --all")
+
+        util.run("pcs property set stonith-enabled=false")
+        util.run("pcs property set no-quorum-policy=ignore")
+        
+        util.run("systemctl enable corosync pacemaker dlm")
+        util.run("systemctl start corosync pacemaker dlm")
+        
+        rdevice = util.run(f"realpath {disk_name}").stdout.strip()
+        file_output = util.run(f"file -s {rdevice}").stdout.strip()
+        if "GFS2" not in file_output:
+            log.info(f"Formatting {rdevice} as GFS2")
+            util.run(f"mkfs.gfs2 -O -p lock_dlm -t {cluster_name}:{fs_name} -j {len(hosts)} {rdevice}")
+
+        util.run(f"pcs resource create {fs_name} Filesystem "
+                 f"device='{disk_name}' directory='{mount_point}' fstype='gfs2' "
+                 f"op monitor interval=20s clone interleave=true")
+
     else:
-        run("dd if=/dev/urandom bs=32 count=1 > " + str(jwt_key), shell=True)
+        log.info("Waiting for cluster configuration to exist")
+        for attempt in range(20):
+            try:
+                result = util.run("pcs cluster status", check=False)
+                if result.returncode == 0:
+                    log.info("Cluster configuration found")
+                    break
+            except Exception:
+                pass
+            if attempt < 19:
+                log.info(f"Waiting for cluster config (attempt {attempt + 1}/20)...")
+                time.sleep(10)
+                
+        util.run("systemctl enable corosync pacemaker dlm")
+        util.run("systemctl start corosync pacemaker dlm")
+    
+    log.info(f"Waiting for {mount_point} to be mounted")
+    for attempt in range(30):
+        df_output = util.run("df -h").stdout
+        if str(mount_point) in df_output:
+            log.info("Mount verified successfully")
+            break
+        if attempt == 29:
+            log.warning("Mount verification timed out")
+            log.warning(f"PCS status:\n{util.run('pcs status').stdout}")
+        time.sleep(5)
 
-    util.chown_slurm(jwt_key, mode=0o400)
+    util.chown_slurm(mount_point)
+    log.info("GFS2 setup completed")
 
+
+def setup_jwt_key(lkp: util.Lookup):
+    jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
+    
+    if lkp.is_primary_controller:
+        if jwt_key.exists():
+            log.info("JWT key already exists. Skipping key generation.")
+        else:
+            log.info("Primary controller generating JWT key...")
+            run("dd if=/dev/urandom bs=32 count=1 > " + str(jwt_key), shell=True)
+        util.chown_slurm(jwt_key, mode=0o400)
+    else:
+        log.info("Secondary controller waiting for JWT key from primary...")
+        wait_for_key(jwt_key, timeout=300) 
 
 def _generate_key(p: Path) -> None:
     run(f"dd if=/dev/random of={p} bs=1024 count=1")
 
+def wait_for_key(key_path: Path, timeout: int = 300) -> None:
+    start_time = time.time()
+    while not key_path.exists():
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Timeout waiting for key {key_path} from primary controller")
+        log.info(f"Waiting for key {key_path}...")
+        time.sleep(5)
+    log.info(f"Key {key_path} found!")
 
 def setup_key(lkp: util.Lookup) -> None:
     file_name = "munge.key"
@@ -234,9 +333,17 @@ def setup_key(lkp: util.Lookup) -> None:
     if lkp.cfg.controller_state_disk.device_name:
         # Copy key from persistent state disk
         persist = slurmdirs.state / file_name
-        if not persist.exists():
-            _generate_key(persist)
-
+        
+        if lkp.is_primary_controller:
+            if not persist.exists():
+                log.info(f"Primary controller generating {file_name}...")
+                _generate_key(persist)
+            else:
+                log.info(f"{file_name} already exists on persistent disk.")
+        else:
+            log.info(f"Secondary controller waiting for {file_name} from primary...")
+            wait_for_key(persist, timeout=300)
+        
         shutil.copyfile(persist, dst)
         if lkp.cfg.enable_slurm_auth:
             util.chown_slurm(dst, mode=0o400)
@@ -258,11 +365,18 @@ def setup_key(lkp: util.Lookup) -> None:
     if lkp.cfg.enable_slurm_auth:
         # Put key into shared volume for distribution
         distributed = util.slurmdirs.key_distribution / file_name
-        shutil.copyfile(dst, distributed)
-        util.chown_slurm(distributed, mode=0o400)
-        # Munge is distributed from /etc/munge.
+        if lkp.is_primary_controller:
+            shutil.copyfile(dst, distributed)
+            util.chown_slurm(distributed, mode=0o400)
+            log.info(f"Key {file_name} distributed to shared volume")
+        else:
+            if not distributed.exists():
+                log.info(f"Waiting for {file_name} in distribution directory...")
+                wait_for_key(distributed, timeout=300)
     else:
-        run("systemctl restart munge", timeout=30)
+        if not lkp.is_primary_controller:
+            time.sleep(2)
+        run("systemctl restart munge", timeout=30, shell=True)
 
 
 def setup_nss_slurm():
@@ -346,11 +460,11 @@ def configure_mysql(lkp: util.Lookup) -> None:
     cnfdir = Path("/etc/my.cnf.d")
     if not cnfdir.exists():
         cnfdir = Path("/etc/mysql/conf.d")
-    if not (cnfdir / "mysql_slurm.cnf").exists():
-        (cnfdir / "mysql_slurm.cnf").write_text(
+        
+    (cnfdir / "mysql_slurm.cnf").write_text(
             """
 [mysqld]
-bind-address=127.0.0.1
+bind-address=0.0.0.0
 innodb_buffer_pool_size=1024M
 innodb_log_file_size=64M
 innodb_lock_wait_timeout=900
@@ -362,16 +476,13 @@ innodb_lock_wait_timeout=900
 
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
-    
-    db_name = "slurm_acct_db"
-    
 
-    cmd = "mysql -u root -e"
-    for host  in ("localhost", lkp.control_host):
-        run(f"""{cmd} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
-        run(f"""{cmd} "create user 'slurm'@'{host}'";""", timeout=30)
-        run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
-
+    mysql = "mysql -u root -e"
+    for host in lookup().control_hosts:
+        control_host = util.host_lookup(host)
+        run(f"""{mysql} "drop user if exists 'slurm'@'{control_host}'";""", timeout=30,check=False,)
+        run(f"""{mysql} "create user 'slurm'@'{control_host}'";""", timeout=30)
+        run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{control_host}'";""", timeout=30)
 
 def configure_dirs():
     for p in dirs.values():
@@ -418,6 +529,7 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
 def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
+    run(["hostnamectl", "set-hostname", lookup().hostname])
     lkp = util.lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
@@ -426,19 +538,20 @@ def setup_controller():
     else:
         conf_v2411.generate_configs_slurm_v2411(lkp)
 
-
+    run_custom_scripts()
     if lkp.cfg.controller_state_disk.device_name != None:
-        mount_save_state_disk()
+        mount_save_state_disk_gfs2(lkp)
 
-    setup_jwt_key()
+    setup_jwt_key(lkp)
     setup_key(lkp)
 
     setup_sudoers()
     setup_network_storage()
 
-    run_custom_scripts()
+    
 
-    if not lkp.cfg.cloudsql_secret:
+    if not (lookup().cfg.cloudsql_secret or lookup().cfg.cloudsql) and lookup().is_primary_controller:
+        log.info("Configure mysql on primary controller...")
         configure_mysql(lkp)
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -466,7 +579,9 @@ def setup_controller():
     run("systemctl enable nfs-server", timeout=30)
     run("systemctl start nfs-server", timeout=30)
 
-    setup_nfs_exports()
+    if lookup().is_primary_controller :
+        setup_nfs_exports()
+
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
@@ -488,6 +603,15 @@ def setup_controller():
     # Add script to perform maintenance
     setup_maintenance_script()
 
+    # Start Healthcheck
+    shutil.copy(
+        "/slurm/scripts/slurmhcd.service",
+        "/etc/systemd/system/slurmhcd.service"
+    )
+    run("systemctl enable slurmhcd.service", timeout=30)
+    run("systemctl start slurmhcd.service", timeout=30)
+    log.info(f"Start Healthchekc service daemon")
+    
     self_report_controller_address(lkp)
 
     log.info("Done setting up controller")
