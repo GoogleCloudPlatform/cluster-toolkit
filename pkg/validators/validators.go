@@ -48,7 +48,7 @@ func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
 		return config.HintError{Hint: credentialsHint, Err: ErrNoDefaultCredentials}
 	}
-	
+
 	// GoogleAPI Error?
 	var gErr *googleapi.Error
 	if errors.As(e, &gErr) {
