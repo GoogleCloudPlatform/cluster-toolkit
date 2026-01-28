@@ -1,0 +1,101 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: slurm-c4a
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-c4a
+  region: us-central1
+  zone: us-central1-a
+  instance_image:
+    family: slurm-gcp-6-11-ubuntu-2404-lts-arm64
+    project: schedmd-slurm-public
+  disk_type: hyperdisk-balanced
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+- group: primary
+  modules:
+
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+
+  - id: c4a-slurm-net-0
+    source: modules/network/vpc
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [c4a-slurm-net-0]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  - id: c4a_startup
+    source: modules/scripts/startup-script
+    settings:
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
+
+  - id: c4a_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [c4a_startup, c4a-slurm-net-0]
+    settings:
+      # Unattended upgrades are disabled to prevent automatic daily updates which may lead to potential instability.
+      # For more details, see https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+      allow_automatic_updates: false
+      bandwidth_tier: tier_1_enabled
+      machine_type: c4a-highcpu-72
+      node_count_static: 0
+      node_count_dynamic_max: 2
+      enable_placement: true
+
+  - id: c4a_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c4a_nodeset]
+    settings:
+      exclusive: false
+      partition_name: c4a
+      is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - $(vars.deployment_name)-*
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [c4a-slurm-net-0]
+    settings:
+      machine_type: c4a-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [c4a-slurm-net-0, c4a_partition, slurm_login, homefs]
+    settings:
+      machine_type: c4a-standard-4
+      controller_state_disk:
+        type: hyperdisk-balanced
+        size: 50
+      enable_controller_public_ips: false
+      login_startup_script: $(login_startup.startup_script)
