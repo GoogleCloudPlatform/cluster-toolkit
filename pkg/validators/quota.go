@@ -180,7 +180,6 @@ func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 
 func collectRequirements(bp config.Blueprint, client QuotaClient, projectID, defaultRegion string) ([]QuotaRequirement, error) {
 	totals := make(map[string]float64)
-
 	var walkErr error
 
 	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
@@ -189,347 +188,23 @@ func collectRequirements(bp config.Blueprint, client QuotaClient, projectID, def
 		}
 		settings := m.Settings
 
-		// 1. Determine Location (Zone/Region)
-		var zone, region string
-
-		if settings.Has("zone") {
-			zVal, err := evalToFloat64OrString(bp, settings.Get("zone"))
-			if err == nil {
-				zone = zVal.(string)
-			}
-		}
-		if settings.Has("region") {
-			rVal, err := evalToFloat64OrString(bp, settings.Get("region"))
-			if err == nil {
-				region = rVal.(string)
-			}
-		}
-		if region == "" && zone != "" {
-			parts := strings.Split(zone, "-")
-			if len(parts) > 2 {
-				region = strings.Join(parts[:len(parts)-1], "-")
-			}
-		}
-		if region == "" {
-			region = defaultRegion
-		}
-
-		// 2. Identify Scaling Factors (Count)
-		count := 1.0
-
-		addCount := func(key string) {
-			if settings.Has(key) {
-				val, err := evalToFloat64(bp, settings.Get(key))
-				if err == nil {
-					count = val
-				}
-				if err != nil && isUnknownError(err) {
-					logging.Error("WARNING: quota validation skipped for module %s: %s is unknown", m.ID, key)
-					count = 0
-				}
-			}
-		}
-
-		if settings.Has("node_count_static") || settings.Has("node_count_dynamic_max") {
-			c := 0.0
-			found := false
-			if settings.Has("node_count_static") {
-				v, err := evalToFloat64(bp, settings.Get("node_count_static"))
-				if err == nil {
-					c += v
-					found = true
-				} else if isUnknownError(err) {
-					logging.Error("WARNING: quota validation skipped for %s: node_count_static is unknown", m.ID)
-				}
-			}
-			if settings.Has("node_count_dynamic_max") {
-				v, err := evalToFloat64(bp, settings.Get("node_count_dynamic_max"))
-				if err == nil {
-					c += v
-					found = true
-				} else if isUnknownError(err) {
-					logging.Error("WARNING: quota validation skipped for %s: node_count_dynamic_max is unknown", m.ID)
-				}
-			}
-			if found {
-				count = c
-			}
-		} else if settings.Has("node_count") {
-			addCount("node_count")
-		} else if settings.Has("instance_count") {
-			addCount("instance_count")
-		} else if settings.Has("vm_count") {
-			addCount("vm_count")
-		}
+		zone, region := getModuleLocation(bp, settings, defaultRegion)
+		count := getModuleCount(bp, string(m.ID), settings)
 
 		if count == 0 {
 			return
 		}
 
-		// 2.5: Check for Specific Reservation
-		usingReservation := false
-		if settings.Has("reservation_affinity") {
-			val := settings.Get("reservation_affinity")
-			v, err := bp.Eval(val)
-			if err == nil && v.Type().IsObjectType() {
-				attrs := v.AsValueMap()
-				if t, ok := attrs["consume_reservation_type"]; ok && t.Type() == cty.String {
-					if t.AsString() == "SPECIFIC_RESERVATION" {
-						usingReservation = true
-					}
-				}
-			}
-		}
-		if settings.Has("reservation_name") {
-			val := settings.Get("reservation_name")
-			v, err := evalString(bp, val)
-			if err == nil && v != "" {
-				usingReservation = true
-			}
-		}
-
-		// 3. Determine Machine Type & Spot/Preemptible
-		isSpot := false
-		if settings.Has("enable_spot_vm") {
-			v, err := evalBool(bp, settings.Get("enable_spot_vm"))
-			if err == nil && v {
-				isSpot = true
-			}
-		}
-		if settings.Has("spot") {
-			v, err := evalBool(bp, settings.Get("spot"))
-			if err == nil && v {
-				isSpot = true
-			}
-		}
-		if settings.Has("preemptible") {
-			v, err := evalBool(bp, settings.Get("preemptible"))
-			if err == nil && v {
-				isSpot = true
-			}
-		}
-		if settings.Has("provisioning_model") {
-			s, err := evalString(bp, settings.Get("provisioning_model"))
-			if err == nil && strings.ToUpper(s) == "SPOT" {
-				isSpot = true
-			}
-		}
-
-		prefix := ""
-		if isSpot {
-			prefix = "PREEMPTIBLE_"
-		}
-
-		// 4. Calculate Machine Requirements (CPUs, GPUs) - Skip if using reservation
-		// Reservations cover vCPUs, GPUs, and Local SSDs.
-		if !usingReservation {
-			if settings.Has("machine_type") {
-				if region == "" {
-					logging.Error("WARNING: Could not determine region for module %s. Regional quota checks (CPUs, GPUs) will be skipped.", m.ID)
-				}
-
-				mtStr, err := evalString(bp, settings.Get("machine_type"))
-				if err == nil && mtStr != "" && region != "" {
-					lookupZone := zone
-					if lookupZone == "" {
-						regObj, err := client.GetRegion(projectID, region)
-						if err == nil && len(regObj.Zones) > 0 {
-							zURL := regObj.Zones[0]
-							parts := strings.Split(zURL, "/")
-							lookupZone = parts[len(parts)-1]
-						} else {
-							lookupZone = region + "-a"
-							logging.Info("quota: failed to discover zones for region %s, falling back to %s: %v", region, lookupZone, err)
-						}
-					}
-
-					mt, err := client.GetMachineType(projectID, lookupZone, mtStr)
-					if err == nil {
-						cpuMetric := "CPUS"
-						lowerType := strings.ToLower(mtStr)
-
-						re := regexp.MustCompile(`^([a-z][0-9]+[a-z]?)-`)
-						matches := re.FindStringSubmatch(lowerType)
-						family := ""
-						if len(matches) > 1 {
-							family = matches[1]
-							// Legacy check (N1, E2, F1, G1 use generic CPUS)
-							if family != "n1" && family != "e2" && family != "f1" && family != "g1" {
-								cpuMetric = strings.ToUpper(family) + "_CPUS"
-							}
-						}
-
-						if family == "a3" || family == "g2" {
-							logging.Info("quota: family %s detected for machine %s, skipping CPU quota check", family, mtStr)
-						} else {
-							cpuMetric = prefix + cpuMetric
-							addTotal(totals, projectID, region, cpuMetric, float64(mt.GuestCpus)*count)
-						}
-
-						// GPUs (Accelerators)
-						for _, acc := range mt.Accelerators {
-							metricNames := mapAcceleratorTypeToMetric(acc.GuestAcceleratorType)
-							for _, mName := range metricNames {
-								addTotal(totals, projectID, region, prefix+mName, float64(acc.GuestAcceleratorCount)*count)
-								addTotal(totals, projectID, "global", "GPUS_ALL_REGIONS", float64(acc.GuestAcceleratorCount)*count)
-							}
-						}
-					} else {
-						logging.Error("WARNING: quota: could not look up machine type %s in %s: %v. Usage check skipped.", mtStr, lookupZone, err)
-					}
-				}
-			}
+		if !isReservationUsed(bp, settings) {
+			addVMQuota(bp, client, settings, projectID, region, zone, count, totals, string(m.ID))
 		} else {
 			logging.Info("quota: module %s targets a specific reservation, skipping CPU/GPU/LocalSSD quota checks", m.ID)
 		}
 
-		// 6. Storage (Disks)
-		var diskSizeGB float64 = 0
-		if settings.Has("disk_size_gb") {
-			v, err := evalToFloat64(bp, settings.Get("disk_size_gb"))
-			if err == nil {
-				diskSizeGB += v
-			}
-		}
-		if settings.Has("boot_disk_size_gb") {
-			v, err := evalToFloat64(bp, settings.Get("boot_disk_size_gb"))
-			if err == nil {
-				diskSizeGB += v
-			}
-		}
-
-		diskType := "pd-standard" // Default
-		if settings.Has("disk_type") {
-			s, err := evalString(bp, settings.Get("disk_type"))
-			if err == nil {
-				diskType = s
-			}
-		}
-
-		if diskSizeGB > 0 {
-			if strings.Contains(diskType, "hyperdisk-balanced") {
-				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_TOTAL_GB", diskSizeGB*count)
-
-				if settings.Has("provisioned_iops") {
-					v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
-					if err == nil {
-						addTotal(totals, projectID, region, "HYPERDISK_BALANCED_IOPS", v*count)
-					}
-				}
-				if settings.Has("provisioned_throughput") {
-					v, err := evalToFloat64(bp, settings.Get("provisioned_throughput"))
-					if err == nil {
-						addTotal(totals, projectID, region, "HYPERDISK_BALANCED_THROUGHPUT", v*count)
-					}
-				}
-
-			} else if strings.Contains(diskType, "pd-extreme") {
-				addTotal(totals, projectID, region, "EXTREME_TOTAL_GB", diskSizeGB*count)
-			} else if strings.Contains(diskType, "ssd") || strings.Contains(diskType, "balanced") {
-				addTotal(totals, projectID, region, "SSD_TOTAL_GB", diskSizeGB*count)
-			} else if strings.Contains(diskType, "standard") {
-				addTotal(totals, projectID, region, "STANDARD_TOTAL_GB", diskSizeGB*count)
-			}
-		}
-
-		if settings.Has("local_ssd_count") {
-			lCount, err := evalToFloat64(bp, settings.Get("local_ssd_count"))
-			if err == nil {
-				// Each local SSD is 375GB
-				addTotal(totals, projectID, region, "LOCAL_SSD_TOTAL_GB", lCount*localSSDSizeGB*count)
-			}
-		}
-
-		// 7. Networks
-		netProjectID := projectID
-		if settings.Has("network_project_id") {
-			s, err := evalString(bp, settings.Get("network_project_id"))
-			if err == nil && s != "" {
-				netProjectID = s
-			}
-		} else if settings.Has("project_id") {
-			s, err := evalString(bp, settings.Get("project_id"))
-			if err == nil && s != "" {
-				netProjectID = s
-			}
-		}
-
-		if strings.Contains(m.Source, "network/vpc") || strings.Contains(m.Source, "gpu-rdma-vpc") {
-			addTotal(totals, netProjectID, "global", "NETWORKS", 1)
-		}
-
-		if strings.Contains(m.Source, "filestore") {
-			tier := "BASIC_HDD"
-			if settings.Has("tier") {
-				s, err := evalString(bp, settings.Get("tier"))
-				if err == nil {
-					tier = s
-				}
-			}
-
-			metricName := "StandardStorageGbPerRegion"
-			switch tier {
-			case "BASIC_SSD":
-				metricName = "PremiumStorageGbPerRegion"
-			case "HIGH_SCALE_SSD":
-				metricName = "HighScaleSSDStorageGibPerRegion"
-			case "ENTERPRISE":
-				metricName = "EnterpriseStorageGibPerRegion"
-			case "ZONAL":
-				metricName = "EnterpriseStorageGibPerRegion"
-			}
-
-			if settings.Has("capacity_gb") {
-				v, err := evalToFloat64(bp, settings.Get("capacity_gb"))
-				if err == nil {
-					addTotal(totals, projectID, region, metricName, v*count)
-				}
-			}
-		}
-
-		if settings.Has("accelerator_type") {
-			accTypeStr, err := evalString(bp, settings.Get("accelerator_type"))
-			if err == nil && strings.HasPrefix(accTypeStr, "v") {
-				parts := strings.Split(accTypeStr, "-")
-				if len(parts) >= 2 {
-					ver := parts[0] // v2, v3
-					coresStr := parts[1]
-					cores, errC := strconv.ParseFloat(coresStr, 64)
-					if errC == nil {
-						metric := fmt.Sprintf("%s_TPUS", strings.ToUpper(ver))
-
-						isTpuPreemptible := false
-						if settings.Has("preemptible") {
-							v, _ := evalBool(bp, settings.Get("preemptible"))
-							if v {
-								isTpuPreemptible = true
-							}
-						}
-
-						if isTpuPreemptible {
-							metric = "PREEMPTIBLE_" + metric
-						}
-						addTotal(totals, projectID, region, metric, cores*count)
-					}
-				}
-			}
-		}
-
-		if settings.Has("subnetworks") {
-			val := settings.Get("subnetworks")
-			v, err := bp.Eval(val)
-			if err == nil && v.Type().IsListType() {
-				iter := v.ElementIterator()
-				for iter.Next() {
-					_, elem := iter.Element()
-					if elem.Type().IsObjectType() {
-
-						addTotal(totals, netProjectID, "global", "SUBNETWORKS", 1)
-					}
-				}
-			}
-		}
-
+		addDiskQuota(bp, settings, projectID, region, count, totals)
+		addNetworkQuota(bp, m, settings, projectID, count, totals)
+		addFilestoreQuota(bp, settings, projectID, region, count, totals)
+		addTPUQuota(bp, settings, projectID, region, count, totals)
 	})
 
 	if walkErr != nil {
@@ -698,41 +373,43 @@ func mapAcceleratorTypeToMetric(accType string) []string {
 	accType = strings.ToLower(accType)
 	var metrics []string
 
-	if strings.Contains(accType, "nvidia-h100") {
-		metrics = append(metrics, "NVIDIA_H100_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-a100") {
-		if strings.Contains(accType, "80gb") {
-			metrics = append(metrics, "NVIDIA_A100_80GB_GPUS")
-		} else {
-			metrics = append(metrics, "NVIDIA_A100_GPUS")
+	if strings.Contains(accType, "nvidia") {
+		if strings.Contains(accType, "h100") {
+			metrics = append(metrics, "NVIDIA_H100_GPUS")
+			return metrics
 		}
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-l4") {
-		metrics = append(metrics, "NVIDIA_L4_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-t4") {
-		metrics = append(metrics, "NVIDIA_T4_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-v100") || strings.Contains(accType, "nvidia-tesla-v100") {
-		metrics = append(metrics, "NVIDIA_V100_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-p100") || strings.Contains(accType, "nvidia-tesla-p100") {
-		metrics = append(metrics, "NVIDIA_P100_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-p4") || strings.Contains(accType, "nvidia-tesla-p4") {
-		metrics = append(metrics, "NVIDIA_P4_GPUS")
-		return metrics
-	}
-	if strings.Contains(accType, "nvidia-k80") || strings.Contains(accType, "nvidia-tesla-k80") {
-		metrics = append(metrics, "NVIDIA_K80_GPUS")
-		return metrics
+		if strings.Contains(accType, "a100") {
+			if strings.Contains(accType, "80gb") {
+				metrics = append(metrics, "NVIDIA_A100_80GB_GPUS")
+			} else {
+				metrics = append(metrics, "NVIDIA_A100_GPUS")
+			}
+			return metrics
+		}
+		if strings.Contains(accType, "l4") {
+			metrics = append(metrics, "NVIDIA_L4_GPUS")
+			return metrics
+		}
+		if strings.Contains(accType, "t4") {
+			metrics = append(metrics, "NVIDIA_T4_GPUS")
+			return metrics
+		}
+		if strings.Contains(accType, "v100") {
+			metrics = append(metrics, "NVIDIA_V100_GPUS")
+			return metrics
+		}
+		if strings.Contains(accType, "p100") {
+			metrics = append(metrics, "NVIDIA_P100_GPUS")
+			return metrics
+		}
+		if strings.Contains(accType, "p4") {
+			metrics = append(metrics, "NVIDIA_P4_GPUS")
+			return metrics
+		}
+		if strings.Contains(accType, "k80") {
+			metrics = append(metrics, "NVIDIA_K80_GPUS")
+			return metrics
+		}
 	}
 
 	base := strings.ToUpper(original)
@@ -745,4 +422,384 @@ func mapAcceleratorTypeToMetric(accType string) []string {
 
 	metrics = append(metrics, fmt.Sprintf("NVIDIA_%s_GPUS", base))
 	return metrics
+}
+
+func getModuleLocation(bp config.Blueprint, settings config.Dict, defaultRegion string) (string, string) {
+	var zone, region string
+
+	if settings.Has("zone") {
+		zVal, err := evalToFloat64OrString(bp, settings.Get("zone"))
+		if err == nil {
+			zone = zVal.(string)
+		}
+	}
+	if settings.Has("region") {
+		rVal, err := evalToFloat64OrString(bp, settings.Get("region"))
+		if err == nil {
+			region = rVal.(string)
+		}
+	}
+	if region == "" && zone != "" {
+		parts := strings.Split(zone, "-")
+		if len(parts) > 2 {
+			region = strings.Join(parts[:len(parts)-1], "-")
+		}
+	}
+	if region == "" {
+		region = defaultRegion
+	}
+	return zone, region
+}
+
+func getModuleCount(bp config.Blueprint, moduleID string, settings config.Dict) float64 {
+	count := 1.0
+
+	addCount := func(key string) {
+		if settings.Has(key) {
+			val, err := evalToFloat64(bp, settings.Get(key))
+			if err == nil {
+				count = val
+			}
+			if err != nil && isUnknownError(err) {
+				logging.Error("WARNING: quota validation skipped for module %s: %s is unknown", moduleID, key)
+				count = 0
+			}
+		}
+	}
+
+	if settings.Has("node_count_static") || settings.Has("node_count_dynamic_max") {
+		return resolveNodeCount(bp, moduleID, settings)
+	}
+
+	if settings.Has("node_count") {
+		addCount("node_count")
+	} else if settings.Has("instance_count") {
+		addCount("instance_count")
+	} else if settings.Has("vm_count") {
+		addCount("vm_count")
+	}
+
+	return count
+}
+
+func resolveNodeCount(bp config.Blueprint, moduleID string, settings config.Dict) float64 {
+	c := 0.0
+	found := false
+	if settings.Has("node_count_static") {
+		v, err := evalToFloat64(bp, settings.Get("node_count_static"))
+		if err == nil {
+			c += v
+			found = true
+		} else if isUnknownError(err) {
+			logging.Error("WARNING: quota validation skipped for %s: node_count_static is unknown", moduleID)
+		}
+	}
+	if settings.Has("node_count_dynamic_max") {
+		v, err := evalToFloat64(bp, settings.Get("node_count_dynamic_max"))
+		if err == nil {
+			c += v
+			found = true
+		} else if isUnknownError(err) {
+			logging.Error("WARNING: quota validation skipped for %s: node_count_dynamic_max is unknown", moduleID)
+		}
+	}
+	if found {
+		return c
+	}
+	return 1.0
+}
+
+func isReservationUsed(bp config.Blueprint, settings config.Dict) bool {
+	if settings.Has("reservation_affinity") {
+		val := settings.Get("reservation_affinity")
+		v, err := bp.Eval(val)
+		if err == nil && v.Type().IsObjectType() {
+			attrs := v.AsValueMap()
+			if t, ok := attrs["consume_reservation_type"]; ok && t.Type() == cty.String {
+				if t.AsString() == "SPECIFIC_RESERVATION" {
+					return true
+				}
+			}
+		}
+	}
+	if settings.Has("reservation_name") {
+		val := settings.Get("reservation_name")
+		v, err := evalString(bp, val)
+		if err == nil && v != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func addVMQuota(bp config.Blueprint, client QuotaClient, settings config.Dict, projectID, region, zone string, count float64, totals map[string]float64, moduleID string) {
+	if !settings.Has("machine_type") {
+		return
+	}
+
+	if region == "" {
+		logging.Error("WARNING: Could not determine region for module %s. Regional quota checks (CPUs, GPUs) will be skipped.", moduleID)
+		return
+	}
+
+	mtStr, err := evalString(bp, settings.Get("machine_type"))
+	if err != nil || mtStr == "" {
+		return
+	}
+
+	lookupZone := resolveVMZone(client, projectID, region, zone, mtStr)
+	mt, err := client.GetMachineType(projectID, lookupZone, mtStr)
+	if err != nil {
+		logging.Error("WARNING: quota: could not look up machine type %s in %s: %v. Usage check skipped.", mtStr, lookupZone, err)
+		return
+	}
+
+	isSpot := checkSpotSettings(bp, settings)
+	prefix := ""
+	if isSpot {
+		prefix = "PREEMPTIBLE_"
+	}
+
+	addCPUMetrics(mtStr, prefix, count, mt.GuestCpus, projectID, region, totals)
+
+	addGPUMetrics(mt.Accelerators, prefix, count, projectID, region, totals)
+}
+
+func resolveVMZone(client QuotaClient, projectID, region, zone, mtStr string) string {
+	if zone != "" {
+		return zone
+	}
+	regObj, err := client.GetRegion(projectID, region)
+	if err == nil && len(regObj.Zones) > 0 {
+		zURL := regObj.Zones[0]
+		parts := strings.Split(zURL, "/")
+		return parts[len(parts)-1]
+	}
+	lookupZone := region + "-a"
+	logging.Info("quota: failed to discover zones for region %s, falling back to %s for %s: %v", region, lookupZone, mtStr, err)
+	return lookupZone
+}
+
+func checkSpotSettings(bp config.Blueprint, settings config.Dict) bool {
+	keys := []string{"enable_spot_vm", "spot", "preemptible"}
+	for _, k := range keys {
+		if settings.Has(k) {
+			v, err := evalBool(bp, settings.Get(k))
+			if err == nil && v {
+				return true
+			}
+		}
+	}
+	if settings.Has("provisioning_model") {
+		s, err := evalString(bp, settings.Get("provisioning_model"))
+		if err == nil && strings.ToUpper(s) == "SPOT" {
+			return true
+		}
+	}
+	return false
+}
+
+func addCPUMetrics(mtStr, prefix string, count float64, guestCpus int64, projectID, region string, totals map[string]float64) {
+	cpuMetric := "CPUS"
+	family := GetMachineTypeFamily(mtStr)
+	if family != "" {
+		if family != "n1" && family != "e2" && family != "f1" && family != "g1" {
+			cpuMetric = strings.ToUpper(family) + "_CPUS"
+		}
+	}
+
+	if family == "a3" || family == "g2" {
+		logging.Info("quota: family %s detected for machine %s, skipping CPU quota check", family, mtStr)
+	} else {
+		cpuMetric = prefix + cpuMetric
+		addTotal(totals, projectID, region, cpuMetric, float64(guestCpus)*count)
+	}
+}
+
+func addGPUMetrics(accelerators []*compute.MachineTypeAccelerators, prefix string, count float64, projectID, region string, totals map[string]float64) {
+	for _, acc := range accelerators {
+		metricNames := mapAcceleratorTypeToMetric(acc.GuestAcceleratorType)
+		for _, mName := range metricNames {
+			addTotal(totals, projectID, region, prefix+mName, float64(acc.GuestAcceleratorCount)*count)
+			addTotal(totals, projectID, "global", "GPUS_ALL_REGIONS", float64(acc.GuestAcceleratorCount)*count)
+		}
+	}
+}
+
+func addDiskQuota(bp config.Blueprint, settings config.Dict, projectID, region string, count float64, totals map[string]float64) {
+	var diskSizeGB float64 = 0
+	if settings.Has("disk_size_gb") {
+		v, err := evalToFloat64(bp, settings.Get("disk_size_gb"))
+		if err == nil {
+			diskSizeGB += v
+		}
+	}
+	if settings.Has("boot_disk_size_gb") {
+		v, err := evalToFloat64(bp, settings.Get("boot_disk_size_gb"))
+		if err == nil {
+			diskSizeGB += v
+		}
+	}
+
+	if settings.Has("local_ssd_count") {
+		lCount, err := evalToFloat64(bp, settings.Get("local_ssd_count"))
+		if err == nil {
+			addTotal(totals, projectID, region, "LOCAL_SSD_TOTAL_GB", lCount*localSSDSizeGB*count)
+		}
+	}
+
+	if diskSizeGB <= 0 {
+		return
+	}
+
+	diskType := "pd-standard"
+	if settings.Has("disk_type") {
+		s, err := evalString(bp, settings.Get("disk_type"))
+		if err == nil {
+			diskType = s
+		}
+	}
+
+	addDetailedDiskMetrics(bp, settings, diskType, diskSizeGB, count, projectID, region, totals)
+}
+
+func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType string, sizeGB, count float64, projectID, region string, totals map[string]float64) {
+	if strings.Contains(diskType, "hyperdisk-balanced") {
+		addTotal(totals, projectID, region, "HYPERDISK_BALANCED_TOTAL_GB", sizeGB*count)
+		if settings.Has("provisioned_iops") {
+			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
+			if err == nil {
+				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_IOPS", v*count)
+			}
+		}
+		if settings.Has("provisioned_throughput") {
+			v, err := evalToFloat64(bp, settings.Get("provisioned_throughput"))
+			if err == nil {
+				addTotal(totals, projectID, region, "HYPERDISK_BALANCED_THROUGHPUT", v*count)
+			}
+		}
+		return
+	}
+
+	if strings.Contains(diskType, "pd-extreme") {
+		addTotal(totals, projectID, region, "EXTREME_TOTAL_GB", sizeGB*count)
+		return
+	}
+	if strings.Contains(diskType, "ssd") || strings.Contains(diskType, "balanced") {
+		addTotal(totals, projectID, region, "SSD_TOTAL_GB", sizeGB*count)
+		return
+	}
+	if strings.Contains(diskType, "standard") {
+		addTotal(totals, projectID, region, "STANDARD_TOTAL_GB", sizeGB*count)
+		return
+	}
+}
+
+func addNetworkQuota(bp config.Blueprint, m *config.Module, settings config.Dict, projectID string, count float64, totals map[string]float64) {
+	netProjectID := resolveNetworkProjectID(bp, settings, projectID)
+
+	if strings.Contains(m.Source, "network/vpc") || strings.Contains(m.Source, "gpu-rdma-vpc") {
+		addTotal(totals, netProjectID, "global", "NETWORKS", 1)
+	}
+
+	if settings.Has("subnetworks") {
+		val := settings.Get("subnetworks")
+		v, err := bp.Eval(val)
+		if err == nil && v.Type().IsListType() {
+			iter := v.ElementIterator()
+			for iter.Next() {
+				_, elem := iter.Element()
+				if elem.Type().IsObjectType() {
+					addTotal(totals, netProjectID, "global", "SUBNETWORKS", 1)
+				}
+			}
+		}
+	}
+}
+
+func resolveNetworkProjectID(bp config.Blueprint, settings config.Dict, defaultProjectID string) string {
+	if settings.Has("network_project_id") {
+		s, err := evalString(bp, settings.Get("network_project_id"))
+		if err == nil && s != "" {
+			return s
+		}
+	}
+	if settings.Has("project_id") {
+		s, err := evalString(bp, settings.Get("project_id"))
+		if err == nil && s != "" {
+			return s
+		}
+	}
+	return defaultProjectID
+}
+
+func addFilestoreQuota(bp config.Blueprint, settings config.Dict, projectID, region string, count float64, totals map[string]float64) {
+	if !settings.Has("capacity_gb") {
+		return
+	}
+	tier := "BASIC_HDD"
+	if settings.Has("tier") {
+		s, err := evalString(bp, settings.Get("tier"))
+		if err == nil {
+			tier = s
+		}
+	}
+
+	metricName := "StandardStorageGbPerRegion"
+	switch tier {
+	case "BASIC_SSD":
+		metricName = "PremiumStorageGbPerRegion"
+	case "HIGH_SCALE_SSD":
+		metricName = "HighScaleSSDStorageGibPerRegion"
+	case "ENTERPRISE":
+		metricName = "EnterpriseStorageGibPerRegion"
+	case "ZONAL":
+		metricName = "EnterpriseStorageGibPerRegion"
+	}
+
+	v, err := evalToFloat64(bp, settings.Get("capacity_gb"))
+	if err == nil {
+		addTotal(totals, projectID, region, metricName, v*count)
+	}
+}
+
+func addTPUQuota(bp config.Blueprint, settings config.Dict, projectID, region string, count float64, totals map[string]float64) {
+	if !settings.Has("accelerator_type") {
+		return
+	}
+	accTypeStr, err := evalString(bp, settings.Get("accelerator_type"))
+	if err != nil || !strings.HasPrefix(accTypeStr, "v") {
+		return
+	}
+
+	parts := strings.Split(accTypeStr, "-")
+	if len(parts) >= 2 {
+		ver := parts[0] // v2, v3
+		coresStr := parts[1]
+		cores, errC := strconv.ParseFloat(coresStr, 64)
+		if errC == nil {
+			metric := fmt.Sprintf("%s_TPUS", strings.ToUpper(ver))
+
+			isTpuPreemptible := false
+			if settings.Has("preemptible") {
+				v, _ := evalBool(bp, settings.Get("preemptible"))
+				if v {
+					isTpuPreemptible = true
+				}
+			}
+
+			if isTpuPreemptible {
+				metric = "PREEMPTIBLE_" + metric
+			}
+			addTotal(totals, projectID, region, metric, cores*count)
+		}
+	}
+}
+
+func GetMachineTypeFamily(machineType string) string {
+	matches := machineTypeFamilyRegex.FindStringSubmatch(strings.ToLower(machineType))
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
 }
