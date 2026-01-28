@@ -165,7 +165,7 @@ func TestCollectRequirements(t *testing.T) {
 			expected: []QuotaRequirement{
 				{ProjectID: "test-project", Region: "us-central1", Metric: "NVIDIA_H100_GPUS", Needed: 8},
 				{ProjectID: "test-project", Region: "us-central1", Metric: "H100_CPUS", Needed: 96},
-				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 8}, 
+				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 8},
 			},
 		},
 		{
@@ -174,9 +174,9 @@ func TestCollectRequirements(t *testing.T) {
 				{
 					ID: "pd-ext",
 					Settings: config.NewDict(map[string]cty.Value{
-						"disk_type":            cty.StringVal("pd-extreme"),
-						"disk_size_gb":         cty.NumberIntVal(500),
-						"zone":                 cty.StringVal("us-central1-a"),
+						"disk_type":    cty.StringVal("pd-extreme"),
+						"disk_size_gb": cty.NumberIntVal(500),
+						"zone":         cty.StringVal("us-central1-a"),
 					}),
 				},
 			},
@@ -197,7 +197,7 @@ func TestCollectRequirements(t *testing.T) {
 			},
 			expected: []QuotaRequirement{
 				{ProjectID: "test-project", Region: "us-central1", Metric: "NVIDIA_H100_GPUS", Needed: 8},
-				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 8}, 
+				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 8},
 			},
 		},
 		{
@@ -223,9 +223,9 @@ func TestCollectRequirements(t *testing.T) {
 				{ProjectID: "test-project", Region: "us-central1", Metric: "A2_CPUS", Needed: 12},
 
 				{ProjectID: "test-project", Region: "us-east1", Metric: "NVIDIA_A100_GPUS", Needed: 1},
-				{ProjectID: "test-project", Region: "us-east1", Metric: "A2_CPUS", Needed: 12}, 
+				{ProjectID: "test-project", Region: "us-east1", Metric: "A2_CPUS", Needed: 12},
 				
-				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 2}, 
+				{ProjectID: "test-project", Region: "global", Metric: "GPUS_ALL_REGIONS", Needed: 2},
 			},
 		},
 		{
@@ -234,11 +234,11 @@ func TestCollectRequirements(t *testing.T) {
 				{
 					ID: "hdb",
 					Settings: config.NewDict(map[string]cty.Value{
-						"disk_type":            cty.StringVal("hyperdisk-balanced"),
-						"disk_size_gb":         cty.NumberIntVal(100),
-						"provisioned_iops":     cty.NumberIntVal(3000),
+						"disk_type":              cty.StringVal("hyperdisk-balanced"),
+						"disk_size_gb":           cty.NumberIntVal(100),
+						"provisioned_iops":       cty.NumberIntVal(3000),
 						"provisioned_throughput": cty.NumberIntVal(150),
-						"zone":                 cty.StringVal("us-central1-a"),
+						"zone":                   cty.StringVal("us-central1-a"),
 					}),
 				},
 			},
@@ -316,7 +316,7 @@ func TestCollectRequirements(t *testing.T) {
 			if len(reqs) != len(tc.expected) {
 				t.Errorf("expected %d requirements, got %d. Got: %v", len(tc.expected), len(reqs), reqs)
 			}
-			
+
 			for _, exp := range tc.expected {
 				found := false
 				for _, act := range reqs {

@@ -22,8 +22,8 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
-	"google.golang.org/api/googleapi"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/api/googleapi"
 )
 
 func projectError(p string) error {
@@ -60,7 +60,7 @@ func handleClientError(e error) error {
 			return fmt.Errorf("GCP API rate limit exceeded. Please wait or increase quota. details: %w", e)
 		}
 	}
-	
+
 	return e
 }
 
