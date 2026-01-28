@@ -23,7 +23,7 @@ run_test() {
 	bpFile=$(basename "$bp")
 	DEPLOYMENT="golden_copy_deployment"
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability"
 	GHPC_PATH="${cwd}/ghpc"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
 	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
