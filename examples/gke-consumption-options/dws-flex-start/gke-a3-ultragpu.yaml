@@ -188,6 +188,7 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
+      system_node_pool_id: $(a3-ultragpu-cluster.system_node_pool_id)
       jobset:
         install: true
       apply_manifests:

@@ -301,6 +301,7 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a4-cluster]
     settings:
+      system_node_pool_id: $(a4-cluster.system_node_pool_id)
       apply_manifests:
       - source: $(vars.permissions_file_staged_path)
         enable: $(vars.enable_periodic_health_checks)

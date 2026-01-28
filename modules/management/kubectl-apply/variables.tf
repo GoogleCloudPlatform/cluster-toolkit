@@ -191,3 +191,9 @@ variable "gib" {
     }
   }
 }
+
+variable "system_node_pool_id" {
+  description = "The ID of the system node pool. Used to ensure the node pool remains active during Kueue uninstallation."
+  type        = string
+  default     = null
+}

@@ -148,6 +148,7 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
+      system_node_pool_id: $(gke_cluster.system_node_pool_id)
       apply_manifests:
       - source: $(vars.permissions_file_staged_path)
         enable: $(vars.enable_periodic_health_checks)
