@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
+	"google.golang.org/api/googleapi"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -41,9 +42,24 @@ const credentialsHint = "load application default credentials following instruct
 var ErrNoDefaultCredentials = errors.New("could not find application default credentials")
 
 func handleClientError(e error) error {
+	if e == nil {
+		return nil
+	}
 	if strings.Contains(e.Error(), "could not find default credentials") {
 		return config.HintError{Hint: credentialsHint, Err: ErrNoDefaultCredentials}
 	}
+	
+	// GoogleAPI Error?
+	var gErr *googleapi.Error
+	if errors.As(e, &gErr) {
+		if gErr.Code == 403 {
+			return fmt.Errorf("GCP API permission denied or API not enabled. Check IAM roles and ensure Compute Engine API is enabled. details: %w", e)
+		}
+		if gErr.Code == 429 {
+			return fmt.Errorf("GCP API rate limit exceeded. Please wait or increase quota. details: %w", e)
+		}
+	}
+	
 	return e
 }
 
@@ -55,7 +71,6 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
-	testQuotaAvailabilityName         = "test_quota_availability"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -252,6 +267,19 @@ func defaults(bp config.Blueprint) []config.Validator {
 			}),
 		})
 	}
+
+	// Quota Validator
+	if projectIDExists {
+		inputs := config.Dict{}.With("project_id", projectRef)
+		if regionExists {
+			inputs = inputs.With("region", regionRef)
+		}
+		defaults = append(defaults, config.Validator{
+			Validator: testQuotaAvailabilityName,
+			Inputs:    inputs,
+		})
+	}
+
 	return defaults
 }
 
