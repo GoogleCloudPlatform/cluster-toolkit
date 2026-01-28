@@ -74,12 +74,14 @@ func NewGCPQuotaClient(ctx context.Context, projectID string) (*GCPQuotaClient, 
 }
 
 func retryCall[T any](op func() (T, error)) (T, error) {
+	var res T
+	var err error
 	var zero T
 	maxRetries := 5
 	baseDelay := 500 * time.Millisecond
 
-	for i := 0; i < maxRetries; i++ {
-		res, err := op()
+	for i := 0; i <= maxRetries; i++ {
+		res, err = op()
 		if err == nil {
 			return res, nil
 		}
@@ -96,12 +98,12 @@ func retryCall[T any](op func() (T, error)) (T, error) {
 			return zero, err
 		}
 
-		delay := float64(baseDelay) * math.Pow(2, float64(i))
-		time.Sleep(time.Duration(delay))
+		if i < maxRetries {
+			delay := float64(baseDelay) * math.Pow(2, float64(i))
+			time.Sleep(time.Duration(delay))
+		}
 	}
-
-	res, err := op()
-	return res, err
+	return zero, err
 }
 
 func (c *GCPQuotaClient) GetRegion(projectID, region string) (*compute.Region, error) {
@@ -202,7 +204,7 @@ func collectRequirements(bp config.Blueprint, client QuotaClient, projectID, def
 		}
 
 		addDiskQuota(bp, settings, projectID, region, count, totals)
-		addNetworkQuota(bp, m, settings, projectID, count, totals)
+		addNetworkQuota(bp, m, settings, projectID, totals)
 		addFilestoreQuota(bp, settings, projectID, region, count, totals)
 		addTPUQuota(bp, settings, projectID, region, count, totals)
 	})
@@ -370,45 +372,31 @@ func evalString(bp config.Blueprint, v cty.Value) (string, error) {
 
 func mapAcceleratorTypeToMetric(accType string) []string {
 	original := accType
-	accType = strings.ToLower(accType)
-	var metrics []string
+	lAccType := strings.ToLower(accType)
 
-	if strings.Contains(accType, "nvidia") {
-		if strings.Contains(accType, "h100") {
-			metrics = append(metrics, "NVIDIA_H100_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "a100") {
-			if strings.Contains(accType, "80gb") {
-				metrics = append(metrics, "NVIDIA_A100_80GB_GPUS")
-			} else {
-				metrics = append(metrics, "NVIDIA_A100_GPUS")
+	var metricMap = map[string]string{
+		"h100": "NVIDIA_H100_GPUS",
+		"l4":   "NVIDIA_L4_GPUS",
+		"t4":   "NVIDIA_T4_GPUS",
+		"v100": "NVIDIA_V100_GPUS",
+		"p100": "NVIDIA_P100_GPUS",
+		"p4":   "NVIDIA_P4_GPUS",
+		"k80":  "NVIDIA_K80_GPUS",
+	}
+
+	if strings.Contains(lAccType, "nvidia") {
+		// Special case for a100
+		if strings.Contains(lAccType, "a100") {
+			if strings.Contains(lAccType, "80gb") {
+				return []string{"NVIDIA_A100_80GB_GPUS"}
 			}
-			return metrics
+			return []string{"NVIDIA_A100_GPUS"}
 		}
-		if strings.Contains(accType, "l4") {
-			metrics = append(metrics, "NVIDIA_L4_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "t4") {
-			metrics = append(metrics, "NVIDIA_T4_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "v100") {
-			metrics = append(metrics, "NVIDIA_V100_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "p100") {
-			metrics = append(metrics, "NVIDIA_P100_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "p4") {
-			metrics = append(metrics, "NVIDIA_P4_GPUS")
-			return metrics
-		}
-		if strings.Contains(accType, "k80") {
-			metrics = append(metrics, "NVIDIA_K80_GPUS")
-			return metrics
+
+		for key, metric := range metricMap {
+			if strings.Contains(lAccType, key) {
+				return []string{metric}
+			}
 		}
 	}
 
@@ -420,23 +408,22 @@ func mapAcceleratorTypeToMetric(accType string) []string {
 	base = strings.TrimPrefix(base, "NVIDIA_")
 	base = strings.TrimPrefix(base, "TESLA_")
 
-	metrics = append(metrics, fmt.Sprintf("NVIDIA_%s_GPUS", base))
-	return metrics
+	return []string{fmt.Sprintf("NVIDIA_%s_GPUS", base)}
 }
 
 func getModuleLocation(bp config.Blueprint, settings config.Dict, defaultRegion string) (string, string) {
 	var zone, region string
 
 	if settings.Has("zone") {
-		zVal, err := evalToFloat64OrString(bp, settings.Get("zone"))
+		zVal, err := evalString(bp, settings.Get("zone"))
 		if err == nil {
-			zone = zVal.(string)
+			zone = zVal
 		}
 	}
 	if settings.Has("region") {
-		rVal, err := evalToFloat64OrString(bp, settings.Get("region"))
+		rVal, err := evalString(bp, settings.Get("region"))
 		if err == nil {
-			region = rVal.(string)
+			region = rVal
 		}
 	}
 	if region == "" && zone != "" {
@@ -683,6 +670,12 @@ func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType 
 
 	if strings.Contains(diskType, "pd-extreme") {
 		addTotal(totals, projectID, region, "EXTREME_TOTAL_GB", sizeGB*count)
+		if settings.Has("provisioned_iops") {
+			v, err := evalToFloat64(bp, settings.Get("provisioned_iops"))
+			if err == nil {
+				addTotal(totals, projectID, region, "PD_EXTREME_TOTAL_PROVISIONED_IOPS", v*count)
+			}
+		}
 		return
 	}
 	if strings.Contains(diskType, "ssd") || strings.Contains(diskType, "balanced") {
@@ -695,7 +688,7 @@ func addDetailedDiskMetrics(bp config.Blueprint, settings config.Dict, diskType 
 	}
 }
 
-func addNetworkQuota(bp config.Blueprint, m *config.Module, settings config.Dict, projectID string, count float64, totals map[string]float64) {
+func addNetworkQuota(bp config.Blueprint, m *config.Module, settings config.Dict, projectID string, totals map[string]float64) {
 	netProjectID := resolveNetworkProjectID(bp, settings, projectID)
 
 	if strings.Contains(m.Source, "network/vpc") || strings.Contains(m.Source, "gpu-rdma-vpc") {
