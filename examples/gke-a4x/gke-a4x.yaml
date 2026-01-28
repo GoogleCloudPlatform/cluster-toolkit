@@ -315,6 +315,7 @@ deployment_groups:
     use: [a4x-cluster]
     settings:
       target_architecture: "arm64"
+      system_node_pool_id: $(a4x-cluster.system_node_pool_id)
       kueue:
         install: true
         version: "0.14.4"
