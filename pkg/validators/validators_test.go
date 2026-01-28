@@ -96,6 +96,12 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
 
+	// Quota validator Inputs vary based on vars present
+	quotaProjectOnly := config.Validator{
+		Validator: testQuotaAvailabilityName, Inputs: prjInp}
+	quotaRegion := config.Validator{
+		Validator: testQuotaAvailabilityName, Inputs: regInp}
+
 	{
 		bp := config.Blueprint{}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
