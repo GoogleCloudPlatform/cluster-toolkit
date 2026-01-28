@@ -89,7 +89,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		Validator: testZoneExistsName, Inputs: zoneInp}
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
-	
+
 	// Quota validator Inputs vary based on vars present
 	quotaProjectOnly := config.Validator{
 		Validator: testQuotaAvailabilityName, Inputs: prjInp}

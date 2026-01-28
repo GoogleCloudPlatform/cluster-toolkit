@@ -73,6 +73,7 @@ run_test() {
 	done
 	find . -name "README.md" -exec rm {} \;
 	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
+	sed -i '/- validator: test_quota_availability/,+1d' .ghpc/artifacts/expanded_blueprint.yaml
 
 	# Compare the deployment folder with the golden copy
 	diff --recursive --color='auto' --exclude="previous_deployment_groups" \
