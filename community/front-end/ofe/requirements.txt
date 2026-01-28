@@ -71,7 +71,7 @@ proto-plus==1.27.0
 protobuf>=6.31.1,<7.0.0
 pyasn1==0.6.2
 pyasn1-modules==0.4.2
-pycparser==2.23
+pycparser==3.0
 PyJWT==2.10.1
 pylint==4.0.4
 pylint-django==2.7.0
