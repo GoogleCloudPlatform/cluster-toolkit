@@ -25,8 +25,8 @@ zone: asia-northeast1-b
 num_slices: 1
 tpu_topology: 4x4
 enable_flex_start: true
-autoscaling_min_node_count_per_zone: 0
-autoscaling_max_node_count_per_zone: 4
+autoscaling_min_node_count: 0
+autoscaling_max_node_count: 4
 
 cli_deployment_vars:
   project_id: "{{ project }}"
@@ -36,8 +36,8 @@ cli_deployment_vars:
   machine_type: "{{ machine_type }}"
   tpu_topology: "{{ tpu_topology }}"
   enable_flex_start: "{{ enable_flex_start }}"
-  autoscaling_min_node_count_per_zone: "{{ autoscaling_min_node_count_per_zone }}"
-  autoscaling_max_node_count_per_zone: "{{ autoscaling_max_node_count_per_zone }}"
+  autoscaling_min_node_count: "{{ autoscaling_min_node_count }}"
+  autoscaling_max_node_count: "{{ autoscaling_max_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   system_node_pool_disk_size_gb: 200
   v6e_node_pool_disk_size_gb: 100
