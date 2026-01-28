@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,17 +56,17 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub
         subnet_region: $(vars.region)
-        subnet_ip: 192.168.0.0/24
+        subnet_ip: 10.10.0.0/20
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-sub
         ranges:
         - range_name: pods
-          ip_cidr_range: 10.64.0.0/19
+          ip_cidr_range: 10.11.0.0/16
         - range_name: services
-          ip_cidr_range: 10.65.0.0/19
+          ip_cidr_range: 10.10.16.0/20
       firewall_rules:
       - name: $(vars.deployment_name)-internal
-        ranges: [192.168.0.0/24]
+        ranges: ["10.10.0.0/15"]
         allow:
         - protocol: tcp
           ports: ["0-65535"]
@@ -75,18 +75,19 @@ deployment_groups:
         - protocol: icmp
 
   - id: gke-h4d-rdma-net
-    source: modules/network/vpc
+    source: modules/network/multivpc
     settings:
-      network_name: $(vars.deployment_name)-rdma-net
+      network_name_prefix: $(vars.deployment_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
-      network_routing_mode: REGIONAL
+      network_routing_mode: "REGIONAL"
+      network_count: 1
       enable_cloud_router: false
       enable_cloud_nat: false
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-rdma-sub
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.1.0/24
-        region: $(vars.region)
+      global_ip_address_range: 10.20.0.0/16
+      subnetwork_cidr_suffix: 24
+      subnetwork_private_access: false
+      network_interface_defaults:
+        nic_type: "IRDMA"
 
   - id: node_pool_service_account
     source: modules/project/service-account
@@ -114,7 +115,7 @@ deployment_groups:
 
   - id: h4d-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-h4d-net, workload_service_account]
+    use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -127,21 +128,6 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-h4d-rdma-net.network_name,
-            subnetwork=gke-h4d-rdma-net.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.32."
@@ -155,7 +141,7 @@ deployment_groups:
 
   - id: h4d-pool
     source: modules/compute/gke-node-pool
-    use: [h4d-cluster, node_pool_service_account]
+    use: [h4d-cluster, gke-h4d-rdma-net, node_pool_service_account]
     settings:
       machine_type: h4d-highmem-192-lssd
       auto_upgrade: true
@@ -183,21 +169,6 @@ deployment_groups:
         effect: NO_SCHEDULE
       placement_policy:
         type: COMPACT
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-h4d-rdma-net.network_name,
-            subnetwork=gke-h4d-rdma-net.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
     outputs: [instructions]
 
   # Install Kueue and Jobset

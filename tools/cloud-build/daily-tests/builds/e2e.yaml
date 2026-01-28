@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,10 +37,18 @@ steps:
     vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zone"
 
     cd /workspace
-    make
+    gsutil cp gs://${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+    unzip -o gcluster-bundle.zip
+    # Grant execution permissions to the binary
+    chmod +x gcluster
     ./gcluster deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" --auto-approve
 
     # check instance was created
     gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
 
     ./gcluster destroy "$depl_name" --auto-approve
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'

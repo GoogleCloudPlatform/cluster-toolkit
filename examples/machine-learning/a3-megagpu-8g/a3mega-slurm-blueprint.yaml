@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -459,8 +459,24 @@ deployment_groups:
           - name: Configure Slurm to depend upon aperture devices
             hosts: all
             become: true
-            vars: {}
             tasks:
+            - name: Create wait script for aperture devices
+              ansible.builtin.copy:
+                dest: /usr/local/bin/wait-for-aperture-devices.sh
+                owner: root
+                group: root
+                mode: 0o755
+                content: |
+                  #!/bin/bash
+                  # Wait up to 60 seconds for aperture devices to appear.
+                  for i in \$(seq 30); do
+                    # Check if the directory is not empty
+                    if [ -n "\$(ls -A /dev/aperture_devices 2>/dev/null)" ]; then
+                      exit 0
+                    fi
+                    sleep 2
+                  done
+                  exit 1
             - name: Ensure slurmd starts after aperture devices are ready
               ansible.builtin.copy:
                 dest: /etc/systemd/system/slurmd.service.d/aperture.conf
@@ -469,7 +485,7 @@ deployment_groups:
                 mode: 0o644
                 content: |
                   [Service]
-                  ExecCondition=/usr/bin/test -d /dev/aperture_devices/
+                  ExecCondition=/usr/local/bin/wait-for-aperture-devices.sh
               notify: Reload SystemD
             handlers:
             - name: Reload SystemD
