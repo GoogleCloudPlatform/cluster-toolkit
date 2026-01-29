@@ -25,3 +25,7 @@ ghpc:
       vars: [node_count_dynamic_max]
       min: 0
     error_message: "The 'node_count_dynamic_max' value must be at least 0."
+  - validator: exclusive
+    inputs:
+      vars: [preemptible, reserved]
+    error_message: "Nodeset cannot be preemptible and reserved at the same time."

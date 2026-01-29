@@ -17,3 +17,9 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: exclusive
+    inputs:
+      vars: [instance_image.name, instance_image.family]
+    error_message: "In 'instance_image', exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
