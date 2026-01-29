@@ -39,8 +39,24 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ---
 
-If a self directed path is preferred, you can use the following commands to
-build the `gcluster` binary:
+### Using the Pre-built Bundle (Recommended)
+
+For the easiest setup, download the latest `gcluster-bundle.zip` from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. This bundle includes the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+
+1. Download and unzip the bundle:
+   ```shell
+   unzip -o gcluster-bundle.zip
+   chmod +x gcluster
+
+2. Verify the Installation:
+   ```shell
+   ./gcluster --version
+   ./gcluster --help
+
+### Building from Source
+
+If you prefer to build the `gcluster` binary from source,
+you can use the following commands:
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
