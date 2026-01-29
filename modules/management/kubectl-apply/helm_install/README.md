@@ -33,6 +33,7 @@ No modules.
 | <a name="input_cleanup_on_fail"></a> [cleanup\_on\_fail](#input\_cleanup\_on\_fail) | Allow deletion of new resources created in this upgrade when the upgrade fails ('helm upgrade --cleanup-on-fail'). | `bool` | `false` | no |
 | <a name="input_create_namespace"></a> [create\_namespace](#input\_create\_namespace) | Set to true to create the namespace if it does not exist ('helm install --create-namespace'). | `bool` | `true` | no |
 | <a name="input_dependency_update"></a> [dependency\_update](#input\_dependency\_update) | Run 'helm dependency update' before installing the chart (useful if chart\_name is a local path to an unpacked chart with dependencies). | `bool` | `false` | no |
+| <a name="input_deployment_dependency_ids"></a> [deployment\_dependency\_ids](#input\_deployment\_dependency\_ids) | A list of resource IDs (e.g., node pool IDs) that this release depends on. Used to force Terraform dependencies. | `list(string)` | `[]` | no |
 | <a name="input_description"></a> [description](#input\_description) | Set an optional description for the Helm release. | `string` | `null` | no |
 | <a name="input_devel"></a> [devel](#input\_devel) | Use development versions, too ('helm install --devel'). Equivalent to version '>0.0.0-0'. If 'chart\_version' is set, this is ignored. | `bool` | `false` | no |
 | <a name="input_disable_crd_hooks"></a> [disable\_crd\_hooks](#input\_disable\_crd\_hooks) | Prevent CRD hooks from running, but run other hooks ('helm install --no-crd-hook'). | `bool` | `false` | no |
