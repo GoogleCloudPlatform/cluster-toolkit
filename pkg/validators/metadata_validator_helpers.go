@@ -216,7 +216,7 @@ func isVarSet(values []cty.Value) bool {
 				return false
 			}
 		case cty.Number:
-			if val.AsBigFloat().Sign() == 0 {
+			if val.AsBigFloat().Sign() <= 0 {
 				return false
 			}
 		case cty.Bool:
