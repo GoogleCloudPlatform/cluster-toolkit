@@ -188,7 +188,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [g4-cluster]
     settings:
-      system_node_pool_id: $(g4-cluster.system_node_pool_id)
       kueue:
         install: true
         wait: true

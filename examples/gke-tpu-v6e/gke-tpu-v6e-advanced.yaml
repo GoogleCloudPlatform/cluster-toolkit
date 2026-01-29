@@ -289,7 +289,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-v6e-cluster]
     settings:
-      system_node_pool_id: $(gke-tpu-v6-cluster.system_node_pool_id)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
