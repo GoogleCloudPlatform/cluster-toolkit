@@ -27,4 +27,4 @@ ghpc:
   - validator: exclusive
     inputs:
       vars: [nodeset, nodeset_dyn, nodeset_tpu]
-    error_message: "Partition must contain exactly one type of nodeset."
+    error_message: "A partition can contain at most one type of nodeset."

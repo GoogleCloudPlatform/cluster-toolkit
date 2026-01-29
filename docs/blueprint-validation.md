@@ -149,7 +149,7 @@ validators:
   - validator: exclusive
     inputs:
       vars: [preemptible, reserved]
-    error_message: "Nodeset cannot be preemptible and reserved at the same time."
+    error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
