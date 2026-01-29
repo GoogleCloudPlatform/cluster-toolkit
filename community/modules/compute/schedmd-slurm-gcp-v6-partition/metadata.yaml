@@ -24,3 +24,7 @@ ghpc:
       vars: [partition_name]
       pattern: "^[a-z](?:[a-z0-9]*)$"
     error_message: "'partition_name' must start with a lowercase letter and can only contain lowercase letters and numbers."
+  - validator: exclusive
+    inputs:
+      vars: [nodeset, nodeset_dyn, nodeset_tpu]
+    error_message: "Partition must contain exactly one type of nodeset."

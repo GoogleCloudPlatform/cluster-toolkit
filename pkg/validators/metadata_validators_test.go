@@ -577,3 +577,131 @@ func TestRangeValidator_Length(t *testing.T) {
 		}
 	})
 }
+
+func TestExclusiveValidator(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:       "test-module",
+						Source:   "test/module",
+						Settings: config.NewDict(map[string]cty.Value{}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := ExclusiveValidator{}
+
+	t.Run("passes_on_empty_exclusion", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one of 'var_a' or 'var_b' should be present.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			},
+		}
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+	t.Run("passes_on_valid_exclusion", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"var_a": cty.StringVal("one"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+	t.Run("fails_on_multiple_set_variables", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"var_a": cty.StringVal("one"),
+			"var_b": cty.NumberIntVal(2),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Only one of 'var_a' or 'var_b' should be set.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+	t.Run("passes_on_zero_or_empty_variables", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"var_a": cty.StringVal(""),
+			"var_b": cty.NumberIntVal(0),
+			"var_c": cty.False,
+			"var_d": cty.ListValEmpty(cty.String),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one variable should be set.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b", "var_c", "var_d"},
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+	t.Run("passes_with_one_set_variable_and_others_empty", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"var_a": cty.StringVal("one"),
+			"var_b": cty.NumberIntVal(0),
+			"var_c": cty.False,
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one variable should be set.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b", "var_c"},
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+	t.Run("fails_on_non_empty_map_and _other_set_variable", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"var_a": cty.ObjectVal(map[string]cty.Value{"key": cty.StringVal("value")}),
+			"var_b": cty.NumberIntVal(2),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusion",
+			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Only one of 'var_a' or 'var_b' should be set.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+}

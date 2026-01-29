@@ -138,6 +138,20 @@ ghpc:
     error_message: "The 'versions' list must contain at least one version."
 ```
 
+### Exclusive Validator
+The `exclusive` validator ensures that at most one of the specified variables is set. It treats variables as 'set' if they are non-empty strings, non-zero numbers, true booleans, or non-empty lists/maps.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+validators:
+  - validator: exclusive
+    inputs:
+      vars: [preemptible, reserved]
+    error_message: "Nodeset cannot be preemptible and reserved at the same time."
+```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators

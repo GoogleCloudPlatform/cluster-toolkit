@@ -295,3 +295,50 @@ func (r *RangeValidator) Validate(
 		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, rule.ErrorMessage)
 	})
 }
+
+// ExclusiveValidator implements the RuleValidator interface for the 'exclusive' validation type.
+type ExclusiveValidator struct{}
+
+// isVarSet returns true if the value is known, non-null, and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+func (e *ExclusiveValidator) isVarSet(val cty.Value) bool {
+	if val.IsNull() || !val.IsKnown() {
+		return false
+	}
+	switch val.Type() {
+	case cty.String:
+		return val.AsString() != ""
+	case cty.Number:
+		return val.AsBigFloat().Sign() != 0
+	case cty.Bool:
+		return val.True()
+	default:
+		// For lists, maps, and sets, consider them "set" if they are not empty.
+		return val.LengthInt() > 0
+	}
+}
+
+// Validate returns an error if more than one of the variables specified in the rule are "set" within the module configuration.
+func (e *ExclusiveValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+	var setVarNames []string
+	handler := func(t Target) error {
+		for _, val := range t.Values {
+			if e.isVarSet(val) {
+				setVarNames = append(setVarNames, t.Name)
+			}
+		}
+		return nil
+	}
+	if err := IterateRuleTargets(bp, mod, rule, group, modIdx, handler); err != nil {
+		return err
+	}
+	if len(setVarNames) > 1 {
+		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+		return config.BpError{Err: fmt.Errorf("%s\n the following are set %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
+	}
+	return nil
+}
