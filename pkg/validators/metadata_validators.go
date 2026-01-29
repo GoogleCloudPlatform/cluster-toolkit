@@ -338,7 +338,7 @@ func (e *ExclusiveValidator) Validate(
 	}
 	if len(setVarNames) > 1 {
 		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
-		return config.BpError{Err: fmt.Errorf("%s\n the following are set %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
+		return config.BpError{Err: fmt.Errorf("%s: the following are set: %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
 	}
 	return nil
 }

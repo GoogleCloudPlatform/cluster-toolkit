@@ -683,7 +683,7 @@ func TestExclusiveValidator(t *testing.T) {
 			t.Fatalf("unexpected validation error: %v", err)
 		}
 	})
-	t.Run("fails_on_non_empty_map_and _other_set_variable", func(t *testing.T) {
+	t.Run("fails_on_non_empty_map_and_other_set_variable", func(t *testing.T) {
 		bp := baseBP
 		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
 			"var_a": cty.ObjectVal(map[string]cty.Value{"key": cty.StringVal("value")}),
