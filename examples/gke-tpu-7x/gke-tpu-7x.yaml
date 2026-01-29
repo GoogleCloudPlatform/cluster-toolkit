@@ -155,6 +155,5 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-7x-cluster]
     settings:
-      system_node_pool_id: $(gke-tpu-7x-cluster.system_node_pool_id)
       jobset:
         install: true

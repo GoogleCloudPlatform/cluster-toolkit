@@ -285,7 +285,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
-      system_node_pool_id: $(a3-ultragpu-cluster.system_node_pool_id)
       apply_manifests:
       - source: $(vars.permissions_file_staged_path)
         enable: $(vars.enable_periodic_health_checks)

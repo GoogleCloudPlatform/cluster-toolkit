@@ -176,7 +176,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [h4d-cluster]
     settings:
-      system_node_pool_id: $(h4d-cluster.system_node_pool_id)
       kueue:
         install: true
       jobset:
