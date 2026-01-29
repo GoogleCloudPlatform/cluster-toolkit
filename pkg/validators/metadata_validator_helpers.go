@@ -203,3 +203,32 @@ func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) 
 	}
 	return b, nil
 }
+
+// isVarSet returns true if the value is known, non-null, and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+func isVarSet(values []cty.Value) bool {
+	for _, val := range values {
+		if val.IsNull() || !val.IsKnown() {
+			return false
+		}
+		switch val.Type() {
+		case cty.String:
+			if val.AsString() == "" {
+				return false
+			}
+		case cty.Number:
+			if val.AsBigFloat().Sign() == 0 {
+				return false
+			}
+		case cty.Bool:
+			if val.False() {
+				return false
+			}
+		default:
+			// For lists, maps, and sets, consider them "not set" if they are empty.
+			if val.LengthInt() == 0 {
+				return false
+			}
+		}
+	}
+	return true
+}

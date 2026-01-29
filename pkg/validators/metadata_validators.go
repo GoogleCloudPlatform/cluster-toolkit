@@ -299,24 +299,6 @@ func (r *RangeValidator) Validate(
 // ExclusiveValidator implements the RuleValidator interface for the 'exclusive' validation type.
 type ExclusiveValidator struct{}
 
-// isVarSet returns true if the value is known, non-null, and non-empty (positive number, non-empty string, true bool, or non-empty collection).
-func (e *ExclusiveValidator) isVarSet(val cty.Value) bool {
-	if val.IsNull() || !val.IsKnown() {
-		return false
-	}
-	switch val.Type() {
-	case cty.String:
-		return val.AsString() != ""
-	case cty.Number:
-		return val.AsBigFloat().Sign() != 0
-	case cty.Bool:
-		return val.True()
-	default:
-		// For lists, maps, and sets, consider them "set" if they are not empty.
-		return val.LengthInt() > 0
-	}
-}
-
 // Validate returns an error if more than one of the variables specified in the rule are "set" within the module configuration.
 func (e *ExclusiveValidator) Validate(
 	bp config.Blueprint,
@@ -326,10 +308,8 @@ func (e *ExclusiveValidator) Validate(
 	modIdx int) error {
 	var setVarNames []string
 	handler := func(t Target) error {
-		for _, val := range t.Values {
-			if e.isVarSet(val) {
-				setVarNames = append(setVarNames, t.Name)
-			}
+		if isVarSet(t.Values) {
+			setVarNames = append(setVarNames, t.Name)
 		}
 		return nil
 	}
