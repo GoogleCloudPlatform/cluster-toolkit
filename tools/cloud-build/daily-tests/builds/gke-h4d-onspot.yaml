@@ -85,6 +85,7 @@ steps:
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
     sed -i -e '/reservation_affinity:/,+3c\      spot: true' $${EXAMPLE_BP}
     sed -i '/reservation/d' $${EXAMPLE_BP}
+    sed -i 's/network_count: 1/network_count: 2/g' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
