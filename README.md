@@ -45,18 +45,20 @@ For the easiest setup, download the latest `gcluster-bundle.zip` from the [Relea
 
 1. Create a directory for the bundle and extract it:
 
-   ```shell
-   mkdir -p gcluster-bundle && cd gcluster-bundle
-   # Replace vX.Y.Z with the desired release version from the Releases page.
-   curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
-   unzip -o gcluster-bundle.zip
-   chmod +x gcluster
+    ```shell
+    mkdir -p gcluster-bundle && cd gcluster-bundle
+    # Replace vX.Y.Z with the desired release version from the Releases page.
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
+    unzip -o gcluster-bundle.zip
+    chmod +x gcluster
+    ```
 
 2. Verify the Installation:
 
-   ```shell
-   ./gcluster --version
-   ./gcluster --help
+    ```shell
+    ./gcluster --version
+    ./gcluster --help
+    ```
 
 ### Building from Source
 
