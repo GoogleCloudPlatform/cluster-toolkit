@@ -17,3 +17,11 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [network_count]
+      min: 2
+      max: 8
+    error_message: "The 'network_count' must be between 2 and 8. Use the standard Toolkit module at 'modules/network/vpc' for count = 1."

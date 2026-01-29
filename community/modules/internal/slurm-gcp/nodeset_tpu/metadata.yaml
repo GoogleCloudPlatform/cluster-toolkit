@@ -13,15 +13,15 @@
 # limitations under the License.
 ---
 
-spec:
-  requirements:
-    services:
-    - container.googleapis.com
-
 ghpc:
   validators:
-  - validator: regex
+  - validator: range
     inputs:
-      vars: [network_id]
-      pattern: ^projects/[^/]+/global/networks/[^/]+$
-    error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+      vars: [node_count_static]
+      min: 0
+    error_message: "The 'node_count_static' value must be at least 0."
+  - validator: range
+    inputs:
+      vars: [node_count_dynamic_max]
+      min: 0
+    error_message: "The 'node_count_dynamic_max' value must be at least 0."
