@@ -59,6 +59,13 @@ Each validator is described below:
     region
   * Common failure: changing 1 value but not the other
   * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)`
+* `test_machine_type_in_zone`
+  * Inputs: `project_id` (string), `zone` (string), `machine_type` (string)
+  * PASS: If the machine type is available in the specified zone and project.
+  * SKIP (Soft Warning): If the Compute Engine API is disabled or the credentials lack `compute.machineTypes.get` permissions, the validator prints a warning and the check is skipped.
+  * FAIL: If the machine type is invalid or unavailable in that zone.
+  * Note: To explicitly verify multiple machine types in a zone, add this validator to the blueprint multiple times.
+  * Manual test: `gcloud compute machine-types describe $(vars.machine_type) --zone $(vars.zone) --project $(vars.project_id)`
 * `test_module_not_used`
   * Inputs: none; reads whole blueprint
   * PASS: if all instances of use keyword pass matching variables
@@ -100,6 +107,11 @@ validators:
       project_id: $(vars.project_id)
       region: $(vars.region)
       zone: $(vars.zone)
+  - validator: test_machine_type_in_zone
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+      machine_type: c2-standard-60  # any machine type to verify in the zone
 ```
 
 ## Module-level (Metadata) Validators
