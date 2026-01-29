@@ -55,6 +55,7 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testMachineTypeInZone             = "test_machine_type_in_zone"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -66,6 +67,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 	}
 }
 
@@ -233,6 +235,12 @@ func defaults(bp config.Blueprint) []config.Validator {
 	if projectIDExists && zoneExists {
 		defaults = append(defaults, config.Validator{
 			Validator: testZoneExistsName,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		}, config.Validator{
+			Validator: testMachineTypeInZone,
 			Inputs: config.NewDict(map[string]cty.Value{
 				"project_id": projectRef,
 				"zone":       zoneRef,
