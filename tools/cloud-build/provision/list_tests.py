@@ -54,8 +54,11 @@ TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     ((
         "ml-a4-highgpu-slurm",
-        "ml-a4-highgpu-onspot-slurm",
         "gke-a4"
+    ), 2*60),
+    ((
+        "ml-a4-highgpu-onspot-slurm",
+        "gke-a4-onspot"
     ), 2*60),
     ((
         "ml-a3-ultragpu-onspot-slurm", 
@@ -71,6 +74,10 @@ TEMPORAL_CONSTAINTS = [
     ((
         "ml-a3-highgpu-slurm", 
         "gke-a3-highgpu"
+    ), 1*60),
+    ((
+        "ml-a3-highgpu-onspot-slurm", 
+        "gke-a3-highgpu-onspot"
     ), 1*60),
 ]
 # TODO:

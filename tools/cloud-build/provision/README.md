@@ -36,6 +36,7 @@ When prompted for project, use integration test project.
 |------|--------|---------|
 | <a name="module_daily_image_test_runner_schedule"></a> [daily\_image\_test\_runner\_schedule](#module\_daily\_image\_test\_runner\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_project_cleanup_filestore_schedule"></a> [daily\_project\_cleanup\_filestore\_schedule](#module\_daily\_project\_cleanup\_filestore\_schedule) | ./trigger-schedule | n/a |
+| <a name="module_daily_project_cleanup_schedule"></a> [daily\_project\_cleanup\_schedule](#module\_daily\_project\_cleanup\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_project_cleanup_slurm_schedule"></a> [daily\_project\_cleanup\_slurm\_schedule](#module\_daily\_project\_cleanup\_slurm\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_test_schedule"></a> [daily\_test\_schedule](#module\_daily\_test\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_weekly_build_dependency_check_schedule"></a> [weekly\_build\_dependency\_check\_schedule](#module\_weekly\_build\_dependency\_check\_schedule) | ./trigger-schedule | n/a |
@@ -44,6 +45,7 @@ When prompted for project, use integration test project.
 
 | Name | Type |
 |------|------|
+| [google_cloudbuild_trigger.daily_project_cleanup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_project_cleanup_filestore](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_project_cleanup_slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
