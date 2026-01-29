@@ -92,7 +92,7 @@
     delegate_to: localhost
     # Using label selector to get logs from all pods in the job
     ansible.builtin.shell: |
-      kubectl logs -l job-name={{ job_name }} --all-containers --prefix --tail=10
+      kubectl logs -l job-name={{ job_name }} --all-containers --prefix --tail=30
     register: job_logs
     changed_when: false
     ignore_errors: true
@@ -100,7 +100,7 @@
 
   - name: Print job output
     ansible.builtin.debug:
-      msg: "Job Output (Last 10 lines): {{ job_logs.stdout if (job_logs.stdout is defined and job_logs.stdout | length > 0) else 'No logs found' }}"
+      msg: "Job Output (Last 30 lines per container): {{ job_logs.stdout if (job_logs.stdout is defined and job_logs.stdout | length > 0) else 'No logs found' }}"
 
   - name: Wait for nodes to scale down to 0
     delegate_to: localhost
