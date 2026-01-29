@@ -190,6 +190,7 @@ limitations under the License.
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 | <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
+| <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.9 |
 
 ## Providers
 
@@ -198,12 +199,13 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
+| <a name="provider_time"></a> [time](#provider\_time) | ~> 0.9 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./kubectl | n/a |
+| <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./helm_install | n/a |
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./kubectl | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
@@ -219,6 +221,7 @@ limitations under the License.
 | [terraform_data.initial_gib_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.jobset_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.kueue_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [time_sleep.wait_for_webhook](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 | [http_http.manifest_from_url](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
