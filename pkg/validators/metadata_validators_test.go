@@ -599,7 +599,7 @@ func TestExclusiveValidator(t *testing.T) {
 
 	t.Run("passes_on_empty_exclusion", func(t *testing.T) {
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one of 'var_a' or 'var_b' should be present.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b"},
@@ -615,7 +615,7 @@ func TestExclusiveValidator(t *testing.T) {
 			"var_a": cty.StringVal("one"),
 		})
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b"},
@@ -632,7 +632,7 @@ func TestExclusiveValidator(t *testing.T) {
 			"var_b": cty.NumberIntVal(2),
 		})
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b"},
@@ -655,7 +655,7 @@ func TestExclusiveValidator(t *testing.T) {
 			"var_d": cty.ListValEmpty(cty.String),
 		})
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one variable should be set.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b", "var_c", "var_d"},
@@ -673,7 +673,7 @@ func TestExclusiveValidator(t *testing.T) {
 			"var_c": cty.False,
 		})
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one variable should be set.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b", "var_c"},
@@ -690,7 +690,7 @@ func TestExclusiveValidator(t *testing.T) {
 			"var_b": cty.NumberIntVal(2),
 		})
 		rule := modulereader.ValidationRule{
-			Validator:    "exclusion",
+			Validator:    "exclusive",
 			ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
 			Inputs: map[string]interface{}{
 				"vars": []interface{}{"var_a", "var_b"},
