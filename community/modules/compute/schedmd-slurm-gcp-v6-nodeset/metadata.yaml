@@ -42,3 +42,35 @@ ghpc:
     inputs:
       vars: [instance_image.name, instance_image.family]
     error_message: "In 'instance_image', at most one of the \"family\" or \"name\" fields can be set."
+  - validator: exclusive
+    inputs:
+      vars: [future_reservation, zones]
+    error_message: "If a future reservation is specified, `zones` should be empty."
+  - validator: exclusive
+    inputs:
+      vars: [enable_placement, future_reservation]
+    error_message: "Cannot use `enable_placement` with future reservations."
+  - validator: exclusive
+    inputs:
+      vars: [reservation_name, future_reservation]
+    error_message: "Cannot use reservations and future reservations in the same nodeset."
+  - validator: exclusive
+    inputs:
+      vars: [enable_spot_vm, dws_flex.enabled]
+    error_message: "Cannot use both Flex-Start and Spot VMs for provisioning."
+  - validator: exclusive
+    inputs:
+      vars: [zones, dws_flex.enabled]
+    error_message: "If a DWS Flex is enabled, `zones` should be empty."
+  - validator: exclusive
+    inputs:
+      vars: [enable_placement, dws_flex.enabled]
+    error_message: "Cannot use DWS Flex with `enable_placement`."
+  - validator: exclusive
+    inputs:
+      vars: [reservation_name, dws_flex.enabled]
+    error_message: "Cannot use reservations with DWS Flex."
+  - validator: exclusive
+    inputs:
+      vars: [reservation_name, zones]
+    error_message: "If a reservation is specified, `zones` should be empty."
