@@ -23,15 +23,6 @@
 
 # --- Flex Start Specific Checks (Pre-Job) ---
 
-- name: Wait for nodes to scale down to 0 (Pre-test)
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl get nodes -l cloud.google.com/gke-tpu-accelerator={{ custom_vars.tpu_accelerator_type | default('tpu-v6e-slice') }} --no-headers | wc -l
-  register: pre_test_node_count
-  retries: 90
-  delay: 10 # Wait up to 15 minutes for scale down if needed
-  until: pre_test_node_count.stdout | int == 0
-
 - name: Verify Initial Node Count (Should be 0 for Flex)
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -68,7 +59,6 @@
     retries: 30 # Wait up to ~5 minutes (30 * 10s)
     delay: 10
     until: scale_up_event.rc == 0
-    ignore_errors: true
 
   - name: Wait for nodes to become Ready
     delegate_to: localhost
