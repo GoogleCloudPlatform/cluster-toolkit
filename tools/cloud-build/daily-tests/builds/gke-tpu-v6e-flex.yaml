@@ -1,0 +1,74 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.vpc
+- m.service-account
+- m.gke-cluster
+- m.gke-node-pool
+- m.kubectl-apply
+- m.cloud-storage-bucket
+- m.gke-job-template
+- m.gke-persistent-volume
+- m.pre-existing-network-storage
+- gke
+
+timeout: 7200s
+
+steps:
+# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-tpu-v6e-flex.yaml"
+
+- id: gke-tpu-v6e-flex
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  - "PROJECT_ID=$PROJECT_ID"
+  - "BUILD_ID=$BUILD_ID"
+  args:
+  - -c
+  - |
+    set -e -u -o pipefail
+    set -x
+    cd /workspace && make
+    ZONE=asia-northeast1-b
+    REGION=asia-northeast1
+    BUILD_ID_SHORT="$${BUILD_ID:0:6}"
+
+    # We use the DWS Flex example blueprint
+    EXAMPLE_BP=examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml
+
+    echo ''
+    echo '  - id: remote-node'                                                            >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'                                        >> $${EXAMPLE_BP}
+    echo '    use: [gke-tpu-v6-net-0]'                                                    >> $${EXAMPLE_BP}
+    echo '    settings:'                                                                  >> $${EXAMPLE_BP}
+    echo '      machine_type: n2-standard-2'                                              >> $${EXAMPLE_BP}
+    echo '      name_prefix: remote-node'                                                 >> $${EXAMPLE_BP}
+    echo '      add_deployment_name_before_prefix: true'                                  >> $${EXAMPLE_BP}
+
+    # IMPORTANT: Ensure auto_repair is FALSE for Flex, and remove conflicting spot/reservation settings if any
+    # The base blueprint might have defaults we want to override via sed if CLI vars aren't enough or to be safe
+    # But cli_deployment_vars in the test definition should handle most overrides.
+
+    # Run the test
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="region=$${REGION} zone=$${ZONE}" \
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-tpu-v6e-flex.yml"
