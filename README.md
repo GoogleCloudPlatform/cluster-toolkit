@@ -44,6 +44,7 @@ is the recommended path to get started with the Cluster Toolkit.
 For the easiest setup, download the latest `gcluster-bundle.zip` from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. This bundle includes the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 1. Download and unzip the bundle:
+
    ```shell
    # Replace vX.Y.Z with the desired release version from the Releases page.
    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
@@ -51,6 +52,7 @@ For the easiest setup, download the latest `gcluster-bundle.zip` from the [Relea
    chmod +x gcluster
 
 2. Verify the Installation:
+
    ```shell
    ./gcluster --version
    ./gcluster --help
