@@ -90,6 +90,12 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
 
+	// Quota validator Inputs vary based on vars present
+	quotaProjectOnly := config.Validator{
+		Validator: testQuotaAvailabilityName, Inputs: prjInp}
+	quotaRegion := config.Validator{
+		Validator: testQuotaAvailabilityName, Inputs: regInp}
+
 	{
 		bp := config.Blueprint{}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
@@ -100,7 +106,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		bp := config.Blueprint{Vars: config.Dict{}.
 			With("project_id", cty.StringVal("f00b"))}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled})
+			unusedMods, unusedVars, projectExists, apisEnabled, quotaProjectOnly})
 	}
 
 	{
@@ -109,7 +115,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("region", cty.StringVal("narnia"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, quotaRegion})
 	}
 
 	{
@@ -118,7 +124,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists})
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, quotaProjectOnly})
 	}
 
 	{
@@ -128,6 +134,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion, quotaRegion})
 	}
 }

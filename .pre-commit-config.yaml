@@ -142,10 +142,10 @@ repos:
 #   rev: v1.0.0-rc.1
 #   hooks:
 #   - id: go-critic
-- repo: https://github.com/Bahjat/pre-commit-golang
-  rev: v1.0.3
+- repo: https://github.com/golangci/golangci-lint
+  rev: v1.63.4
   hooks:
-  - id: go-static-check
+  - id: golangci-lint
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.34.0
   hooks:
