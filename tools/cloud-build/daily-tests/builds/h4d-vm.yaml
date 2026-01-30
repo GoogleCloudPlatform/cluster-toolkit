@@ -51,11 +51,7 @@ steps:
       exit 1
     fi
     set -x
-    cd /workspace
-    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-    unzip -o gcluster-bundle.zip
-    # Grant execution permissions to the binary
-    chmod +x gcluster
+    cd /workspace && make
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     BLUEPRINT="/workspace/examples/h4d-vm.yaml"
