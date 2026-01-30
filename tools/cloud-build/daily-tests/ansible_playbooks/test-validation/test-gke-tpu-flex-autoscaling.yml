@@ -95,7 +95,6 @@
       kubectl logs -l job-name={{ job_name }} --all-containers --prefix --tail=30
     register: job_logs
     changed_when: false
-    ignore_errors: true
     no_log: true
 
   - name: Print job output
@@ -157,5 +156,4 @@
   - name: Clean up
     delegate_to: localhost
     ansible.builtin.shell: |
-      kubectl delete job {{ job_name }}
-    ignore_errors: true
+      kubectl delete job {{ job_name }} --ignore-not-found
