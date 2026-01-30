@@ -116,6 +116,13 @@ Modules that are still in development and less stable are labeled with the
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 
+### Management
+
+* **[tag]** ![core-badge] : The tag module creates a tag key and the provided tag values.
+If the key already exists, then the tag values passed are associated with the existing tag key.
+
+[tag]: management/tag/README.md
+
 ### Monitoring
 
 * **[dashboard]** ![core-badge] : Creates a
