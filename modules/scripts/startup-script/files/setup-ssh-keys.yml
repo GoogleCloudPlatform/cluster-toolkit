@@ -28,6 +28,9 @@
       state: directory
       mode: 0700
       owner: "{{ ansible_user_id }}"
+  - name: "Log for PR verification"
+    ansible.builtin.debug:
+      msg: "TEST LOG: The changes in PR are successfully being applied to this test run."
   - name: Create keys
     community.crypto.openssh_keypair:
       path: "{{ pub_key_file }}"
