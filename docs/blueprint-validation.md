@@ -182,7 +182,7 @@ validators:
 ### Conditional Validator
 The `conditional` validator enforces that a dependent variable is set or matches a specific value only when a trigger variable condition is met. This is useful for cross-variable dependencies (e.g., if feature X is enabled, setting Y is required).
 
-If trigger_value or dependent_value is omitted, the validator checks if the variable is simply "set" (non-null, non-zero, and non-empty).
+If trigger_value or dependent_value is omitted, the validator checks if the variable is simply "set" (non-null, true bool, positive integer, and non-empty list/tuple/map).
 If a value is provided, it must match exactly. This also supports matching against null to check if a variable is explicitly omitted.
 
 **Example definition in `metadata.yaml`:**
