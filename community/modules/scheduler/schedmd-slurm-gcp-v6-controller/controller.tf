@@ -163,7 +163,7 @@ moved {
 
 # SECRETS: CLOUDSQL
 resource "google_secret_manager_secret" "cloudsql" {
-  count = var.cloudsql != null ? 1 : 0
+  count = (var.cloudsql != null && var.kms_key == null) ? 1 : 0
 
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
   project   = var.project_id
@@ -198,16 +198,113 @@ resource "google_secret_manager_secret" "cloudsql" {
 }
 
 resource "google_secret_manager_secret_version" "cloudsql_version" {
-  count = var.cloudsql != null ? 1 : 0
+  count = (var.cloudsql != null && !var.with_kms) ? 1 : 0
 
   secret      = google_secret_manager_secret.cloudsql[0].id
   secret_data = jsonencode(var.cloudsql)
 }
 
 resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
-  count = var.cloudsql != null ? 1 : 0
+  count = (var.cloudsql != null && !var.with_kms) ? 1 : 0
 
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.service_account.email}"
+}
+
+#############################
+# RANDOM KEYS TO ENCRYPT
+#############################
+
+resource "random_id" "munge_key" {
+  count       = var.munge_key == null ? 1 : 0
+  byte_length = 1024
+}
+
+resource "random_id" "jwt_key" {
+  count       = var.jwt_key == null ? 1 : 0
+  byte_length = 32
+}
+
+#############################
+# KMS KEYRING
+#############################
+
+resource "google_kms_key_ring" "keyring" {
+  count    = var.with_kms ? 1 : 0
+  name     = "${local.slurm_cluster_name}-keyring"
+  location = var.kms.location != null ? var.kms.location : var.region
+
+}
+
+#############################
+# KMS CRYPTO KEY
+#############################
+
+resource "google_kms_crypto_key" "key" {
+  count           = var.with_kms && var.kms_key == null ? 1 : 0
+  name            = "${local.slurm_cluster_name}-keyring-key"
+  key_ring        = one(google_kms_key_ring.keyring[*].id)
+  rotation_period = var.kms.rotation
+
+}
+
+#############################
+# LOCAL KMS KEY REFERENCE
+#############################
+
+locals {
+  kms_key = var.with_kms && var.kms_key == null ? one(google_kms_crypto_key.key[*].id) : var.kms_key
+}
+
+#############################
+# IAM ROLES FOR KMS ACCESS
+#############################
+
+# Give encryption permissions to controller only
+resource "google_kms_crypto_key_iam_member" "encrypter" {
+  for_each = var.with_kms ? {
+    controller = "serviceAccount:${local.service_account.email}"
+  } : {}
+
+  crypto_key_id = local.kms_key
+  role          = "roles/cloudkms.cryptoKeyEncrypter"
+  member        = each.value
+}
+
+# Give decryption permissions to controller and computes
+resource "google_kms_crypto_key_iam_member" "decrypter" {
+  for_each = var.with_kms ? (
+    merge(
+      { for ns in var.nodeset : "compute-${ns.service_account.email}" => "serviceAccount:${ns.service_account.email}"
+      if ns.service_account != null && ns.service_account.email != null && ns.service_account.email != "" },
+      { controller = "serviceAccount:${local.service_account.email}" }
+    )
+  ) : {}
+
+  crypto_key_id = local.kms_key
+  role          = "roles/cloudkms.cryptoKeyDecrypter"
+  member        = each.value
+}
+
+#############################
+# ENCRYPT DATA USING KMS
+#############################
+
+resource "google_kms_secret_ciphertext" "sql_password" {
+  count      = var.with_kms ? 1 : 0
+  crypto_key = local.kms_key
+  plaintext  = var.cloudsql != null ? var.cloudsql.password : ""
+}
+
+resource "google_kms_secret_ciphertext" "munge_key" {
+  count      = var.with_kms ? 1 : 0
+  crypto_key = local.kms_key
+  plaintext  = var.munge_key != null ? var.munge_key : random_id.munge_key[0].b64_std
+}
+
+resource "google_kms_secret_ciphertext" "jwt_key" {
+  count      = var.with_kms ? 1 : 0
+  crypto_key = local.kms_key
+  plaintext  = var.jwt_key != null ? var.jwt_key : random_id.jwt_key[0].b64_std
 }
