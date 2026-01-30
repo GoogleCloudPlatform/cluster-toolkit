@@ -1,5 +1,5 @@
 /*
-Copyright 2022 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,14 +46,13 @@ var (
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
-		Long: `gHPC provides a flexible and simple to use interface to accelerate
-HPC deployments on the Google Cloud Platform.`,
+		Long:  `Google Cloud Cluster Toolkit is an open source tool that makes it easy to create and manage repeatable AI/ML and HPC clusters on Google Cloud.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := cmd.Help(); err != nil {
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.76.0",
+		Version:     "v1.80.0",
 		Annotations: annotation,
 	}
 )

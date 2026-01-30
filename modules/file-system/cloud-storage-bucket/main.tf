@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -118,9 +118,9 @@ resource "google_storage_bucket" "bucket" {
     }
 
     precondition {
-      condition = var.anywhere_cache == null || alltrue([
+      condition = var.anywhere_cache != null ? alltrue([
         for zone in var.anywhere_cache.zones : startswith(zone, var.region)
-      ])
+      ]) : true
       error_message = "The zone for the Anywhere Cache must be within the bucket's region."
     }
   }

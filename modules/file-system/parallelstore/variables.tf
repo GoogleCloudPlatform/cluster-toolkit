@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ variable "mount_options" {
 variable "private_vpc_connection_peering" {
   description = <<-EOT
     The name of the VPC Network peering connection.
-    If using new VPC, please use community/modules/network/private-service-access to create private-service-access and
+    If using new VPC, please use modules/network/private-service-access to create private-service-access and
     If using existing VPC with private-service-access enabled, set this manually."
     EOT
   type        = string

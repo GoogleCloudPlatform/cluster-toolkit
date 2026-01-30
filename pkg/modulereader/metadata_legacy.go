@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,14 +49,11 @@ func defaultAPIList(source string) []string {
 			"bigqueryconnection.googleapis.com",
 			"sqladmin.googleapis.com",
 		},
-		"community/modules/file-system/DDN-EXAScaler": {
-			"compute.googleapis.com",
-			"deploymentmanager.googleapis.com",
-			"iam.googleapis.com",
-			"runtimeconfig.googleapis.com",
-		},
 		"community/modules/file-system/nfs-server": {
 			"compute.googleapis.com",
+		},
+		"modules/file-system/managed-lustre": {
+			"lustre.googleapis.com",
 		},
 		"modules/project/service-account": {
 			"iam.googleapis.com",

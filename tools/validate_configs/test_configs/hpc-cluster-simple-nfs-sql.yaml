@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: ps_connect
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network1]
 
   - id: homefs

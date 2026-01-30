@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ vars:
   tcpx_kernel_password: # use value supplied by Google Cloud staff
   keyserver_ubuntu_key: # use value supplied by Google Cloud staff
   a3_reservation_name: # supply a3-highgpu-8g reservation name
-  slurm_cluster_name: # supply name for slurm cluster
+  slurm_cluster_name: # supply name for slurm cluster (lowercase alphanumeric, max 10 characters, must start with a letter)
   a3_static_cluster_size: # supply a3-highgpu-8g reservation size
   a3_partition_name: # supply partition name
   disk_size_gb: 200

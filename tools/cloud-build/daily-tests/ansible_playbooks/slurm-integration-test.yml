@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,19 @@
 - name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
+  ## Display Terraform Version
+  - name: "Get Terraform Version"
+    ansible.builtin.command: terraform version
+    changed_when: false
+    register: terraform_version_output
+
+  - name: "Print Terraform Version"
+    ansible.builtin.debug:
+      msg: |
+        ---- TERRAFORM VERSION ----
+        {{ terraform_version_output.stdout }}
+        ---------------------------
+
   ## Create SSH Keys
   - name: "Create .ssh folder"
     ansible.builtin.file:
@@ -146,6 +159,15 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+      retries: 5
+      delay: 10
+      until: key_created.rc == 0
+      ignore_errors: yes
+
+    - name: Fail if SSH key add failed after retries
+      ansible.builtin.fail:
+        msg: "Failed to add SSH key to OS Login after multiple retries: {{ key_created.stderr }}"
+      when: key_created.rc != 0
 
     - name: Add Login node as host
       ansible.builtin.add_host:

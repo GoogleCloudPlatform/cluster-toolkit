@@ -51,7 +51,7 @@ traffic in existing networks. The snippet below is drawn from the
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2024 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -83,7 +83,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 12.0 |
+| <a name="module_firewall_rule"></a> [firewall\_rule](#module\_firewall\_rule) | terraform-google-modules/network/google//modules/firewall-rules | ~> 13.0 |
 
 ## Resources
 

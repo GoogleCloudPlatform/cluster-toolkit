@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ var (
 	infolog  *log.Logger
 	errorlog *log.Logger
 	fatallog *log.Logger
+	// Exit is a function that exits the program. It is overridden in tests.
+	Exit = os.Exit
 )
 
 func init() {
@@ -48,5 +50,5 @@ func Error(f string, a ...any) {
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
 	fatallog.Println(msg)
-	os.Exit(1)
+	Exit(1)
 }

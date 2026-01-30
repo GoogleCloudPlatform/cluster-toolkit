@@ -6,6 +6,14 @@ see:
 
 [Create an AI-optimized Slurm cluster](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster)
 
+Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+
+Example (deploy only the primary group for this blueprint):
+
+```bash
+./gcluster deploy -d a4high-slurm-deployment.yaml a4high-slurm-blueprint.yaml --only primary
+```
+
 ### Cloud Storage FUSE
 
 This blueprint includes four Cloud Storage FUSE mounts to provide a simple and scalable way

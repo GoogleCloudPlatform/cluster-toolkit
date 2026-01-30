@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -199,7 +199,7 @@ deployment_groups:
       disk_size: 100
       machine_type: n2-standard-16
 
-      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
+      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260108
       source_image_project_id: [ubuntu-os-accelerator-images]
 
       image_family: $(vars.family)

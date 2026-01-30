@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --exclusive
 
-# Usage: sbatch run-nccl-tests.sh
+# Usage: sbatch run-nccl-tests-tcpxo.sh
 
 set -x
 # This should be set to the squashfs file that you created for your application

@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +48,9 @@ vars:
 
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
+
+# Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -164,6 +167,7 @@ deployment_groups:
       enable_gcsfuse_csi: true # enable GCS Fuse for the cluster
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
+      enable_filestore_csi: true # enable Filestore for the cluster
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
@@ -242,7 +246,7 @@ deployment_groups:
   # # PSA is required for all Managed Lustre functionality.
   # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   # - id: private_service_access
-  #   source: community/modules/network/private-service-access
+  #   source: modules/network/private-service-access
   #   use: [gke-tpu-7x-net-0]
   #   settings:
   #     prefix_length: 24
@@ -285,6 +289,12 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-7x-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-7x-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true
 
@@ -294,28 +304,16 @@ deployment_groups:
       remote_mount: $(training_bucket.gcs_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
+
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
       remote_mount: $(checkpoint_bucket.gcs_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
-      mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:-1,
-        metadata-cache:stat-cache-max-size-mb:-1,
-        metadata-cache:type-cache-max-size-mb:-1,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-cache:enable-parallel-downloads:true,
-        rename-dir-limit=200000
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
+
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
@@ -349,7 +347,7 @@ deployment_groups:
 
       k8s_service_account_name: workload-identity-k8s-sa
       requested_cpu_per_pod: 8
-      image: ubuntu:latest
+      image: ubuntu:22.04
 
       command:
       - bash
@@ -456,4 +454,46 @@ deployment_groups:
   #       --directory="/data/hyperdisk-balanced-pvc-0/fio-benchmarks-${TAG}" --filename_format=fiotest-balanced-iops
   #     node_count: 1
 
+  #   outputs: [instructions]
+
+  # # --- FILESTORE ADDITIONS ---
+  # - id: filestore
+  #   source: modules/file-system/filestore
+  #   use: [gke-tpu-7x-net-0]
+  #   settings: {local_mount: /mnt/7x-filestore}
+
+  # - id: shared-filestore-pv
+  #   source: modules/file-system/gke-persistent-volume
+  #   use: [gke-tpu-7x-cluster, filestore]
+
+  # # Shared Filestore Job
+  # - id: shared-fs-job
+  #   source: modules/compute/gke-job-template
+  #   use:
+  #   - gke-tpu-7x-cluster
+  #   - gke-tpu-7x-pool
+  #   - shared-filestore-pv
+  #   settings:
+  #     image: alpine/git:latest
+  #     command:
+  #     - sh
+  #     - -c
+  #     - |
+  #       echo "Pod ${HOSTNAME} is starting..."
+  #       SHARED_DIR=/mnt/7x-filestore
+  #       mkdir -p $SHARED_DIR
+  #       cd $SHARED_DIR
+
+  #       # Simulate some work and write to a shared file
+  #       cmd="date +%s"
+  #       TIMESTAMP=`$cmd`
+  #       echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+  #       sleep 5
+  #       echo "Displaying content of shared_output.txt:"
+  #       echo "---"
+  #       cat shared_output.txt # Read the content to show it's shared
+  #       echo "---"
+  #       sleep 20
+  #       echo "Pod ${HOSTNAME} finished."
+  #     node_count: 2
   #   outputs: [instructions]
