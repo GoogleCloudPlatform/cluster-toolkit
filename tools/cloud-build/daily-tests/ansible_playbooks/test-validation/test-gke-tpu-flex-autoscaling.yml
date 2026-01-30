@@ -156,4 +156,4 @@
   - name: Clean up
     delegate_to: localhost
     ansible.builtin.shell: |
-      kubectl delete job {{ job_name }} --ignore-not-found
+      kubectl delete job {{ job_name }}
