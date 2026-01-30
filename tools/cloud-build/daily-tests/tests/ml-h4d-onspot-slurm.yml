@@ -22,7 +22,7 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: "{{ test_name }}-net-0"
+network: "{{ deployment_name }}-net"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
@@ -41,6 +41,7 @@ custom_vars:
     h4d_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  deployment_name: "{{ deployment_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
