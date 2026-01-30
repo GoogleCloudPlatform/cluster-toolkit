@@ -15,20 +15,9 @@
 
 ghpc:
   validators:
-  - validator: range
-    inputs:
-      vars: [node_count_static]
-      min: 0
-    error_message: "The 'node_count_static' value must be at least 0."
-  - validator: range
-    inputs:
-      vars: [node_count_dynamic_max]
-      min: 0
-    error_message: "The 'node_count_dynamic_max' value must be at least 0."
   - validator: conditional
     inputs:
-      trigger: subnetwork
-      trigger_value: null
-      dependent: enable_public_ip
-      dependent_value: true
-    error_message: "Using the default subnetwork for the TPU nodeset requires enable_public_ip set to true."
+      trigger: enable_hybrid
+      trigger_value: true
+      dependent: slurm_control_host
+    error_message: "Input slurm_control_host is required when enable_hybrid is true."

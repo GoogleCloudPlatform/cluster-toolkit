@@ -577,3 +577,233 @@ func TestRangeValidator_Length(t *testing.T) {
 		}
 	})
 }
+
+func TestIsVarSet(t *testing.T) {
+	tests := []struct {
+		name string
+		val  []cty.Value
+		want bool
+	}{
+		{"null", []cty.Value{cty.NilVal}, false},
+		{"empty string", []cty.Value{cty.StringVal("")}, false},
+		{"valid string", []cty.Value{cty.StringVal("ok")}, true},
+		{"bool false", []cty.Value{cty.BoolVal(false)}, false},
+		{"bool true", []cty.Value{cty.BoolVal(true)}, true},
+		{"num 0", []cty.Value{cty.NumberIntVal(0)}, false},
+		{"num positive", []cty.Value{cty.NumberIntVal(5)}, true},
+		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
+		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
+		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
+		{"populated object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"a": cty.True})}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isVarSet(tt.val); got != tt.want {
+				t.Errorf("isVarSet() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConvertToCty(t *testing.T) {
+	val := convertToCty(nil)
+	if !val.IsNull() {
+		t.Error("convertToCty(nil) should return NilVal")
+	}
+
+	val = convertToCty("test")
+	if val.AsString() != "test" {
+		t.Error("convertToCty(string) failed")
+	}
+
+	// Test Slice
+	sliceInput := []interface{}{"a", 1}
+	val = convertToCty(sliceInput)
+	if !val.Type().IsTupleType() || val.LengthInt() != 2 {
+		t.Errorf("convertToCty(slice) failed, got %s", val.GoString())
+	}
+
+	// Test Map
+	mapInput := map[string]interface{}{"key": true}
+	val = convertToCty(mapInput)
+	if !val.Type().IsObjectType() || !val.GetAttr("key").True() {
+		t.Error("convertToCty(map) failed")
+	}
+}
+
+func TestValuesMatch(t *testing.T) {
+	if !ValuesMatch([]cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}) {
+		t.Error("ValuesMatch: null should equal false")
+	}
+	if !ValuesMatch([]cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}) {
+		t.Error("ValuesMatch: numbers should match")
+	}
+	vList1 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
+	vList2 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
+	if !ValuesMatch(vList1, vList2) {
+		t.Error("ValuesMatch: identical lists should match")
+	}
+}
+
+func TestConditionalValidator_Triggers(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{ID: "test-module", Source: "test/module", Settings: config.NewDict(map[string]cty.Value{})},
+				},
+			},
+		},
+	}
+	validator := ConditionalValidator{}
+
+	t.Run("fails_on_missing_trigger_input_in_rule", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs:    map[string]interface{}{"dependent": "foo"},
+		}
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "missing 'trigger'") {
+			t.Fatalf("expected error for missing 'trigger' input, got: %v", err)
+		}
+	})
+
+	t.Run("handles_null_equals_false_for_trigger_value", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":       "missing_var",
+				"trigger_value": false,
+				"dependent":     "dep",
+				"optional":      true,
+			},
+		}
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "variable \"dep\" is required") {
+			t.Fatal("expected dependent check to trigger because null matches false")
+		}
+	})
+
+	t.Run("passes_when_trigger_missing_in_blueprint_and_optional", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":   "missing_var",
+				"dependent": "dep_var",
+				"optional":  true,
+			},
+		}
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected error for missing optional trigger: %v", err)
+		}
+	})
+
+	t.Run("fails_when_trigger_missing_in_blueprint_and_not_optional", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":   "missing_var",
+				"dependent": "dep_var",
+				"optional":  false,
+			},
+		}
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "setting \"missing_var\" not found") {
+			t.Fatalf("expected error for missing required trigger, got: %v", err)
+		}
+	})
+
+	t.Run("skips_when_trigger_is_false_and_no_trigger_value_provided", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"trigger_var": cty.BoolVal(false),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":   "trigger_var",
+				"dependent": "dep_var",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("validation should have skipped, but got error: %v", err)
+		}
+	})
+}
+
+func TestConditionalValidator_Dependents(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{ID: "test-module", Source: "test/module", Settings: config.NewDict(map[string]cty.Value{})},
+				},
+			},
+		},
+	}
+	validator := ConditionalValidator{}
+
+	t.Run("fails_when_trigger_is_true_and_dependent_is_missing", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"trigger_var": cty.BoolVal(true),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional",
+			ErrorMessage: "DEP_REQUIRED",
+			Inputs: map[string]interface{}{
+				"trigger":   "trigger_var",
+				"dependent": "dep_var",
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "DEP_REQUIRED") {
+			t.Fatalf("expected custom error message, got: %v", err)
+		}
+	})
+
+	t.Run("trigger_value_match_triggers_dependent_check", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine": cty.StringVal("a3-megagpu"),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":       "machine",
+				"trigger_value": "a3-megagpu",
+				"dependent":     "gpu_count",
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected error: trigger matched, so dependent is required")
+		}
+	})
+
+	t.Run("dependent_value_mismatch_shows_formatted_error", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"trigger": cty.True,
+			"dep":     cty.NumberIntVal(10),
+		})
+		rule := modulereader.ValidationRule{
+			Validator: "conditional",
+			Inputs: map[string]interface{}{
+				"trigger":         "trigger",
+				"dependent":       "dep",
+				"dependent_value": 20,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatal("expected error for value mismatch")
+		}
+		if !strings.Contains(err.Error(), "expected: '20', got: '10'") {
+			t.Fatalf("error message format incorrect: %v", err)
+		}
+	})
+}

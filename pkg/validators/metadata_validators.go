@@ -295,3 +295,81 @@ func (r *RangeValidator) Validate(
 		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, rule.ErrorMessage)
 	})
 }
+
+// ConditionalValidator implements the RuleValidator interface for the 'conditional' validation type.
+// It enforces that a 'dependent' variable is set or matches a value when a 'trigger' variable condition is met.
+type ConditionalValidator struct{}
+
+// Validate checks if the dependent variable satisfies the condition when the trigger variable is set.
+func (c *ConditionalValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	optional, _ := parseBoolInput(rule.Inputs, "optional", true)
+
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+
+	triggerName, ok := parseString(rule.Inputs["trigger"])
+	if !ok {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'trigger'", mod.ID), Path: modPath}
+	}
+
+	triggerVal, _, err := getModuleSettingValues(bp, group, modIdx, mod, triggerName)
+	if err != nil {
+		if !optional {
+			return config.BpError{
+				Err:  fmt.Errorf("setting %q not found in module %q settings", triggerName, mod.ID),
+				Path: config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(triggerName),
+			}
+		}
+		// If optional, treat missing trigger as Null/False
+		triggerVal = []cty.Value{cty.NilVal}
+
+	}
+	expectedRawVal, isExpectedGiven := rule.Inputs["trigger_value"]
+	triggerExpectedVal := convertToCty(expectedRawVal)
+
+	conditionMet := false
+	if !isExpectedGiven {
+		conditionMet = isVarSet(triggerVal)
+	} else {
+		conditionMet = ValuesMatch(triggerVal, evaluateAndFlatten(triggerExpectedVal))
+	}
+	if !conditionMet {
+		return nil // Condition not met; skip validation for the dependent variable.
+	}
+
+	dependentName, ok := parseString(rule.Inputs["dependent"])
+	if !ok {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'dependent'", mod.ID), Path: modPath}
+	}
+
+	dependentVal, _, err := getModuleSettingValues(bp, group, modIdx, mod, dependentName)
+	if err != nil {
+		dependentVal = []cty.Value{cty.NilVal}
+	}
+	depExpectedRawVal, isDepExpectedGiven := rule.Inputs["dependent_value"]
+	dependentExpectedVal := convertToCty(depExpectedRawVal)
+
+	depPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(dependentName)
+
+	if !isDepExpectedGiven {
+		if !isVarSet(dependentVal) {
+			msg := rule.ErrorMessage
+			if msg == "" {
+				msg = fmt.Sprintf("variable %q is required when %q condition is met", dependentName, triggerName)
+			}
+			return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
+		}
+		return nil
+	}
+	dependentExpectedVals := evaluateAndFlatten(dependentExpectedVal)
+	if !ValuesMatch(dependentVal, dependentExpectedVals) {
+		return config.BpError{Err: fmt.Errorf("%s\n variable '%s' value doesn't match\n expected: '%s', got: '%s'",
+			rule.ErrorMessage, dependentName, formatValue(dependentExpectedVals), formatValue(dependentVal)), Path: depPath}
+	}
+	return nil
+}
