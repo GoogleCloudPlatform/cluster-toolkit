@@ -197,6 +197,7 @@ ghpc:
         dependent: slurm_control_host
       error_message: "slurm_control_host is required when enable_hybrid is true."
 ```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators
