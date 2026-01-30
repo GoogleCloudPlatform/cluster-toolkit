@@ -39,8 +39,52 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ---
 
-If a self directed path is preferred, you can use the following commands to
-build the `gcluster` binary:
+### Using the Pre-built Bundle (Recommended)
+
+For the easiest setup, download the latest `gcluster-bundle.zip` from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. This bundle includes the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+
+#### Bundle Compatibility Matrix
+
+The pre-built bundle is compiled for Linux-based execution environments and supports the deployment of the following cluster operating systems.
+
+##### Execution Platform (Where the binary runs)
+
+| Platform | Support Status | Notes |
+| :--- | :---: | :--- |
+| **Linux** | ✅ | Pre-compiled on Debian Bullseye. |
+| **Google Cloud Shell** | ✅ | Native support via the Linux binary. |
+| **macOS** | Coming Soon | Please [Build from Source](#building-from-source). |
+| **Windows** | ❎ | Please [Build from Source](#building-from-source). |
+
+##### Cluster Operating Systems (Guest OS Support)
+
+| Operating System | Support Status | Notes |
+| :--- | :---: | :--- |
+| **HPC Rocky Linux 8** | ✅ | Optimized for high-performance computing. |
+| **Debian 11** | ✅ | Standard stable distribution. |
+| **Ubuntu 22.04 LTS** | ✅ | Long-term support release. |
+
+1. Create a directory for the bundle and extract it:
+
+    ```shell
+    mkdir -p gcluster-bundle && cd gcluster-bundle
+    # Replace vX.Y.Z with the desired release version from the Releases page.
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
+    unzip -o gcluster-bundle.zip
+    chmod +x gcluster
+    ```
+
+2. Verify the Installation:
+
+    ```shell
+    ./gcluster --version
+    ./gcluster --help
+    ```
+
+### Building from Source
+
+If you prefer to build the `gcluster` binary from source,
+you can use the following commands:
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
