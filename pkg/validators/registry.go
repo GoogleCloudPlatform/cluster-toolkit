@@ -20,4 +20,5 @@ var Registry = map[string]RuleValidator{
 	"allowed_enum": &AllowedEnumValidator{},
 	"range":        &RangeValidator{},
 	"exclusive":    &ExclusiveValidator{},
+	"conditional":  &ConditionalValidator{},
 }

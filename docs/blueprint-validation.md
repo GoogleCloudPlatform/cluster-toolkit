@@ -179,6 +179,25 @@ validators:
     error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
 ```
 
+### Conditional Validator
+The `conditional` validator enforces that a dependent variable is set or matches a specific value only when a trigger variable condition is met. This is useful for cross-variable dependencies (e.g., if feature X is enabled, setting Y is required).
+
+If trigger_value or dependent_value is omitted, the validator checks if the variable is simply "set" (non-null, non-zero, and non-empty).
+If a value is provided, it must match exactly. This also supports matching against null to check if a variable is explicitly omitted.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional
+      inputs:
+        trigger: enable_hybrid
+        trigger_value: true
+        dependent: slurm_control_host
+      error_message: "slurm_control_host is required when enable_hybrid is true."
+```
+
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
 
 ## Skipping or Disabling Validators

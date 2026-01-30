@@ -80,7 +80,10 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 		}
 	}
 
-	val, _ := getNestedValue(mod.Settings, settingName)
+	val, ok := getNestedValue(mod.Settings, settingName)
+	if !ok {
+		return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
+	}
 
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
@@ -113,6 +116,27 @@ func parseStringList(v interface{}) ([]string, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// parseString normalizes an input that may be a single string or a list containing a single string into a string.
+func parseString(v interface{}) (string, bool) {
+	if v == nil {
+		return "", false
+	}
+	switch vv := v.(type) {
+	case string:
+		return vv, true
+	case []interface{}:
+		if len(vv) == 1 {
+			s, ok := vv[0].(string)
+			return s, ok
+		}
+	case []string:
+		if len(vv) == 1 {
+			return vv[0], true
+		}
+	}
+	return "", false
 }
 
 // Target represents a resolved target (module-setting or blueprint var) for validation.
@@ -234,4 +258,75 @@ func isVarSet(values []cty.Value) bool {
 		}
 	}
 	return true
+}
+
+// convertToCty converts a primitive Go interface{} to a cty.Value.
+// Returns cty.Value if input was not nil, otherwise cty.NilVal.
+func convertToCty(in interface{}) cty.Value {
+	if in == nil {
+		return cty.NilVal
+	}
+	switch v := in.(type) {
+	case bool:
+		return cty.BoolVal(v)
+	case int:
+		return cty.NumberIntVal(int64(v))
+	case float64:
+		return cty.NumberFloatVal(v)
+	case string:
+		return cty.StringVal(v)
+	case []interface{}:
+		if len(v) == 0 {
+			return cty.EmptyTupleVal
+		}
+		vals := make([]cty.Value, len(v))
+		for i, val := range v {
+			vals[i] = convertToCty(val)
+		}
+		return cty.TupleVal(vals)
+	case map[string]interface{}:
+		if len(v) == 0 {
+			return cty.EmptyObjectVal
+		}
+		vals := make(map[string]cty.Value)
+		for k, val := range v {
+			vals[k] = convertToCty(val)
+		}
+		return cty.ObjectVal(vals)
+	default:
+		return cty.NilVal
+	}
+}
+
+// ValuesMatch compares two slices of cty.Value for equality.
+func ValuesMatch(original []cty.Value, expected []cty.Value) bool {
+	if len(original) != len(expected) {
+		return false
+	}
+	for i := range original {
+		originalVal := original[i]
+		expectedVal := expected[i]
+
+		isOriginalSet := isVarSet([]cty.Value{originalVal})
+		isExpectedSet := isVarSet([]cty.Value{expectedVal})
+		if !isOriginalSet && !isExpectedSet {
+			continue
+		}
+		if !originalVal.Equals(expectedVal).True() {
+			return false
+		}
+	}
+	return true
+}
+
+// formatValue formats a cty.Value slice for display in error messages.
+func formatValue(vals []cty.Value) string {
+	if len(vals) == 0 {
+		return "null"
+	}
+	val := vals[0]
+	if val.IsNull() {
+		return "null"
+	}
+	return string(config.TokensForValue(val).Bytes())
 }

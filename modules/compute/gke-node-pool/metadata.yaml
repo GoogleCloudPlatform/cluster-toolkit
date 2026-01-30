@@ -35,3 +35,38 @@ ghpc:
       vars: [local.upgrade_settings.max_unavailable]
       min: 0
     error_message: "'max_unavailable' value must be at least 0."
+  - validator: conditional
+    inputs:
+      trigger: enable_flex_start
+      trigger_value: true
+      dependent: reservation_affinity.consume_reservation_type
+      dependent_value: "NO_RESERVATION"
+    error_message: "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+  - validator: conditional
+    inputs:
+      trigger: enable_flex_start
+      trigger_value: true
+      dependent: static_node_count
+      dependent_value: null
+    error_message: "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
+  - validator: conditional
+    inputs:
+      trigger: enable_flex_start
+      trigger_value: true
+      dependent: auto_repair
+      dependent_value: false
+    error_message: "enable_flex_start needs node auto_repair set to false."
+  - validator: conditional
+    inputs:
+      trigger: enable_queued_provisioning
+      trigger_value: true
+      dependent: autoscaling_total_min_nodes
+      dependent_value: 0
+    error_message: "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
+  - validator: conditional
+    inputs:
+      trigger: enable_queued_provisioning
+      trigger_value: true
+      dependent: reservation_affinity.consume_reservation_type
+      dependent_value: "NO_RESERVATION"
+    error_message: "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
