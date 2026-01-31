@@ -1,0 +1,55 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Install Slurm Scripts (Centralized)
+  hosts: all
+  become: true
+  vars:
+    # location for staging files
+    staging_root: /var/tmp/slurm-scripts
+    # Default install location
+    slurm_root: /opt/apps/adm/slurm
+    # The profile determines which sub-folder to install (e.g., a3-megagpu-8g, h4d)
+    # Default to 'none' to prevent accidental installation of wrong scripts
+    slurm_profile: "{{ profile | default('none') }}"
+
+  tasks:
+    # 1. Setup Base Directories
+  - name: Create Script Directories
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: directory
+      mode: "0755"
+      recurse: yes
+    loop:
+    - "{{ slurm_root }}/scripts/"
+    when: slurm_profile != 'none'
+
+    # # 2. Install Common Libraries (Always)
+  - name: Install Common Dependencies (sudo-oslogin)
+    ansible.builtin.copy:
+      src: "{{staging_root}}/common/"
+      dest: "{{ slurm_root }}/scripts/"
+      mode: "0755"
+      remote_src: yes
+
+    # 3. Install Machine-Specific Profile
+  - name: "Install Profile: {{ slurm_profile }}"
+    ansible.builtin.copy:
+      src: "{{ staging_root }}/{{ slurm_profile }}/"
+      dest: "{{ slurm_root }}/scripts/"
+      mode: "0755"
+      remote_src: yes
+    when: slurm_profile != 'none'

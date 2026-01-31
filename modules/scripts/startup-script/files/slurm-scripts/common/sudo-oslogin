@@ -1,0 +1,63 @@
+#!/bin/bash
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# On Google Cloud VMs that have OS Login enabled, this script will query the
+# OS Login API and add users as sudoers if they have the OS Admin Login role.
+# The sudoers entry is added at job start and removed upon job completion.
+
+if ! type -P jq 1>/dev/null; then
+	echo "Must install jq for this script to function."
+	exit 0
+fi
+
+if [[ -z "$SLURM_SCRIPT_CONTEXT" ||
+	-z "$SLURM_JOB_USER" ||
+	-z "$SLURM_JOB_ID" ]]; then
+	echo "This script must be run within a Slurm prolog or epilog environment."
+	exit 0
+fi
+
+# only run this script if OS Login is enabled
+i_config=$(curl -s -H "Metadata-Flavor: Google" \
+	"http://metadata.google.internal/computeMetadata/v1/instance/attributes/?recursive=true" |
+	jq -r '."enable-oslogin"')
+p_config=$(curl -s -H "Metadata-Flavor: Google" \
+	"http://metadata.google.internal/computeMetadata/v1/project/attributes/?recursive=true" |
+	jq -r '."enable-oslogin"')
+if ! [[ "$i_config" == "TRUE" || "$p_config" == "TRUE" && "$i_config" != "FALSE" ]]; then
+	echo "This script must be run on a VM with OS Login enabled."
+	exit 0
+fi
+
+SUDOERDIR="/var/google-sudoers.d"
+SUDOERFILE="${SUDOERDIR}/slurm-${SLURM_JOB_USER}-${SLURM_JOB_ID}"
+if [[ "$SLURM_SCRIPT_CONTEXT" == "prolog_slurmd" && -d "$SUDOERDIR" ]]; then
+	# ensure that older Slurm NSS configurations are removed
+	sed -i 's,slurm ,,' /etc/nsswitch.conf
+
+	USER_OPENID=$(curl -s -H "Metadata-Flavor: Google" \
+		"http://metadata.google.internal/computeMetadata/v1/oslogin/users?username=${SLURM_JOB_USER}" |
+		jq -r '.loginProfiles | .[] | .name')
+
+	curl -s -H "Metadata-Flavor: Google" \
+		"http://metadata.google.internal/computeMetadata/v1/oslogin/authorize?policy=adminLogin&email=${USER_OPENID}" |
+		jq --exit-status 'select(.success) | length == 1' 1>/dev/null
+	USER_ADMIN=$?
+	if [ "$USER_ADMIN" -eq 0 ]; then
+		echo "$SLURM_JOB_USER ALL=(ALL) NOPASSWD: ALL" >"$SUDOERFILE"
+	fi
+elif [[ "$SLURM_SCRIPT_CONTEXT" == "epilog_slurmd" && -f "$SUDOERFILE" ]]; then
+	rm -f "$SUDOERFILE"
+fi
