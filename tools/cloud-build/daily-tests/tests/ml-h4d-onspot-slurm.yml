@@ -27,8 +27,6 @@ post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 - test-validation/test-default-partition.yml
-post_destroy_tasks:
-- post-destroy-tasks/delete-image.yml
 custom_vars:
   gpu_count: 8
   gpu_partition: h4d
