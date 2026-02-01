@@ -56,7 +56,7 @@ README
        stages=[training] \
        training=gpt3/5b \
        container=../nemofw+tcpxo-24.12.sqsh \
-       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64,/sys/bus/pci]
+       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64,/sys/bus/pci] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \
