@@ -43,7 +43,10 @@ README
 
    ```shell
    cd launcher_scripts
-   mkdir data
+   mkdir -p data/bpe
+
+   wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json -O ./data/bpe/vocab.json
+   wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt -O ./data/bpe/merges.txt
 
    MAX_STEPS=10
    NUM_NODES=8
@@ -52,9 +55,8 @@ README
        launcher_scripts_path=${PWD} \
        stages=[training] \
        training=gpt3/5b \
-       env_vars.TRANSFORMERS_OFFLINE=0 \
        container=../nemofw+tcpxo-24.12.sqsh \
-       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64] \
+       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64,/sys/bus/pci]
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \
