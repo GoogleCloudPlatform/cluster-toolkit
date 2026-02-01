@@ -278,7 +278,7 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 		if err := TestZoneExists(projectID, globalZone); err != nil {
 			return err
 		}
-		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType)
+		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType, validatorName)
 
 		// Catch the sentinel and return nil so the deployment proceeds
 		if errors.Is(err, errSoftWarning) {
@@ -287,7 +287,7 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 		return err
 	}
 
-	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", func(z, name string) error {
-		return validateMachineTypeInZone(s, projectID, z, name)
+	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", validatorName, func(z, name string, vName string) error {
+		return validateMachineTypeInZone(s, projectID, z, name, vName)
 	})
 }

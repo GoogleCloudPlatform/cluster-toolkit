@@ -150,12 +150,13 @@ func mockComputeService(handler http.HandlerFunc) *compute.Service {
 }
 
 func (s *MySuite) TestValidateMachineTypeInZone(c *C) {
+	const validatorName = "test_machine_type_in_zone"
 	// Case 1: Success (200 OK)
 	{
 		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"name": "c2-standard-60"}`))
 		})
-		err := validateMachineTypeInZone(svc, "proj", "zone", "mt")
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
 		c.Check(err, IsNil)
 	}
 
@@ -165,7 +166,7 @@ func (s *MySuite) TestValidateMachineTypeInZone(c *C) {
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte(`{"error": {"code": 403, "message": "Denied"}}`))
 		})
-		err := validateMachineTypeInZone(svc, "proj", "zone", "mt")
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
 		// FIXED: Replaced errors.Is with direct comparison
 		c.Check(err == errSoftWarning, Equals, true)
 	}
@@ -175,7 +176,7 @@ func (s *MySuite) TestValidateMachineTypeInZone(c *C) {
 		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		})
-		err := validateMachineTypeInZone(svc, "proj", "zone", "mt")
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
 		c.Check(err, NotNil)
 		c.Check(err == errSoftWarning, Equals, false)
 	}

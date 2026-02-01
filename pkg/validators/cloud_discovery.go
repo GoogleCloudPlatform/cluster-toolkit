@@ -137,7 +137,7 @@ func resolveZones(blueprint config.Blueprint, module *config.Module, globalZone 
 }
 
 // checkResourceInZones implements the "OR" logic: passes if found in at least one valid zone.
-func checkResourceInZones(projectID string, zones []string, globalZone, resourceLabel, resourceName string, validateFn func(string, string) error) (bool, error) {
+func checkResourceInZones(projectID string, zones []string, globalZone, resourceLabel, resourceName string, validatorName string, validateFn func(string, string, string) error) (bool, error) {
 	var attempted []string
 	for _, z := range zones {
 		if z == "" {
@@ -147,7 +147,7 @@ func checkResourceInZones(projectID string, zones []string, globalZone, resource
 		if z != globalZone {
 			if err := TestZoneExists(projectID, z); err != nil {
 				// Check if the zone-check error is actually a permission issue (403)
-				if msg, isSoft := getSoftWarningMessage(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.zones.get"); isSoft {
+				if msg, isSoft := getSoftWarningMessage(err, validatorName, projectID, "Compute Engine API", "compute.zones.get"); isSoft {
 					fmt.Println(msg)
 					return true, errSoftWarning // Trigger the abort sentinel
 				}
@@ -157,7 +157,7 @@ func checkResourceInZones(projectID string, zones []string, globalZone, resource
 		}
 
 		attempted = append(attempted, z)
-		err := validateFn(z, resourceName)
+		err := validateFn(z, resourceName, validatorName)
 		if err == nil {
 			return true, nil
 		}
@@ -175,7 +175,7 @@ func checkResourceInZones(projectID string, zones []string, globalZone, resource
 // validateSettingsInModules  walks through every module in the blueprint,
 // identifies settings that match a specific suffix (e.g., "machine_type"),
 // and validates them against the zones where that module is allowed to reside.
-func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID, suffix, resourceLabel string, validateResource func(zone string, name string) error) error {
+func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID, suffix, resourceLabel string, validatorName string, validateResource func(zone string, name string, vName string) error) error {
 	validationErrors := config.Errors{}
 	// Anti-Spam Logic: This flag is set if we encounter an environmental issue
 	// (like a 403 Permission Denied). It allows us to stop making slow API calls
@@ -205,7 +205,7 @@ func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID
 				continue
 			}
 
-			found, err := checkResourceInZones(projectID, targetZones, globalZone, resourceLabel, resourceName, validateResource)
+			found, err := checkResourceInZones(projectID, targetZones, globalZone, resourceLabel, resourceName, validatorName, validateResource)
 			// If we hit the private sentinel error (403/400), set the abort flag.
 			if errors.Is(err, errSoftWarning) {
 				aborted = true
@@ -221,7 +221,7 @@ func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID
 
 // validateMachineTypeInZone calls the Compute Engine API to verify if a specific
 // machine type is available in the given zone and project.
-func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string) error {
+func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string, validatorName string) error {
 	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
 
 	// Case 1: Success - The machine type exists
@@ -230,7 +230,7 @@ func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType 
 	}
 
 	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
-	if msg, isSoft := getSoftWarningMessage(err, "test_machine_type_in_zone", projectID, "Compute Engine API", "compute.machineTypes.get"); isSoft {
+	if msg, isSoft := getSoftWarningMessage(err, validatorName, projectID, "Compute Engine API", "compute.machineTypes.get"); isSoft {
 		fmt.Println(msg)
 		return errSoftWarning
 	}
