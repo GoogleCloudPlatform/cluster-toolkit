@@ -87,7 +87,7 @@ module "kubectl_apply_manifests" {
 module "install_kueue" {
   source           = "./helm_install"
   count            = local.install_kueue ? 1 : 0
-  wait             = try(var.kueue.wait, false)
+  wait             = true
   timeout          = 1200
   release_name     = "kueue"
   chart_repository = "oci://registry.k8s.io/kueue/charts"
@@ -102,18 +102,38 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+resource "time_sleep" "wait_for_webhook" {
+  create_duration = "120s"
+  depends_on      = [module.install_kueue]
+}
+
 module "configure_kueue" {
-  source        = "./kubectl"
-  source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
-  template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
-  depends_on    = [module.install_kueue]
+  source           = "./helm_install"
+  count            = local.install_kueue ? ((var.kueue.config_path == null ? "" : var.kueue.config_path) != "" ? 1 : 0) : 0
+  release_name     = "kueue-config"
+  chart_name       = "${path.module}/raw-config-chart"
+  chart_version    = "0.1.0"
+  namespace        = "kueue-system"
+  create_namespace = true
+  wait             = false # Configuration resources (Queues) usually don't need wait
 
-  server_side_apply = true
-  wait_for_rollout  = true
+  values_yaml = [
+    yamlencode({
+      manifests = [
+        for doc in split("\n---", (
+          (var.kueue.config_path == null ? "" : var.kueue.config_path) != ""
+          ? (length(var.kueue.config_template_vars == null ? {} : var.kueue.config_template_vars) > 0 || length(regexall("\\.tftpl$", var.kueue.config_path == null ? "" : var.kueue.config_path)) > 0
+            ? templatefile(var.kueue.config_path, var.kueue.config_template_vars == null ? {} : var.kueue.config_template_vars)
+          : file(var.kueue.config_path))
+          : ""
+        )) : trimspace(doc)
+        if length(trimspace(doc)) > 0
+      ]
+    })
+  ]
 
-  providers = {
-    kubectl = kubectl
-  }
+  depends_on = [time_sleep.wait_for_webhook]
+
 }
 
 module "install_jobset" {
