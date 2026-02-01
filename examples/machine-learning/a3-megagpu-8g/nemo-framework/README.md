@@ -45,8 +45,8 @@ README
    cd launcher_scripts
    mkdir -p data/bpe
 
-   wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json -O ./data/bpe/vocab.json
-   wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt -O ./data/bpe/merges.txt
+   wget https://huggingface.co/gpt2/resolve/main/vocab.json -O ./data/bpe/vocab.json
+   wget https://huggingface.co/gpt2/resolve/main/merges.txt -O ./data/bpe/merges.txt
 
    MAX_STEPS=10
    NUM_NODES=8
