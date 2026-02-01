@@ -39,7 +39,8 @@ README
    ```
 
    This will run an example of training a 5B parameter GPT3 model for 10 steps
-   using mock data as the input.
+   using mock data as the input. Note: Please update `NUM_NODES` to
+   actual number of nodes in the deployment.
 
    ```shell
    cd launcher_scripts
