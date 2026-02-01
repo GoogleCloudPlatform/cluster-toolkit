@@ -188,7 +188,7 @@ deployment_groups:
                     operator: In
                     values:
                     - $(vars.base_pool_machine_type)
-    outputs: [instructions]
+    outputs: [slurm_namespace, slurm_operator_namespace]
 
   - id: slurm_exporter_monitoring
     source: modules/management/kubectl-apply
