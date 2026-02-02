@@ -51,5 +51,5 @@
 
 | Name | Description |
 |------|-------------|
-| <a name="output_nodeset_name"></a> [nodeset\_name](#output\_nodeset\_name) | Name of the new Slinky nodset |
+| <a name="output_nodeset_name"></a> [nodeset\_name](#output\_nodeset\_name) | Name of the new Slinky nodeset |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
