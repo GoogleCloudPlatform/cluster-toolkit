@@ -64,13 +64,14 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **Debian 11** | ✅ | Standard stable distribution. |
 | **Ubuntu 22.04 LTS** | ✅ | Long-term support release. |
 
-1. Create a directory for the bundle and extract it:
+1. Download and extract the bundle:
 
     ```shell
-    mkdir -p gcluster-bundle && cd gcluster-bundle
     # Replace vX.Y.Z with the desired release version from the Releases page.
+    # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
-    unzip -o gcluster-bundle.zip
+    unzip gcluster-bundle.zip -d gcluster-bundle/
+    cd gcluster-bundle
     chmod +x gcluster
     ```
 
