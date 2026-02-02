@@ -27,9 +27,6 @@ vars:
 deployment_groups:
 - group: network
   modules:
-  - id: network1
-    source: modules/network/vpc
-    kind: terraform
 - group: packer
   modules:
   - id: my-custom-image
