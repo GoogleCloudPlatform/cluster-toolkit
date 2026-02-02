@@ -50,7 +50,20 @@ locals {
     }
   ]
 
-  output_subnets_gke = [
+  output_subnets_gke = local.is_roce_metal ? [
+    for i in range(8) : {
+      network            = local.network_name
+      subnetwork         = "default-subnet-1-${local.network_name}"
+      subnetwork_project = var.project_id
+      network_ip         = null
+      nic_type           = "MRDMA"
+      stack_type         = "IPV6_ONLY"
+      queue_count        = null
+      access_config      = []
+      ipv6_access_config = []
+      alias_ip_range     = []
+    }
+    ] : [
     for i in range(length(module.vpc.subnets)) : {
       network            = local.network_name
       subnetwork         = local.template_subnetworks[i].subnet_name

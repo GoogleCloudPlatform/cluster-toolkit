@@ -221,6 +221,12 @@ variable "enable_node_local_dns_cache" {
   default     = false
 }
 
+variable "enable_shielded_nodes" {
+  description = "Enable Shielded Nodes features on all nodes in this cluster."
+  type        = bool
+  default     = true
+}
+
 variable "system_node_pool_enabled" {
   description = "Create a system node pool."
   type        = bool

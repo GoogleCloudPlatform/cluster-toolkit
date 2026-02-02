@@ -1,0 +1,196 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: nccl-test-compute-domain
+spec:
+  numNodes: 2
+  channel:
+    resourceClaimTemplate:
+      name: nccl-test-compute-domain-channel
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: nccl-test-all-mrdma
+spec:
+  spec:
+    devices:
+      requests:
+      - name: req-mrdma
+        exactly:
+          deviceClassName: mrdma.google.com
+          allocationMode: ExactCount
+          count: 8
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: allgather
+  # labels:
+  #   kueue.x-k8s.io/queue-name: a4x-max
+spec:
+  ttlSecondsAfterFinished: 1200
+  network:
+    enableDNSHostnames: true
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        parallelism: 2
+        completions: 2
+        template:
+          # metadata:
+          #   annotations:
+          #     kueue.x-s.io/podset-required-topology: "cloud.google.com/gce-topology-subblock"
+
+          spec:
+            terminationGracePeriodSeconds: 5
+            activeDeadlineSeconds: 3600
+            restartPolicy: Never
+            nodeSelector:
+              cloud.google.com/gke-accelerator: nvidia-gb300
+            tolerations:
+            - key: nvidia.com/gpu
+              operator: Equal
+              value: present
+              effect: NoSchedule
+            - key: kubernetes.io/arch
+              operator: Equal
+              value: arm64
+              effect: NoSchedule
+            setHostnameAsFQDN: true
+            volumes:
+            - name: nvidia
+              hostPath:
+                path: /home/kubernetes/bin/nvidia
+            - name: lib64
+              hostPath:
+                path: /lib64
+            - name: shared-memory
+              emptyDir:
+                medium: "Memory"
+                sizeLimit: 250Gi
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: nccl-test-compute-domain-channel
+            - name: rdma
+              resourceClaimTemplateName: nccl-test-all-mrdma
+            containers:
+            - name: nccl-test
+              stdin: true
+              tty: true
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64:v1.1.1
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: MY_NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              - name: MY_JOB_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['job-name']
+              - name: MY_SUBDOMAIN
+                value: "allgather"
+              - name: OMPI_ALLOW_RUN_AS_ROOT
+                value: "1"
+              - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+                value: "1"
+              - name: N_NODES
+                value: "2"
+              - name: LD_LIBRARY_PATH
+                value: /usr/local/nvidia/lib64:/usr/local/gib/lib64
+              - name: NCCL_DEBUG
+                value: "INFO"
+              - name: NCCL_DEBUG_SUBSYS
+                value: "INIT,NET"
+              command:
+              - bash
+              - -c
+              - |
+                set -x
+                echo "Starting workload container on ${MY_NODE_NAME} for $N_NODES benchmark"
+
+                # Install ping
+                apt update -y
+                apt install -y iputils-ping
+
+                # Start sshd
+                /scripts/container_entry.sh daemon &
+
+                # Get helper variables to form all hostnames
+                export NODE_RANK=$JOB_COMPLETION_INDEX
+
+                # For every worker, wait till online and add to hostfile
+                for i in $(seq 0 $(($N_NODES-1))); do
+                  OTHER=${MY_JOB_NAME}-${i}.${MY_SUBDOMAIN}
+                  until ssh -p 222 -o StrictHostKeyChecking=no $OTHER hostname; do
+                    echo Waiting for ${OTHER}...
+                    sleep 10
+                  done
+                  echo ${OTHER} port=222 slots=4 | tee -a /tmp/hostfile;
+                done
+
+                cat /tmp/hostfile
+
+                # Launch from head node
+                if [[ "${NODE_RANK}" -eq "0" ]]; then
+
+                    # World Level = 0x0, Rail Aligned = 0x7
+                    export NCCL_TESTS_SPLIT_MASK="0x0"
+
+                    # Environment variables to pass to mpirun ranks
+                    EXPORT_VARS="LD_LIBRARY_PATH PATH NCCL_DEBUG NCCL_DEBUG_SUBSYS NCCL_TESTS_SPLIT_MASK OMPI_ALLOW_RUN_AS_ROOT OMPI_ALLOW_RUN_AS_ROOT_CONFIRM"
+                    MPIRUN_X_FLAGS=""
+                    for var in $EXPORT_VARS; do
+                      MPIRUN_X_FLAGS="-x $var $MPIRUN_X_FLAGS"
+                    done
+
+                    mpirun --hostfile /tmp/hostfile \
+                      $MPIRUN_X_FLAGS \
+                      -mca plm_rsh_no_tree_spawn 1 \
+                      --mca orte_keep_fqdn_hostnames 1 \
+                      --mca btl self,tcp \
+                      --mca btl_tcp_if_include eth0 \
+                      --bind-to none \
+                      --mca plm_rsh_agent "ssh -q -o LogLevel=ERROR -o StrictHostKeyChecking=no -p 222" \
+                      /third_party/nccl-tests/build/all_gather_perf -b 1K -e 8G -f 2 -g 1 -w 5 --iters 100 -c 1
+
+                else
+                  HEAD_NODE=${MY_JOB_NAME}-0.${MY_SUBDOMAIN}
+                  # Wait for head node to exit
+                  while ssh -p 222 -o StrictHostKeyChecking=no $HEAD_NODE hostname; do
+                    sleep 5
+                  done
+                fi
+
+                exit 0
+              volumeMounts:
+              - name: nvidia
+                mountPath: /usr/local/nvidia
+              - name: shared-memory
+                mountPath: /dev/shm
+              resources:
+                limits:
+                  nvidia.com/gpu: 4
+                requests:
+                  nvidia.com/gpu: 4
+                claims:
+                - name: compute-domain-channel
+                - name: rdma

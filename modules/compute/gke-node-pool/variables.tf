@@ -509,3 +509,19 @@ variable "autoscaling_max_node_count" {
   type        = number
   default     = null
 }
+
+variable "linux_node_config" {
+  description = "Linux node configuration (e.g., sysctls, hugepages)."
+  type = object({
+    sysctls = optional(map(string), {
+      "net.ipv4.tcp_rmem" = "4096 87380 16777216"
+      "net.ipv4.tcp_wmem" = "4096 16384 16777216"
+    })
+    hugepages_config = optional(object({
+      hugepage_size_2m = optional(number)
+      hugepage_size_1g = optional(number)
+    }))
+  })
+  default  = {}
+  nullable = false
+}

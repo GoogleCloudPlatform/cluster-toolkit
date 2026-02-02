@@ -1,0 +1,177 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: asapd-lite
+  namespace: kube-system
+  labels:
+    k8s-app: asapd-lite
+spec:
+  selector:
+    matchLabels:
+      k8s-app: asapd-lite
+  template:
+    metadata:
+      labels:
+        k8s-app: asapd-lite
+    spec:
+      priorityClassName: system-node-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - a4x-maxgpu-4g-metal
+                - a4x-maxgpu-4g-metal-nolssd
+              - key: cloud.google.com/gke-os-distribution
+                operator: In
+                values:
+                - cos
+      tolerations:
+      - operator: Exists
+
+      # Use the host's network namespace. This is essential for managing the
+      # host's CX PFs.
+      hostNetwork: true
+
+      # Use the host's PID namespace. This can be useful for
+      # debugging and interacting with host processes.
+      hostPID: true
+      containers:
+      - name: asapd-lite
+        image: us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.3
+
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -x
+          /usr/local/bin/run_asapd_lite.sh
+
+          # Wait for a bit to let interfaces come up.
+          sleep 15
+
+          DADFAILED_FOUND=0
+          INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep 'gpu')
+
+          for iface in $INTERFACES; do
+            if ip -6 addr show dev "$iface" | grep -q 'dadfailed'; then
+              echo "Found dadfailed on interface $iface. Bringing it down and up."
+              ip link set dev "$iface" down
+              ip link set dev "$iface" up
+              DADFAILED_FOUND=1
+            fi
+          done
+
+          if [ "$DADFAILED_FOUND" -eq 1 ]; then
+            echo "Found and attempted to fix dadfailed on one or more interfaces. Exiting to allow container restart."
+            exit 1
+          fi
+
+          # Keep the container running
+          echo "No dadfailed detected on interfaces."
+          wait
+
+        env:
+        - name: LD_LIBRARY_PATH
+          value: /asapd-lite/controller
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 19540
+          initialDelaySeconds: 60
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 19540
+
+        securityContext:
+          # 'privileged: true' is required for modifying most host-level
+          # resources, including network devices and udev rules.
+          privileged: true
+
+        volumeMounts:
+        - name: host-sys
+          mountPath: /sys
+        - name: host-proc
+          mountPath: /proc
+        - name: host-udev-rules
+          mountPath: /etc/udev/rules.d
+        - name: host-run-udev
+          mountPath: /run/udev
+        - name: host-run-asapd-lite
+          mountPath: /run/asapd-lite
+        - mountPath: /hugepages-2Mi
+          name: hugepage-2mi
+        - name: var-log-google-asapd-lite
+          mountPath: /var/log/google/asapd-lite
+        - name: var-lib-google-asapd-lite
+          mountPath: /var/lib/google/asapd-lite
+        - name: host-systemd-system
+          mountPath: /etc/systemd/system
+        - name: host-run-systemd
+          mountPath: /run/systemd
+        resources:
+          limits:
+            hugepages-2Mi: 8192Mi
+            memory: 1024Mi
+
+      volumes:
+      - name: host-sys
+        hostPath:
+          path: /sys
+      - name: host-proc
+        hostPath:
+          path: /proc
+      - name: host-udev-rules
+        hostPath:
+          path: /etc/udev/rules.d
+      - name: host-run-udev
+        hostPath:
+          path: /run/udev
+      - name: host-run-asapd-lite
+        hostPath:
+          path: /run/asapd-lite
+          type: DirectoryOrCreate
+      - name: hugepage-2mi
+        emptyDir:
+          medium: HugePages-2Mi
+      - name: var-log-google-asapd-lite
+        hostPath:
+          path: /var/log/google/asapd-lite
+          type: DirectoryOrCreate
+      # Mount /var/lib/google/asapd-lite to provide a persistent location for
+      # the ipam binary on the host, allowing it to be executed from the host.
+      # This location was chosen based on this documentation
+      # https://docs.cloud.google.com/container-optimized-os/docs/concepts/disks-and-filesystem#working_with_the_file_system
+      # Hence, this may not necessarily be a suitable location for non-COS based
+      # systems.
+      - name: var-lib-google-asapd-lite
+        hostPath:
+          path: /var/lib/google/asapd-lite
+          type: DirectoryOrCreate
+      - name: host-systemd-system
+        hostPath:
+          path: /etc/systemd/system
+      - name: host-run-systemd
+        hostPath:
+          path: /run/systemd
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1%
