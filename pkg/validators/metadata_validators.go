@@ -345,12 +345,20 @@ func (r *RequiredValidator) Validate(
 		}
 		return nil
 	}
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
 
-	if err := IterateRuleTargets(bp, mod, rule, group, modIdx, handler); err != nil {
-		return err
+	varsList, ok := parseStringList(rule.Inputs["vars"])
+	if !ok {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'vars'", mod.ID), Path: modPath}
+	}
+	for _, varName := range varsList {
+		values, _, _ := getModuleSettingValues(bp, group, modIdx, mod, varName)
+
+		if err := handler(Target{Name: varName, Values: values}); err != nil {
+			return err
+		}
 	}
 
-	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
 	forbidden, err := parseBoolInput(rule.Inputs, "forbidden", false)
 	if err != nil {
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
