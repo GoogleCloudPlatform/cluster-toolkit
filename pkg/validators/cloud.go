@@ -71,6 +71,15 @@ func handleServiceUsageError(err error, pid string) error {
 	return fmt.Errorf("unhandled error: %s", herr)
 }
 
+func isValidatorExplicit(bp config.Blueprint, validatorName string) bool {
+	for _, v := range bp.Validators {
+		if v.Validator == validatorName {
+			return true
+		}
+	}
+	return false
+}
+
 // TestApisEnabled tests whether APIs are enabled in given project
 func TestApisEnabled(projectID string, requiredAPIs []string) error {
 	// can return immediately if there are 0 APIs to test
@@ -239,4 +248,46 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
+}
+
+func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Determine if the validator was explicitly added to the blueprint YAML
+	const validatorName = "test_machine_type_in_zone"
+	required := []string{"project_id", "zone"}
+	if isValidatorExplicit(bp, validatorName) {
+		required = append(required, "machine_type")
+	}
+
+	if err := checkInputs(inputs, required); err != nil {
+		return err
+	}
+
+	s, err := compute.NewService(context.Background())
+	if err != nil {
+		return handleClientError(err)
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	projectID, globalZone, explicitMachineType := m["project_id"], m["zone"], m["machine_type"]
+
+	if explicitMachineType != "" {
+		// When explicitly called, we MUST validate the zone provided in the inputs
+		if err := TestZoneExists(projectID, globalZone); err != nil {
+			return err
+		}
+		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType, validatorName)
+
+		// Catch the sentinel and return nil so the deployment proceeds
+		if errors.Is(err, errSoftWarning) {
+			return nil
+		}
+		return err
+	}
+
+	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", validatorName, func(z, name string, vName string) error {
+		return validateMachineTypeInZone(s, projectID, z, name, vName)
+	})
 }

@@ -15,8 +15,14 @@
 package validators
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/option"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -89,6 +95,8 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		Validator: testZoneExistsName, Inputs: zoneInp}
 	zoneInRegion := config.Validator{
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
+	machineTypeInZone := config.Validator{
+		Validator: "test_machine_type_in_zone", Inputs: zoneInp}
 
 	{
 		bp := config.Blueprint{}
@@ -118,7 +126,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists})
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone})
 	}
 
 	{
@@ -128,6 +136,103 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, machineTypeInZone, zoneInRegion})
+	}
+}
+
+// Helper to create a mock compute service for unit tests
+func mockComputeService(handler http.HandlerFunc) *compute.Service {
+	ts := httptest.NewServer(handler)
+	s, _ := compute.NewService(context.Background(),
+		option.WithEndpoint(ts.URL),
+		option.WithHTTPClient(ts.Client()))
+	return s
+}
+
+func (s *MySuite) TestValidateMachineTypeInZone(c *C) {
+	const validatorName = "test_machine_type_in_zone"
+	// Case 1: Success (200 OK)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"name": "c2-standard-60"}`))
+		})
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
+		c.Check(err, IsNil)
+	}
+
+	// Case 2: Soft Warning (403 Forbidden)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error": {"code": 403, "message": "Denied"}}`))
+		})
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
+		// FIXED: Replaced errors.Is with direct comparison
+		c.Check(err == errSoftWarning, Equals, true)
+	}
+
+	// Case 4: Hard Failure (404 Not Found)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+		err := validateMachineTypeInZone(svc, "proj", "zone", "mt", validatorName)
+		c.Check(err, NotNil)
+		c.Check(err == errSoftWarning, Equals, false)
+	}
+}
+
+func (s *MySuite) TestResolveZonesAndOverride(c *C) {
+	bp := config.Blueprint{}
+
+	// Case 1: Plural list (*_zones) takes priority over singular zone (*_zone)
+	{
+		mod := &config.Module{
+			ID: "m1",
+			Settings: config.NewDict(map[string]cty.Value{
+				"zone":      cty.StringVal("ignore-me"),
+				"gpu_zones": cty.StringVal("use-me"),
+			}),
+		}
+		res, err := resolveZones(bp, mod, "global")
+		c.Check(err, IsNil)
+		c.Check(res, DeepEquals, []string{"use-me"})
+	}
+
+	// Case 2: Singular override works when no plural list is present
+	{
+		mod := &config.Module{
+			ID: "m2",
+			Settings: config.NewDict(map[string]cty.Value{
+				"compute_zone": cty.StringVal("override"),
+			}),
+		}
+		res, err := resolveZones(bp, mod, "global")
+		c.Check(err, IsNil)
+		c.Check(res, DeepEquals, []string{"override"})
+	}
+
+	// Case 3: Fallback to global default when no module settings exist
+	{
+		mod := &config.Module{ID: "m3", Settings: config.NewDict(nil)}
+		res, err := resolveZones(bp, mod, "default-zone")
+		c.Check(err, IsNil)
+		c.Check(res, DeepEquals, []string{"default-zone"})
+	}
+
+	// Case 4: Type Error in zones list (Hard Failure)
+	// This verifies that unquoted numbers trigger the official toolkit error
+	{
+		mod := &config.Module{
+			ID: "m4",
+			Settings: config.NewDict(map[string]cty.Value{
+				"zones": cty.ListVal([]cty.Value{cty.NumberIntVal(10)}),
+			}),
+		}
+		res, err := resolveZones(bp, mod, "global")
+		c.Check(res, IsNil)
+		c.Check(err, NotNil)
+		// Verifies the error message matches the standard toolkit type error
+		c.Check(err.Error(), Matches, ".*must be strings.*")
 	}
 }
