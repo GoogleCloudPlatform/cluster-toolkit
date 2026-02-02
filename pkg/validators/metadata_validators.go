@@ -322,3 +322,52 @@ func (e *ExclusiveValidator) Validate(
 	}
 	return nil
 }
+
+// RequiredValidator implements the RuleValidator interface for the 'required' validation type.
+type RequiredValidator struct{}
+
+// Validate checks if the variables specified in the rule are present (required) or absent (forbidden).
+func (r *RequiredValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	var unsetVarNames []string
+	var setVarNames []string
+
+	handler := func(t Target) error {
+		if !isVarSet(t.Values) {
+			unsetVarNames = append(unsetVarNames, t.Name)
+		} else {
+			setVarNames = append(setVarNames, t.Name)
+		}
+		return nil
+	}
+
+	if err := IterateRuleTargets(bp, mod, rule, group, modIdx, handler); err != nil {
+		return err
+	}
+
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+	forbidden, err := parseBoolInput(rule.Inputs, "forbidden", false)
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	if forbidden {
+		if len(setVarNames) > 0 {
+			msg := fmt.Sprintf("unwanted settings: %s", strings.Join(setVarNames, ", "))
+			if rule.ErrorMessage != "" {
+				msg = fmt.Sprintf("%s: %s", rule.ErrorMessage, msg)
+			}
+			return config.BpError{Err: fmt.Errorf("%s", msg), Path: modPath}
+		}
+		return nil
+	}
+	if len(unsetVarNames) > 0 {
+		return config.BpError{Err: fmt.Errorf("%s: missing required settings: %s", rule.ErrorMessage, strings.Join(unsetVarNames, ", ")), Path: modPath}
+	}
+	return nil
+}

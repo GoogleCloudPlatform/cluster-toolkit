@@ -19,3 +19,20 @@ spec:
     - batch.googleapis.com
     - compute.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [job_template_contents]
+      forbidden: true
+    error_message: "job_template_contents is deprecated. Please use `job_data` instead."
+  - validator: required
+    inputs:
+      vars: [job_filename]
+      forbidden: true
+    error_message: "job_filename is deprecated. Please use `job_data` instead."
+  - validator: required
+    inputs:
+      vars: [job_id]
+      forbidden: true
+    error_message: "job_id is deprecated. Please use `job_data` instead."

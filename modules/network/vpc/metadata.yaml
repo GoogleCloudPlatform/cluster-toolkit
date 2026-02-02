@@ -24,3 +24,8 @@ ghpc:
     inputs:
       vars: [secondary_ranges, secondary_ranges_list]
     error_message: "Only one of 'secondary_ranges' or 'secondary_ranges_list' should be specified"
+  - validator: required
+    inputs:
+      vars: [primary_subnetwork, additional_subnetworks, subnetwork_size]
+      forbidden: true
+    error_message: "DEPRECATED: primary_subnetwork, additional_subnetworks, subnetwork_size. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."

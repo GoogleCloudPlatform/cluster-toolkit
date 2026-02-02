@@ -705,3 +705,104 @@ func TestExclusiveValidator(t *testing.T) {
 		}
 	})
 }
+func TestRequiredValidator(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"required_var": cty.StringVal("present"),
+							"unset_var":    cty.NullVal(cty.String),
+						}),
+					},
+				},
+			},
+		},
+	}
+	validator := RequiredValidator{}
+
+	t.Run("passes_when_required_vars_are_present", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"required_var"},
+			},
+		}
+
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_when_required_vars_are_missing", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"unset_var"},
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error for missing variable, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing required settings") {
+			t.Fatalf("expected error message to contain 'missing required settings', got: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_when_forbidden_vars_are_absent", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars":      []interface{}{"unset_var"},
+				"forbidden": true,
+			},
+		}
+
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_when_forbidden_vars_are_present", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars":      []interface{}{"required_var"},
+				"forbidden": true,
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error for forbidden variable, got nil")
+		}
+		if !strings.Contains(err.Error(), "unwanted settings") {
+			t.Fatalf("expected error message to contain 'unwanted settings', got: %q", err.Error())
+		}
+	})
+
+	t.Run("checks_custom_error_message", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator:    "required",
+			ErrorMessage: "Custom Error",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"unset_var"},
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Custom Error: missing required settings") {
+			t.Fatalf("expected error message to contain 'Custom Error: missing required settings', got: %q", err.Error())
+		}
+	})
+}

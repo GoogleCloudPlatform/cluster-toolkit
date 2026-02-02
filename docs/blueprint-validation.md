@@ -177,6 +177,33 @@ validators:
     inputs:
       vars: [preemptible, reserved]
     error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
+### Required Validator
+The `required` validator ensures that a specific set of variables is either present or absent (forbidden). This is useful for enforcing mandatory inputs or preventing conflicting configurations.
+
+vars (list of strings): The list of variable names to check.
+forbidden (boolean, optional): If true, the validator checks that the specified variables are not set. Defaults to false (checks that variables are set).
+
+**Example: Enforcing required variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [vpc_network_name, subnetwork_name]
+    error_message: "Network details must be provided."
+```
+
+**Example: Forbidding variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [legacy_option]
+      forbidden: true
+    error_message: "The 'legacy_option' is no longer supported."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
