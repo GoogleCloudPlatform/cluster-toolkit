@@ -41,11 +41,11 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ### Using the Pre-built Bundle (Recommended)
 
-For the easiest setup, download the latest `gcluster-bundle.zip` from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. This bundle includes the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+For the easiest setup, download the latest `gcluster_bundle_linux.zip` (for Linux) or `gcluster_bundle_mac.zip` (for macOS) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle Compatibility Matrix
 
-The pre-built bundle is compiled for Linux-based execution environments and supports the deployment of the following cluster operating systems.
+The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
 
 ##### Execution Platform (Where the binary runs)
 
@@ -53,7 +53,7 @@ The pre-built bundle is compiled for Linux-based execution environments and supp
 | :--- | :---: | :--- |
 | **Linux** | ✅ | Pre-compiled on Debian Bullseye. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux binary. |
-| **macOS** | Coming Soon | Please [Build from Source](#building-from-source). |
+| **macOS** | ✅ | Native support via the Mac binary. |
 | **Windows** | ❎ | Please [Build from Source](#building-from-source). |
 
 ##### Cluster Operating Systems (Guest OS Support)
