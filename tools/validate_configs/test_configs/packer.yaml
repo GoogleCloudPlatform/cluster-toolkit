@@ -25,8 +25,6 @@ vars:
   subnetwork_name: image-builder-primary-subnet
 
 deployment_groups:
-- group: network
-  modules:
 - group: packer
   modules:
   - id: my-custom-image
