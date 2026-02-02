@@ -367,7 +367,11 @@ func (r *RequiredValidator) Validate(
 		return nil
 	}
 	if len(unsetVarNames) > 0 {
-		return config.BpError{Err: fmt.Errorf("%s: missing required settings: %s", rule.ErrorMessage, strings.Join(unsetVarNames, ", ")), Path: modPath}
+		msg := fmt.Sprintf("missing required settings: %s", strings.Join(unsetVarNames, ", "))
+		if rule.ErrorMessage != "" {
+			msg = fmt.Sprintf("%s: %s", rule.ErrorMessage, msg)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: modPath}
 	}
 	return nil
 }
