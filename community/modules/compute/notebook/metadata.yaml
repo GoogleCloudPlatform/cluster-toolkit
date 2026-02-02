@@ -29,7 +29,3 @@ ghpc:
     inputs:
       vars: [instance_image.name, instance_image.family]
     error_message: "In 'instance_image', at most one of the \"family\" or \"name\" fields can be set."
-  - validator: required
-    inputs:
-      vars: [instance_image.project]
-    error_message: "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
