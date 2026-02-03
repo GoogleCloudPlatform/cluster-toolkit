@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: gke-tpu-v6
+blueprint_name: gke-tpu-v6e
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-tpu-v6
+  deployment_name: gke-tpu-v6e
 
   # The GCP Region used for this deployment.
   region:
@@ -46,7 +46,7 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU v6 nodes
+  # The name of the compute engine reservation of TPU v6e nodes
   reservation:
 
   system_node_pool_disk_size_gb: 200
@@ -56,7 +56,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-tpu-v6-net-0
+  - id: gke-tpu-v6e-net-0
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
@@ -81,7 +81,7 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-tpu-v6-net-1
+  - id: gke-tpu-v6e-net-1
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
@@ -124,9 +124,9 @@ deployment_groups:
       - artifactregistry.reader
       - container.admin
 
-  - id: gke-tpu-v6-cluster
+  - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-tpu-v6-net-0, workload_service_account]
+    use: [gke-tpu-v6e-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -139,8 +139,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-tpu-v6-net-1.network_name,
-            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -162,12 +162,12 @@ deployment_groups:
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
     outputs: [instructions]
 
-  - id: gke-tpu-v6-pool
+  - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
-    use: [gke-tpu-v6-cluster, node_pool_service_account]
+    use: [gke-tpu-v6e-cluster, node_pool_service_account]
     settings:
       num_slices: $(vars.num_slices)
-      name: gke-tpu-v6-pool
+      name: gke-tpu-v6e-pool
       disk_type: hyperdisk-balanced
       machine_type: $(vars.machine_type)
       auto_upgrade: true
@@ -177,8 +177,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-tpu-v6-net-1.network_name,
-            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -200,7 +200,7 @@ deployment_groups:
 
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [gke-tpu-v6-cluster]
+    use: [gke-tpu-v6e-cluster]
     settings:
       jobset:
         install: true
