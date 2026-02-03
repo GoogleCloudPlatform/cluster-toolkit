@@ -97,7 +97,7 @@ locals {
     accelerator_topology   = var.accelerator_topology
 
     labels                    = local.labels
-    machine_type              = terraform_data.machine_type_zone_validation.output
+    machine_type              = var.machine_type
     advanced_machine_features = var.advanced_machine_features
     metadata                  = local.metadata
     min_cpu_platform          = var.min_cpu_platform
