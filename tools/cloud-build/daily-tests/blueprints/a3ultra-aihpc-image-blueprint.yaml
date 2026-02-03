@@ -1,0 +1,515 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: a3ultra-slurm
+
+vars:
+  deployment_name: # supply deployment name
+  project_id: # supply project ID
+  region: # supply region
+  zone: # supply zone
+  a3u_cluster_size: # supply cluster size
+  # Image settings
+  # Cluster env settings
+  # net0 and filestore ranges must not overlap
+  net0_range: 192.168.0.0/19
+  filestore_ip_range: 192.168.32.0/24
+  net1_range: 192.168.64.0/18
+  rdma_net_range: 192.168.128.0/18
+  # Cluster Settings
+  local_ssd_mountpoint: /mnt/localssd
+  instance_image:
+    project: deeplearning-platform
+    family: ai-hpc-ubuntu2204-slurm-x86-64-gpu-prod
+  disk_size_gb: 100
+  nccl_gib_version: 1.1.0
+  libnccl_version: 2.27.5-1+cuda12.9
+  base_network_name: $(vars.deployment_name)
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3u_reservation_name: "" # supply reservation name
+  a3u_dws_flex_enabled: false
+  a3u_enable_spot_vm: false
+
+  # To enable Managed-Lustre please uncomment this section and fill out the settings.
+  # Additionally, please uncomment the private_service_access and managed-lustre modules.
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  # lustre_instance_id: lustre-instance
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  # lustre_size_gib: 36000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  # per_unit_storage_throughput: 500
+
+deployment_groups:
+
+
+- group: cluster-env
+  modules:
+  - id: a3ultra-slurm-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net-0
+      mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
+      subnetworks:
+      - subnet_name: $(vars.base_network_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.base_network_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-slurm-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net-1
+      mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
+      subnetworks:
+      - subnet_name: $(vars.base_network_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.base_network_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-slurm-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.base_network_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.base_network_name)-mrdma-sub
+        count: 8
+        ip_range: $(vars.rdma_net_range)
+        region: $(vars.region)
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - a3ultra-slurm-net-0
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+      deletion_protection:
+        enabled: true
+        reason: Avoid data loss
+    outputs:
+    - network_storage
+
+  # To use Managed Lustre as for the shared /home directory:
+  # 1. Comment out the filestore block above and the`filestore_ip_range` line in the vars block.
+  # 2. Uncomment the managed-lustre and private-service-access blocks
+  # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json above to true
+  # - id: private_service_access
+  #   source: modules/network/private-service-access
+  #   use: [a3ultra-slurm-net-0]
+
+  # - id: homefs
+  #   source: modules/file-system/managed-lustre
+  #   use:
+  #   - a3ultra-slurm-net-0
+  #   - private_service_access
+  #   settings:
+  #     size_gib: $(vars.lustre_size_gib)
+  #     name: $(vars.lustre_instance_id)
+  #     local_mount: /home
+  #     remote_mount: lustrefs
+  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+  #   outputs:
+  #   - network_storage
+
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+- group: cluster
+  modules:
+  - id: a3ultra_startup
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: false
+      local_ssd_filesystem:
+        mountpoint: $(vars.local_ssd_mountpoint)
+        permissions: "1777" # must quote numeric filesystem permissions!
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.local_ssd_mountpoint)/docker"
+          }
+      runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # Install NCCL
+      - type: ansible-local
+        destination: install_nccl.yml
+        content: |
+          ---
+          - name: Install nccl
+            hosts: all
+            become: true
+            tasks:
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: yes
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - "libnccl2=$(vars.libnccl_version)"
+                - "libnccl-dev=$(vars.libnccl_version)"
+                state: present
+      # Install NCCL-GIB Plugin
+      - type: ansible-local
+        destination: install_nccl_gib.yml
+        content: |
+          ---
+          - name: Install Google NCCL-GIB Plugin
+            hosts: all
+            become: true
+            tasks:
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
+                state: present
+            - name: Add artifact registry gpg key
+              ansible.builtin.apt_key:
+                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+                state: present
+            - name: Install Apt Transport AR Apt Repo
+              apt_repository:
+                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
+                state: present
+            - name: Install AR transport
+              ansible.builtin.apt:
+                name: "apt-transport-artifact-registry"
+                update_cache: true
+            - name: Install Google NCCL-GIB Plugin
+              apt_repository:
+                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
+                state: present
+            - name: Install NCCL-GIB Plugin
+              ansible.builtin.apt:
+                name: "nccl-gib=$(vars.nccl_gib_version)"
+                update_cache: true
+            - name: Freeze NCCL GIB Plugin
+              ansible.builtin.dpkg_selections:
+                name: "nccl-gib"
+                selection: hold
+      # --------------------------------------------------------------------------
+      # Environment Configuration
+      # --------------------------------------------------------------------------
+      - type: ansible-local
+        destination: configure_nccl_env.yml
+        name: Ensure NCCL/gIB environment script is sourced for all users
+        content: |
+          ---
+          - name: Configure NCCL/gIB environment
+            hosts: all
+            become: true
+            tasks:
+            - name: Deploy /etc/profile.d/nccl-gib.sh
+              ansible.builtin.copy:
+                dest: /etc/profile.d/nccl-gib.sh
+                content: |
+                  # Load NCCL/gIB environment
+                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                    source /usr/local/gib/scripts/set_nccl_env.sh
+                  fi
+
+                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                  if [ -d "/usr/local/gib/lib64" ]; then
+                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                  fi
+                mode: '0644'
+            handlers:
+              - name: Reload SystemD
+                ansible.builtin.systemd:
+                  daemon_reload: true
+
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+              enable_nvidia_persistenced: true
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
+
+  - id: a3_ultra_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [a3ultra-slurm-net-0, a3ultra_startup]
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: a3-ultragpu-8g
+
+      enable_public_ips: true
+      node_count_static: $(vars.a3u_cluster_size)
+      node_count_dynamic_max: 0
+      enable_placement: false
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+
+      #Provisioning models
+      reservation_name: $(vars.a3u_reservation_name)
+      enable_spot_vm: $(vars.a3u_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3u_dws_flex_enabled)
+
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 56
+        SocketsPerBoard: 2
+        ThreadsPerCore: 2
+      additional_networks:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=a3ultra-slurm-net-1.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip="",
+            stack_type=null,
+            access_config=[],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+          a3ultra-slurm-rdma-net.subnetwork_interfaces
+        ))
+
+  - id: a3_ultra_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - a3_ultra_nodeset
+    settings:
+      exclusive: false
+      partition_name: a3ultra
+      is_default: true
+      partition_conf:
+        OverSubscribe: EXCLUSIVE
+        ResumeTimeout: 1200
+        SuspendTimeout: 1200
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [a3ultra-slurm-net-0]
+    settings:
+      disk_size_gb: 300
+      enable_login_public_ips: true
+      machine_type: n2-standard-8
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          PARTITION_NAME=$(a3_ultra_partition.partitions[0].partition_name)
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          # enable a GPU health check that runs at the completion of all jobs on A3U nodes
+          mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - a3ultra-slurm-net-0
+    - a3_ultra_partition
+    - slurm_login
+    - homefs
+    - gcs_bucket
+    settings:
+      enable_controller_public_ips: true
+      disk_type: pd-extreme
+      disk_size_gb: 300
+      machine_type: n2-standard-80
+      controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true
