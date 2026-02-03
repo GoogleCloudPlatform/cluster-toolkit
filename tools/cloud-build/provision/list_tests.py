@@ -38,11 +38,16 @@ import itertools
 # OFE-deployment test is configured to only run as a PR trigger and does
 # not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
 # for the configuration.
+# Other tests mentioned here are being replaced with equivalent OnSPot tests
 TO_SKIP = frozenset([
-    "ofe-deployment", 
-    "ml-a3-ultragpu-slurm", 
-    "gke-a3-ultragpu", 
-    "ml-a3-ultragpu-jbvms"
+    "gke-a3-megagpu",
+    "gke-a3-ultragpu",
+    "gke-a4",
+    "ml-a3-megagpu-slurm-ubuntu",
+    "ml-a3-ultragpu-jbvms",
+    "ml-a3-ultragpu-slurm",
+    "ml-a4-highgpu-slurm",
+    "ofe-deployment",
 ])
 
 # Seed for deterministic order of tests, change to other value to shuffle tests
@@ -53,10 +58,6 @@ ORDER_SEED = b"What a wonderful phrase"
 TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     ((
-        "ml-a4-highgpu-slurm",
-        "gke-a4"
-    ), 2*60),
-    ((
         "ml-a4-highgpu-onspot-slurm",
         "gke-a4-onspot"
     ), 2*60),
@@ -66,8 +67,6 @@ TEMPORAL_CONSTAINTS = [
         "gke-a3-ultragpu-onspot"
     ), 2*60),
     ((
-        "ml-a3-megagpu-slurm-ubuntu",
-        "gke-a3-megagpu",
         "ml-a3-megagpu-onspot-slurm-ubuntu",
         "gke-a3-megagpu-onspot"
     ), 1*60),
