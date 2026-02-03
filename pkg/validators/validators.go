@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
@@ -150,6 +151,14 @@ func validateBlueprintWithMetadata(bp config.Blueprint) error {
 
 				if err := validator.Validate(bp, mod, rule, group, j); err != nil {
 					// The validator is responsible for creating a BpError with the correct path.
+					if rule.Level == "warning" {
+						rawErr := errors.Unwrap(err)
+						if rawErr == nil {
+							rawErr = err // Fallback
+						}
+						logging.Error("WARNING: validation failed for module %q: %v", mod.ID, rawErr)
+						continue
+					}
 					return err
 				}
 			}
