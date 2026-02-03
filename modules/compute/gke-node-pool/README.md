@@ -63,7 +63,7 @@ equivalent toleration is required. The `gke-job-template` module will
 automatically apply this toleration when using a node pool with GPUs.
 
 Nvidia GPU drivers must be installed.  The recommended approach for GKE to install
-GPU dirvers is by applying a DaemonSet to the cluster. See
+GPU drivers is by applying a DaemonSet to the cluster. See
 [these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
 
 However, in some cases it may be desired to compile a different driver (such as

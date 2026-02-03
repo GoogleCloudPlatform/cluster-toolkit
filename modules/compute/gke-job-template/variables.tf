@@ -140,7 +140,7 @@ variable "backoff_limit" {
   default     = 0
 }
 
-variable "random_name_sufix" {
+variable "random_name_suffix" {
   description = "Appends a random suffix to the job name to avoid clashes."
   type        = bool
   default     = true
