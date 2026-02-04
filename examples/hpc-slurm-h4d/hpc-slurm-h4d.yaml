@@ -40,6 +40,8 @@ deployment_groups:
 
   - id: h4d-slurm-net-0
     source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
 
   - id: h4d-rdma-net
     source: modules/network/vpc

@@ -17,3 +17,11 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [network_count]
+      min: 1
+      max: 8
+    error_message: "The 'network_count' must be between 1 and 8."

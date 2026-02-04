@@ -208,6 +208,14 @@ The advanced blueprint provisions several key technologies to create a robust da
 * [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
 * [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
 
+### Understanding DWS Flex Start Integration
+
+Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training), which allows you to request TPU resources using a flexible "Flex Start" model. This is ideal for training jobs that can wait for capacity and require lower costs.
+
+For a pre-configured example and detailed documentation on using Flex Start with TPU v6e, please refer to:
+* [GKE TPU v6e Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml)
+* [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-v6e/README.md)
+
 ### Understanding Managed Lustre integration
 The advanced blueprint `gke-tpu-v6-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.
 
@@ -321,9 +329,10 @@ To enable Filestore integration, perform the following steps before deploying:
 
 1. In the `gke-tpu-v6-cluster` module settings, ensure `enable_filestore_csi: true` is set.
 2. Find the section commented `--- FILESTORE ADDITIONS ---`. Uncomment the following modules:
-   * `filestore`: Provisions the Filestore instance and specifies the `local_mount` point.
-   * `shared-filestore-pv`: Creates the Kubernetes Persistent Volume and Claim.
-   * `shared-fs-job`: (Optional) A test job template to verify multi-node shared writing.
+
+* `filestore`: Provisions the Filestore instance and specifies the `local_mount` point.
+* `shared-filestore-pv`: Creates the Kubernetes Persistent Volume and Claim.
+* `shared-fs-job`: (Optional) A test job template to verify multi-node shared writing.
 
 #### Testing the Shared Filestore Mount
 The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two different pods can write to and read from the same file simultaneously.

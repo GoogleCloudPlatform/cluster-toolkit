@@ -149,12 +149,22 @@ variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
   type        = number
   default     = 0
+
+  validation {
+    condition     = var.autoscaling_min_node_count == null || var.autoscaling_total_min_nodes == 0
+    error_message = "autoscaling_total_min_nodes (global) is mutually exclusive with autoscaling_min_node_count (zonal). Please unset one of them."
+  }
 }
 
 variable "autoscaling_total_max_nodes" {
   description = "Total maximum number of nodes in the NodePool."
   type        = number
   default     = 1000
+
+  validation {
+    condition     = var.autoscaling_max_node_count == null || var.autoscaling_total_max_nodes == 1000
+    error_message = "autoscaling_total_max_nodes (global) is mutually exclusive with autoscaling_max_node_count (zonal). Please unset one of them."
+  }
 }
 
 variable "static_node_count" {
@@ -484,4 +494,18 @@ variable "enable_numa_aware_scheduling" {
   description = "Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling."
   type        = bool
   default     = false
+}
+
+variable "autoscaling_min_node_count" {
+  # NOTE: This variable is currently only required for deploying TPU DWS Flex clusters
+  description = "Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling_total_min_nodes."
+  type        = number
+  default     = null
+}
+
+variable "autoscaling_max_node_count" {
+  # NOTE: This variable is currently only required for deploying TPU DWS Flex clusters
+  description = "Maximum number of nodes per zone in the NodePool. Cannot be used with autoscaling_total_max_nodes."
+  type        = number
+  default     = null
 }

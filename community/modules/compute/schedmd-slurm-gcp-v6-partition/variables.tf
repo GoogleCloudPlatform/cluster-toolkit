@@ -17,8 +17,8 @@ variable "partition_name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]*)$", var.partition_name))
-    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9]*)$'."
+    condition     = can(regex("^[a-z](?:[a-z0-9-]*)$", var.partition_name))
+    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9-]*)$'."
   }
 }
 

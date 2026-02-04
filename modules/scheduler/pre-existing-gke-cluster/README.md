@@ -6,7 +6,7 @@ The module outputs are aligned with the [gke-cluster module][gke-cluster] so tha
 as a drop-in substitute when a GKE cluster already exists.
 
 The below sample blueprint discovers the existing GKE cluster named "my-gke-cluster" in "us-central1" region. With the `use` keyword, the
-[gke-node-pool] module accepts the `cluser_id`
+[gke-node-pool] module accepts the `cluster_id`
 input variable that uniquely identifies the existing GKE cluster in which the
 GKE node pool will be created.
 
@@ -100,7 +100,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks creates relevat network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks creates relevant network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_cluster_name"></a> [cluster\_name](#input\_cluster\_name) | Name of the existing cluster | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project that hosts the existing cluster | `string` | n/a | yes |
 | <a name="input_rdma_subnetwork_name_prefix"></a> [rdma\_subnetwork\_name\_prefix](#input\_rdma\_subnetwork\_name\_prefix) | Prefix of the RDMA subnetwork names | `string` | `null` | no |

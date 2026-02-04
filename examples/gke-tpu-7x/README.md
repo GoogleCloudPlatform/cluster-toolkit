@@ -10,7 +10,7 @@ The blueprint follows Google Cloud best practices, including:
 
 > NOTE: This guide provides examples for deploying a small, single-node slice (2x2x1), but the parameters in the deployment file can be easily changed to provision larger, multi-node slices.
 
-This guide also includes a `tpu-7x-job.yaml` that creates a Kubernetes Pod and runs a simple command to check for available TPU chips.
+This guide also includes a `gke-tpu-7x-job.yaml` that creates a Kubernetes Pod and runs a simple command to check for available TPU chips.
 
 ## Key parameters when working with TPUs
 
@@ -126,8 +126,8 @@ The process is nearly identical to the basic deployment.
     ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    community/examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
-    community/examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
+    examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
+    examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
     ```
 
 3. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
@@ -153,7 +153,7 @@ This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native
 
 ## Run the sample job
 
-The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload installs JAX and a specific `libtpu` library, and then returns the number of TPU chips it can detect.
+The `gke-tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload installs JAX and a specific `libtpu` library, and then returns the number of TPU chips it can detect.
 
 1. Connect to your cluster:
 
@@ -165,7 +165,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
 
    Replace `DEPLOYMENT_NAME`, `REGION`, and `PROJECT_ID` with the ones used in your `gke-tpu-7x-deployment.yaml` file.
 2. Update the `nodeSelector` in the job file.
-   Open the `examples/gke-tpu-7x/tpu-7x-job.yaml` file. Ensure the `nodeSelector` values match the accelerator label and topology used in your deployment file.
+   Open the `examples/gke-tpu-7x/gke-tpu-7x-job.yaml` file. Ensure the `nodeSelector` values match the accelerator label and topology used in your deployment file.
    > *You can find the correct labels for your cluster by running `kubectl get nodes --show-labels`*
 
    For the example deployment, the values are:
@@ -179,7 +179,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
 3. Update Resource Request:
 
     ```yaml
-    # In tpu-7x-job.yaml, inside the spec container
+    # In gke-tpu-7x-job.yaml, inside the spec container
     resources:
       requests:
         google.com/tpu: <CHIPS_PER_NODE> # e.g., 4 for tpu7x-standard-4t
@@ -191,7 +191,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
    The sample job file already contains the correct node selectors for the example deployment.
 
     ```bash
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/tpu-7x-job.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/gke-tpu-7x-job.yaml
     ```
 
    This command returns a Pod name.
@@ -273,6 +273,14 @@ The blueprint provisions several key technologies to create a robust data pipeli
 - [Cloud TPU Storage Options](https://cloud.google.com/tpu/docs/storage-options): Learn about the recommended storage patterns for Cloud TPUs, including why GCS FUSE is a best practice for providing training data.
 - [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
 - [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
+
+### Understanding DWS Flex Start Integration
+
+Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training), which allows you to request TPU resources using a flexible "Flex Start" model. This is ideal for training jobs that can wait for capacity and require lower costs.
+
+For a pre-configured example and detailed documentation on using Flex Start with TPU 7x, please refer to:
+- [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
 
 ### Understanding Managed Lustre integration
 
