@@ -72,5 +72,17 @@ ghpc:
     error_message: "Cannot use reservations with DWS Flex."
   - validator: exclusive
     inputs:
+      vars: [reservation_name, enable_spot_vm]
+    error_message: "Cannot use reservations with Spot VMs for provisioning."
+  - validator: exclusive
+    inputs:
+      vars: [future_reservation, enable_spot_vm]
+    error_message: "Cannot use future reservations with Spot VMs for provisioning."
+  - validator: exclusive
+    inputs:
+      vars: [future_reservation, dws_flex.enabled]
+    error_message: "Cannot use future reservations with DWS Flex."
+  - validator: exclusive
+    inputs:
       vars: [reservation_name, zones]
     error_message: "If a reservation is specified, `zones` should be empty."
