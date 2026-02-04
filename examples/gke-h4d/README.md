@@ -5,55 +5,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 > **_NOTE:_** The required GKE version for H4D support is >= 1.32.3-gke.1170000.
 
 ## Steps to deploy the H4D blueprint
-
-1. Install Cluster Toolkit
-    1. Install [dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
-    1. Set up [Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
-1. Switch to the Cluster Toolkit directory
-
-   ```sh
-   cd cluster-toolkit
-   ```
-
-1. Get the IP address for your host machine
-
-   ```sh
-   curl ifconfig.me
-   ```
-
-1. Update the vars block of the `gke-h4d-deployment.yaml` file.
-    1. `project_id`: ID of the project where you are deploying the cluster.
-    1. `deployment_name`: Name of the deployment.
-    1. `region`: Compute region used for the deployment.
-    1. `zone`: Compute zone used for the deployment.
-    1. `static_node_count`: Number of nodes to create.
-    1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
-    1. `reservation`: The name of the compute engine reservation in the form of <reservation-name>. To target a BLOCK_NAME, the name of the extended reservation can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>.
-
-1. Build the Cluster Toolkit binary
-
-   ```sh
-   make
-   ```
-
-1. Provision the GKE cluster
-
-   ```sh
-   ./gcluster deploy -d examples/gke-h4d/gke-h4d-deployment.yaml examples/gke-h4d/gke-h4d.yaml
-   ```
-
-   These four options are displayed:
-
-   ```sh
-   (D)isplay full proposed changes,
-   (A)pply proposed changes,
-   (S)top and exit,
-   (C)ontinue without applying
-   ```
-
-   Type `a` and hit enter to create the cluster.
-
-1. Additionally, this example blueprint provisions a filestore and connects it to the GKE Cluster via Persistent Volume (PV). An example job template is included in the blueprint which runs a parallel job that reads and writes data to this shared storage. A command similar to `kubectl create -f <file-path>` is displayed in the deployment outputs which can be used to trigger the sample job.
+Refer to [Run high performance computing (HPC) workloads with H4D](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/run-hpc-workloads#cluster-toolkit) for instructions on creating the GKE-H4D cluster.
 
 ## Run a test using the MPI Operator
 The MPI Operator is installed on the cluster during the deployment. To run a test using the MPI Operator on the GKE H4D cluster, refer to https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/hpc/mpi.
