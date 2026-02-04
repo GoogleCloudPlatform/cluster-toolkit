@@ -32,6 +32,18 @@
 
 - name: Destroy block
   block:
+  - name: Get cluster credentials
+    failed_when: false
+    ansible.builtin.shell: |
+      gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ project | default(lookup('env', 'PROJECT_ID')) }}
+    ignore_errors: true
+
+  - name: Pre-destroy cleanup of Kueue CRDs
+    failed_when: false
+    ansible.builtin.shell: |
+      kubectl delete clusterqueue --all --ignore-not-found --wait=true --timeout=60s
+      kubectl delete resourceflavor --all --ignore-not-found --wait=true --timeout=60s
+    ignore_errors: true
 
   - name: Destroy deployment
     register: gcluster_destroy
