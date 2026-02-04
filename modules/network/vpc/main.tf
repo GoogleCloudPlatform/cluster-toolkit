@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ locals {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.default_primary_subnetwork_cidr_block
     subnet_region         = var.region
-    subnet_private_access = true
+    subnet_private_access = var.subnetwork_private_access
     subnet_flow_logs      = false
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
@@ -191,6 +191,8 @@ module "vpc" {
   secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
+  enable_ipv6_ula                        = var.enable_ipv6_ula
+  internal_ipv6_range                    = var.internal_ipv6_range
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes

@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,22 +14,26 @@
 
 ---
 
-blueprint_name: hexa-net
+blueprint_name: managed-lustre-net
 
 vars:
   project_id: hpc-toolkit-demo
   deployment_name: network
   region: europe-west4
   zone: europe-west4-a
+  lustre_instance_id: lustre-instance
 
 deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
 
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
     use: [network1]
     settings:
-      local_mount: /scratch
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      private_vpc_connection_peering: "servicenetworking-googleapis-com"

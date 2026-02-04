@@ -1,5 +1,5 @@
 /**
-  * Copyright 2023 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -84,11 +84,15 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
 
   node_count = var.static_node_count
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a 
+  # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
     for_each = local.static_node_set ? [] : [1]
     content {
-      total_min_node_count = var.autoscaling_total_min_nodes
-      total_max_node_count = var.autoscaling_total_max_nodes
+      min_node_count       = var.autoscaling_min_node_count
+      max_node_count       = var.autoscaling_max_node_count
+      total_min_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_min_nodes
+      total_max_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_max_nodes
       location_policy      = "ANY"
     }
   }
@@ -391,8 +395,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
     precondition {
-      condition     = var.enable_flex_start == true ? (var.spot == false) : true
+      condition     = !(var.enable_flex_start && var.spot)
       error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning && var.spot)
+      error_message = "Both enable_queued_provisioning and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
   }
 }

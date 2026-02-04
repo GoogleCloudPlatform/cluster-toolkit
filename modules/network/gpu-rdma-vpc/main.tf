@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,15 @@
 locals {
   autoname      = replace(var.deployment_name, "_", "-")
   network_name  = var.network_name == null ? "${local.autoname}-net" : var.network_name
-  subnet_prefix = var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
+  subnet_prefix = var.subnetworks_template == null || var.subnetworks_template.name_prefix == null ? "${local.autoname}-subnet" : var.subnetworks_template.name_prefix
+  is_roce_metal = var.network_profile != null ? can(regex("vpc-roce-metal", var.network_profile)) : false
 
-  new_bits = ceil(log(var.subnetworks_template.count, 2))
-  template_subnetworks = [for i in range(var.subnetworks_template.count) :
+  new_bits = local.is_roce_metal ? 0 : ceil(log(var.subnetworks_template.count, 2))
+  /** RoCE metal profile doesn't allow creating a subnetwork, as the profile 
+  * automatically creates a predefined subnetwork for the MRDMA interfaces.
+  * See: https://cloud.google.com/vpc/docs/network-profiles
+  **/
+  template_subnetworks = local.is_roce_metal ? [] : [for i in range(var.subnetworks_template.count) :
     {
       subnet_name   = "${local.subnet_prefix}-${i}"
       subnet_region = try(var.subnetworks_template.region, var.region)
@@ -76,4 +81,17 @@ module "vpc" {
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
   network_profile                        = var.network_profile
+}
+
+resource "terraform_data" "network_profile_validation" {
+  lifecycle {
+    precondition {
+      condition = (
+        can(regex("vpc-roce-metal", var.network_profile)) ?
+        var.subnetworks_template == null :
+        var.subnetworks_template != null
+      )
+      error_message = "subnetworks_template must be null when using 'vpc-roce-metal' network profile and non-null for all other profiles."
+    }
+  }
 }

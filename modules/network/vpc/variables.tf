@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,6 +80,18 @@ variable "mtu" {
   type        = number
   description = "The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively."
   default     = 8896
+}
+
+variable "enable_ipv6_ula" {
+  description = "Enable IPv6 ULA, this is a permanent change and cannot be undone!"
+  type        = bool
+  default     = false
+}
+
+variable "internal_ipv6_range" {
+  description = "When enabling IPv6 ULA, optionally specify a /48 from fd20::/20 (default null)"
+  type        = string
+  default     = null
 }
 
 variable "subnetworks" {
@@ -298,4 +310,10 @@ variable "network_profile" {
   When using a Mellanox network profile (contains 'roce'), if firewall_rules is specified or enable_internal_traffic is true, an error will be thrown
   EOT
   default     = null
+}
+
+variable "subnetwork_private_access" {
+  type        = bool
+  description = "Enable Private Google Access on the subnetworks"
+  default     = true
 }

@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ vars:
   a3mega_maintenance_interval: ""
   enable_placement: false
   local_mount_homefs: /home
+  build_slurm_from_git_ref: 6.10.6
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)
@@ -405,7 +406,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

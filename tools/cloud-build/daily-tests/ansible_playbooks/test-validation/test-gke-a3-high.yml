@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,17 @@
   ansible.builtin.shell: |
     gcloud container clusters describe {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --format="value(currentMasterVersion)"
   register: gke_version_info
+
+- name: Apply NCCL Config and NRI Device Injector
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Apply the NCCL configuration required by the all-gather scripts
+    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-config.yaml
+
+    # Apply the NRI Device Injector manifest
+    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nri_device_injector/nri-device-injector.yaml
+  register: infra_setup
+  changed_when: "'created' in infra_setup.stdout or 'configured' in infra_setup.stdout"
 
 - name: Print GKE cluster version
   ansible.builtin.debug:
@@ -70,12 +81,12 @@
   debug:
     msg: "{{ nccl_test_logs.stdout }}"
 
-- name: Ensure average bus bandwidth is >= 18 GB/s
+- name: Ensure average bus bandwidth is >= 25 GB/s
   delegate_to: localhost
   ansible.builtin.shell: |
     grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
   register: avg_bus_bandwidth
-  failed_when: avg_bus_bandwidth.stdout | float < 18
+  failed_when: avg_bus_bandwidth.stdout | float < 25
 
 - name: Clean up
   delegate_to: localhost

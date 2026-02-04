@@ -1,7 +1,7 @@
 #!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
-# Copyright 2015 Google Inc. All rights reserved.
+# Copyright 2026 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,14 @@ blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultr
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 network: "{{ test_name }}-net-0"
+nccl_test_path: "examples/machine-learning/a3-ultragpu-8g/nccl-tests"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 - test-validation/test-default-partition.yml
 - test-validation/test-enroot.yml
 - test-validation/test-gpus-slurm.yml
+- test-validation/test-nccl.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:

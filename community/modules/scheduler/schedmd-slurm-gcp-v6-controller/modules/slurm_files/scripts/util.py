@@ -51,6 +51,7 @@ from google.oauth2 import service_account # type: ignore
 import googleapiclient.discovery # type: ignore
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
+from googleapiclient.errors import HttpError # type: ignore
 from google.api_core.client_options import ClientOptions
 import httplib2
 
@@ -336,12 +337,15 @@ def create_client_options(api: ApiEndpoint) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
     ud = universe_domain()
-    options = {}
-    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
-        options["universe_domain"] = ud
-    if ver:
-        options["api_endpoint"] = f"https://{api.value}.{ud}/{ver}/"
-    co = ClientOptions(**options)
+    
+    # Explicitly pass arguments to the constructor
+    api_endpoint = f"https://{api.value}.{ud}/{ver}/" if ver else None
+    universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
+
+    co = ClientOptions(
+        api_endpoint=api_endpoint,
+        universe_domain=universe_domain_val
+    )
     log.debug(f"Using ClientOptions = {co} for API: {api.value}")
     return co
 
@@ -614,10 +618,12 @@ def storage_client() -> storage.Client:
     Config-independent storage client
     """
     ud = universe_domain()
-    co = {}
-    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
-        co["universe_domain"] = ud
-    return storage.Client(client_options=ClientOptions(**co))
+    # Check if we need a custom universe domain, otherwise pass None
+    universe_domain_val = ud if (ud and ud != DEFAULT_UNIVERSE_DOMAIN) else None
+    
+    return storage.Client(
+        client_options=ClientOptions(universe_domain=universe_domain_val)
+    )
 
 
 class DeffetiveStoredConfigError(Exception):
@@ -1882,7 +1888,22 @@ class Lookup:
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
     def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
-        reservation = self._get_reservation(project, zone, name)
+        try:
+            reservation = self._get_reservation(project, zone, name)
+        except HttpError as e:
+            if e.resp.status == 403:
+                log.warning(f"Could not fetch reservation details for {project}/{zone}/{name}: {e}. Proceeding with minimal reservation settings.")
+                return ReservationDetails(
+                    project=project,
+                    zone=zone,
+                    name=name,
+                    policies=[],
+                    bulk_insert_name=bulk_insert_name,
+                    deployment_type=None,
+                    reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None)
+            raise e
 
         # Converts policy URLs to names, e.g.:
         # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra

@@ -1,3 +1,8 @@
+> [!WARNING]
+> This module is deprecated and will be removed on October 31, 2026. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../managed-lustre/README.md)
+
 ## Description
 
 This module creates [parallelstore](https://cloud.google.com/parallelstore)
@@ -123,7 +128,7 @@ Use `dfuse_environment` to provide additional environment variables for `dfuse` 
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2024 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

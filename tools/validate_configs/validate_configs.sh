@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_reservation_exists"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_machine_type_in_zone, test_reservation_exists"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
@@ -128,6 +128,7 @@ EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-ece.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-slurm.yaml"]=
 EXCLUDE_EXAMPLE["community/examples/sycomp/sycomp-storage-expansion.yaml"]=
+EXCLUDE_EXAMPLE["community/examples/eda/eda-hybrid-cloud.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}

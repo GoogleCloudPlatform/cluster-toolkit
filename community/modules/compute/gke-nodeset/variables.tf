@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ variable "slurm_cluster_name" {
   description = "Cluster name, used in slurm controller"
 
   validation {
-    condition     = var.slurm_cluster_name != null && can(regex("^[a-z](?:[a-z0-9]{0,9})$", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z](?:[a-z0-9]{0,9})$'."
+    condition     = var.slurm_cluster_name != null && can(regex("^[a-z]([-a-z0-9]{0,20})$", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,20})$'."
   }
 }
 

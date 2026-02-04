@@ -1,3 +1,9 @@
+> [!WARNING]
+> The `Parallelstore` `storage_type` is deprecated and will be removed on October 31, 2026. For a
+> replacement on GKE, we recommend using the
+> [GCP Managed Lustre module](../managed-lustre/README.md)
+> See the [gke-managed-lustre.yaml](../../../examples/gke-managed-lustre.yaml) blueprint for a complete example.
+
 ## Description
 
 This module creates Kubernetes Storage Class (SC) that can be used by a Persistent Volume Claim (PVC)
@@ -73,7 +79,7 @@ graph TD;
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2024 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

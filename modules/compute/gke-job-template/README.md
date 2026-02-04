@@ -55,7 +55,7 @@ using the `requested_cpu_per_pod` setting.
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2023 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -115,7 +115,7 @@ No modules.
 | <a name="input_node_pool_names"></a> [node\_pool\_names](#input\_node\_pool\_names) | A list of node pool names on which to run the job. Can be populated via `use` field. | `list(string)` | `[]` | no |
 | <a name="input_node_selectors"></a> [node\_selectors](#input\_node\_selectors) | A list of node selectors to use to place the job. | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_persistent_volume_claims"></a> [persistent\_volume\_claims](#input\_persistent\_volume\_claims) | A list of objects that describes a k8s PVC that is to be used and mounted on the job. Generally supplied by the gke-persistent-volume module. | <pre>list(object({<br/>    name          = string<br/>    namespace     = string<br/>    mount_path    = string<br/>    mount_options = string<br/>    storage_type  = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `true` | no |
+| <a name="input_random_name_suffix"></a> [random\_name\_suffix](#input\_random\_name\_suffix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `true` | no |
 | <a name="input_requested_cpu_per_pod"></a> [requested\_cpu\_per\_pod](#input\_requested\_cpu\_per\_pod) | The requested cpu per pod. If null, allocatable\_cpu\_per\_node will be used to claim whole nodes. If provided will override allocatable\_cpu\_per\_node. | `number` | `-1` | no |
 | <a name="input_requested_gpu_per_pod"></a> [requested\_gpu\_per\_pod](#input\_requested\_gpu\_per\_pod) | The requested gpu per pod. If null, allocatable\_gpu\_per\_node will be used to claim whole nodes. If provided will override allocatable\_gpu\_per\_node. | `number` | `-1` | no |
 | <a name="input_restart_policy"></a> [restart\_policy](#input\_restart\_policy) | Job restart policy. Only a RestartPolicy equal to `Never` or `OnFailure` is allowed. | `string` | `"Never"` | no |

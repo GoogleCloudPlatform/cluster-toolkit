@@ -1,0 +1,234 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: eda-all-on-cloud
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: eda-all-on-cloud
+  region: us-central1  ## Set GCP Region Here ##
+  zone: us-central1-a  ## Set GCP Zone Here ##
+  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
+  rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
+
+deployment_groups:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Setup
+#
+# Sets up VPC network, persistent NFS shares
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: base
+  modules:
+  # Frontend network for GCE, NetApp Volumes and other services
+  - id: eda-net
+    source: modules/network/vpc
+
+  # Backend RDMA network for GCE instances with RDMA capabilities
+  - id: eda-rdma-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      enable_internal_traffic: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.rdma_net_range)
+        region: $(vars.region)
+
+  # PSA is required for Google Cloud NetApp Volumes.
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [eda-net]
+    settings:
+      prefix_length: 24
+      service_name: "netapp.servicenetworking.goog"
+      deletion_policy: "ABANDON"
+
+  # NetApp Storage Pool. All NetApp Volumes will be created in this pool.
+  - id: netapp_pool
+    source: modules/file-system/netapp-storage-pool
+    use: [eda-net, private_service_access]
+    settings:
+      pool_name: "eda-pool"
+      capacity_gib: 4096
+      service_level: $(vars.pool_service_level)
+      region: $(vars.region)
+
+  # NFS volume for shared tools and utilities
+  - id: toolsfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "toolsfs"
+      capacity_gib: 1024    # Adjust size as needed
+      large_capacity: false
+      local_mount: "/tools"
+      protocols: ["NFSV3"]
+      unix_permissions: "0777"
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  # NFS volume for shared libraries
+  - id: libraryfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "libraryfs"
+      capacity_gib: 1024    # Adjust size as needed
+      large_capacity: false
+      local_mount: "/library"
+      protocols: ["NFSV3"]
+      unix_permissions: "0777"
+      # Mount options are optimized for aggressive caching, assuming rare changes on the volume
+      mount_options: "nocto,actimeo=600,hard,rsize=262144,wsize=262144,vers=3,tcp,mountproto=tcp"
+
+  # NFS volume for home directories
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "homefs"
+      capacity_gib: 1024    # Adjust size as needed
+      large_capacity: false
+      local_mount: "/home"
+      protocols: ["NFSV3"]
+      unix_permissions: "0755"
+
+  # NFS volume for scratch space
+  - id: scratchfs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      region: $(vars.region)
+      volume_name: "scratchfs"
+      capacity_gib: 1024    # Adjust size as needed
+      large_capacity: false
+      local_mount: "/scratch"
+      protocols: ["NFSV3"]
+      unix_permissions: "0777"
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Software Installation
+#
+# This deployment group is a stub for installing software before
+# bringing up the actual cluster.
+# See the README.md for useful software deployment patterns.
+#
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# - group: software_installation
+#   modules:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Cluster
+#
+# Provisions the actual EDA cluster with compute partitions,
+# Connects to the previously set up NFS shares.
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: cluster
+  modules:
+  - id: h4d_startup
+    source: modules/scripts/startup-script
+    settings:
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
+
+  - id: h4d_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - h4d_startup
+    - eda-net
+    - homefs
+    - toolsfs
+    - libraryfs
+    - scratchfs
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: h4d-highmem-192-lssd
+      node_count_static: 1        # Adjust as needed
+      node_count_dynamic_max: 0   # Adjust as needed
+      enable_placement: false
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      additional_networks:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=eda-rdma-net.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=null,
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+
+  - id: h4d_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h4d_nodeset
+    settings:
+      exclusive: false
+      partition_name: h4d
+      is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [eda-net]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - eda-net
+    - h4d_partition
+    - slurm_login
+    - homefs
+    - toolsfs
+    - libraryfs
+    - scratchfs
+    settings:
+      enable_controller_public_ips: true
+      cloud_parameters:
+        slurmd_timeout: 900

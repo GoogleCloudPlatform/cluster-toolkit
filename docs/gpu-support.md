@@ -12,8 +12,7 @@
 ## Accelerator definition automation
 
 The schedmd-slurm-gcp-v6 modules ([nodeset], [controller] and [login]),
-the [vm-instance] module and any module relying on [vm-instance] (HTCondor and
-PBS Pro) support
+the [vm-instance] module and any module relying on [vm-instance] (HTCondor) support
 automation for defining the `guest_accelerator` config. If the user supplies any
 value for this setting, the automation will be bypassed.
 

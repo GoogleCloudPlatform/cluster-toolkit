@@ -1,5 +1,5 @@
 /**
-  * Copyright 2024 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ variable "region" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GKE, if any. Providing additional networks creates relevat network objects on the cluster."
+  description = "Additional network interface details for GKE, if any. Providing additional networks creates relevant network objects on the cluster."
   default     = []
   type = list(object({
     network            = string

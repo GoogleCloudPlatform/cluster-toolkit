@@ -1,4 +1,4 @@
-// Copyright 2025 "Google LLC"
+// Copyright 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -123,6 +123,26 @@ type Target struct {
 	IsBlueprint bool // true if came from blueprint vars, false if module.settings
 }
 
+// parseIntInput parses an integer from the input map and returns a pointer.
+// It returns nil if the key is not found.
+func parseIntInput(inputs map[string]interface{}, key string) (*int, error) {
+	v, ok := inputs[key]
+	if !ok {
+		return nil, nil
+	}
+
+	var val int
+	switch t := v.(type) {
+	case int:
+		val = t
+	case float64:
+		val = int(t)
+	default:
+		return nil, fmt.Errorf("'%s' must be an integer, not %T", key, v)
+	}
+	return &val, nil
+}
+
 // processModuleSettings processes a list of names interpreted as module settings.
 func processModuleSettings(bp config.Blueprint, mod config.Module, group config.Group, modIdx int, list []string, optional bool, handler func(Target) error) error {
 	for _, s := range list {
@@ -167,4 +187,19 @@ func IterateRuleTargets(
 
 	// Interpret each var name as module.settings.<name>
 	return processModuleSettings(bp, mod, group, modIdx, varsList, optional, handler)
+}
+
+// parseBoolInput retrieves a boolean value from a map by key.
+// If the key is missing, it returns the defaultVal.
+// If the key is present but not a boolean, it returns an error.
+func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) (bool, error) {
+	v, ok := inputs[key]
+	if !ok {
+		return defaultVal, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("'%s' must be a boolean, not %T", key, v)
+	}
+	return b, nil
 }

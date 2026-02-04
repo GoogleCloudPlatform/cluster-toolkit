@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ variable "maintenance_exclusions" {
     condition = alltrue([
       for x in var.maintenance_exclusions : (
         ((x.end_time != null) != (x.exclusion_end_time_behavior != null)) &&
-        (x.end_time == null || length(trimspace(x.end_time)) > 0)
+        try(length(trimspace(x.end_time)) > 0, true)
       )
     ])
     error_message = "For each maintenance exclusion, exactly one of 'end_time' or 'exclusion_end_time_behavior' must be specified. If 'end_time' is provided, it cannot be an empty string."
@@ -422,7 +422,7 @@ variable "enable_multi_networking" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster."
+  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster."
   default     = []
   type = list(object({
     network            = string

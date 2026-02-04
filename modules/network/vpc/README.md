@@ -143,7 +143,7 @@ To allow regular SSH access from a known IP address you can add the following
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2022 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -200,9 +200,11 @@ limitations under the License.
 | <a name="input_enable_iap_ssh_ingress"></a> [enable\_iap\_ssh\_ingress](#input\_enable\_iap\_ssh\_ingress) | Enable a firewall rule to allow SSH access using IAP tunnels | `bool` | `true` | no |
 | <a name="input_enable_iap_winrm_ingress"></a> [enable\_iap\_winrm\_ingress](#input\_enable\_iap\_winrm\_ingress) | Enable a firewall rule to allow Windows Remote Management (WinRM) access using IAP tunnels | `bool` | `false` | no |
 | <a name="input_enable_internal_traffic"></a> [enable\_internal\_traffic](#input\_enable\_internal\_traffic) | Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network | `bool` | `true` | no |
+| <a name="input_enable_ipv6_ula"></a> [enable\_ipv6\_ula](#input\_enable\_ipv6\_ula) | Enable IPv6 ULA, this is a permanent change and cannot be undone! | `bool` | `false` | no |
 | <a name="input_extra_iap_ports"></a> [extra\_iap\_ports](#input\_extra\_iap\_ports) | A list of TCP ports for which to create firewall rules that enable IAP for TCP forwarding (use dedicated enable\_iap variables for standard ports) | `list(string)` | `[]` | no |
 | <a name="input_firewall_log_config"></a> [firewall\_log\_config](#input\_firewall\_log\_config) | Firewall log configuration for Toolkit firewall rules (var.enable\_iap\_ssh\_ingress and others) | `string` | `"DISABLE_LOGGING"` | no |
 | <a name="input_firewall_rules"></a> [firewall\_rules](#input\_firewall\_rules) | List of firewall rules | `any` | `[]` | no |
+| <a name="input_internal_ipv6_range"></a> [internal\_ipv6\_range](#input\_internal\_ipv6\_range) | When enabling IPv6 ULA, optionally specify a /48 from fd20::/20 (default null) | `string` | `null` | no |
 | <a name="input_ips_per_nat"></a> [ips\_per\_nat](#input\_ips\_per\_nat) | The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT). The number of NAT IPs depend on the port reservation allocated for each node and the number of ports that a single NAT IP can serve. Refer this documentation for more details: https://cloud.google.com/nat/docs/ports-and-addresses#port-reservation-examples | `number` | `2` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to network resources that support labels. Key-value pairs of strings. | `map(string)` | `{}` | no |
 | <a name="input_mtu"></a> [mtu](#input\_mtu) | The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively. | `number` | `8896` | no |
@@ -218,6 +220,7 @@ limitations under the License.
 | <a name="input_secondary_ranges_list"></a> [secondary\_ranges\_list](#input\_secondary\_ranges\_list) | "List of secondary ranges associated with the subnetworks.<br/>Each subnetwork must be specified at most once in this list." | <pre>list(object({<br/>    subnetwork_name = string,<br/>    ranges = list(object({<br/>      range_name    = string,<br/>      ip_cidr_range = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Makes this project a Shared VPC host if 'true' (default 'false') | `bool` | `false` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-primary-subnet") | `string` | `null` | no |
+| <a name="input_subnetwork_private_access"></a> [subnetwork\_private\_access](#input\_subnetwork\_private\_access) | Enable Private Google Access on the subnetworks | `bool` | `true` | no |
 | <a name="input_subnetwork_size"></a> [subnetwork\_size](#input\_subnetwork\_size) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `number` | `null` | no |
 | <a name="input_subnetworks"></a> [subnetworks](#input\_subnetworks) | List of subnetworks to create within the VPC. If left empty, it will be<br/>replaced by a single, default subnetwork constructed from other parameters<br/>(e.g. var.region). In all cases, the first subnetwork in the list is identified<br/>by outputs as a "primary" subnetwork.<br/><br/>subnet\_name           (string, required, name of subnet)<br/>subnet\_region         (string, required, region of subnet)<br/>subnet\_ip             (string, mutually exclusive with new\_bits, CIDR-formatted IP range for subnetwork)<br/>new\_bits              (number, mutually exclusive with subnet\_ip, CIDR bits used to calculate subnetwork range)<br/>subnet\_private\_access (bool, optional, Enable Private Access on subnetwork)<br/>subnet\_flow\_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)<br/>description           (string, optional, Description of Network)<br/>purpose               (string, optional, related to Load Balancing)<br/>role                  (string, optional, related to Load Balancing) | `list(map(string))` | `[]` | no |
 

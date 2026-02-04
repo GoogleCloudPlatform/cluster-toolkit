@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,4 +75,7 @@ module "vpcs" {
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode
   network_profile                        = var.network_profile
+  enable_cloud_router                    = var.enable_cloud_router
+  enable_cloud_nat                       = var.enable_cloud_nat
+  subnetwork_private_access              = var.subnetwork_private_access
 }

@@ -59,6 +59,13 @@ Each validator is described below:
     region
   * Common failure: changing 1 value but not the other
   * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)`
+* `test_machine_type_in_zone`
+  * Inputs: `project_id` (string), `zone` (string), `machine_type` (string)
+  * PASS: If the machine type is available in the specified zone and project.
+  * SKIP (Soft Warning): If the Compute Engine API is disabled or the credentials lack `compute.machineTypes.get` permissions, the validator prints a warning and the check is skipped.
+  * FAIL: If the machine type is invalid or unavailable in that zone.
+  * Note: To explicitly verify multiple machine types in a zone, add this validator to the blueprint multiple times.
+  * Manual test: `gcloud compute machine-types describe $(vars.machine_type) --zone $(vars.zone) --project $(vars.project_id)`
 * `test_module_not_used`
   * Inputs: none; reads whole blueprint
   * PASS: if all instances of use keyword pass matching variables
@@ -100,6 +107,11 @@ validators:
       project_id: $(vars.project_id)
       region: $(vars.region)
       zone: $(vars.zone)
+  - validator: test_machine_type_in_zone
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+      machine_type: c2-standard-60  # any machine type to verify in the zone
 ```
 
 ## Module-level (Metadata) Validators
@@ -119,6 +131,23 @@ ghpc:
         vars: [partition_name]
         pattern: "^[a-z0-9]{1,10}$"
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
+```
+
+### Range Validator
+The `range` validator ensures input variables either their values or lengths fall within specified numerical minimum and/or maximum bounds. It supports validating individual numeric values, lists of numeric values, and the number of elements in a list. The optional length_check field (defaulting to false) determines whether to validate the values themselves or the length of the variable.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [versions]
+      min: 1
+      max: 8
+      length_check: true # enables validation of the list's length rather than the individual values it contains.
+    error_message: "The 'versions' list must contain at least one version."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.

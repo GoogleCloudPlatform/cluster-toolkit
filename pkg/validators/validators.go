@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 func projectError(p string) error {
 	return config.HintError{
 		Err: fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
-		Hint: "It is possible the machine you are working on has not been authenticated.\n" +
+		Hint: "It is possible the you are working on has not been authenticated.\n" +
 			"Try to run `gcloud auth application-default login`",
 	}
 }
@@ -56,6 +56,7 @@ const (
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
 	testReservationExistsName         = "test_reservation_exists"
+	testMachineTypeInZone             = "test_machine_type_in_zone"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -68,6 +69,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
 		testReservationExistsName:         testReservationExists,
+		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 	}
 }
 
@@ -235,6 +237,12 @@ func defaults(bp config.Blueprint) []config.Validator {
 	if projectIDExists && zoneExists {
 		defaults = append(defaults, config.Validator{
 			Validator: testZoneExistsName,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		}, config.Validator{
+			Validator: testMachineTypeInZone,
 			Inputs: config.NewDict(map[string]cty.Value{
 				"project_id": projectRef,
 				"zone":       zoneRef,

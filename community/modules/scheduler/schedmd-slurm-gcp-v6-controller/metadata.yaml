@@ -1,4 +1,4 @@
-# Copyright 2023 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,12 @@ spec:
     - storage.googleapis.com
 ghpc:
   validators:
+  - validator: range
+    inputs:
+      vars: [static_ips]
+      max: 1
+      length_check: true # Validates the list's length instead of its elements.
+    error_message: "The Slurm modules supports 0 or 1 static IPs on controller instance."
   - validator: regex
     inputs:
       vars: [slurm_cluster_name]

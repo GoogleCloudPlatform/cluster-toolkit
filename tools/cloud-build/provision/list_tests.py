@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,8 +54,11 @@ TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     ((
         "ml-a4-highgpu-slurm",
-        "ml-a4-highgpu-onspot-slurm",
         "gke-a4"
+    ), 2*60),
+    ((
+        "ml-a4-highgpu-onspot-slurm",
+        "gke-a4-onspot"
     ), 2*60),
     ((
         "ml-a3-ultragpu-onspot-slurm", 
@@ -71,6 +74,10 @@ TEMPORAL_CONSTAINTS = [
     ((
         "ml-a3-highgpu-slurm", 
         "gke-a3-highgpu"
+    ), 1*60),
+    ((
+        "ml-a3-highgpu-onspot-slurm", 
+        "gke-a3-highgpu-onspot"
     ), 1*60),
 ]
 # TODO:

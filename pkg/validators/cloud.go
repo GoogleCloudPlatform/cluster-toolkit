@@ -1,4 +1,4 @@
-// Copyright 2023 "Google LLC"
+// Copyright 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -73,6 +73,15 @@ func handleServiceUsageError(err error, pid string) error {
 		return nil // occurs if API list is empty and 0 APIs to validate
 	}
 	return fmt.Errorf("unhandled error: %s", herr)
+}
+
+func isValidatorExplicit(bp config.Blueprint, validatorName string) bool {
+	for _, v := range bp.Validators {
+		if v.Validator == validatorName {
+			return true
+		}
+	}
+	return false
 }
 
 // TestApisEnabled tests whether APIs are enabled in given project
@@ -245,19 +254,6 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// getSoftWarningMessage checks if a Google Cloud API error represents a permission issue (403)
-// or a disabled API (400). When these occur, it prints a warning to the console
-// and returns true, signaling the validator to "skip" the check rather than failing the deployment.
-func getSoftWarningMessage(err error, validatorName, projectID, apiName, permission string) (string, bool) {
-	var gerr *googleapi.Error
-	if errors.As(err, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
-		msg := fmt.Sprintf("\n[!] WARNING (%d): validator %q for project %q. Identity lacks permissions to verify the resource. Skipping this check.\n", gerr.Code, validatorName, projectID)
-		msg += fmt.Sprintf("    Hint: It is possible that the %s is disabled or you do not have IAM permissions (%s). Please ensure the API is enabled and check your permissions.\n", apiName, permission)
-		return msg, true
-	}
-	return "", false
-}
-
 func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
 	aggList, err := s.Reservations.AggregatedList(projectID).Do()
 	if err != nil {
@@ -369,4 +365,44 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 
 	// Pass both the owner project and the deployment project
 	return TestReservationExists(reservationProjectID, zone, targetName, deploymentProjectID)
+func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Determine if the validator was explicitly added to the blueprint YAML
+	const validatorName = "test_machine_type_in_zone"
+	required := []string{"project_id", "zone"}
+	if isValidatorExplicit(bp, validatorName) {
+		required = append(required, "machine_type")
+	}
+
+	if err := checkInputs(inputs, required); err != nil {
+		return err
+	}
+
+	s, err := compute.NewService(context.Background())
+	if err != nil {
+		return handleClientError(err)
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	projectID, globalZone, explicitMachineType := m["project_id"], m["zone"], m["machine_type"]
+
+	if explicitMachineType != "" {
+		// When explicitly called, we MUST validate the zone provided in the inputs
+		if err := TestZoneExists(projectID, globalZone); err != nil {
+			return err
+		}
+		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType, validatorName)
+
+		// Catch the sentinel and return nil so the deployment proceeds
+		if errors.Is(err, errSoftWarning) {
+			return nil
+		}
+		return err
+	}
+
+	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", validatorName, func(z, name string, vName string) error {
+		return validateMachineTypeInZone(s, projectID, z, name, vName)
+	})
 }

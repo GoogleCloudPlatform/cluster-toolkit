@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -167,4 +167,6 @@ const (
 	errMsgValueEmptyString     = string("value is an empty string")
 	errMsgLabelValueReqs       = string("value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long")
 	errMsgSlurmClusterNameReqs = string("must start with a lowercase letter, contain only lowercase letters and numbers, and be between 1 and 10 characters long")
+	ErrMsgResourceInZone       = "%s %q is not available in zone %q in project %q"
+	ErrMsgResourceInAnyZone    = "%s %q is not available in any requested zones [%s] in project %q"
 )

@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -510,12 +510,21 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Name of the reservation to use for VM resources, should be in one of the following formats:
-    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
-    - RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+    Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.
+    Set to an empty string if using no reservation or automatically-consumed reservations.
 
-    Must be a "SPECIFIC" reservation
-    Set to empty string if using no reservation or automatically-consumed reservations
+    Formats:
+    - Local Reservation: For reservations in the same project as the cluster (var.project_id), the name is sufficient:
+      RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+    - Shared Reservation: For reservations shared from a different project, the full resource path is required:
+      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+
+    Where:
+    - HOST_PROJECT_ID: Project ID where the shared reservation was created.
+    - RESERVATION_NAME: The name assigned to the specific reservation.
+    - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+
+    Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
   EOD
   type        = string
   default     = ""

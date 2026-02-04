@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ variable "partition_name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]*)$", var.partition_name))
-    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9]*)$'."
+    condition     = can(regex("^[a-z](?:[a-z0-9-]*)$", var.partition_name))
+    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9-]*)$'."
   }
 }
 

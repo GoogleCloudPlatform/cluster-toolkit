@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -156,6 +156,7 @@ resource "google_compute_instance_template" "tpl" {
       subnetwork_project = network_interface.value.subnetwork_project
       network_ip         = try(coalesce(network_interface.value.network_ip), null)
       nic_type           = try(coalesce(network_interface.value.nic_type), null)
+      stack_type         = try(coalesce(network_interface.value.stack_type), null)
       dynamic "access_config" {
         for_each = network_interface.value.access_config
         content {

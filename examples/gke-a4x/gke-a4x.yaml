@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -331,7 +331,7 @@ deployment_groups:
         path: $(vars.gib_installer_path)
         template_vars:
           image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
-          version: v1.0.7
+          version: v1.1.0
           accelerator_count: 4
           node_affinity:
             requiredDuringSchedulingIgnoredDuringExecution:

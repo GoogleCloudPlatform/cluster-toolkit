@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ vars:
   region: us-central1
   zone: us-central1-a
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
+  lustre_instance_id: lustre-hpc
   slurm_image:
     # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
     # for a list of valid family options with Slurm
@@ -103,13 +104,14 @@ deployment_groups:
     settings:
       local_mount: /projects
 
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network]
+  - id: lustre-gcp
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
     settings:
-      local_mount: /scratch
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 36000
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -283,7 +285,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, controller_sa, homefs, projectsfs, scratchfs, slurm_login,
+    use: [network, controller_sa, homefs, projectsfs, lustre-gcp, slurm_login,
           n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
     settings:
       instance_image: $(vars.slurm_image)
