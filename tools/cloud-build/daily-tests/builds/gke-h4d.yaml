@@ -45,14 +45,14 @@ steps:
   - -c
   - |
     set -x -e
+    cd /workspace
     if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        cd /workspace
         gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
         unzip -o gcluster-bundle.zip
         # Grant execution permissions to the binary
         chmod +x gcluster
     else
-        cd /workspace && make
+        make
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
