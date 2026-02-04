@@ -347,8 +347,9 @@ func TestReservationExists(reservationProjectID string, zone string, reservation
 		// If Discovery fails (403/400) and it's a SHARED project, we must skip
 		// because we can't prove the user has a typo; we just can't list resources.
 		if reservationProjectID != deploymentProjectID {
-			fmt.Printf("\n[!] WARNING: Identity cannot verify shared reservation in project %q (%v). Skipping this check.\n", reservationProjectID, err)
-			fmt.Printf("\n[!] WARNING: Identity cannot verify shared reservation in project %q (%v). Skipping this check.\n", reservationProjectID, aggErr)
+			fmt.Printf("\n[!] WARNING: Shared reservation %q was not found in zone %q.\n", reservationName, zone)
+			fmt.Printf("    Discovery in other zones of project %q failed due to restricted permissions: %v\n", reservationProjectID, aggErr)
+			fmt.Printf("    Skipping this check as consumption may still be possible.\n")
 			return nil
 		}
 
