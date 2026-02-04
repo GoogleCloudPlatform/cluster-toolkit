@@ -59,6 +59,7 @@ type ValidationRule struct {
 	Inputs    map[string]interface{} `yaml:"inputs"`    // Flexible parameters for the rule (e.g., pattern, vars)
 
 	ErrorMessage string `yaml:"error_message"`
+	Level        string `yaml:"level"`
 }
 
 // GetMetadata reads and parses `metadata.yaml` from module root.

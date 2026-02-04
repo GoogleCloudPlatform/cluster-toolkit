@@ -118,6 +118,21 @@ validators:
 
 Module-level validators are defined directly within a module's `metadata.yaml` file under the `ghpc.validators` field. These are primarily used for early validation of module-specific input variables before any infrastructure is provisioned.
 
+By default, a failure in a module-level validator will stop execution and return an error. You can make a validator optional by setting the `level` field to `warning`. In this case, a failure will print a warning message but allow the toolkit to continue.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [versions]
+      min: 1
+    error_message: "The 'versions' list must contain at least one version."
+    level: warning # Optional: failure issues a warning instead of an error
+```
+
 ### Regex Validator
 The `regex` validator ensures that input variables match a specific regular expression pattern. This is commonly used to enforce Google Cloud naming conventions or specific software requirements (like Slurm partition name lengths).
 
@@ -229,6 +244,8 @@ They can be set to 3 differing levels of behavior using the command-line
   which validator(s) failed and how.
 * `"IGNORE"`: Do not execute any validators, even if they are explicitly defined
   in a `validators` block or the default set is implicitly added.
+
+>**Note:** The individual `level: warning` setting allows specific rules to be optional even when the global `--validation-level` is set to `ERROR`. However, the global `--validation-level IGNORE` flag will skip all validators regardless of their individual settings.
 
 For example, this command will set all validators to `WARNING` behavior:
 
