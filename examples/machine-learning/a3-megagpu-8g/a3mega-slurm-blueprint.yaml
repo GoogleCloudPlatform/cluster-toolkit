@@ -24,8 +24,9 @@ validators:
 
 vars:
   sys_net_range: 172.16.0.0/16
-  source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
-  source_image_project_id: [ubuntu-os-accelerator-images]
+  base_image:
+    project: ubuntu-os-accelerator-images
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260108
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -345,8 +346,8 @@ deployment_groups:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
       machine_type: c2-standard-8
-      source_image_family: $(vars.source_image_family)
-      source_image_project_id: $(vars.source_image_project_id)
+      source_image: $(vars.base_image.image)
+      source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.final_image_family)
       disk_size: $(vars.disk_size_gb)
       omit_external_ip: false
