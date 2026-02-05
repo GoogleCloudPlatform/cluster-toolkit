@@ -21,9 +21,7 @@ validators:
 - validator: test_deployment_variable_not_used
   inputs: {}
   skip: true
-- validator: test_apis_enabled
-  inputs: {}
-  skip: true
+
 vars:
   sys_net_range: 172.16.0.0/16
   base_image:
