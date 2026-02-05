@@ -18,3 +18,10 @@ spec:
     services:
     - notebooks.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: regex
+    inputs:
+      vars: [mount_runner.args]
+      pattern: "^[^ ]+( [^ ]+){4}$"
+    error_message: "The 'mount_runner.args' field must contain exactly 5 elements."

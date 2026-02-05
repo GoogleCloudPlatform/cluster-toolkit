@@ -30,7 +30,7 @@ variable "region" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GKE, if any. Providing additional networks creates relevat network objects on the cluster."
+  description = "Additional network interface details for GKE, if any. Providing additional networks creates relevant network objects on the cluster."
   default     = []
   type = list(object({
     network            = string

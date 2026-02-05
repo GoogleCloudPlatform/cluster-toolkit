@@ -18,3 +18,11 @@ spec:
     services:
     - compute.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [zones]
+      max: 2
+      length_check: true # Validates the list's length instead of its elements.
+    error_message: "The 'zones' list must contain at most 2 zones."

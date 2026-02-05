@@ -84,11 +84,15 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
 
   node_count = var.static_node_count
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a 
+  # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
     for_each = local.static_node_set ? [] : [1]
     content {
-      total_min_node_count = var.autoscaling_total_min_nodes
-      total_max_node_count = var.autoscaling_total_max_nodes
+      min_node_count       = var.autoscaling_min_node_count
+      max_node_count       = var.autoscaling_max_node_count
+      total_min_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_min_nodes
+      total_max_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_max_nodes
       location_policy      = "ANY"
     }
   }

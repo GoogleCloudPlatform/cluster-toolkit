@@ -156,6 +156,7 @@ resource "google_compute_instance_template" "tpl" {
       subnetwork_project = network_interface.value.subnetwork_project
       network_ip         = try(coalesce(network_interface.value.network_ip), null)
       nic_type           = try(coalesce(network_interface.value.nic_type), null)
+      stack_type         = try(coalesce(network_interface.value.stack_type), null)
       dynamic "access_config" {
         for_each = network_interface.value.access_config
         content {
