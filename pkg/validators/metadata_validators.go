@@ -354,8 +354,8 @@ func (c *ConditionalValidator) Validate(
 		}
 		// If optional, treat missing trigger as Null/False
 		triggerVal = []cty.Value{cty.NilVal}
-
 	}
+
 	expectedRawVal, isExpectedGiven := rule.Inputs["trigger_value"]
 	triggerExpectedVal := convertToCty(expectedRawVal)
 
