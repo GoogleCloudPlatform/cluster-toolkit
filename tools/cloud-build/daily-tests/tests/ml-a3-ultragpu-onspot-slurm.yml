@@ -16,7 +16,7 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a3u-onspot-slurm
-deployment_name: a3u-onspot-slurm-{{ build }}
+deployment_name: "a3u-onspot-slurm-{{ build }}"
 slurm_cluster_name: "a3usp{{ build[0:5] }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"

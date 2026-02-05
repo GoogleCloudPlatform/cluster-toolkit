@@ -52,6 +52,23 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
+
+    # Add these tasks to base-integration-test.yml
+  - name: Generate random suffix for networking
+    ansible.builtin.set_fact:
+     random_id: "{{ query('password', '/dev/null chars=ascii_lowercase,digits length=4') | first }}"
+
+  - name: Generic randomization of networking keys in blueprint
+    ansible.builtin.replace:
+      path: "{{ workspace }}/{{ blueprint_path }}"
+      regexp: '^(\s*)({{ item }}):\s*([^#\n\s]+)(.*)$'
+      replace: '\1\2: \3-{{ random_id }}\4'
+    loop:
+     - network_name
+     - subnetwork_name
+     - network_name_prefix
+
+
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
@@ -105,6 +122,49 @@
     - name: Print remote node's public IP
       ansible.builtin.debug:
         var: remote_ip
+
+    - name: Generate random second and third octets for IP range
+      ansible.builtin.set_fact:
+        octet2: "{{ 254 | random(start=1) }}"
+        octet3: "{{ 254 | random(start=1) }}"
+
+    - name: Create unique IP CIDR range
+      ansible.builtin.set_fact:
+        unique_cidr: "10.{{ octet2 }}.{{ octet3 }}.0/24"
+
+    - name: Inject unique IP ranges into the blueprint
+      ansible.builtin.replace:
+        path: "{{ blueprint_yaml }}"
+        # Matches common toolkit IP range keys (ip_cidr_range or ip_range)
+        regexp: '^(\s*)({{ item }}):\s*([0-9\./]+)(.*)$'
+        # Replaces the existing range with the unique one
+        replace: '\1\2: {{ unique_cidr }}\4'
+      loop:
+        - ip_cidr_range
+        - ip_range
+
+    - name: Prefix networking resources with Build ID to prevent 409 conflicts
+      ansible.builtin.replace:
+        path: "{{ blueprint_yaml }}"
+        # Matches the key and captures the current value (e.g., a3u-onspot-slurm-net)
+        regexp: '^(\s*)({{ item }}):\s*([^#\n\s]+)(.*)$'
+        # Prefixes with build ID (e.g., a1b2c3-a3u-onspot-slurm-net)
+        replace: '\1\2: {{ build }}-\3\4'
+      loop:
+        - network_name          # VPC Networks (Primary target for this error)
+        - network_id            # Some modules use network_id instead of network_name
+        - subnetwork_name       # GKE Subnets
+        - network_name_prefix   # GKE Multi-VPC
+
+
+    - name: Force randomization of networking strings in blueprint
+      ansible.builtin.replace:
+        path: "{{ blueprint_yaml }}"
+        # Matches any occurrence of the conflicting network name string
+        regexp: 'a3u-onspot-slurm-net'
+        # Replaces it with the prefixed version
+        replace: '{{ build }}-a3u-onspot-slurm-net'
+
 
     # Setup firewall for cloud build
     - name: Create firewall rule

@@ -32,10 +32,6 @@ substitutions:
 
 timeout: 14400s  # 4hr
 steps:
-# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
-- id: check_for_running_build
-  name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-onspot-slurm.yaml"
 
 - id: ml-a3-ultragpu-onspot-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
@@ -74,6 +70,9 @@ steps:
     BLUEPRINT="/workspace/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
+    # Add this to your Cloud Build script before calling ansible-playbook
+    sed -i "s/a3u-onspot-slurm-net/$${BUILD_ID_SHORT}-a3u-onspot-slurm-net/g" $${BLUEPRINT}
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
