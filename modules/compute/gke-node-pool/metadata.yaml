@@ -41,7 +41,7 @@ ghpc:
       trigger_value: true
       dependent: reservation_affinity.consume_reservation_type
       dependent_value: "NO_RESERVATION"
-    error_message: "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+    error_message: "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
   - validator: conditional
     inputs:
       trigger: enable_flex_start

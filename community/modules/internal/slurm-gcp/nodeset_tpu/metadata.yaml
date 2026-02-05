@@ -36,10 +36,6 @@ ghpc:
       dependent: enable_public_ip
       dependent_value: true
     error_message: "Using the default subnetwork for the TPU nodeset requires enable_public_ip set to true."
-  - validator: exclusive
-    inputs:
-      vars: [preemptible, reserved]
-    error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
   - validator: conditional
     inputs:
       trigger: subnetwork

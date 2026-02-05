@@ -161,10 +161,8 @@ deployment_groups:
           add-nvidia-repositories -y
           apt update -y
           apt install -y cuda-toolkit-12-8
-          apt install -y datacenter-gpu-manager=1:4.5.0
-          apt install -y datacenter-gpu-manager-dev=1:4.5.0
-          # Pin the packages so they aren't upgraded by 'apt upgrade'
-          apt-mark hold datacenter-gpu-manager datacenter-gpu-manager-dev
+          apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       - type: ansible-local
         destination: configure_cuda_dcgm.yml
         content: |

@@ -479,8 +479,8 @@ deployment_groups:
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
               nvidia_packages:
               - cuda-toolkit-12-8
-              - datacenter-gpu-manager=1:4.5.0
-              - datacenter-gpu-manager-dev=1:4.5.0
+              - datacenter-gpu-manager-4-cuda12
+              - datacenter-gpu-manager-4-dev
               - libnvidia-cfg1-570-server
               - libnvidia-nscq-570
               - nvidia-compute-utils-570-server
