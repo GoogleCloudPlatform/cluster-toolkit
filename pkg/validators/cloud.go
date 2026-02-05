@@ -296,6 +296,8 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 	})
 }
 
+// findReservationInOtherZones searches for a reservation by name across zones
+// in the project.
 func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
 	aggList, err := s.Reservations.AggregatedList(projectID).Do()
 	if err != nil {
@@ -362,7 +364,6 @@ func TestReservationExists(reservationProjectID string, zone string, reservation
 	}
 
 	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
-	// This will now trigger for your "hpc-toolkit-dev" case!
 	if len(foundInZones) > 0 {
 		zonesList := strings.Join(foundInZones, ", ")
 		return config.HintError{
