@@ -126,6 +126,7 @@ module "instance_template" {
   shielded_instance_config    = var.shielded_instance_config
   advanced_machine_features   = var.advanced_machine_features
   enable_confidential_vm      = var.enable_confidential_vm
+  confidential_instance_type  = var.confidential_instance_type
   enable_shielded_vm          = var.enable_shielded_vm
   preemptible                 = var.preemptible
   spot                        = var.spot
