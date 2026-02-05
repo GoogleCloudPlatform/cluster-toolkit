@@ -145,13 +145,13 @@ data "google_compute_zones" "available" {
   region  = var.region
 
   lifecycle {
-    # postcondition {
-    #   condition     = length(setsubtract(local.zones, self.names)) == 0
-    #   error_message = <<-EOD
-    #   Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
-    #   Available zones=${jsonencode(self.names)}
-    #   EOD
-    # }
+    postcondition {
+      condition     = length(setsubtract(local.zones, self.names)) == 0
+      error_message = <<-EOD
+      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
+      Available zones=${jsonencode(self.names)}
+      EOD
+    }
   }
 }
 
