@@ -756,12 +756,12 @@ func TestRequiredValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("passes_when_forbidden_vars_are_absent", func(t *testing.T) {
+	t.Run("passes_when_deprecated_vars_are_absent", func(t *testing.T) {
 		rule := modulereader.ValidationRule{
 			Validator: "required",
 			Inputs: map[string]interface{}{
-				"vars":      []interface{}{"unset_var"},
-				"forbidden": true,
+				"vars":       []interface{}{"unset_var"},
+				"deprecated": true,
 			},
 		}
 
@@ -770,18 +770,18 @@ func TestRequiredValidator(t *testing.T) {
 		}
 	})
 
-	t.Run("fails_when_forbidden_vars_are_present", func(t *testing.T) {
+	t.Run("fails_when_deprecated_vars_are_present", func(t *testing.T) {
 		rule := modulereader.ValidationRule{
 			Validator: "required",
 			Inputs: map[string]interface{}{
-				"vars":      []interface{}{"required_var"},
-				"forbidden": true,
+				"vars":       []interface{}{"required_var"},
+				"deprecated": true,
 			},
 		}
 
 		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
 		if err == nil {
-			t.Fatalf("expected validation error for forbidden variable, got nil")
+			t.Fatalf("expected validation error for deprecated variable, got nil")
 		}
 		if !strings.Contains(err.Error(), "unwanted settings") {
 			t.Fatalf("expected error message to contain 'unwanted settings', got: %q", err.Error())

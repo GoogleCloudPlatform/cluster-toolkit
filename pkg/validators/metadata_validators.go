@@ -326,7 +326,7 @@ func (e *ExclusiveValidator) Validate(
 // RequiredValidator implements the RuleValidator interface for the 'required' validation type.
 type RequiredValidator struct{}
 
-// Validate checks if the variables specified in the rule are present (required) or absent (forbidden).
+// Validate checks if the variables specified in the rule are present (required) or absent (deprecated).
 func (r *RequiredValidator) Validate(
 	bp config.Blueprint,
 	mod config.Module,
@@ -359,12 +359,12 @@ func (r *RequiredValidator) Validate(
 		}
 	}
 
-	forbidden, err := parseBoolInput(rule.Inputs, "forbidden", false)
+	deprecated, err := parseBoolInput(rule.Inputs, "deprecated", false)
 	if err != nil {
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
 	}
 
-	if forbidden {
+	if deprecated {
 		if len(setVarNames) > 0 {
 			msg := fmt.Sprintf("unwanted settings: %s", strings.Join(setVarNames, ", "))
 			if rule.ErrorMessage != "" {
