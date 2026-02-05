@@ -640,7 +640,7 @@ deployment_groups:
         SuspendTimeout: 600  # 10 mins
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use:
     - a4x-slurm-net-0
     settings:

@@ -127,7 +127,7 @@ deployment_groups:
       exclusive: false
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
       machine_type: n2-standard-4

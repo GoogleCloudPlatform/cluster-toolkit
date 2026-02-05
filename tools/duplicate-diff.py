@@ -42,7 +42,7 @@ duplicates = [
     ],
     [
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/source_image_logic.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-login/source_image_logic.tf",
+        "modules/scheduler/schedmd-slurm-gcp-v6-login/source_image_logic.tf",
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/source_image_logic.tf",
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/source_image_logic.tf",
     ],

@@ -261,7 +261,7 @@ deployment_groups:
       exclusive: false
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [af3_network]
     settings:
       name_prefix: login

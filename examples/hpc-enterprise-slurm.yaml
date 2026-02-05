@@ -273,7 +273,7 @@ deployment_groups:
       partition_name: h3
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network, login_sa]
     settings:
       instance_image: $(vars.slurm_image)

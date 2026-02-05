@@ -97,7 +97,7 @@ deployment_groups:
           echo "Hello world! Hostname: \$(hostname)"
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use:
     - network
     settings:

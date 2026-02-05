@@ -107,7 +107,7 @@ and therefore must have access to GCS.
 > modules
 
 [vm-instance]: ../../compute/vm-instance/README.md
-[schedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[schedMD-slurm-on-gcp-login-node]: ../../../modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 [schedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 
 ### Tracking startup script execution

@@ -3,16 +3,16 @@
 This module creates a login node for a Slurm cluster based on the internal
 [slurm\_instance\_template] and [slurm\_instance]
 terraform modules. The login node is used in conjunction with the
-[Slurm controller](../schedmd-slurm-gcp-v6-controller/README.md).
+[Slurm controller](../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md).
 
-[slurm\_instance]: /community/modules/internal/slurm-gcp/instance/README.md
-[slurm\_instance\_template]: /community/modules/internal/slurm-gcp/instance_template/README.md
+[slurm\_instance]: ../../community/modules/internal/slurm-gcp/instance/README.md
+[slurm\_instance\_template]: ../../community/modules/internal/slurm-gcp/instance_template/README.md
 
 ### Example
 
 ```yaml
 - id: slurm_login
-  source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+  source: modules/scheduler/schedmd-slurm-gcp-v6-login
   use:
   - network
   settings:

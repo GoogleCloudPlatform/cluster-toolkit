@@ -277,7 +277,7 @@ These instructions apply to the following modules:
 [vm-instance]: ../modules/compute/vm-instance
 [hpc-toolkit-packer]: ../modules/packer/custom-image
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-[schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login
+[schedmd-slurm-gcp-v6-login]: ../modules/scheduler/schedmd-slurm-gcp-v6-login
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node

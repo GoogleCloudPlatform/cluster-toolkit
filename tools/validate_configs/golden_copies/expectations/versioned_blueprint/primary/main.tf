@@ -287,7 +287,7 @@ module "h3_partition" {
 }
 
 module "slurm_login" {
-  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.49.0&depth=1"
+  source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.49.0&depth=1"
   enable_login_public_ips = true
   instance_image          = var.slurm_image
   instance_image_custom   = var.instance_image_custom

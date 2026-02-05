@@ -113,7 +113,7 @@ deployment_groups:
     - slurm_login
 {{ controller_uses | safe }}
 
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+  - source: modules/scheduler/schedmd-slurm-gcp-v6-login
     kind: terraform
     id: slurm_login
     settings:

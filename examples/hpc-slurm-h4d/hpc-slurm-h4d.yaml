@@ -127,7 +127,7 @@ deployment_groups:
         SuspendTimeout: 600
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [h4d-slurm-net-0]
     settings:
       machine_type: n2-standard-4

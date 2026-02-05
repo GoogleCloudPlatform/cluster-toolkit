@@ -40,7 +40,7 @@ cannot be determined automatically like with `a2`.
 [vm-instance]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/compute/vm-instance
 [nodeset]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset
 [controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-login
+[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scheduler/schedmd-slurm-gcp-v6-login
 [htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
 [htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
 [htcondor-execute-point]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/htcondor-execute-point

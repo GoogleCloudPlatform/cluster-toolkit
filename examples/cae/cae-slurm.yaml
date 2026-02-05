@@ -189,7 +189,7 @@ deployment_groups:
   ####### Scheduler: SLURM #######
   # This block creates a SLURM login node
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
       machine_type: n2-standard-8

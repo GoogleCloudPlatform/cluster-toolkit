@@ -158,7 +158,7 @@ After creating the service account, it can be set via the
 [def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
 [slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
 [slurm-on-gcp-con]: community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
-[slurm-on-gcp-login]: community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[slurm-on-gcp-login]: modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 
 ### Timeout Error / Startup Script Failure (Slurm V6)
 

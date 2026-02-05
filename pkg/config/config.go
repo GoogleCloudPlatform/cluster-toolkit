@@ -48,6 +48,7 @@ var movedModules = map[string]string{
 	"community/modules/file-system/cloud-storage-bucket": "modules/file-system/cloud-storage-bucket",
 	"community/modules/project/service-account":          "modules/project/service-account",
 	"community/modules/network/private-service-access":   "modules/network/private-service-access",
+	"community/modules/scheduler/schedmd-slurm-gcp-v6-login": "modules/scheduler/schedmd-slurm-gcp-v6-login",
 }
 
 // GroupName is the name of a deployment group
