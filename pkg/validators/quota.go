@@ -169,6 +169,11 @@ func testQuotaAvailability(bp config.Blueprint, inputs config.Dict) error {
 
 	client, err := NewGCPQuotaClient(context.Background(), projectID)
 	if err != nil {
+		var gErr *googleapi.Error
+		if errors.As(err, &gErr) && gErr.Code == 403 {
+			logging.Error("WARNING: quota validation skipped due to lack of permissions: %v", err)
+			return nil
+		}
 		return handleClientError(err)
 	}
 
