@@ -298,7 +298,7 @@ func convertToCty(in interface{}) cty.Value {
 	}
 }
 
-// ValuesMatch compares two slices of cty.Value for equality.
+// ValuesMatch compares two slices of cty.Value for equality, treating "unset" values as equal.
 func ValuesMatch(original []cty.Value, expected []cty.Value) bool {
 	if len(original) != len(expected) {
 		return false
