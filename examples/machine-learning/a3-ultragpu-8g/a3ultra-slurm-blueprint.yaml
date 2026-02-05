@@ -161,7 +161,7 @@ deployment_groups:
           apt install -y cuda-toolkit-12-8
           # apt install -y datacenter-gpu-manager-4-cuda12
           # apt install -y datacenter-gpu-manager-4-dev
-                    apt install -y \
+          apt install -y \
               datacenter-gpu-manager-4-cuda12=1:4.5.0-1 \
               datacenter-gpu-manager-4-dev=1:4.5.0-1 \
               datacenter-gpu-manager-4-core=1:4.5.0-1
