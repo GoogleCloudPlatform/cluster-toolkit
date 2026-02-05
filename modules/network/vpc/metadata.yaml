@@ -27,5 +27,5 @@ ghpc:
   - validator: required
     inputs:
       vars: [primary_subnetwork, additional_subnetworks, subnetwork_size]
-      forbidden: true
+      deprecated: true
     error_message: "DEPRECATED: primary_subnetwork, additional_subnetworks, subnetwork_size. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."

@@ -24,15 +24,15 @@ ghpc:
   - validator: required
     inputs:
       vars: [job_template_contents]
-      forbidden: true
+      deprecated: true
     error_message: "job_template_contents is deprecated. Please use `job_data` instead."
   - validator: required
     inputs:
       vars: [job_filename]
-      forbidden: true
+      deprecated: true
     error_message: "job_filename is deprecated. Please use `job_data` instead."
   - validator: required
     inputs:
       vars: [job_id]
-      forbidden: true
+      deprecated: true
     error_message: "job_id is deprecated. Please use `job_data` instead."

@@ -22,15 +22,15 @@ ghpc:
   - validator: required
     inputs:
       vars: [descriptions]
-      forbidden: true
+      deprecated: true
     error_message: "var.descriptions has been deprecated in favor of creating single accounts with var.description"
   - validator: required
     inputs:
       vars: [names]
-      forbidden: true
+      deprecated: true
     error_message: "var.names has been deprecated in favor of creating single accounts with var.name"
   - validator: required
     inputs:
       vars: [prefix]
-      forbidden: true
+      deprecated: true
     error_message: "var.prefix has been deprecated in favor of setting prefix with var.deployment_name"

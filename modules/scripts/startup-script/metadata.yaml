@@ -22,10 +22,10 @@ ghpc:
   - validator: required
     inputs:
       vars: [enable_docker_world_writable]
-      forbidden: true
+      deprecated: true
     error_message: "The variable enable_docker_world_writable has been removed. Use var.docker instead"
   - validator: required
     inputs:
       vars: [install_docker]
-      forbidden: true
+      deprecated: true
     error_message: "The variable install_docker has been removed. Use var.docker instead"

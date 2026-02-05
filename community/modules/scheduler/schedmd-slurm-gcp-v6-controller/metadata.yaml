@@ -39,5 +39,5 @@ ghpc:
   - validator: required
     inputs:
       vars: [enable_smt, disable_smt]
-      forbidden: true
+      deprecated: true
     error_message: "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
