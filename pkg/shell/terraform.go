@@ -31,6 +31,12 @@ import (
 	"regexp"
 	"strings"
 
+	"bytes"
+	"io"
+	"sync"
+	"time"
+
+	"github.com/fatih/color"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -234,6 +240,55 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 	}
 }
 
+type timestampWriter struct {
+	writer      io.Writer
+	startOfLine bool
+	mu          sync.Mutex
+}
+
+func newTimestampWriter(writer io.Writer) io.Writer {
+	return &timestampWriter{
+		writer:      writer,
+		startOfLine: true,
+	}
+}
+
+func (w *timestampWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var buf bytes.Buffer
+	lastIdx := 0
+
+	// Scan for newlines to ensure line-by-line timestamping
+	for i, b := range p {
+		if b == '\n' {
+			w.writeSegment(&buf, p[lastIdx:i+1])
+			w.startOfLine = true
+			lastIdx = i + 1
+		}
+	}
+
+	// Handle partial writes (e.g., progress bars)
+	if lastIdx < len(p) {
+		w.writeSegment(&buf, p[lastIdx:])
+		w.startOfLine = false
+	}
+
+	// Single atomic write to the underlying writer
+	_, err = w.writer.Write(buf.Bytes())
+	return len(p), err
+}
+
+func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
+	if w.startOfLine {
+		ts := time.Now().UTC().Format(time.RFC3339)
+		coloredTs := color.New(color.FgMagenta).Sprint(ts)
+		buf.WriteString(coloredTs + " ")
+	}
+	buf.Write(p)
+}
+
 // This function applies the terraform plan, but generates outputs in JSON format
 // (instead of text)
 func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
@@ -250,8 +305,8 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 		return err
 	} else {
 		defer jsonFile.Close()
-		tf.SetStdout(os.Stdout)
-		tf.SetStderr(os.Stderr)
+		tf.SetStdout(newTimestampWriter(os.Stdout))
+		tf.SetStderr(newTimestampWriter(os.Stderr))
 		if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
 			return err
 		}
@@ -264,8 +319,8 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
 	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
-	tf.SetStdout(os.Stdout)
-	tf.SetStderr(os.Stderr)
+	tf.SetStdout(newTimestampWriter(os.Stdout))
+	tf.SetStderr(newTimestampWriter(os.Stderr))
 	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
 		return err
 	}
