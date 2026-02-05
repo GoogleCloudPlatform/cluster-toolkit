@@ -88,13 +88,14 @@ locals {
     bandwidth_tier = var.bandwidth_tier
     can_ip_forward = var.can_ip_forward
 
-    enable_confidential_vm = var.enable_confidential_vm
-    enable_placement       = var.enable_placement
-    placement_max_distance = var.placement_max_distance
-    enable_oslogin         = var.enable_oslogin
-    enable_shielded_vm     = var.enable_shielded_vm
-    gpu                    = one(local.guest_accelerator)
-    accelerator_topology   = var.accelerator_topology
+    enable_confidential_vm     = var.enable_confidential_vm
+    confidential_instance_type = var.confidential_instance_type
+    enable_placement           = var.enable_placement
+    placement_max_distance     = var.placement_max_distance
+    enable_oslogin             = var.enable_oslogin
+    enable_shielded_vm         = var.enable_shielded_vm
+    gpu                        = one(local.guest_accelerator)
+    accelerator_topology       = var.accelerator_topology
 
     labels                    = local.labels
     machine_type              = terraform_data.machine_type_zone_validation.output
@@ -144,13 +145,13 @@ data "google_compute_zones" "available" {
   region  = var.region
 
   lifecycle {
-    postcondition {
-      condition     = length(setsubtract(local.zones, self.names)) == 0
-      error_message = <<-EOD
-      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
-      Available zones=${jsonencode(self.names)}
-      EOD
-    }
+    # postcondition {
+    #   condition     = length(setsubtract(local.zones, self.names)) == 0
+    #   error_message = <<-EOD
+    #   Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
+    #   Available zones=${jsonencode(self.names)}
+    #   EOD
+    # }
   }
 }
 

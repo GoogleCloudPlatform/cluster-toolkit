@@ -223,6 +223,7 @@ resource "google_compute_instance_template" "tpl" {
 
   confidential_instance_config {
     enable_confidential_compute = var.enable_confidential_vm
+    confidential_instance_type  = var.enable_confidential_vm ? var.confidential_instance_type : null
   }
 
   dynamic "guest_accelerator" {
