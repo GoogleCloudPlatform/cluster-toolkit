@@ -53,7 +53,6 @@
           awk -F'"' '{print $2}'
 
 
-    # Add these tasks to base-integration-test.yml
   - name: Generate random suffix for networking
     ansible.builtin.set_fact:
      random_id: "{{ query('password', '/dev/null chars=ascii_lowercase,digits length=4') | first }}"
