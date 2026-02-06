@@ -64,7 +64,7 @@ output "subnetwork_address" {
 
 output "subnetwork_stack_type" {
   description = "Stack type of the primary subnetwork"
-  value       = module.vpc.subnetwork_stack_type
+  value       = local.output_primary_subnetwork_stack_type
   depends_on  = [module.vpc, module.cloud_router]
 }
 
