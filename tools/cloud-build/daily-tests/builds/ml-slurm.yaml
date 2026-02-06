@@ -25,6 +25,9 @@ tags:
 - m.startup-script
 - slurm6
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 18000s  # 5hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)

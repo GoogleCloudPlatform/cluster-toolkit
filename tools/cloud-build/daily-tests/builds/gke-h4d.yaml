@@ -57,8 +57,6 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=examples/gke-h4d/gke-h4d.yaml
-    BASE_TEST_NAME="gke-h4d"
-    FULL_TEST_NAME="${_TEST_PREFIX}$${BASE_TEST_NAME}"
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
@@ -82,8 +80,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-h4d.yml" \
-        --extra-vars="test_name=$${FULL_TEST_NAME}"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-h4d.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
   secretManager:
