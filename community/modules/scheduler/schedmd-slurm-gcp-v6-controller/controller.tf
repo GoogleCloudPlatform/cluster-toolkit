@@ -146,6 +146,7 @@ resource "google_compute_instance_from_template" "controller" {
     }
     network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
     subnetwork = var.subnetwork_self_link
+    stack_type = var.subnetwork_stack_type
   }
 
   dynamic "network_interface" {
