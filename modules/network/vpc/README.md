@@ -89,6 +89,8 @@ by
    * [var.region](#input_region)
    * [var.network_address_range](#input_network_address_range)
    * [var.default_primary_subnetwork_size](#input_default_primary_subnetwork_size)
+   * [var.subnetwork_stack_type](#input_subnetwork_stack_type)
+   * [var.subnetwork_ipv6_access_type](#input_subnetwork_ipv6_access_type)
 
 If `var.subnetworks` is provided then the primary subnetwork name is taken
 explicitly from it and `var.subnetwork_name` is ignored.
@@ -223,6 +225,8 @@ limitations under the License.
 | <a name="input_subnetwork_private_access"></a> [subnetwork\_private\_access](#input\_subnetwork\_private\_access) | Enable Private Google Access on the subnetworks | `bool` | `true` | no |
 | <a name="input_subnetwork_size"></a> [subnetwork\_size](#input\_subnetwork\_size) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `number` | `null` | no |
 | <a name="input_subnetworks"></a> [subnetworks](#input\_subnetworks) | List of subnetworks to create within the VPC. If left empty, it will be<br/>replaced by a single, default subnetwork constructed from other parameters<br/>(e.g. var.region). In all cases, the first subnetwork in the list is identified<br/>by outputs as a "primary" subnetwork.<br/><br/>subnet\_name           (string, required, name of subnet)<br/>subnet\_region         (string, required, region of subnet)<br/>subnet\_ip             (string, mutually exclusive with new\_bits, CIDR-formatted IP range for subnetwork)<br/>new\_bits              (number, mutually exclusive with subnet\_ip, CIDR bits used to calculate subnetwork range)<br/>subnet\_private\_access (bool, optional, Enable Private Access on subnetwork)<br/>subnet\_flow\_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)<br/>description           (string, optional, Description of Network)<br/>purpose               (string, optional, related to Load Balancing)<br/>role                  (string, optional, related to Load Balancing) | `list(map(string))` | `[]` | no |
+| <a name="input_subnetwork_stack_type"></a> [subnetwork\_stack\_type](#input\_subnetwork\_stack\_type) | The stack type for the subnetworks to identify whether the IPv6 feature is enabled or not | `string` | `IPV4_ONLY` | no |
+| <a name="input_subnetwork_ipv6_access_type"></a> [subnetwork\_ipv6\_access\_type](#input\_subnetwork\_ipv6\_access\_type) | The access type of IPv6 address the subnetworks | `string` | `null` | no |
 
 ## Outputs
 
@@ -236,5 +240,6 @@ limitations under the License.
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | IP address range of the primary subnetwork |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the primary subnetwork |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Self link of the primary subnetwork |
+| <a name="output_subnetwork_stack_type"></a> [subnetwork\_stack\_type](#output\_subnetwork\_stack\_type) | Stack type of the primary subnetwork |
 | <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | Full list of subnetwork objects belonging to the new VPC network |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

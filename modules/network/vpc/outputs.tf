@@ -62,6 +62,12 @@ output "subnetwork_address" {
   depends_on  = [module.vpc, module.cloud_router]
 }
 
+output "subnetwork_stack_type" {
+  description = "Stack type of the primary subnetwork"
+  value       = module.vpc.subnetwork_stack_type
+  depends_on  = [module.vpc, module.cloud_router]
+}
+
 output "nat_ips" {
   description = "External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used)"
   value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])

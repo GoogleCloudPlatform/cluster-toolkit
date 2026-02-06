@@ -45,6 +45,8 @@ locals {
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
     role                  = null
+    stack_type            = var.subnetwork_stack_type
+    ipv6_access_type      = var.subnetwork_ipv6_access_type
   }
 
   # Identify user-supplied primary subnetwork
