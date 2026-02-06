@@ -355,9 +355,9 @@ variable "subnetwork_self_link" {
 }
 
 variable "subnetwork_stack_type" {
-  type = string
+  type        = string
   description = "Stack type of the subnet to deploy to."
-  default = "IPV4_ONLY"
+  default     = "IPV4_ONLY"
 }
 
 
