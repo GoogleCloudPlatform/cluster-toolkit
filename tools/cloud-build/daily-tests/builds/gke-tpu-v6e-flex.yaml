@@ -25,6 +25,9 @@ tags:
 - m.pre-existing-network-storage
 - gke
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 7200s
 
 steps:
@@ -46,7 +49,15 @@ steps:
   - |
     set -e -u -o pipefail
     set -x
-    cd /workspace && make
+    cd /workspace
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
     ZONE=asia-northeast1-b
     REGION=asia-northeast1
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
@@ -72,3 +83,8 @@ steps:
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-tpu-v6e-flex.yml"
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
