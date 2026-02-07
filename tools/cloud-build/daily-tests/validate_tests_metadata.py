@@ -21,21 +21,20 @@ from typing import Optional
 import itertools
 
 CATEGORICAL_TAGS = frozenset([
-    "batch", 
-    "crd", 
+    "batch",
+    "crd",
     "gke",
-    "htcondor", 
-    "monitoring", 
-    "ofe", 
-    "packer", 
-    "slurm5", 
-    "slurm6", 
+    "htcondor",
+    "monitoring",
+    "ofe",
+    "packer",
+    "slurm5",
+    "slurm6",
     "spack",
-    "tpu", 
+    "tpu",
     "vm",
-    "dockerfile", 
+    "dockerfile",
 ])
-
 def module_tag(src: str) -> Optional[str]:
     """
     Returns tag for a specific module source.
