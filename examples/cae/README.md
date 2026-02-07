@@ -105,7 +105,7 @@ storage intact and b) you can build software before you deploy your cluster.
    id.
 
    ```bash
-   ./gcluster create community/examples/cae-slurm.yaml -w --vars project_id=<project>
+   ./gcluster create examples/cae/cae-slurm.yaml -w --vars project_id=<project>
    ```
 
 1. Deploy the `setup` group
