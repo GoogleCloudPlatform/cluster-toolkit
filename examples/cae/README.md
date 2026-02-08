@@ -113,7 +113,7 @@ storage intact and b) you can build software before you deploy your cluster.
    Call the following gcluster command to deploy the cae-slurm blueprint.
 
    ```bash
-   ./gcluster deploy cae-slurm
+   ./gcluster deploy cae-slurm-v6
    ```
 
    The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
@@ -178,7 +178,7 @@ commands to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./gcluster destroy cae-slurm
+./gcluster destroy cae-slurm-v6
 ```
 
 > [!WARNING]
