@@ -22,9 +22,6 @@ tags:
 - m.gpu-rdma-vpc
 - m.kubectl-apply
 - m.vpc
-- m.cloud-storage-bucket
-- m.gke-persistent-volume
-- m.pre-existing-network-storage
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
@@ -60,8 +57,8 @@ steps:
     EXAMPLE_BP=examples/gke-a4/gke-a4-inference-gateway.yaml
 
     # Ansible playbook call
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}"
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} blueprint_yaml=$${EXAMPLE_BP}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a4-inference-gateway-test.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
