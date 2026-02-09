@@ -318,12 +318,11 @@ func findReservationInOtherZones(s *compute.Service, projectID string, name stri
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
-func TestReservationExists(reservationProjectID string, zone string, reservationName string, deploymentProjectID string) error {
+func TestReservationExists(ctx context.Context, reservationProjectID string, zone string, reservationName string, deploymentProjectID string) error {
 	if reservationName == "" {
 		return nil
 	}
 
-	ctx := context.Background()
 	s, err := compute.NewService(ctx)
 	if err != nil {
 		return handleClientError(err)
@@ -405,10 +404,13 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	targetName := resInput
 
 	if len(matches) == 3 {
-		reservationProjectID = matches[1] // Extract project 'B'
+		// The input is a full resource path, indicating a shared reservation.
+		// Use the project ID extracted from the path instead of the deployment project.
+		reservationProjectID = matches[1]
 		targetName = matches[2]
 	}
 
 	// Pass both the owner project and the deployment project
-	return TestReservationExists(reservationProjectID, zone, targetName, deploymentProjectID)
+	ctx := context.Background()
+	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }
