@@ -16,13 +16,13 @@
 
 # region, zone must be defined in build file with --extra-vars flag!
 test_name: a3u-onspot-slurm
-deployment_name: "a3u-onspot-slurm-{{ build }}"
-slurm_cluster_name: "a3usp{{ build[0:5] }}"
+deployment_name: "a3u-onspot-slurm-{{ build[0:4] }}"
+slurm_cluster_name: "a3usp{{ build[0:4] }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: "{{ test_name }}-net-0"
+network: "{{ build[0:4] }}-net-0"
 nccl_test_path: "examples/machine-learning/a3-ultragpu-8g/nccl-tests"
 post_deploy_tests:
 - test-validation/test-mounts.yml
