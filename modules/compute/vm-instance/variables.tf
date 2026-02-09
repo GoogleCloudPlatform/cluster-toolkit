@@ -315,12 +315,12 @@ variable "placement_policy" {
   See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy#nested_group_placement_policy
   EOT
   type = object({
-    vm_count                = optional(number)
+    vm_count                  = optional(number)
     availability_domain_count = optional(number)
-    collocation             = optional(string)
-    max_distance            = optional(number)
-    gpu_topology            = optional(string)
-  })  
+    collocation               = optional(string)
+    max_distance              = optional(number)
+    gpu_topology              = optional(string)
+  })
   default = null
 }
 
