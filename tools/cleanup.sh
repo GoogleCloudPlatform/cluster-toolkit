@@ -109,16 +109,16 @@ is_excluded() {
 			if [[ "$KEY" == "time-to-live" ]]; then
 				local exp_seconds
 				# Regex for YYYY-MM-DD_HH-MM format (GCP Label compliant)
-				if [[ "$VAL" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{2}-[0-9]{2})?$ ]] ; then
-					
+				if [[ "$VAL" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{2}-[0-9]{2})?$ ]]; then
+
 					# Transform "YYYY-MM-DD_HH-MM" to "YYYY-MM-DD HH:MM" for the date command
 					local VAL_FOR_DATE
 					VAL_FOR_DATE=$(echo "$VAL" | sed 's/_/ /; s/-/:/3')
-					
+
 					if exp_seconds=$(date -d "$VAL_FOR_DATE" -u +%s 2>/dev/null); then
 						local current_seconds
 						current_seconds=$(date -u +%s)
-						
+
 						if [[ "$exp_seconds" -gt "$current_seconds" ]]; then
 							log "SKIP" "$resource_name: Exempted by active label: time-to-live=$VAL"
 							return 0 # Excluded
