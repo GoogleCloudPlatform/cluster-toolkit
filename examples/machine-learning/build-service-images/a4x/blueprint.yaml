@@ -118,7 +118,7 @@ deployment_groups:
           #!/bin/bash
           set -e -o pipefail
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.10 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

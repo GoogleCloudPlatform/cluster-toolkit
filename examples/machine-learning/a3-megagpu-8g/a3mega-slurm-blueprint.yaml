@@ -35,7 +35,7 @@ vars:
   enable_login_public_ips: true
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd
-
+  build_slurm_from_git_ref: 6.10.10
   #Provisioning models (set to true or fill in reservation name, pick only one)
   a3mega_reservation_name: ""  # supply reservation name
   a3mega_dws_flex_enabled: false
@@ -149,7 +149,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.6 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
