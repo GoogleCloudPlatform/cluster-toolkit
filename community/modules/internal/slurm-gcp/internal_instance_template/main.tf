@@ -48,10 +48,11 @@ locals {
   # initialize the block only if it is enabled.
   shielded_vm_configs = var.enable_shielded_vm ? [true] : []
 
-  gpu_enabled            = var.gpu != null
-  alias_ip_range_enabled = var.alias_ip_range != null
-  preemptible            = var.preemptible || var.spot
-  on_host_maintenance = (
+  gpu_enabled                = var.gpu != null
+  alias_ip_range_enabled     = var.alias_ip_range != null
+  preemptible                = var.preemptible || var.spot
+  confidential_instance_type = var.enable_confidential_vm ? coalesce(var.confidential_instance_type, "SEV") : null
+  effective_on_host_maintenance = (
     local.preemptible || var.enable_confidential_vm || local.gpu_enabled
     ? "TERMINATE"
     : var.on_host_maintenance
@@ -179,13 +180,33 @@ resource "google_compute_instance_template" "tpl" {
 
   lifecycle {
     create_before_destroy = "true"
+
+    precondition {
+      condition     = !(local.confidential_instance_type == "SEV" && local.effective_on_host_maintenance == "MIGRATE") || var.min_cpu_platform == "AMD Milan"
+      error_message = "To use on_host_maintenance = 'MIGRATE' with confidential_instance_type = 'SEV', min_cpu_platform must be 'AMD Milan'."
+    }
+
+    precondition {
+      condition     = !(local.confidential_instance_type == "SEV" && var.min_cpu_platform != "AMD Milan") || local.effective_on_host_maintenance == "TERMINATE"
+      error_message = "If confidential_instance_type is 'SEV' and min_cpu_platform is not 'AMD Milan', on_host_maintenance must be 'TERMINATE'."
+    }
+
+    precondition {
+      condition     = local.confidential_instance_type != "SEV_SNP" || var.min_cpu_platform == "AMD Milan"
+      error_message = "If confidential_instance_type is 'SEV_SNP', min_cpu_platform must be 'AMD Milan'."
+    }
+
+    precondition {
+      condition     = var.enable_confidential_vm ? contains(["SEV", "SEV_SNP", "TDX"], local.confidential_instance_type) : true
+      error_message = "If enable_confidential_vm is true, confidential_instance_type must be one of 'SEV', 'SEV_SNP', or 'TDX'."
+    }
   }
 
   scheduling {
     preemptible                 = local.preemptible
     provisioning_model          = local.provisioning_model
     automatic_restart           = local.automatic_restart
-    on_host_maintenance         = local.on_host_maintenance
+    on_host_maintenance         = local.effective_on_host_maintenance
     instance_termination_action = var.instance_termination_action
 
     dynamic "max_run_duration" {
@@ -223,7 +244,7 @@ resource "google_compute_instance_template" "tpl" {
 
   confidential_instance_config {
     enable_confidential_compute = var.enable_confidential_vm
-    confidential_instance_type  = var.enable_confidential_vm ? var.confidential_instance_type : null
+    confidential_instance_type  = local.confidential_instance_type
   }
 
   dynamic "guest_accelerator" {
