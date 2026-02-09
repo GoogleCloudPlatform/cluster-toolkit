@@ -207,7 +207,7 @@ func writeVersions(providers map[string]config.TerraformProvider, dst string) er
 	body := f.Body()
 	body.AppendNewline()
 	tfb := body.AppendNewBlock("terraform", []string{}).Body()
-	tfb.SetAttributeValue("required_version", cty.StringVal(">= 1.2"))
+	tfb.SetAttributeValue("required_version", cty.StringVal("= 1.12.2"))
 	tfb.AppendNewline()
 
 	pb := tfb.AppendNewBlock("required_providers", []string{}).Body()

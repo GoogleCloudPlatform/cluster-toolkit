@@ -414,7 +414,7 @@ func (s *zeroSuite) TestWriteVersions(c *C) {
 		c.Assert(err, IsNil)
 		c.Check(string(b), Equals, license+`
 terraform {
-  required_version = ">= 1.2"
+  required_version = "= 1.12.2"
 
   required_providers {
     elephant = {

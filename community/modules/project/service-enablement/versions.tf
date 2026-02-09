@@ -25,5 +25,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:service-enablement/v1.81.0"
   }
 
-  required_version = ">= 0.14.0"
+  required_version = "= 1.12.2"
 }

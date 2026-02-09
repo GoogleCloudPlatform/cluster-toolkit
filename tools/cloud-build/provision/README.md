@@ -19,7 +19,7 @@ When prompted for project, use integration test project.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_external"></a> [external](#requirement\_external) | ~> 2.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
 
