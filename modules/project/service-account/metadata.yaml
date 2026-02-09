@@ -23,14 +23,14 @@ ghpc:
     inputs:
       vars: [descriptions]
       deprecated: true
-    error_message: "var.descriptions has been deprecated in favor of creating single accounts with var.description"
+    error_message: "Unsupported variable: 'descriptions'. Please use 'description' instead."
   - validator: required
     inputs:
       vars: [names]
       deprecated: true
-    error_message: "var.names has been deprecated in favor of creating single accounts with var.name"
+    error_message: "Unsupported variable: 'names'. Please use 'name' instead."
   - validator: required
     inputs:
       vars: [prefix]
       deprecated: true
-    error_message: "var.prefix has been deprecated in favor of setting prefix with var.deployment_name"
+    error_message: "Unsupported variable: 'prefix'. Please use 'deployment_name' instead."

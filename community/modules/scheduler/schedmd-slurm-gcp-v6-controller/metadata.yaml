@@ -40,4 +40,4 @@ ghpc:
     inputs:
       vars: [enable_smt, disable_smt]
       deprecated: true
-    error_message: "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
+    error_message: "Unsupported variables: 'enable_smt', 'disable_smt'. Please use 'advanced_machine_features.threads_per_core' instead."

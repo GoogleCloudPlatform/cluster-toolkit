@@ -25,14 +25,14 @@ ghpc:
     inputs:
       vars: [job_template_contents]
       deprecated: true
-    error_message: "job_template_contents is deprecated. Please use `job_data` instead."
+    error_message: "Unsupported variable: 'job_template_contents'. Please use 'job_data' instead."
   - validator: required
     inputs:
       vars: [job_filename]
       deprecated: true
-    error_message: "job_filename is deprecated. Please use `job_data` instead."
+    error_message: "Unsupported variable: 'job_filename'. Please use 'job_data' instead."
   - validator: required
     inputs:
       vars: [job_id]
       deprecated: true
-    error_message: "job_id is deprecated. Please use `job_data` instead."
+    error_message: "Unsupported variable: 'job_id'. Please use 'job_data' instead."
