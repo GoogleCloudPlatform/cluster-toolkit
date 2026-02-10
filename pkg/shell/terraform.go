@@ -42,6 +42,10 @@ import (
 	"github.com/zclconf/go-cty/cty/gocty"
 )
 
+var (
+	tsColor = color.New(color.FgMagenta)
+)
+
 // OutputFormat determines the format in which the errors are reported.
 // Current supported format are text (default option) and JSON.
 type OutputFormat uint
@@ -276,14 +280,15 @@ func (w *timestampWriter) Write(p []byte) (n int, err error) {
 	}
 
 	// Single atomic write to the underlying writer
-	_, err = w.writer.Write(buf.Bytes())
-	return len(p), err
+	nWritten, err := w.writer.Write(buf.Bytes())
+	return nWritten, err
 }
 
 func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
 	if w.startOfLine {
 		ts := time.Now().UTC().Format(time.RFC3339)
-		coloredTs := color.New(color.FgMagenta).Sprint(ts)
+		// Assuming tsColor is made available in this package, e.g., by passing it or making it global.
+		coloredTs := tsColor.Sprint(ts)
 		buf.WriteString(coloredTs + " ")
 	}
 	buf.Write(p)
