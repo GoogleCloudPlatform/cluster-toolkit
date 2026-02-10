@@ -67,7 +67,8 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 1. Download and extract the bundle:
 
     ```shell
-    # Replace vX.Y.Z with the desired release version from the Releases page.
+    LATEST_TAG=$(curl -s https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/releases/latest | jq -r ".tag_name")
+    # Replace LATEST_TAG with the latest release version, ex: v1.81.0
     # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
     unzip gcluster-bundle.zip -d gcluster-bundle/
