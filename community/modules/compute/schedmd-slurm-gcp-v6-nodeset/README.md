@@ -165,7 +165,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.4 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.11 |
 
 ## Providers

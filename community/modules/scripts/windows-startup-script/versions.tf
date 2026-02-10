@@ -19,5 +19,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:windows-startup-script/v1.81.0"
   }
 
-  required_version = ">= 0.14.0"
+  required_version = "= 1.12.2"
 }
