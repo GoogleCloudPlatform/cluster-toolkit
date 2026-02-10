@@ -192,3 +192,106 @@ func (v *AllowedEnumValidator) Validate(
 		return v.checkValues(t.Values, t.Path, allowedSet, allowedList, caseSensitive, allowNull, rule.ErrorMessage)
 	})
 }
+
+// RangeValidator implements the RuleValidator interface for the 'range' validation type.
+type RangeValidator struct{}
+
+// checkBounds validates a single integer value against the optional minimum and maximum bounds.
+func (r *RangeValidator) checkBounds(value int, min *int, max *int, customErrMsg string, path config.Path) error {
+	if min != nil && value < *min {
+		msg := customErrMsg
+		if msg == "" {
+			msg = fmt.Sprintf("value %d is less than the minimum allowed value of %d", value, *min)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	if max != nil && value > *max {
+		msg := customErrMsg
+		if msg == "" {
+			msg = fmt.Sprintf("value %d is greater than the maximum allowed value of %d", value, *max)
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: path}
+	}
+	return nil
+}
+
+// validateTarget applies range validation to a list of cty.Values.
+func (r *RangeValidator) validateTarget(
+	values []cty.Value,
+	path config.Path,
+	min *int,
+	max *int,
+	lengthCheck bool,
+	customErrMsg string) error {
+	if lengthCheck {
+		return r.checkBounds(len(values), min, max, customErrMsg, path)
+	}
+
+	for _, val := range values {
+		if val.IsNull() || !val.IsKnown() {
+			continue
+		}
+		if val.Type() == cty.Number {
+			f, _ := val.AsBigFloat().Float64()
+			if f != float64(int64(f)) {
+				return config.BpError{
+					Err:  fmt.Errorf("range validator only supports integer numbers, not %v", f),
+					Path: path,
+				}
+			}
+			if err := r.checkBounds(int(f), min, max, customErrMsg, path); err != nil {
+				return err
+			}
+		} else {
+			return config.BpError{
+				Err:  fmt.Errorf("range validator only supports numbers, not %s", val.Type().FriendlyName()),
+				Path: path,
+			}
+		}
+	}
+	return nil
+}
+
+// Validate checks if the variables specified in the rule fall within the specified numeric range or length constraints.
+func (r *RangeValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+
+	min, err := parseIntInput(rule.Inputs, "min")
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	max, err := parseIntInput(rule.Inputs, "max")
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	if min == nil && max == nil {
+		return config.BpError{
+			Err:  fmt.Errorf("range validator for module %q must have at least one of 'min' or 'max' defined", mod.ID),
+			Path: modPath,
+		}
+	}
+
+	if min != nil && max != nil && *max < *min {
+		return config.BpError{
+			Err:  fmt.Errorf("range validator for module %q must have 'min' less than or equal to 'max' defined", mod.ID),
+			Path: modPath,
+		}
+	}
+
+	checkListLength, err := parseBoolInput(rule.Inputs, "length_check", false)
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
+		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, rule.ErrorMessage)
+	})
+}

@@ -127,8 +127,8 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.33.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/oauth2 v0.34.0
+	golang.org/x/sys v0.40.0
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/grpc v1.76.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect

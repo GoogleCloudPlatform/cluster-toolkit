@@ -111,6 +111,7 @@ resource "google_compute_instance_from_template" "slurm_instance" {
       queue_count        = nic.value.queue_count
       subnetwork         = nic.value.subnetwork
       subnetwork_project = nic.value.subnetwork_project
+      stack_type         = nic.value.stack_type
     }
   }
 

@@ -1,0 +1,159 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.project is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+# --- Flex Start Specific Checks (Pre-Job) ---
+
+- name: Verify Initial Node Count (Should be 0 for Flex)
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get nodes -l cloud.google.com/gke-tpu-accelerator={{ custom_vars.tpu_accelerator_type | default('tpu-v6e-slice') }} --no-headers | wc -l
+  register: initial_node_count
+  failed_when: initial_node_count.stdout | int != 0
+
+- name: Identify Job File
+  delegate_to: localhost
+  ansible.builtin.shell: ls {{ workspace }}/{{ deployment_name }}/primary/my-job*.yaml | head -n 1
+  register: job_file_result
+  changed_when: False
+
+- name: Register Job Variables
+  ansible.builtin.set_fact:
+    job_file_path: "{{ job_file_result.stdout }}"
+    job_name: "{{ job_file_result.stdout | basename | splitext | first }}"
+
+- name: Execute the job
+  delegate_to: localhost
+  ansible.builtin.command: kubectl create -f {{ job_file_path }}
+  changed_when: False
+
+# --- Flex Start Specific Checks (Scale Up) ---
+
+- name: Block to wait for job completion, verify scaling, and capture failures
+  block:
+  # Check for TriggeredScaleUp event (This confirms Flex/Autoscaling kicked in)
+  - name: Wait for TriggeredScaleUp event
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get events --sort-by='.lastTimestamp' | grep "TriggeredScaleUp" | grep -E "gke-tpu|instanceGroups"
+    register: scale_up_event
+    retries: 30 # Wait up to ~5 minutes (30 * 10s)
+    delay: 10
+    until: scale_up_event.rc == 0
+
+  - name: Wait for nodes to become Ready
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get nodes -l cloud.google.com/gke-tpu-accelerator={{ custom_vars.tpu_accelerator_type | default('tpu-v6e-slice') }} --no-headers | grep "Ready" | wc -l
+    register: ready_node_count
+    retries: 60 # Wait up to 10 minutes for nodes to boot
+    delay: 10
+    until: ready_node_count.stdout | int == (custom_vars.expected_node_count | default(4) | int)
+
+  - name: Verify Flex Start label on Nodes
+    delegate_to: localhost
+    ansible.builtin.shell: |
+       kubectl get nodes -l cloud.google.com/gke-flex-start=true --no-headers | wc -l
+    register: labeled_node_count
+    failed_when: labeled_node_count.stdout | int == 0
+
+  - name: Wait for job to complete
+    delegate_to: localhost
+    ansible.builtin.command: kubectl wait --for=condition=complete "job/{{ job_name }}" --timeout=20m
+    register: job_wait_result
+
+  - name: Verify Expected Pods Completed
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods --selector=job-name={{ job_name }} --field-selector=status.phase=Succeeded --no-headers | wc -l
+    register: succeeded_pod_count
+    failed_when: succeeded_pod_count.stdout | int != (custom_vars.expected_node_count | default(4) | int)
+
+  - name: Get job logs
+    delegate_to: localhost
+    # Using label selector to get logs from all pods in the job
+    ansible.builtin.shell: |
+      kubectl logs -l job-name={{ job_name }} --all-containers --prefix --tail=30
+    register: job_logs
+    changed_when: false
+    no_log: true
+
+  - name: Print job output
+    ansible.builtin.debug:
+      msg: "Job Output (Last 30 lines per container): {{ job_logs.stdout if (job_logs.stdout is defined and job_logs.stdout | length > 0) else 'No logs found' }}"
+
+  - name: Wait for nodes to scale down to 0
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get nodes -l cloud.google.com/gke-tpu-accelerator={{ custom_vars.tpu_accelerator_type | default('tpu-v6e-slice') }} --no-headers | wc -l
+    register: final_node_count
+    retries: 120
+    delay: 10 # Wait up to 20 minutes for scale down
+    until: final_node_count.stdout | int == 0
+
+  rescue:
+  - name: "FAILURE: Job did not complete or verification failed. Capturing debug info."
+    ansible.builtin.debug:
+      msg: "The Job failed to complete within the expected time or failed verification. See debug output below."
+
+  - name: Get all pods status on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -o wide
+    register: pods_on_failure
+    changed_when: false
+
+  - name: Print all pods status on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_on_failure.stdout_lines }}"
+
+  - name: Describe the job on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe job {{ job_name }}
+    register: job_describe_on_failure
+    changed_when: false
+
+  - name: Print job description on failure
+    ansible.builtin.debug:
+      msg: "{{ job_describe_on_failure.stdout_lines }}"
+
+  - name: Get events on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get events --sort-by='.lastTimestamp'
+    register: events_on_failure
+    changed_when: false
+
+  - name: Print events on failure
+    ansible.builtin.debug:
+      msg: "{{ events_on_failure.stdout_lines }}"
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "GKE DWS Flex Job validation failed."
+
+  always:
+  - name: Clean up
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete job {{ job_name }}

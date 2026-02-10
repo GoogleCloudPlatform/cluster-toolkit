@@ -13,6 +13,6 @@
 # limitations under the License.
 
 output "nodeset_name" {
-  description = "Name of the new Slinky nodset"
+  description = "Name of the new Slinky nodeset"
   value       = local.nodeset.nodeset_name
 }

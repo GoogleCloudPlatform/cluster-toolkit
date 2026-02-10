@@ -19,3 +19,10 @@ spec:
     - compute.googleapis.com
 ghpc:
   inject_module_id: ghpc_module_id
+  validators:
+  - validator: range
+    inputs:
+      vars: [versions]
+      min: 1
+      length_check: true # Validates the list's length instead of its elements.
+    error_message: "The 'versions' list must contain at least one version."

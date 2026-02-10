@@ -123,6 +123,26 @@ type Target struct {
 	IsBlueprint bool // true if came from blueprint vars, false if module.settings
 }
 
+// parseIntInput parses an integer from the input map and returns a pointer.
+// It returns nil if the key is not found.
+func parseIntInput(inputs map[string]interface{}, key string) (*int, error) {
+	v, ok := inputs[key]
+	if !ok {
+		return nil, nil
+	}
+
+	var val int
+	switch t := v.(type) {
+	case int:
+		val = t
+	case float64:
+		val = int(t)
+	default:
+		return nil, fmt.Errorf("'%s' must be an integer, not %T", key, v)
+	}
+	return &val, nil
+}
+
 // processModuleSettings processes a list of names interpreted as module settings.
 func processModuleSettings(bp config.Blueprint, mod config.Module, group config.Group, modIdx int, list []string, optional bool, handler func(Target) error) error {
 	for _, s := range list {

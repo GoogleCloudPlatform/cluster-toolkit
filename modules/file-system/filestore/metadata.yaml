@@ -20,6 +20,18 @@ spec:
 
 ghpc:
   validators:
+  - validator: range
+    inputs:
+      vars: [size_gb]
+      min: 1024
+    error_message: "The 'size_gb' value must be at least 1024 GiB. See https://cloud.google.com/filestore/docs/service-tiers for details."
+
+  - validator: regex
+    inputs:
+      vars: [network_id]
+      pattern: ^projects/[^/]+/global/networks/[^/]+$
+    error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+
   - validator: allowed_enum
     inputs:
       vars: [filestore_tier]

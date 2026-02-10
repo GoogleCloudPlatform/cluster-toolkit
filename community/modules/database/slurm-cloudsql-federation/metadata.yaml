@@ -19,3 +19,10 @@ spec:
     - bigqueryconnection.googleapis.com
     - sqladmin.googleapis.com
     - servicenetworking.googleapis.com
+ghpc:
+  validators:
+  - validator: regex
+    inputs:
+      vars: [network_id]
+      pattern: "^projects/[^/]+/global/networks/[^/]+$"
+    error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
