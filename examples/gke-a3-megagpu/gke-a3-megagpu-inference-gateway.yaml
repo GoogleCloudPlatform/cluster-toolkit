@@ -188,3 +188,14 @@ deployment_groups:
           accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a3_megagpu_pool]
+    settings:
+      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
+      command:
+      - nvidia-smi
+      node_count: 2
+      name: run-nvidia-smi
+      k8s_service_account_name: workload-identity-k8s-sa
+    outputs: [instructions]
