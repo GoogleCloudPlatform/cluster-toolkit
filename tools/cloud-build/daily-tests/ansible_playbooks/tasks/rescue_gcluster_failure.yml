@@ -38,7 +38,7 @@
     changed_when: gcluster_destroy.changed
     run_once: true
     ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
-    #Temporarily add retry due to K8S deletion issue.
+    # Temporarily add retry due to K8S deletion issue.
     until: gcluster_destroy.rc == 0
     retries: 1
     delay: 10
