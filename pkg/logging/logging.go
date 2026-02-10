@@ -43,16 +43,19 @@ func formatTs() string {
 	return tsColor.Sprint(ts)
 }
 
+// Info prints info to stdout
 func Info(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
 	infolog.Printf("%s: %s", formatTs(), msg)
 }
 
+// Error prints info to stderr but does not end the program
 func Error(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
 	errorlog.Printf("%s ERROR: %s", formatTs(), msg)
 }
 
+// Fatal prints info to stderr and ends the program
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
 	fatallog.Printf("%s FATAL: %s", formatTs(), msg)
