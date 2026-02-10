@@ -18,6 +18,8 @@ import os
 import subprocess
 import yaml
 import uuid
+import copy
+import tempfile
 
 class Deployment:
     def __init__(self, blueprint: str):
@@ -111,17 +113,81 @@ class Deployment:
         self.upload_deployment()
         self.print_download_command()
 
-    def deploy(self):
-        # Create deployment directory
-        self.create_deployment_directory()
-        cmd = [
-              "./gcluster",
-              "deploy",
-              self.deployment_name,
-              "--auto-approve"
-          ]
+    def generate_blueprint_with_spot_config(self, enable_spot: bool) -> str:
+        """
+        Generates a temporary blueprint file with the specified Spot VM configuration.
+        Returns the path to the temporary blueprint file.
+        """
+        config = None
+        with open(self.blueprint_file, 'r') as f:
+            config = yaml.safe_load(f)
 
-        subprocess.run(cmd, check=True, cwd=self.workspace)
+        # Iterate through groups and modules to find nodesets
+        for group in config.get('deployment_groups', []):
+            for module in group.get('modules', []):
+                source = module.get('source', '')
+                if 'nodeset' in source:
+                    if 'settings' not in module:
+                        module['settings'] = {}
+                    
+                    module['settings']['enable_spot_vm'] = enable_spot
+                    print(f"Set enable_spot_vm={enable_spot} for module {module.get('id')}")
+
+        fd, temp_path = tempfile.mkstemp(suffix='.yaml', text=True)
+        with os.fdopen(fd, 'w') as f:
+            yaml.dump(config, f)
+        
+        return temp_path
+
+    def deploy(self):
+        """
+        Deploys the blueprint using a waterfall strategy:
+        Tier 1: Spot VMs (enable_spot_vm=True)
+        Tier 2: On-Demand VMs (enable_spot_vm=False)
+        """
+        original_blueprint_file = self.blueprint_file
+        
+        tiers = [
+            (True, "Tier 1: Spot VMs"),
+            (False, "Tier 2: On-Demand VMs")
+        ]
+
+        for i, (enable_spot, description) in enumerate(tiers):
+            print(f"\n--- Attempting {description} ---")
+            
+            try:
+                temp_blueprint = self.generate_blueprint_with_spot_config(enable_spot)
+                self.blueprint_file = temp_blueprint
+                
+                self.create_deployment_directory()
+                
+                cmd = [
+                      "./gcluster",
+                      "deploy",
+                      self.deployment_name,
+                      "--auto-approve"
+                  ]
+                
+                subprocess.run(cmd, check=True, cwd=self.workspace)
+                
+                print(f"Successfully deployed using {description}")
+                return
+
+            except Exception as e:
+                print(f"Deployment failed for {description}: {e}")
+                if i == len(tiers) - 1:
+                    print("All provisioning tiers failed.")
+                    raise e
+                
+                print("Falling back to next tier...")
+                
+                try:
+                    self.destroy()
+                except Exception as destroy_err:
+                    print(f"Warning: Failed to cleanup after failed deployment: {destroy_err}")
+
+            finally:
+                self.blueprint_file = original_blueprint_file
 
     def destroy(self):
         cmd = [
