@@ -70,7 +70,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     LATEST_TAG=$(curl -s https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/releases/latest | jq -r ".tag_name")
     # Replace LATEST_TAG with the latest release version, ex: v1.81.0
     # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/vX.Y.Z/gcluster-bundle.zip
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${LATEST_TAG}/gcluster-bundle.zip
     unzip gcluster-bundle.zip -d gcluster-bundle/
     cd gcluster-bundle
     chmod +x gcluster
