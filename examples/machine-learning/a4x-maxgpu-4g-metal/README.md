@@ -24,7 +24,7 @@ This blueprint installs and configures several key software components. While th
 * **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
 * **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
-* **Slurm:** Git ref `6.10.6` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
+* **Slurm:** Git ref `6.10.10` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
 * **ASAPd Image:** `us-west1-docker.pkg.dev/asapd-staging-test/asapd-lite-dev/asapd-lite-arm-tmp:3.1-deliberate-cc-cuiwl-asapd-lite-release-deliberate-cc`
 
@@ -98,14 +98,14 @@ vars:
 
 ``` bash
 #!/bin/bash
-gcluster deploy -d a4xmax-bm-slurm-deployment.yaml a4xmax-bm-slurm-blueprint.yaml
+./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml
 ```
 
 ### Re-deploy the cluster
 
 ```bash
 #!/bin/bash
-gcluster deploy -d a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml --only cluster-env,cluster --auto-approve -w
+./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml --only cluster-env,cluster --auto-approve -w
 ```
 
 ### Destroy the cluster
@@ -120,7 +120,7 @@ Selective deployment and teardown for this blueprint are documented centrally. S
 Example (deploy only the primary group for this blueprint):
 
 ```bash
-./gcluster deploy -d a4xmax-bm-slurm-deployment.yaml a4xmax-bm-slurm-blueprint.yaml --only primary
+./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml --only primary
 ```
 
 ### Cloud Storage FUSE
