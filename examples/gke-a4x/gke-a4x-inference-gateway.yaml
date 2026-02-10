@@ -230,48 +230,6 @@ deployment_groups:
         ))
     outputs: [instructions]
 
-  # # --- MANAGED LUSTRE ADDITIONS ---
-  # # Private Service Access (PSA) requires the compute.networkAdmin role which is
-  # # included in the Owner role, but not Editor.
-  # # PSA is required for all Managed Lustre functionality.
-  # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
-  # - id: private_service_access
-  #   source: community/modules/network/private-service-access
-  #   use: [gke-a4x-net-0]
-  #   settings:
-  #     prefix_length: 24
-
-  # # Firewall to allow Managed Lustre connection
-  # - id: lustre_firewall_rule
-  #   source: modules/network/firewall-rules
-  #   use: [gke-a4x-net-0]
-  #   settings:
-  #     ingress_rules:
-  #     - name: $(vars.deployment_name)-allow-lustre-traffic
-  #       description: Allow Managed Lustre traffic
-  #       source_ranges:
-  #       - $(private_service_access.cidr_range)
-  #       allow:
-  #       - protocol: tcp
-  #       ports:
-  #       - "988"
-
-  # - id: managed-lustre
-  #   source: modules/file-system/managed-lustre
-  #   use: [gke-a4x-net-0, private_service_access]
-  #   settings:
-  #     name: $(vars.lustre_instance_id)
-  #     local_mount: /lustre
-  #     remote_mount: lustrefs
-  #     size_gib: $(vars.lustre_size_gib)
-  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
-
-  # - id: lustre-pv
-  #   source: modules/file-system/gke-persistent-volume
-  #   use: [managed-lustre, a4x-cluster]
-  #   settings:
-  #     capacity_gib: $(vars.lustre_size_gib)
-
   - id: workload_policy
     source: modules/compute/resource-policy
     settings:
