@@ -287,7 +287,6 @@ func (w *timestampWriter) Write(p []byte) (n int, err error) {
 func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
 	if w.startOfLine {
 		ts := time.Now().UTC().Format(time.RFC3339)
-		// Assuming tsColor is made available in this package, e.g., by passing it or making it global.
 		coloredTs := tsColor.Sprint(ts)
 		buf.WriteString(coloredTs + " ")
 	}
