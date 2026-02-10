@@ -78,6 +78,7 @@ No resources.
 | Name | Description |
 |------|-------------|
 | <a name="output_is_tpu"></a> [is\_tpu](#output\_is\_tpu) | Boolean value indicating if the node pool is for TPUs. |
+| <a name="output_kubernetes_label"></a> [kubernetes\_label](#output\_kubernetes\_label) | A map of Kubernetes labels to apply to the node pool for TPU discovery. |
 | <a name="output_tpu_accelerator_type"></a> [tpu\_accelerator\_type](#output\_tpu\_accelerator\_type) | The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice'). |
 | <a name="output_tpu_chips_per_node"></a> [tpu\_chips\_per\_node](#output\_tpu\_chips\_per\_node) | The number of TPU chips on each node in the pool. |
 | <a name="output_tpu_taint"></a> [tpu\_taint](#output\_tpu\_taint) | A list containing the standard TPU taint object if the node pool is for TPUs. |
