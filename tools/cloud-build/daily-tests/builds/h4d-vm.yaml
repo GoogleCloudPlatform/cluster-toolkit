@@ -43,6 +43,7 @@ steps:
   - "INSTANCE_PREFIX=h4dsp"
   - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/h4doptions.txt"
+  - "ENABLE_SPOT_FALLBACK=true"
   args:
   - -c
   - |
@@ -69,12 +70,19 @@ steps:
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
     sed -i '/  - id: h4d-vms/,/  - id: wait-for-vms/ { /    settings:/a \
-          provisioning_model: "SPOT"
+          provisioning_model: "'"$$PROVISIONING_MODEL"'"
     }' $${BLUEPRINT}
+    
+    SPOT_VAR=""
+    if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
+      SPOT_VAR="--extra-vars=enable_spot=false"
+    fi
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
+        $$SPOT_VAR \
         --extra-vars="@tools/cloud-build/daily-tests/tests/h4d-vm.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:

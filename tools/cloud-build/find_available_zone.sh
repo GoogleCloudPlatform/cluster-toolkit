@@ -86,103 +86,131 @@ fi
 SELECTED_ZONE=""
 SUCCESS=false
 
-# Loop through all zones to find capacity
-for ZONE in "${ZONES_ARRAY[@]}"; do
-	if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
-		# --- TPU Capacity Check ---
-		for i in $(seq 1 "${NUM_NODES}"); do
-			TPU_NAME="${FULL_INSTANCE_PREFIX}$(printf "%02d" "$i")"
-			declare -a GCLOUD_TPU_CMD
-			GCLOUD_TPU_CMD=(
-				gcloud compute tpus tpu-vm create "${TPU_NAME}"
-				--project="${PROJECT_ID}"
-				--zone="${ZONE}"
-				--accelerator-type="${ACCELERATOR_TYPE}"
-				--version="${TPU_RUNTIME_VERSION}"
-				--spot
-				--quiet
+# Determine provisioning models to try
+declare -a PROVISIONING_MODELS=("SPOT")
+if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
+	PROVISIONING_MODELS+=("STANDARD")
+fi
+
+# Loop through all models (SPOT first, then STANDARD if enabled)
+for MODEL in "${PROVISIONING_MODELS[@]}"; do
+	echo "INFO: Trying provisioning model: ${MODEL}"
+	PROVISIONING_MODEL="${MODEL}"
+
+	# Loop through all zones to find capacity for this model
+	for ZONE in "${ZONES_ARRAY[@]}"; do
+		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
+			# --- TPU Capacity Check ---
+			for i in $(seq 1 "${NUM_NODES}"); do
+				TPU_NAME="${FULL_INSTANCE_PREFIX}$(printf "%02d" "$i")"
+				declare -a GCLOUD_TPU_CMD
+				GCLOUD_TPU_CMD=(
+					gcloud compute tpus tpu-vm create "${TPU_NAME}"
+					--project="${PROJECT_ID}"
+					--zone="${ZONE}"
+					--accelerator-type="${ACCELERATOR_TYPE}"
+					--version="${TPU_RUNTIME_VERSION}"
+					--quiet
+				)
+				# Only add --spot flag if the current model is SPOT
+				if [[ "${PROVISIONING_MODEL}" == "SPOT" ]]; then
+					GCLOUD_TPU_CMD+=(--spot)
+				fi
+
+				if ! TPU_CREATE_OUTPUT=$("${GCLOUD_TPU_CMD[@]}" 2>&1); then
+					echo "ERROR: Unexpected error during TPU create in ${ZONE} (${PROVISIONING_MODEL}): ${TPU_CREATE_OUTPUT}" >&2
+				fi
+			done
+
+			declare -a CREATED_TPU_NAMES=()
+			TPU_CREATED_COUNT=0
+			if tpu_list_output=$(gcloud compute tpus tpu-vm list --project="${PROJECT_ID}" --zone="${ZONE}" \
+				--filter="name ~ ${FULL_INSTANCE_PREFIX}" --format='value(name)' 2>/dev/null); then
+				if [[ -n "${tpu_list_output}" ]]; then
+					readarray -t CREATED_TPU_NAMES <<<"${tpu_list_output}"
+					TPU_CREATED_COUNT=${#CREATED_TPU_NAMES[@]}
+					echo "INFO: Found ${TPU_CREATED_COUNT} TPU nodes: ${CREATED_TPU_NAMES[*]}"
+				else
+					echo "INFO: No matching TPU nodes found in ${ZONE} via list."
+				fi
+			else
+				echo "ERROR: Failed to list TPU nodes in ${ZONE}: ${tpu_list_output}" >&2
+			fi
+
+			if [[ "${TPU_CREATED_COUNT}" -ge 1 ]]; then
+				SELECTED_ZONE="${ZONE}"
+				SUCCESS=true
+			fi
+
+			cleanup_tpu_nodes "${PROJECT_ID}" "${ZONE}" "${CREATED_TPU_NAMES[@]}"
+		else
+			readarray -t INSTANCE_NAMES_ARRAY < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
+			instance_names_str=$(
+				IFS=,
+				echo "${INSTANCE_NAMES_ARRAY[*]}"
 			)
 
-			if ! TPU_CREATE_OUTPUT=$("${GCLOUD_TPU_CMD[@]}" 2>&1); then
-				echo "ERROR: Unexpected error during TPU create in ${ZONE}: ${TPU_CREATE_OUTPUT}" >&2
-			fi
-		done
-
-		declare -a CREATED_TPU_NAMES=()
-		TPU_CREATED_COUNT=0
-		if tpu_list_output=$(gcloud compute tpus tpu-vm list --project="${PROJECT_ID}" --zone="${ZONE}" \
-			--filter="name ~ ${FULL_INSTANCE_PREFIX}" --format='value(name)' 2>/dev/null); then
-			if [[ -n "${tpu_list_output}" ]]; then
-				readarray -t CREATED_TPU_NAMES <<<"${tpu_list_output}"
-				TPU_CREATED_COUNT=${#CREATED_TPU_NAMES[@]}
-				echo "INFO: Found ${TPU_CREATED_COUNT} TPU nodes: ${CREATED_TPU_NAMES[*]}"
+			declare -a GCLOUD_CMD
+			GCLOUD_CMD=(
+				gcloud compute instances bulk create
+				--predefined-names="${instance_names_str}"
+				--project="${PROJECT_ID}"
+				--zone="${ZONE}"
+				--machine-type="${MACHINE_TYPE}"
+				--provisioning-model="${PROVISIONING_MODEL}"
+				--no-address
+				--quiet
+				--min-count="${MIN_NODES}"
+			)
+			
+			if [[ "${PROVISIONING_MODEL}" == "SPOT" ]]; then
+				GCLOUD_CMD+=(--instance-termination-action="${TERMINATION_ACTION}")
 			else
-				echo "INFO: No matching TPU nodes found in ${ZONE} via list."
+				# Standard VMs with Local SSDs must have on-host-maintenance=TERMINATE
+				# We set it for all Standard VMs here as it is generally safe for ephemeral tests
+				GCLOUD_CMD+=(--on-host-maintenance="TERMINATE")
 			fi
-		else
-			echo "ERROR: Failed to list TPU nodes in ${ZONE}: ${tpu_list_output}" >&2
-		fi
 
-		if [[ "${TPU_CREATED_COUNT}" -ge 1 ]]; then
-			SELECTED_ZONE="${ZONE}"
-			SUCCESS=true
-		fi
+			echo "INFO: Attempting to bulk create ${NUM_NODES} VMs in ${ZONE} (Model: ${PROVISIONING_MODEL})..."
+			if CREATE_OUTPUT=$("${GCLOUD_CMD[@]}" 2>&1); then
+				if instance_list_output=$(gcloud compute instances list --project="${PROJECT_ID}" --zones="${ZONE}" \
+					--filter="name ~ ^${FULL_INSTANCE_PREFIX}" --format='value(name)'); then
+					if [[ -n "${instance_list_output}" ]]; then
+						readarray -t created_instances < <(echo "${instance_list_output}")
+						NUM_CREATED=$((${#created_instances[@]}))
+						cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 
-		cleanup_tpu_nodes "${PROJECT_ID}" "${ZONE}" "${CREATED_TPU_NAMES[@]}"
-	else
-		readarray -t INSTANCE_NAMES_ARRAY < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
-		instance_names_str=$(
-			IFS=,
-			echo "${INSTANCE_NAMES_ARRAY[*]}"
-		)
-
-		declare -a GCLOUD_CMD
-		GCLOUD_CMD=(
-			gcloud compute instances bulk create
-			--predefined-names="${instance_names_str}"
-			--project="${PROJECT_ID}"
-			--zone="${ZONE}"
-			--machine-type="${MACHINE_TYPE}"
-			--provisioning-model="${PROVISIONING_MODEL}"
-			--instance-termination-action="${TERMINATION_ACTION}"
-			--no-address
-			--quiet
-			--min-count="${MIN_NODES}"
-		)
-		echo "INFO: Attempting to bulk create ${NUM_NODES} VMs in ${ZONE}..."
-		if CREATE_OUTPUT=$("${GCLOUD_CMD[@]}" 2>&1); then
-			if instance_list_output=$(gcloud compute instances list --project="${PROJECT_ID}" --zones="${ZONE}" \
-				--filter="name ~ ^${FULL_INSTANCE_PREFIX}" --format='value(name)'); then
-				if [[ -n "${instance_list_output}" ]]; then
-					readarray -t created_instances < <(echo "${instance_list_output}")
-					NUM_CREATED=$((${#created_instances[@]}))
-					cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
-
-					if [[ "${NUM_CREATED}" -ge "${MIN_NODES}" ]]; then
-						SELECTED_ZONE="${ZONE}"
-						SUCCESS=true
-						echo "INFO: Found sufficient VM capacity in ${ZONE}."
+						if [[ "${NUM_CREATED}" -ge "${MIN_NODES}" ]]; then
+							SELECTED_ZONE="${ZONE}"
+							SUCCESS=true
+							echo "INFO: Found sufficient VM capacity in ${ZONE}."
+						else
+							echo "ERROR: Bulk create & list succeeded in ${ZONE}, but only ${NUM_CREATED} instances found, less than min_count ${MIN_NODES}." >&2
+						fi
 					else
-						echo "ERROR: Bulk create & list succeeded in ${ZONE}, but only ${NUM_CREATED} instances found, less than min_count ${MIN_NODES}." >&2
+						echo "ERROR: Bulk create command apparently succeeded in ${ZONE}, but LIST command found no instances with the prefix." >&2
+						cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 					fi
 				else
-					echo "ERROR: Bulk create command apparently succeeded in ${ZONE}, but LIST command found no instances with the prefix." >&2
+					echo "ERROR: Bulk create command succeeded in ${ZONE}, but the command to list instances failed." >&2
 					cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 				fi
 			else
-				echo "ERROR: Bulk create command succeeded in ${ZONE}, but the command to list instances failed." >&2
+				# Check for insufficient capacity or resource pool exhausted errors
+				if [[ "${CREATE_OUTPUT}" != *"INSUFFICIENT_CAPACITY"* &&
+					"${CREATE_OUTPUT}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* ]]; then
+					echo "ERROR: Unexpected error during bulk create in ${ZONE}: ${CREATE_OUTPUT}" >&2
+				else
+					echo "INFO: Insufficient VM capacity for bulk create in ${ZONE} (Model: ${PROVISIONING_MODEL})."
+				fi
 				cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 			fi
-		else
-			if [[ "${CREATE_OUTPUT}" != *"INSUFFICIENT_CAPACITY"* &&
-				"${CREATE_OUTPUT}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* ]]; then
-				echo "ERROR: Unexpected error during bulk create in ${ZONE}: ${CREATE_OUTPUT}" >&2
-			else
-				echo "INFO: Insufficient VM capacity for bulk create in ${ZONE}."
-			fi
-			cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 		fi
-	fi
+
+		if [[ "${SUCCESS}" == "true" ]]; then
+			break
+		fi
+	done
 
 	if [[ "${SUCCESS}" == "true" ]]; then
 		break
@@ -190,8 +218,9 @@ for ZONE in "${ZONES_ARRAY[@]}"; do
 done
 
 if [[ "${SUCCESS}" == "true" ]]; then
-	echo "Deploying in ZONE: ${SELECTED_ZONE}"
+	echo "Deploying in ZONE: ${SELECTED_ZONE}, MODEL: ${PROVISIONING_MODEL}"
 	export ZONE="${SELECTED_ZONE}"
+	export PROVISIONING_MODEL="${PROVISIONING_MODEL}"
 else
 	echo "--- DEPLOYMENT FAILED(Couldn't find a zone to deploy) ---" >&2
 	exit 1
