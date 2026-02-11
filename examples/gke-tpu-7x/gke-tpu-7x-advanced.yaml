@@ -49,7 +49,7 @@ vars:
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
 
-# Kueue configuration
+  # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
