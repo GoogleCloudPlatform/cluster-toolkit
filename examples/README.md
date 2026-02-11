@@ -543,6 +543,19 @@ renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy hello-workload
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./gcluster destroy hello-workload
+```
+
 [serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
 ### [serverless-batch-mpi.yaml] ![core-badge]
