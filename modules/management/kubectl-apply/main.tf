@@ -99,7 +99,7 @@ module "install_kueue" {
     file("${path.module}/kueue/kueue-helm-values.yaml")
   ]
 
-  deployment_dependency_ids = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
+  dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
   depends_on = [var.gke_cluster_exists]
 }
