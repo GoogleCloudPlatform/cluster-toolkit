@@ -392,7 +392,7 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
-      error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+      error_message = "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
     }
     precondition {
       condition     = !(var.enable_flex_start && var.spot)
