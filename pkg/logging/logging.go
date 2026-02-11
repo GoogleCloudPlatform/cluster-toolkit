@@ -28,7 +28,7 @@ var (
 	errorlog *log.Logger
 	fatallog *log.Logger
 	Exit     = os.Exit
-	tsColor  = color.New(color.FgMagenta)
+	TsColor  = color.New(color.FgMagenta)
 )
 
 func init() {
@@ -40,7 +40,7 @@ func init() {
 // formatTs returns a timestamp
 func formatTs() string {
 	ts := time.Now().UTC().Format(time.RFC3339)
-	return tsColor.Sprint(ts)
+	return TsColor.Sprint(ts)
 }
 
 // Info prints info to stdout

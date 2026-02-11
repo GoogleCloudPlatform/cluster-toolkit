@@ -31,19 +31,9 @@ import (
 	"regexp"
 	"strings"
 
-	"bytes"
-	"io"
-	"sync"
-	"time"
-
-	"github.com/fatih/color"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
-)
-
-var (
-	tsColor = color.New(color.FgMagenta)
 )
 
 // OutputFormat determines the format in which the errors are reported.
@@ -242,55 +232,6 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 	default:
 		return false
 	}
-}
-
-type timestampWriter struct {
-	writer      io.Writer
-	startOfLine bool
-	mu          sync.Mutex
-}
-
-func newTimestampWriter(writer io.Writer) io.Writer {
-	return &timestampWriter{
-		writer:      writer,
-		startOfLine: true,
-	}
-}
-
-func (w *timestampWriter) Write(p []byte) (n int, err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	var buf bytes.Buffer
-	lastIdx := 0
-
-	// Scan for newlines to ensure line-by-line timestamping
-	for i, b := range p {
-		if b == '\n' {
-			w.writeSegment(&buf, p[lastIdx:i+1])
-			w.startOfLine = true
-			lastIdx = i + 1
-		}
-	}
-
-	// Handle partial writes (e.g., progress bars)
-	if lastIdx < len(p) {
-		w.writeSegment(&buf, p[lastIdx:])
-		w.startOfLine = false
-	}
-
-	// Single atomic write to the underlying writer
-	nWritten, err := w.writer.Write(buf.Bytes())
-	return nWritten, err
-}
-
-func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
-	if w.startOfLine {
-		ts := time.Now().UTC().Format(time.RFC3339)
-		coloredTs := tsColor.Sprint(ts)
-		buf.WriteString(coloredTs + " ")
-	}
-	buf.Write(p)
 }
 
 // This function applies the terraform plan, but generates outputs in JSON format
