@@ -58,19 +58,24 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 ##### Cluster Operating Systems (Guest OS Support)
 
+The following operating systems are supported for deployment on Compute Engine instances within clusters:
+
 | Operating System | Support Status | Notes |
 | :--- | :---: | :--- |
 | **HPC Rocky Linux 8** | ✅ | Optimized for high-performance computing. |
 | **Debian 11** | ✅ | Standard stable distribution. |
 | **Ubuntu 22.04 LTS** | ✅ | Long-term support release. |
 
+> **_NOTE:_** Blueprints deploying Google Kubernetes Engine (GKE) clusters will use standard GKE-supported node images, such as Container-Optimized OS (COS) or Ubuntu.
+
 1. Download and extract the bundle:
 
     ```shell
-    LATEST_TAG=$(curl -s https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/releases/latest | jq -r ".tag_name")
-    # Replace LATEST_TAG with the latest release version, ex: v1.81.0
+    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
+    # Set the desired version TAG (e.g., v1.77.0)
+    TAG=v1.77.0
     # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${LATEST_TAG}/gcluster-bundle.zip
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster-bundle.zip
     unzip gcluster-bundle.zip -d gcluster-bundle/
     cd gcluster-bundle
     chmod +x gcluster
