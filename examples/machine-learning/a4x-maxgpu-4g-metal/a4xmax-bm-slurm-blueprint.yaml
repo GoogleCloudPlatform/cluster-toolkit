@@ -159,10 +159,10 @@ deployment_groups:
           set -e -x
           echo "Setting up asapd-lite service from Docker image..."
 
-          ASAPD_IMAGE="us-west1-docker.pkg.dev/asapd-staging-test/asapd-lite-dev/asapd-lite-arm-tmp:3.1-deliberate-cc-cuiwl-asapd-lite-release-deliberate-cc"
+          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4"
 
           # Authenticate Docker with gcloud
-          gcloud auth configure-docker us-west1-docker.pkg.dev -q
+          gcloud auth configure-docker us-docker.pkg.dev -q
 
           # Create host directories
           sudo mkdir -p /var/log/google/asapd-lite/
@@ -191,9 +191,16 @@ deployment_groups:
             -v /var/lib/nvidia/lib64:/usr/local/nvidia/lib64 \
             -v /var/lib/nvidia/bin:/usr/local/nvidia/bin \
             -v /dev:/dev \
+            -v /sys:/sys \
+            -v /proc:/proc \
+            -v /etc/udev/rules.d:/etc/udev/rules.d \
+            -v /run/udev:/run/udev \
+            -v /run/asapd-lite:/run/asapd-lite \
             -v /var/log/google/asapd-lite/:/var/log/google/asapd-lite/ \
             -v /var/lib/google/asapd-lite/:/var/lib/google/asapd-lite/ \
-            $ASAPD_IMAGE /asapd-lite/controller/asapd-lite-controller
+            -v /etc/systemd/system:/etc/systemd/system \
+            -v /run/systemd:/run/systemd \
+            $ASAPD_IMAGE /bin/bash -c "/usr/local/bin/run_asapd_lite.sh && wait"
           ExecStop=/usr/bin/docker stop %n
 
           [Install]
