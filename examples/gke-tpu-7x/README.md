@@ -282,6 +282,10 @@ For a pre-configured example and detailed documentation on using Flex Start with
 - [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
 - [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
 
+Additionally, for **Queued Provisioning (QP)** support with DWS Flex Start:
+- [GKE TPU 7x DWS Flex with QP Blueprint](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex with QP README.md](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/README.md)
+
 ### Understanding Managed Lustre integration
 
 The advanced blueprint `gke-tpu-7x-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.

@@ -52,6 +52,16 @@ locals {
   initial_node_set = try(var.initial_node_count > 0, false)
 
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
+
+  # Merge all Kubernetes labels
+  # Note: cloud.google.com/gke-queued is added manually because while GKE 
+  # automatically applies the taint, the label is required for workloads 
+  # using nodeSelectors to correctly target these provisioned nodes.
+  kubernetes_labels = merge(
+    var.kubernetes_labels,
+    module.tpu.kubernetes_label,
+    var.enable_queued_provisioning ? { "cloud.google.com/gke-queued" = "true" } : {}
+  )
 }
 
 
@@ -132,7 +142,7 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb     = var.disk_size_gb
     disk_type        = var.disk_type
     resource_labels  = local.labels
-    labels           = var.kubernetes_labels
+    labels           = local.kubernetes_labels
     service_account  = var.service_account_email
     oauth_scopes     = var.service_account_scopes
     machine_type     = var.machine_type
@@ -359,8 +369,8 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Compact placement is not supported with blue-green upgrades."
     }
     precondition {
-      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT")
-      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT" && !module.tpu.is_tpu)
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true, unless using TPUs."
     }
     precondition {
       condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")

@@ -5,12 +5,12 @@
 Note the `enable_flex_start` and `enable_queued_provisioning` variables in the yaml files.
 
 ## Create a cluster
+
 These steps guide you through the cluster creation process.
 
 Note: If you create multiple clusters using these same cluster blueprints, ensure that all VPCs and subnet names are unique per project to prevent errors.
 
 1. Launch [Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the [instructions to install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
-
 1. Clone the Cluster Toolkit from the git repository:
 
     ```sh
@@ -24,7 +24,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     cd cluster-toolkit && git checkout main && make
     ```
 
-1. Create a {{storage_name}} bucket to store the state of the Terraform deployment:
+1. Create a Cloud Storage bucket to store the state of the Terraform deployment:
 
     ```sh
     gcloud storage buckets create gs://BUCKET_NAME \
@@ -35,10 +35,11 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 
-    Replace the following variables:\
-    BUCKET_NAME: the name of the new Cloud Storage bucket.\
-    PROJECT_ID: ID of the project where the bucket is being created.\
-    COMPUTE_REGION: the compute region where you want to store the state of the Terraform deployment.
+    Replace the following variables:
+
+   * BUCKET_NAME: the name of the new Cloud Storage bucket.
+   * PROJECT_ID: ID of the project where the bucket is being created.
+   * COMPUTE_REGION: the compute region where you want to store the state of the Terraform deployment.
 
 1. In the examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu-deployment.yaml file, fill in the following settings in the terraform_backend_defaults and vars sections to match the specific values for your deployment:
 
@@ -71,6 +72,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     ```
 
 1. When prompted, select (A)pply to deploy the blueprint.
+
    * The blueprint creates VPC networks, a GPU RDMA VPC network, service accounts, a cluster, and a nodepool.
 
 ## Note
@@ -79,6 +81,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
 * To use DWS Flex Start, `auto_repair` should be set to `false`.
 
 Along with these flex start requirements, there are a few queue-provisioning specific requirements.
+
 * Queued provisioning does not work with `static_node_count` and requires `autoscaling_total_min_nodes` be set to `0`.
 
 ## Run a job
@@ -100,7 +103,7 @@ The dws-flex-start-queued-provisioning example provides a `sample-job.yaml` file
     ```
 
 1. Consider using `kubectl get jobs` and `kubectl describe job <job-name>` to get information about the jobs.\
-You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
+    You can also use `kubectl get pods` and `kubectl describe pod <pod-name>` to get pod information.
 
 ## Deploy and run NCCL test
 
@@ -122,7 +125,7 @@ To validate the functionality of the provisioned cluster, you can run a NCCL tes
 
     Note that the `nccl-jobset-example.yaml` file has this config under jobset metadata. These are required for using queued provisioning.
 
-    ```sh
+    ```yaml
       labels:
         kueue.x-k8s.io/queue-name: dws-local-queue
       annotations:
@@ -197,3 +200,10 @@ To validate the functionality of the provisioned cluster, you can run a NCCL tes
     # Out of bounds values : 0 OK
     # Avg bus bandwidth    : 120.248
     ```
+
+## Hardware-Specific Guides
+
+For detailed deployment instructions, topology requirements, and job examples, please refer to the guide for your specific hardware:
+
+* [TPU v6e (Trillium)](gke-tpu-v6e/README.md): Optimized for `ct6e-standard-4t` clusters.
+* [TPU 7x (TPU v4)](gke-tpu-7x/README.md): Optimized for `tpu7x-standard-4t` clusters.

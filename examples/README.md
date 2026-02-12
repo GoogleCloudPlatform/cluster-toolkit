@@ -1435,9 +1435,17 @@ This blueprint takes care of the initial infrastructure setup (e.g., network cre
 
 ### [gke-consumption-options] ![core-badge]
 
-This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
-* [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
-* [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
+This folder holds multiple GKE blueprint examples that demonstrate different consumption options on GKE, covering hardware such as A3 Ultra (A3U), TPU v6e, and TPU 7x.
+
+* [**DWS Flex Start**](../examples/gke-consumption-options/dws-flex-start/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e)
+
+* [**DWS Flex Start with Queued Provisioning**](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-v6e)
 
 [gke-consumption-options]: ../examples/gke-consumption-options
 
