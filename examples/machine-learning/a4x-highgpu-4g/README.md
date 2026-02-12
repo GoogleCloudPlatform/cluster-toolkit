@@ -3,7 +3,6 @@
 This document outlines the deployment steps for provisioning A4X High
 `a4x-highgpu-4g` VMs using either Slurm as an orchestrator or as a standalone VM group.
 
-
 ## A4X-High Slurm Cluster Deployment
 
 ### Build the Cluster Toolkit gcluster binary
@@ -86,7 +85,7 @@ Example (deploy only the primary group for this blueprint):
 ./gcluster deploy -d a4xhigh-slurm-deployment.yaml a4xhigh-slurm-blueprint.yaml --only primary
 ```
 
-A4X-High VM Deployment
+## A4X-High VM Deployment
 ----------------------
 
 This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler.
