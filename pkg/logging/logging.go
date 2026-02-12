@@ -18,14 +18,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"github.com/fatih/color"
 )
 
 var (
 	infolog  *log.Logger
 	errorlog *log.Logger
 	fatallog *log.Logger
-	// Exit is a function that exits the program. It is overridden in tests.
-	Exit = os.Exit
+	Exit     = os.Exit
+	TsColor  = color.New(color.FgMagenta)
 )
 
 func init() {
@@ -34,21 +37,27 @@ func init() {
 	fatallog = log.New(os.Stderr, "", 0)
 }
 
+// formatTs returns a timestamp
+func formatTs() string {
+	ts := time.Now().UTC().Format(time.RFC3339)
+	return TsColor.Sprint(ts)
+}
+
 // Info prints info to stdout
 func Info(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	infolog.Println(msg)
+	infolog.Printf("%s: %s", formatTs(), msg)
 }
 
 // Error prints info to stderr but does not end the program
 func Error(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	errorlog.Println(msg)
+	errorlog.Printf("%s ERROR: %s", formatTs(), msg)
 }
 
 // Fatal prints info to stderr and ends the program
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	fatallog.Println(msg)
+	fatallog.Printf("%s FATAL: %s", formatTs(), msg)
 	Exit(1)
 }

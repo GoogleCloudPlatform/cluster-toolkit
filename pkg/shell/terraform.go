@@ -250,8 +250,8 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 		return err
 	} else {
 		defer jsonFile.Close()
-		tf.SetStdout(os.Stdout)
-		tf.SetStderr(os.Stderr)
+		tf.SetStdout(newTimestampWriter(os.Stdout))
+		tf.SetStderr(newTimestampWriter(os.Stderr))
 		if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
 			return err
 		}
@@ -264,8 +264,8 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
 	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
-	tf.SetStdout(os.Stdout)
-	tf.SetStderr(os.Stderr)
+	tf.SetStdout(newTimestampWriter(os.Stdout))
+	tf.SetStderr(newTimestampWriter(os.Stderr))
 	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
 		return err
 	}
