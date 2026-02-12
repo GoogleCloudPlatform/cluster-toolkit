@@ -77,13 +77,10 @@ steps:
     H4D_VARS_FILE="tools/cloud-build/daily-tests/tests/h4d-vm.yml"
     if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
       SPOT_VAR="--extra-vars=enable_spot=false"
-      sed -i 's/enable_spot: true/enable_spot: false/' "$${H4D_VARS_FILE}"
-      sed -i '/h4d_onspot: true/d' "$${H4D_VARS_FILE}"
+      sed -i '/instance_labels:/,+1d' "$${H4D_VARS_FILE}"
+      sed -i '/enable_spot: true/d' "$${H4D_VARS_FILE}"
     else
-      sed -i 's/enable_spot: false/enable_spot: true/' "$${H4D_VARS_FILE}"
-      if ! grep -q 'h4d_onspot: true' "$${H4D_VARS_FILE}"; then
-          sed -i '/instance_labels:/a \    h4d_onspot: true' "$${H4D_VARS_FILE}"
-      fi
+      echo "INFO: Using $${H4D_VARS_FILE} as it is for SPOT provisioning."
     fi
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

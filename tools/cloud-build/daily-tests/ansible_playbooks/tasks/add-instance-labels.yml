@@ -19,7 +19,6 @@
     - custom_vars.instance_labels is mapping
     - custom_vars.instance_labels | length > 0
     fail_msg: "custom_vars.instance_labels must be a non-empty dictionary."
-  when: custom_vars.enable_spot | default(false)
 
 # Creates label string of the form "key1=value1,key2=value2" to add to the instances created during the test.
 # Also, transforms key and value to lowercase to be compliant with the gcloud command.
@@ -30,23 +29,18 @@
     items: "{{ custom_vars.instance_labels.items() }}"
     keys: "{{ items | map(attribute=0) | map('string') | map('lower') }}"
     values: "{{ items | map(attribute=1) | map('string') | map('lower') }}"
-  when: custom_vars.enable_spot | default(false)
 
 - name: Gather instance information
   ansible.builtin.import_tasks: tasks/get_instance_ids.yml
-  when: custom_vars.enable_spot | default(false)
 
 - name: Parse instance list
   ansible.builtin.set_fact:
     gce_instances_list: "{{ instances.stdout | default('[]') | from_json }}"
-  when: custom_vars.enable_spot | default(false)
 
 - name: Report if no instances found
   ansible.builtin.debug:
     msg: "No instances found with label ghpc_deployment={{ deployment_name }} in project {{ project }}."
-  when:
-  - custom_vars.enable_spot | default(false)
-  - gce_instances_list | length == 0
+  when: gce_instances_list | length == 0
 
 - name: Add spot label to each node
   ansible.builtin.command: >-
@@ -61,7 +55,5 @@
   until: update_result.rc == 0
   retries: 5
   delay: 10
-  when:
-  - custom_vars.enable_spot | default(false)
-  - gce_instances_list | length > 0
+  when: gce_instances_list | length > 0
   delegate_to: localhost
