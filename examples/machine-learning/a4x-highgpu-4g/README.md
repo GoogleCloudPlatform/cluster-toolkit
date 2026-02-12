@@ -109,7 +109,7 @@ vars:
   zone: 
   reservation_name: 
   instance_count: 
-
+```
 
 ### Deploy the cluster
 
