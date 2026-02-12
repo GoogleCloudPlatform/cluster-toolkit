@@ -104,11 +104,11 @@ terraform_backend_defaults:
 
 vars:
   deployment_name: a4x-vm
-  project_id: 
-  region: 
-  zone: 
-  reservation_name: 
-  instance_count: 
+  project_id: <PROJECT_ID>
+  region: <REGION>
+  zone: <ZONE>
+  reservation_name: <RESERVATION_NAME>
+  instance_count: <INSTANCE_COUNT>
 ```
 
 ### Deploy the VMs
