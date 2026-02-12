@@ -333,7 +333,7 @@ func (r *RequiredValidator) Validate(
 	rule modulereader.ValidationRule,
 	group config.Group,
 	modIdx int) error {
-  
+
 	var unsetVarNames []string
 	var setVarNames []string
 
@@ -380,7 +380,7 @@ func (r *RequiredValidator) Validate(
 			msg = fmt.Sprintf("%s: %s", rule.ErrorMessage, msg)
 		}
 		return config.BpError{Err: fmt.Errorf("%s", msg), Path: modPath}
-  }
+	}
 	return nil
 }
 
