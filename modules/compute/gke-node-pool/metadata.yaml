@@ -39,13 +39,6 @@ ghpc:
     inputs:
       trigger: enable_flex_start
       trigger_value: true
-      dependent: reservation_affinity.consume_reservation_type
-      dependent_value: "NO_RESERVATION"
-    error_message: "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
-  - validator: conditional
-    inputs:
-      trigger: enable_flex_start
-      trigger_value: true
       dependent: static_node_count
       dependent_value: null
     error_message: "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
@@ -63,10 +56,3 @@ ghpc:
       dependent: autoscaling_total_min_nodes
       dependent_value: 0
     error_message: "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
-  - validator: conditional
-    inputs:
-      trigger: enable_queued_provisioning
-      trigger_value: true
-      dependent: reservation_affinity.consume_reservation_type
-      dependent_value: "NO_RESERVATION"
-    error_message: "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
