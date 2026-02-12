@@ -41,7 +41,7 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ### Using the Pre-built Bundle (Recommended)
 
-For the easiest setup, download the latest `gcluster_bundle_linux.zip` (for Linux) or `gcluster_bundle_mac.zip` (for macOS) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+For the easiest setup, download the `gcluster_bundle_linux.zip` (for Linux) or `gcluster_bundle_mac.zip` (for macOS) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle Compatibility Matrix
 
@@ -56,24 +56,12 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **macOS** | ✅ | Native support via the Mac binary. |
 | **Windows** | ❎ | Please [Build from Source](#building-from-source). |
 
-##### Cluster Operating Systems (Guest OS Support)
-
-The following operating systems are supported for deployment on Compute Engine instances within clusters:
-
-| Operating System | Support Status | Notes |
-| :--- | :---: | :--- |
-| **HPC Rocky Linux 8** | ✅ | Optimized for high-performance computing. |
-| **Debian 11** | ✅ | Standard stable distribution. |
-| **Ubuntu 22.04 LTS** | ✅ | Long-term support release. |
-
-> **_NOTE:_** Blueprints deploying Google Kubernetes Engine (GKE) clusters will use standard GKE-supported node images, such as Container-Optimized OS (COS) or Ubuntu.
-
 1. Download and extract the bundle:
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
     # Set the desired version TAG (e.g., v1.82.0)
-    TAG=v1.82.0
+    TAG=vX.Y.Z
     # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster-bundle.zip
     unzip gcluster-bundle.zip -d gcluster-bundle/
