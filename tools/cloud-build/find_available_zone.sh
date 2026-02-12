@@ -86,18 +86,15 @@ fi
 SELECTED_ZONE=""
 SUCCESS=false
 
-# Determine provisioning models to try
 declare -a PROVISIONING_MODELS=("SPOT")
 if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
 	PROVISIONING_MODELS+=("STANDARD")
 fi
 
-# Loop through all models (SPOT first, then STANDARD if enabled)
 for MODEL in "${PROVISIONING_MODELS[@]}"; do
 	echo "INFO: Trying provisioning model: ${MODEL}"
 	PROVISIONING_MODEL="${MODEL}"
 
-	# Loop through all zones to find capacity for this model
 	for ZONE in "${ZONES_ARRAY[@]}"; do
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
 			# --- TPU Capacity Check ---
@@ -112,7 +109,6 @@ for MODEL in "${PROVISIONING_MODELS[@]}"; do
 					--version="${TPU_RUNTIME_VERSION}"
 					--quiet
 				)
-				# Only add --spot flag if the current model is SPOT
 				if [[ "${PROVISIONING_MODEL}" == "SPOT" ]]; then
 					GCLOUD_TPU_CMD+=(--spot)
 				fi
@@ -162,12 +158,10 @@ for MODEL in "${PROVISIONING_MODELS[@]}"; do
 				--quiet
 				--min-count="${MIN_NODES}"
 			)
-			
+
 			if [[ "${PROVISIONING_MODEL}" == "SPOT" ]]; then
 				GCLOUD_CMD+=(--instance-termination-action="${TERMINATION_ACTION}")
 			else
-				# Standard VMs with Local SSDs must have on-host-maintenance=TERMINATE
-				# We set it for all Standard VMs here as it is generally safe for ephemeral tests
 				GCLOUD_CMD+=(--on-host-maintenance="TERMINATE")
 			fi
 
@@ -196,7 +190,6 @@ for MODEL in "${PROVISIONING_MODELS[@]}"; do
 					cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
 				fi
 			else
-				# Check for insufficient capacity or resource pool exhausted errors
 				if [[ "${CREATE_OUTPUT}" != *"INSUFFICIENT_CAPACITY"* &&
 					"${CREATE_OUTPUT}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* ]]; then
 					echo "ERROR: Unexpected error during bulk create in ${ZONE}: ${CREATE_OUTPUT}" >&2
