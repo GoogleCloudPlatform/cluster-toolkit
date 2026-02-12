@@ -122,7 +122,8 @@ gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
 
 ``` bash
 #!/bin/bash
-gcluster destroy a4x-vm-deployment.yaml --auto-approve
+#!/bin/bash
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
 ### Cloud Storage FUSE
