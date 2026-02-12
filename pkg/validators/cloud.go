@@ -414,3 +414,46 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	ctx := context.Background()
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }
+
+
+func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	// 1. Determine if the validator was explicitly added to the blueprint YAML
+	const validatorName = "test_disk_type_in_zone"
+	required := []string{"project_id", "zone"}
+	if isValidatorExplicit(bp, validatorName) {
+		required = append(required, "disk_type")
+	}
+
+	if err := checkInputs(inputs, required); err != nil {
+		return err
+	}
+
+	s, err := compute.NewService(context.Background())
+	if err != nil {
+		return handleClientError(err)
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	projectID, globalZone, explicitDiskType := m["project_id"], m["zone"], m["disk_type"]
+
+	if explicitDiskType != "" {
+		// When explicitly called, we MUST validate the zone provided in the inputs
+		if err := TestZoneExists(projectID, globalZone); err != nil {
+			return err
+		}
+		err := validateDiskTypeInZone(s, projectID, globalZone, explicitDiskType, validatorName)
+
+		// Catch the sentinel and return nil so the deployment proceeds
+		if errors.Is(err, errSoftWarning) {
+			return nil
+		}
+		return err
+	}
+
+	return validateSettingsInModules(bp, globalZone, projectID, "disk_type", "disk type", validatorName, func(z, name string, vName string) error {
+		return validateDiskTypeInZone(s, projectID, z, name, vName)
+	})
+}
