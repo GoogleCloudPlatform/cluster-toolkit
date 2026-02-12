@@ -220,7 +220,7 @@ variable "on_host_maintenance" {
 variable "state_timeout" {
   description = "The time to wait for instance state changes, including image creation"
   type        = string
-  default     = "50m"
+  default     = "10m"
 }
 
 variable "metadata" {

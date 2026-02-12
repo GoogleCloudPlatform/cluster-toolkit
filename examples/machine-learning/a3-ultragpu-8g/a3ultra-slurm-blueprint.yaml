@@ -133,17 +133,6 @@ deployment_groups:
             "monitoring_agent": "cloud-ops",
           }
       - type: shell
-        destination: debug_schedmd_download.sh
-        content: |
-          #!/bin/bash
-          echo "Attempting verbose curl to download.schedmd.com for debugging..."
-          # Use the exact URL that failed, and add verbose output, longer connect timeout
-          curl -v --connect-timeout 30 https://download.schedmd.com/slurm/slurm-25.05.2.tar.bz2 -o /dev/null || true
-          echo "Curl debug complete."
-          # Also test network connectivity to an external known-good site
-          echo "Testing connectivity to google.com..."
-          curl -v --connect-timeout 10 https://www.google.com -o /dev/null || true
-      - type: shell
         destination: install_slurm.sh
         content: |
           #!/bin/bash
@@ -169,8 +158,8 @@ deployment_groups:
           #!/bin/bash
           set -e -o pipefail
           add-nvidia-repositories -y
-          apt install -y cuda-toolkit-12-8
           apt install -y \
+              cuda-toolkit-12-8 \
               datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
               datacenter-gpu-manager-4-dev=1:4.5.1-1 \
               datacenter-gpu-manager-4-core=1:4.5.1-1

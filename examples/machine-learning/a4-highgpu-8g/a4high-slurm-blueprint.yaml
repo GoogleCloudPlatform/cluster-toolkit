@@ -161,7 +161,7 @@ deployment_groups:
           add-nvidia-repositories -y
           apt update -y
           apt install -y \
-              cuda-toolkit-12-8
+              cuda-toolkit-12-8 \
               datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
               datacenter-gpu-manager-4-dev=1:4.5.1-1 \
               datacenter-gpu-manager-4-core=1:4.5.1-1
