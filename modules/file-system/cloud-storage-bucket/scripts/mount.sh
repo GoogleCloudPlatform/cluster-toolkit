@@ -22,14 +22,15 @@ MOUNT_OPTIONS=$5
 [[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
 
 if [ "${FS_TYPE}" = "gcsfuse" ]; then
+        ctk_tag="ctk-from-mount-sh"
 	if [[ ! "${MOUNT_OPTIONS}" =~ [c,C][t,T][k,K] ]]; then
 		if [[ "${MOUNT_OPTIONS}" =~ app_name= ]]; then
-			MOUNT_OPTIONS=$(echo "${MOUNT_OPTIONS}" | sed -E 's/(app_name=[^,]+)/\1-ctk/')
+			MOUNT_OPTIONS=$(echo "${MOUNT_OPTIONS}" | sed -E 's/(app_name=[^,]+)/\1-${ctk_tag}/')
 		else
 			if [[ -z "${MOUNT_OPTIONS}" ]]; then
-				MOUNT_OPTIONS="app_name=ctk"
+				MOUNT_OPTIONS="app_name=${ctk_tag}"
 			else
-				MOUNT_OPTIONS="${MOUNT_OPTIONS},app_name=ctk"
+				MOUNT_OPTIONS="${MOUNT_OPTIONS},app_name=${ctk_tag}"
 			fi
 		fi
 	fi

@@ -130,6 +130,7 @@ def setup_network_storage():
         mount_options = mount.mount_options.split(",") if mount.mount_options else []
 
         if fs_type == "gcsfuse":
+            ctk_tag="ctk-from-python"
             log.info(f"DEBUG [setup_network_storage.py]: fs_type={fs_type} mount_options={mount_options}")
 
             # Check if any option contains "ctk" (case-insensitive)
@@ -138,12 +139,12 @@ def setup_network_storage():
                 app_name_found = False
                 for i, opt in enumerate(mount_options):
                     if opt.startswith("app_name="):
-                        mount_options[i] = f"{opt}-ctk"
+                        mount_options[i] = f"{opt}-{ctk_tag}"
                         app_name_found = True
                         break
 
                 if not app_name_found:
-                    mount_options.append("app_name=ctk")
+                    mount_options.append("app_name={ctk_tag}")
 
             log.info(f"DEBUG [setup_network_storage.py]: POST fs_type={fs_type} mount_options={mount_options}")
 
