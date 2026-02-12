@@ -116,14 +116,14 @@ vars:
 ``` bash
 #!/bin/bash
 gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
-
+```
 
 ### Destroy the VM group
 
 ``` bash
 #!/bin/bash
 gcluster destroy a4x-vm-deployment.yaml --auto-approve
-
+```
 
 ### Cloud Storage FUSE
 
