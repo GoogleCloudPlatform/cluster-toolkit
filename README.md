@@ -72,8 +72,9 @@ The following operating systems are supported for deployment on Compute Engine i
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.77.0)
-    TAG=v1.77.0
+    # Set the desired version TAG (e.g., v1.82.0)
+    # The binary will be available in version 1.82.0 and late
+    TAG=v1.82.0
     # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster-bundle.zip
     unzip gcluster-bundle.zip -d gcluster-bundle/
