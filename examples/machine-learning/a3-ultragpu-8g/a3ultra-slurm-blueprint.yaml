@@ -159,8 +159,6 @@ deployment_groups:
           set -e -o pipefail
           add-nvidia-repositories -y
           apt install -y cuda-toolkit-12-8
-          # apt install -y datacenter-gpu-manager-4-cuda12
-          # apt install -y datacenter-gpu-manager-4-dev
           apt install -y \
               datacenter-gpu-manager-4-cuda12=1:4.5.0-1 \
               datacenter-gpu-manager-4-dev=1:4.5.0-1 \
