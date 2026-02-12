@@ -15,7 +15,7 @@
  */
 
 terraform {
-  required_version = ">= 1.1"
+  required_version = "= 1.12.2"
 
   required_providers {
     google = {
@@ -29,6 +29,6 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-execute-point/v1.80.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-execute-point/v1.81.0"
   }
 }

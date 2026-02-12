@@ -13,7 +13,7 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = "= 1.12.2"
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -25,6 +25,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.80.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.81.0"
   }
 }

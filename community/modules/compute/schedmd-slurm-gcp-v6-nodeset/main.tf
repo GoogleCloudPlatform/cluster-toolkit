@@ -88,16 +88,17 @@ locals {
     bandwidth_tier = var.bandwidth_tier
     can_ip_forward = var.can_ip_forward
 
-    enable_confidential_vm = var.enable_confidential_vm
-    enable_placement       = var.enable_placement
-    placement_max_distance = var.placement_max_distance
-    enable_oslogin         = var.enable_oslogin
-    enable_shielded_vm     = var.enable_shielded_vm
-    gpu                    = one(local.guest_accelerator)
-    accelerator_topology   = var.accelerator_topology
+    enable_confidential_vm     = var.enable_confidential_vm
+    confidential_instance_type = var.confidential_instance_type
+    enable_placement           = var.enable_placement
+    placement_max_distance     = var.placement_max_distance
+    enable_oslogin             = var.enable_oslogin
+    enable_shielded_vm         = var.enable_shielded_vm
+    gpu                        = one(local.guest_accelerator)
+    accelerator_topology       = var.accelerator_topology
 
     labels                    = local.labels
-    machine_type              = terraform_data.machine_type_zone_validation.output
+    machine_type              = var.machine_type
     advanced_machine_features = var.advanced_machine_features
     metadata                  = local.metadata
     min_cpu_platform          = var.min_cpu_platform
@@ -202,31 +203,5 @@ data "google_compute_reservation" "reservation" {
 
     # TODO: wait for https://github.com/hashicorp/terraform-provider-google/issues/18248
     # Add a validation that if reservation.project != var.project_id it should be a shared reservation
-  }
-}
-
-data "google_compute_machine_types" "machine_types_by_zone" {
-  for_each = local.zones
-  project  = var.project_id
-  filter   = format("name = \"%s\"", var.machine_type)
-  zone     = each.value
-}
-
-locals {
-  machine_types_by_zone   = data.google_compute_machine_types.machine_types_by_zone
-  zones_with_machine_type = [for k, v in local.machine_types_by_zone : k if length(v.machine_types) > 0]
-}
-
-resource "terraform_data" "machine_type_zone_validation" {
-  input = var.machine_type
-  lifecycle {
-    precondition {
-      condition     = length(local.zones_with_machine_type) > 0
-      error_message = <<-EOT
-        machine type ${var.machine_type} is not available in any of the zones ${jsonencode(local.zones)}". To list zones in which it is available, run:
-
-        gcloud compute machine-types list --filter="name=${var.machine_type}"
-        EOT
-    }
   }
 }

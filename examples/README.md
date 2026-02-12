@@ -422,13 +422,29 @@ example takes the following steps:
 4. Deploys a Slurm cluster using the custom image (see
 [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
 
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
 #### Building and using the custom image
 
 Create the deployment folder from the blueprint:
 
 ```text
 ./gcluster create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./gcluster deploy image-builder-v6-001"
+./gcluster deploy image-builder-v6-001
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -436,28 +452,15 @@ For example, the network is created in the first deployment group, the VM image
 is created in the second group, and the third group uses the image to create an
 HPC cluster using the Slurm scheduler.
 
-When you are done, clean up the resources in reverse order of creation:
-
-```text
-terraform -chdir=image-builder-v6-001/cluster destroy --auto-approve
-terraform -chdir=image-builder-v6-001/primary destroy --auto-approve
-```
-
-Finally, browse to the [Cloud Console][console-images] to delete your custom
-image. It will be named beginning with `my-slurm-image` followed by a date and
-timestamp for uniqueness.
-
-[console-images]: https://console.cloud.google.com/compute/images
-
 #### Why use a custom image?
 
 Using a custom VM image can be more scalable and reliable than installing
 software using boot-time startup scripts because:
 
-* it avoids reliance on continued availability of package repositories
+* It avoids reliance on continued availability of package repositories.
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
-  boot-time configuration
-* machines are guaranteed to boot with a static software configuration chosen
+  boot-time configuration.
+* Machines are guaranteed to boot with a static software configuration chosen
   when the custom image was created. No potential for some machines to have
   different software versions installed due to `apt`/`yum`/`pip` installations
   executed after remote repositories have been updated.
@@ -505,30 +508,28 @@ Once the Slurm cluster has been deployed we can test that our Slurm compute
 partition is using the custom image. Each compute node should contain the
 `hello.txt` file added by the startup-script.
 
-1. SSH into the login node `imagebuild-login-login-001`.
+1. SSH into the login node `imagebuild-slurm-login-001`.
 2. Run a job that prints the contents of the added file:
 
   ```bash
-  $ srun -N 2 cat /home/hello.txt
+  $ srun -N 2 cat /usr/local/hello.txt
   Hello World
   Hello World
   ```
 
-#### Quota Requirements for image-builder.yaml
+To avoid recurring charges for the resources provisioned by Cluster Toolkit, clean up the resources using the following command:
 
-For this example the following is needed in the selected region:
+```text
+./gcluster destroy image-builder-v6-001
+```
 
-* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
-  GB/node** up to 704 GB
-* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
+Follow the on-screen prompts to approve the deletion of each deployment group. For example, the resources are removed in reverse order. The cluster is destroyed first, followed by the primary is destroyed in the deployment group.
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` followed by a date and
+timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
 
 ### [serverless-batch.yaml] ![core-badge]
 
@@ -541,6 +542,19 @@ an instance template to be used for the Google Cloud Batch compute VMs and
 renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
+
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy hello-workload
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./gcluster destroy hello-workload
+```
 
 [serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
