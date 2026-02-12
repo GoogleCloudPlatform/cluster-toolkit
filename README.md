@@ -80,7 +80,8 @@ The following operating systems are supported for deployment on Compute Engine i
     cd gcluster-bundle
     chmod +x gcluster
     ```
-> **_NOTE:_** The binary is available starting with version 1.82.0
+
+    > **_NOTE:_** The binary is available starting with version 1.82.0
 
 2. Verify the Installation:
 
