@@ -122,7 +122,6 @@ gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
 
 ``` bash
 #!/bin/bash
-#!/bin/bash
 ./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
