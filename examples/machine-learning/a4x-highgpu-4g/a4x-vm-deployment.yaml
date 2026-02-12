@@ -21,7 +21,7 @@ terraform_backend_defaults:
 vars:
   deployment_name: # supply unique deployment name
   project_id: # supply existing project id
-  region: # supply region with a4-highgpu-8g capacity in reservation
-  zone: # supply zone with a4-highgpu-8g capacity in reservation
-  reservation_name: # supply a4-highgpu-8g reservation name
+  region: # supply region with a4x-highgpu-8g capacity in reservation
+  zone: # supply zone with a4x-highgpu-8g capacity in reservation
+  reservation_name: # supply a4x-highgpu-8g reservation name
   instance_count: # supply number of vms desired
