@@ -137,30 +137,25 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	}
 	logging.Error("%s", renderError(err, ctx))
 
-	logging.Error("One or more blueprint validators has failed. See messages above for suggested")
-	logging.Error("actions. General troubleshooting guidance and instructions for configuring")
-	logging.Error("validators are shown below.")
-	logging.Error("")
-	logging.Error("- https://goo.gle/hpc-toolkit-troubleshooting")
-	logging.Error("- https://goo.gle/hpc-toolkit-validation")
-	logging.Error("")
-	logging.Error("Validators can be silenced or treated as warnings or errors:")
-	logging.Error("")
-	logging.Error("- https://goo.gle/hpc-toolkit-validation-levels")
-	logging.Error("")
+	var errorMsg strings.Builder
+	errorMsg.WriteString("One or more blueprint validators has failed. See messages above for suggested actions.\n")
+	errorMsg.WriteString("General troubleshooting guidance and instructions for configuring alidators are shown below:\n\n")
+	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-troubleshooting\n")
+	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-validation\n\n")
+	errorMsg.WriteString("Validators can be silenced or treated as warnings or errors:\n\n")
+	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-validation-levels\n")
+	logging.Error("%s", errorMsg.String())
 
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			logging.Error("%s", boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
-			logging.Error("")
+			logging.Error("%s\n", boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
 		}
 	case config.ValidationError:
 		{
-			logging.Fatal("%s", boldRed("validation failed due to the issues listed above"))
+			logging.Fatal("%s", boldRed("Validation failed due to the issues listed above"))
 		}
 	}
-
 }
 
 // TODO: move to expand.go
