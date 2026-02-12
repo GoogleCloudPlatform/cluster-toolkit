@@ -1,0 +1,913 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: a4xmax-bm-slurm
+
+vars:
+  deployment_name: ## Deployment name ##
+  project_id: ## Project name ##
+  region: ## A4X-Max Reservation Region ##
+  zone: ## A4X-Max Reservation Zone ##
+  a4x_max_cluster_size: # supply cluster size
+
+  # Image settings
+  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
+  build_from_image_project: ubuntu-os-accelerator-images
+  image_build_machine_type: c4a-highcpu-16
+  image_build_disk_type: hyperdisk-balanced
+  image_disk_size_gb: 100
+  built_image_family: slurm-ubuntu2404-a4x-max-metal # Needs to be built with MOFED
+  build_slurm_from_git_ref: 6.10.10
+
+  # Cluster env settings
+  net0_range: 10.1.1.0/24
+  net1_range: 10.1.2.0/24
+  # To use filestore, uncomment the following and the homefs module in cluster-env:
+  # filestore_ip_range: 10.1.3.0/24
+
+  # Cluster Settings
+  disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
+  local_ssd_mountpoint: /mnt/localssd
+  nccl_plugin_image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64
+  nccl_plugin_version: v1.1.1
+  instance_image:
+    project: $(vars.project_id)
+    family: $(vars.built_image_family)
+  a4x_max_reservation_name: "" # supply reservation name
+  benchmark_dir: $(ghpc_stage("system_benchmarks"))
+
+
+deployment_groups:
+- group: image-env
+  modules:
+  - id: a4x-max-slurm-image-net
+    source: modules/network/vpc
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: update_gce_nic_naming.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          echo "Updating gce-nic-naming script..."
+          sudo curl -o /usr/bin/gce-nic-naming https://raw.githubusercontent.com/GoogleCloudPlatform/guest-configs/master/src/usr/bin/gce-nic-naming
+          sudo chmod +x /usr/bin/gce-nic-naming
+      - type: shell
+        destination: apply_networkd_workaround.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          echo "Applying systemd-networkd-wait-online workaround..."
+          OVERRIDE_DIR=/etc/systemd/system/systemd-networkd-wait-online.service.d
+          sudo mkdir -p ${OVERRIDE_DIR}
+          cat << EOF | sudo tee ${OVERRIDE_DIR}/override.conf
+          [Service]
+          ExecStart=
+          ExecStart=/lib/systemd/systemd-networkd-wait-online --ipv4 --timeout=60 --any --operational-state=routable
+          EOF
+          sudo systemctl daemon-reload
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+              - nvidia-imex-*
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack 8192
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: ansible-local
+        destination: update_settings.yml
+        content: |
+          ---
+          - name: Update OS settings prior to Slurm install
+            hosts: all
+            become: true
+            tasks:
+            - name: Turn off username space restriction in Apparmor
+              ansible.builtin.lineinfile:
+                path: /etc/sysctl.d/20-apparmor-donotrestrict.conf
+                regexp: '^kernel.apparmor_restrict_unprivileged_userns'
+                line: kernel.apparmor_restrict_unprivileged_userns = 0
+                create: yes
+              when: ansible_distribution == "Ubuntu" and  ansible_distribution_major_version is version('23', '>=')
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": true,
+            "install_cuda": false,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops",
+            "install_managed_lustre": false
+          }
+      - type: shell
+        destination: setup_asapd_lite_service.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          echo "Setting up asapd-lite service from Docker image..."
+
+          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4"
+
+          # Authenticate Docker with gcloud
+          gcloud auth configure-docker us-docker.pkg.dev -q
+
+          # Create host directories
+          sudo mkdir -p /var/log/google/asapd-lite/
+          sudo mkdir -p /var/lib/google/asapd-lite/
+          sudo chmod 777 /var/log/google/asapd-lite/
+          sudo chmod 777 /var/lib/google/asapd-lite/
+
+          # Create systemd service file
+          cat << EOF | sudo tee /etc/systemd/system/asapd-lite.service
+          [Unit]
+          Description=ASAPd Lite Daemon
+          After=docker.service network-online.target
+          Requires=docker.service
+
+          [Service]
+          TimeoutStartSec=0
+          Restart=always
+          ExecStartPre=-/usr/bin/docker pull $ASAPD_IMAGE
+          ExecStartPre=-/usr/bin/docker stop %n
+          ExecStartPre=-/usr/bin/docker rm %n
+          ExecStart=/usr/bin/docker run --name %n \
+            --privileged \
+            --net=host \
+            -v /lib/modules:/lib/modules:ro \
+            -v /usr/lib/libcuda:/usr/lib/libcuda \
+            -v /var/lib/nvidia/lib64:/usr/local/nvidia/lib64 \
+            -v /var/lib/nvidia/bin:/usr/local/nvidia/bin \
+            -v /dev:/dev \
+            -v /sys:/sys \
+            -v /proc:/proc \
+            -v /etc/udev/rules.d:/etc/udev/rules.d \
+            -v /run/udev:/run/udev \
+            -v /run/asapd-lite:/run/asapd-lite \
+            -v /var/log/google/asapd-lite/:/var/log/google/asapd-lite/ \
+            -v /var/lib/google/asapd-lite/:/var/lib/google/asapd-lite/ \
+            -v /etc/systemd/system:/etc/systemd/system \
+            -v /run/systemd:/run/systemd \
+            $ASAPD_IMAGE /bin/bash -c "/usr/local/bin/run_asapd_lite.sh && wait"
+          ExecStop=/usr/bin/docker stop %n
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Reload systemd, enable and start the service
+          sudo systemctl daemon-reload
+          sudo systemctl enable asapd-lite.service
+          echo "asapd-lite service enabled."
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      - type: ansible-local
+        destination: install_a4x_drivers.yml
+        content: |
+          ---
+          - name: Install A4X Drivers and Utils
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
+              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
+              nvidia_packages:
+              - cuda-toolkit-13-0
+              - datacenter-gpu-manager-4-cuda13
+              - datacenter-gpu-manager-4-dev
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ cuda_repo_url }}"
+                dest: "{{ cuda_repo_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ cuda_repo_filename }}"
+                state: present
+            - name: Install NVIDIA fabric and CUDA
+              ansible.builtin.apt:
+                name: "{{ item }}"
+                update_cache: true
+                allow_downgrade: yes
+              loop: "{{ nvidia_packages }}"
+              ignore_errors: yes # Ignore errors during packer build
+            - name: Freeze NVIDIA fabric and CUDA
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages }}"
+              ignore_errors: yes # Ignore errors during packer build
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+              ignore_errors: yes
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+      # Install DOCA-OFED
+      - type: shell
+        destination: install_mofed.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          export DEBIAN_FRONTEND=noninteractive
+
+          # mft depends on dkms
+          apt install -y dkms
+
+          mkdir -p /opt/src
+          cd /opt/src
+          wget https://www.mellanox.com/downloads/MFT/mft-4.34.0-145-aarch64-deb.tgz
+          tar -xvf mft-4.34.0-145-aarch64-deb.tgz
+          cd mft-4.34.0-145-aarch64-deb
+          ./install.sh
+          cd ..
+          # remove
+          rm -rf mft-4.34.0-145-aarch64-deb
+
+          export DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
+          BASE_URL=https://linux.mellanox.com/public/repo/doca
+          DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
+          DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
+          curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
+          echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
+          sudo apt-get update
+          sudo apt-get -y install doca-ofed
+      - type: data
+        destination: /etc/systemd/network/20-mrdma.network
+        content: |
+          [Match]
+          Name=gpu*rdma*
+
+          [Link]
+          MTUBytes=8896
+
+          [Network]
+          IPv6AcceptRA=true
+          SLAAC=true
+          DHCP=no
+          LinkLocalAddressing=ipv6
+      - type: shell
+        destination: enable_openibd.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          echo "Enabling openibd service..."
+          sudo systemctl enable openibd
+      - type: shell
+        destination: stop_packer_early.sh
+        content: |
+          #!/bin/bash
+          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
+          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
+          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
+
+- group: image
+  modules:
+  - id: slurm-a4x-max-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.image_disk_size_gb)
+      disk_type: $(vars.image_build_disk_type)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.build_from_image_family)
+      source_image_project_id: [$(vars.build_from_image_project)]
+      image_family: $(vars.built_image_family)
+      omit_external_ip: false
+    use:
+    - a4x-max-slurm-image-net
+    - slurm-build-script
+
+- group: cluster-env
+  modules:
+  # Net 0 for IDPF / Diorite 0 (Primary NIC)
+  - id: a4x-max-slurm-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-idpf-net-0
+      mtu: 4096
+      enable_ipv6_ula: true
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-idpf-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+        stack_type: IPV4_IPV6
+        ipv6_access_type: INTERNAL
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a4x-max-slurm-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-idpf-net-1
+      mtu: 4096
+      enable_ipv6_ula: true
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-idpf-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+        stack_type: IPV4_IPV6
+        ipv6_access_type: INTERNAL
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a4x-max-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce-metal
+      subnetworks_template: null
+
+  # - id: homefs
+  #   source: modules/file-system/filestore
+  #   use:
+  #   - a4x-max-slurm-net-0
+  #   settings:
+  #     filestore_tier: HIGH_SCALE_SSD
+  #     size_gb: 10240
+  #     local_mount: /home
+  #     reserved_ip_range: $(vars.filestore_ip_range)
+  #     deletion_protection:
+  #       enabled: true
+  #       reason: Avoid data loss
+  #   outputs:
+  #   - network_storage
+
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  - id: a4x_max_startup
+    source: modules/scripts/startup-script
+    settings:
+      local_ssd_filesystem:
+        mountpoint: $(vars.local_ssd_mountpoint)
+        permissions: "1777"  # must quote numeric filesystem permissions!
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.local_ssd_mountpoint)/docker"
+          }
+      runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
+      - type: shell
+        destination: ensure_mnt_localssd_permissions.sh
+        content: |
+          #!/bin/bash
+          mkdir -p $(vars.local_ssd_mountpoint)
+          chmod 1777 $(vars.local_ssd_mountpoint)
+      - type: shell
+        destination: ensure_asapd_lite_running.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          echo "Ensuring asapd-lite service is running..."
+          if ! systemctl is-active --quiet asapd-lite.service; then
+            echo "asapd-lite.service is not active, attempting to start..."
+            sudo systemctl start asapd-lite.service
+            # Optional: Short delay and check again
+            sleep 5
+            if ! systemctl is-active --quiet asapd-lite.service; then
+              echo "ERROR: asapd-lite.service failed to start."
+              # You could add more diagnostics here, e.g., journalctl -u asapd-lite.service
+            else
+              echo "asapd-lite.service started successfully."
+            fi
+          else
+            echo "asapd-lite.service is already active."
+          fi
+
+          # Ensure it's enabled, just in case
+          if ! systemctl is-enabled --quiet asapd-lite.service; then
+            echo "asapd-lite.service is not enabled, enabling..."
+            sudo systemctl enable asapd-lite.service
+          fi
+      - type: shell
+        destination: ensure_etc_hostname_created.sh
+        content: |
+          #!/bin/bash
+          hostname -s | sudo tee /etc/hostname > /dev/null
+      - type: data
+        destination: /etc/slurm/plugstack.conf.d/pyxis.conf
+        content: |
+          optional /usr/lib/aarch64-linux-gnu/slurm/spank_pyxis.so
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: ansible-local
+        destination: nccl_plugin.yml
+        content: |
+          ---
+          - name: Install NCCL plugin for A4X series
+            hosts: all
+            become: true
+            tasks:
+            - name: Add SystemD unit for NCCL plugin installation
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nccl-plugin@$(vars.nccl_plugin_version).service
+                mode: 0o0644
+                content: |
+                  [Unit]
+                  After=network-online.target docker.service
+                  Before=slurmd.service
+                  Requires=docker.service
+
+                  [Service]
+                  Type=oneshot
+                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
+                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
+                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
+                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
+                      $(vars.nccl_plugin_image):$(vars.nccl_plugin_version) install --install-nccl
+                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
+
+                  [Install]
+                  WantedBy=slurmd.service
+              notify:
+              - Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Enable NCCL plugin SystemD unit
+              ansible.builtin.service:
+                name: nccl-plugin@$(vars.nccl_plugin_version).service
+                state: started
+                enabled: true
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            # Enable persistenced service
+            - name: Enable nvidia-persistenced
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: started
+                enabled: true
+
+- group: cluster
+  modules:
+  - id: a4x_max_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [a4x-max-slurm-net-0, a4x_max_startup]
+    settings:
+      machine_type: a4x-maxgpu-4g-metal # *** A4X-Max Bare Metal machine type ***
+      enable_public_ips: true
+      node_count_static: $(vars.a4x_max_cluster_size)
+      node_count_dynamic_max: 0
+      enable_placement: true
+      accelerator_topology: "1x72"
+      guest_accelerator:
+      - type: nvidia-gb300
+        count: 4
+      disk_type: hyperdisk-balanced
+      instance_image_custom: true
+      on_host_maintenance: TERMINATE
+      reservation_name: $(vars.a4x_max_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 72
+        SocketsPerBoard: 2
+        ThreadsPerCore: 1
+      additional_networks:
+      - network: $(a4x-max-slurm-net-1.network_self_link)
+        subnetwork: $(a4x-max-slurm-net-1.subnetwork_self_link)
+        subnetwork_project: $(vars.project_id)
+        stack_type: IPV4_IPV6
+      # nic2 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic3 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic4 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic5 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic6 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic7 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic8 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+      # nic9 on rdma-net (MRDMA)
+      - network: $(a4x-max-rdma-net.network_self_link)
+        subnetwork: default-subnet-1-$(vars.deployment_name)-rdma-net
+        subnetwork_project: $(vars.project_id)
+        nic_type: MRDMA
+        stack_type: IPV6_ONLY
+
+  - id: a4x_max_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - a4x_max_nodeset
+    settings:
+      partition_name: a4xmax
+      is_default: true
+      exclusive: false
+      partition_conf:
+        ResumeTimeout: 3600  # 1 hour
+        SuspendTimeout: 1200  # 20 mins
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use:
+    - a4x-max-slurm-net-0
+    settings:
+      enable_login_public_ips: true
+      instance_image_custom: true
+      disk_type: hyperdisk-balanced
+      machine_type: c4a-standard-4
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          PARTITION_NAME=$(a4x_max_partition.partitions[0].partition_name)
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          # enable a GPU health check that runs at the completion of all jobs on A4X nodes
+          mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/imex_prolog" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_prolog
+          chmod 0755 "${SLURM_ROOT}/scripts/imex_prolog"
+          ln -s "${SLURM_ROOT}/scripts/imex_prolog" "${SLURM_ROOT}/prolog_slurmd.d/imex_prolog.prolog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/imex_epilog" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_epilog
+          chmod 0755 "${SLURM_ROOT}/scripts/imex_epilog"
+          ln -s "${SLURM_ROOT}/scripts/imex_epilog" "${SLURM_ROOT}/epilog_slurmd.d/imex_epilog.epilog_slurmd"
+      - type: data
+        destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+        source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+      - type: data
+        destination: /opt/apps/system_benchmarks/README.md
+        source: $(vars.benchmark_dir)/README.md
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - a4x_max_partition
+    - a4x-max-slurm-net-0
+    - slurm_login
+    # - homefs
+    - gcs_bucket
+    settings:
+      enable_controller_public_ips: true
+      disk_type: hyperdisk-balanced
+      machine_type: c4a-highcpu-16
+      controller_state_disk:
+        type: hyperdisk-balanced # Override the default pd-ssd
+        size: 50
+      instance_image_custom: true
+      controller_startup_script: $(controller_startup.startup_script)
+      cloud_parameters:
+        prolog_flags: Alloc,DeferBatch,NoHold
+        switch_type: switch/nvidia_imex
+      prolog_scripts:
+      - filename: 1_imex_prolog.sh
+        content: |
+          #!/usr/bin/env bash
+          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
+            exit 0
+          fi
+
+          activate_imex() {
+            set -ex
+
+            # Clean the config file in case the service gets started by accident
+            > /etc/nvidia-imex/nodes_config.cfg
+
+            NVIDIA_IMEX_START_TIMEOUT=80
+            IMEX_CONN_WAIT_TIMEOUT=70
+            NVIDIA_IMEX_STOP_TIMEOUT=15
+            IMEX_SERVER_PORT=1101
+            IMEX_CMD_PORT=1102
+
+            # clean up prev connection
+            set +e
+            timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
+            pkill -9 nvidia-imex
+            set -e
+
+            # update peer list
+            scontrol -a show node "${SLURM_NODELIST}" -o | sed 's/^.* NodeAddr=\([^ ]*\).*/\1/' > /etc/nvidia-imex/nodes_config.cfg
+
+            sed -i "s/SERVER_PORT.*/SERVER_PORT=${IMEX_SERVER_PORT}/" /etc/nvidia-imex/config.cfg
+
+            # enable imex-ctl on all nodes so you can query imex status with: nvidia-imex-ctl -a -q
+            sed -i "s/IMEX_CMD_PORT.*/IMEX_CMD_PORT=${IMEX_CMD_PORT}/" /etc/nvidia-imex/config.cfg
+            sed -i "s/IMEX_CMD_ENABLED.*/IMEX_CMD_ENABLED=1/" /etc/nvidia-imex/config.cfg
+
+            # set timeouts for start
+            sed -i "s/IMEX_CONN_WAIT_TIMEOUT.*/IMEX_CONN_WAIT_TIMEOUT=${IMEX_CONN_WAIT_TIMEOUT}/" /etc/nvidia-imex/config.cfg
+
+            timeout $NVIDIA_IMEX_START_TIMEOUT systemctl start nvidia-imex
+          }
+          activate_imex > "/var/log/slurm/imex_prolog_${SLURM_JOB_ID}.log" 2>&1
+      epilog_scripts:
+      - filename: 2_imex_epilog.sh
+        content: |
+          #!/usr/bin/env bash
+          set -ex
+
+          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
+            exit 0
+          fi
+
+          # Clean the config file in case the service gets started by accident
+          > /etc/nvidia-imex/nodes_config.cfg
+
+          NVIDIA_IMEX_STOP_TIMEOUT=30
+
+          # clean up connection
+          set +e
+
+          timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
+
+          pkill -9 nvidia-imex
+          set -e
