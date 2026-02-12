@@ -57,6 +57,7 @@ const (
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
 	testMachineTypeInZone             = "test_machine_type_in_zone"
+	testReservationExistsName         = "test_reservation_exists"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -69,6 +70,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
 		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
+		testReservationExistsName:         testReservationExists,
 	}
 }
 
@@ -251,6 +253,21 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"zone":       zoneRef,
 			}),
 		})
+		for _, varName := range bp.Vars.Keys() {
+			if resKeyRegex.MatchString(varName) {
+				resRef := config.GlobalRef(varName).AsValue()
+
+				// Automatically add a reservation check for every detected reservation variable
+				defaults = append(defaults, config.Validator{
+					Validator: testReservationExistsName,
+					Inputs: config.NewDict(map[string]cty.Value{
+						"project_id":       projectRef,
+						"zone":             zoneRef,
+						"reservation_name": resRef,
+					}),
+				})
+			}
+		}
 	}
 
 	if projectIDExists && regionExists && zoneExists {
