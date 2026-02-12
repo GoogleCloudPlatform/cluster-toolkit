@@ -39,8 +39,49 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ---
 
-If a self directed path is preferred, you can use the following commands to
-build the `gcluster` binary:
+### Using the Pre-built Bundle (Recommended)
+
+For the easiest setup, download the `gcluster_bundle_linux.zip` (for Linux) or `gcluster_bundle_mac.zip` (for macOS) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+
+#### Bundle Compatibility Matrix
+
+The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
+
+##### Execution Platform (Where the binary runs)
+
+| Platform | Support Status | Notes |
+| :--- | :---: | :--- |
+| **Linux** | ✅ | Pre-compiled on Debian Bullseye. |
+| **Google Cloud Shell** | ✅ | Native support via the Linux binary. |
+| **macOS** | ✅ | Native support via the Mac binary. |
+| **Windows** | ❎ | Please [Build from Source](#building-from-source). |
+
+1. Download and extract the bundle:
+
+    ```shell
+    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
+    # Set the desired version TAG (e.g., v1.82.0)
+    TAG=vX.Y.Z
+    # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster-bundle.zip
+    unzip gcluster-bundle.zip -d gcluster-bundle/
+    cd gcluster-bundle
+    chmod +x gcluster
+    ```
+
+    > **_NOTE:_** The binary is available starting with version 1.82.0
+
+2. Verify the Installation:
+
+    ```shell
+    ./gcluster --version
+    ./gcluster --help
+    ```
+
+### Building from Source
+
+If you prefer to build the `gcluster` binary from source,
+you can use the following commands:
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit

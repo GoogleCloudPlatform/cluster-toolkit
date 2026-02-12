@@ -648,3 +648,9 @@ variable "placement_max_distance" {
     error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
   }
 }
+
+variable "confidential_instance_type" {
+  type        = string
+  description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
+  default     = null
+}

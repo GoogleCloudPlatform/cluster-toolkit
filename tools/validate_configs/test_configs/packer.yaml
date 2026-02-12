@@ -43,3 +43,5 @@ deployment_groups:
       - playbook_file: ./example-playbook.yml
         galaxy_file: ./requirements.yml
         extra_arguments: ["-vv"]
+    use:
+    - network1

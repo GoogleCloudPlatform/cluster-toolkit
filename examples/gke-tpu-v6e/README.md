@@ -1,6 +1,6 @@
 # GKE TPU V6 blueprint
 
-This example shows how a TPU cluster with v6 machines and topology 4x4 can be created. The example also includes a `tpu-multislice.yaml` that creates a kubernetes service and job. The job includes commands to install `jax` and run a simple command using jax, on the TPU.
+This example shows how a TPU cluster with v6e machines and topology 4x4 can be created. The example also includes a `tpu-multislice.yaml` that creates a kubernetes service and job. The job includes commands to install `jax` and run a simple command using jax, on the TPU.
 
 Key parameters when working with TPUs:
 
@@ -59,7 +59,7 @@ This section guides you through the cluster creation process, ensuring that your
    * `BUCKET_NAME`: the name of the new Cloud Storage bucket.
    * `COMPUTE_REGION`: the compute region where you want to store the state of the Terraform deployment.
 
-1. In the [`examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
+1. In the [`examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
 
    * `bucket`: the name of the Cloud Storage bucket you created in the previous step.
    * `project_id`: your Google Cloud project ID.
@@ -70,29 +70,31 @@ This section guides you through the cluster creation process, ensuring that your
    * `tpu_topology`: the TPU placement topology for pod slice node pool.
    * `static_node_count`: the number of TPU nodes in your cluster.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `reservation`: the name of the compute engine reservation of TPU v6 nodes.
+   * `reservation`: the name of the compute engine reservation of TPU v6e nodes.
 
-    To modify advanced settings, edit `examples/gke-tpu-v6/gke-tpu-v6.yaml`.
+    To modify advanced settings, edit `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`.
 
 1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
-   1. Remove the `reservation` variable from the [`gke-tpu-v6-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml) file.
+   1. Remove the `reservation` variable from the [`gke-tpu-v6e-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) file.
    1. Remove the `reservation_affinity` block from the nodepool module.
+
+1. To utilize spot instances, remove the reservation variable from gke-tpu-v6e-deployment.yaml and add spot: true. In gke-tpu-v6e.yaml, replace the reservation_affinity block under gke-tpu-v6e-pool module with spot: $(vars.spot)
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
 1. Deploy the blueprint to provision the GKE  infrastructure
-    using TPU v6 machine types:
+    using TPU v6e machine types:
 
    ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml \
-    examples/gke-tpu-v6/gke-tpu-v6.yaml
+    examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml \
+    examples/gke-tpu-v6e/gke-tpu-v6e.yaml
    ```
 
 ## Advanced Blueprint: GKE TPU with GCS Integration
 
-This repository also includes an advanced blueprint, `gke-tpu-v6-advanced.yaml`, designed for production-ready workloads. It builds on the basic blueprint by adding several key features:
+This repository also includes an advanced blueprint, `gke-tpu-v6e-advanced.yaml`, designed for production-ready workloads. It builds on the basic blueprint by adding several key features:
 * **Dedicated Service Accounts** for nodes and workloads, following security best practices.
 * **Automatic creation of two GCS buckets** for training data and checkpoints.
 * **Performance-tuned GCS FUSE mounts** pre-configured in the cluster as Persistent Volumes.
@@ -104,22 +106,22 @@ This repository also includes an advanced blueprint, `gke-tpu-v6-advanced.yaml`,
 
 The process is nearly identical to the basic deployment.
 
-1. Ensure you have completed steps 1-7 from the "Create a cluster" section above. The same `gke-tpu-v6-deployment.yaml` file can be used.
+1. Ensure you have completed steps 1-7 from the "Create a cluster" section above. The same `gke-tpu-v6e-deployment.yaml` file can be used.
 
-1. In the final deploy command, simply point to the `gke-tpu-v6-advanced.yaml` blueprint instead.
+1. In the final deploy command, simply point to the `gke-tpu-v6e-advanced.yaml` blueprint instead.
 
     ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml \
-    examples/gke-tpu-v6/gke-tpu-v6-advanced.yaml
+    examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml \
+    examples/gke-tpu-v6e/gke-tpu-v6e-advanced.yaml
     ```
 
 1. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
 
 ### Advanced Scheduling with Kueue
 
-This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native system for managing quotas and job queuing. This is enabled by default in the advanced blueprint (`gke-tpu-v6-advanced.yaml`).
+This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native system for managing quotas and job queuing. This is enabled by default in the advanced blueprint (`gke-tpu-v6e-advanced.yaml`).
 
 1. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue` matching the total static TPU capacity of your cluster (slices x nodes x chips).
 2. **Submit a Job:** To submit a job to the queue, add the label `kueue.x-k8s.io/queue-name: user-queue` to your Job or JobSet manifest.
@@ -127,7 +129,7 @@ This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native
     A sample job file is provided: `kueue-job-sample.yaml`.
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6/kueue-job-sample.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6e/kueue-job-sample.yaml
     ```
 
 3. **Validation:** Check the status of your workload.
@@ -138,12 +140,12 @@ This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native
 
 ## Run the sample job
 
-The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6/tpu-multislice.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.
+The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/gke-tpu-v6e/tpu-multislice.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.
 
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials gke-tpu-v6 --region=REGION --project=PROJECT_ID
+    gcloud container clusters get-credentials gke-tpu-v6e --region=REGION --project=PROJECT_ID
     ```
 
     Replace the `REGION` and `PROJECT_ID` with the ones used in the blueprint.
@@ -152,14 +154,14 @@ The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit
 
     ```yaml
     nodeSelector:
-        cloud.google.com/gke-tpu-accelerator: tpu-v6-slice
+        cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
         cloud.google.com/gke-tpu-topology: 4x4
     ```
 
 1. Create the resources:
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6/tpu-multislice.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-v6e/tpu-multislice.yaml
     ```
 
     This command returns a service and a job name.
@@ -191,14 +193,14 @@ The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit
 To avoid recurring charges for the resources used on this page, clean up the resources provisioned by Cluster Toolkit, including the VPC networks and GKE cluster:
 
    ```sh
-   ./gcluster destroy gke-tpu-v6/
+   ./gcluster destroy gke-tpu-v6e/
    ```
 
 ## Appendix
 
 ### Useful TPU links
 1. [TPU architecture](https://cloud.google.com/tpu/docs/system-architecture-tpu-vm)
-2. [TPU v6](https://cloud.google.com/tpu/docs/v6e)
+2. [TPU v6e](https://cloud.google.com/tpu/docs/v6e)
 
 ### Understanding the GCS Integration
 
@@ -217,15 +219,15 @@ For a pre-configured example and detailed documentation on using Flex Start with
 * [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-v6e/README.md)
 
 ### Understanding Managed Lustre integration
-The advanced blueprint `gke-tpu-v6-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.
+The advanced blueprint `gke-tpu-v6e-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.
 
 #### Enabling Managed Lustre
 To enable Managed Lustre, you must make these changes before deploying:
 
-1. In the `gke-tpu-v6-advanced.yaml`:
+1. In the `gke-tpu-v6e-advanced.yaml`:
 Find the **vars:** section and **uncomment** the Managed Lustre variables. The defaults provide a high-performance **36000GiB** (~35.16TiB) filesystem with **18 GB/s** of throughput.
 
-2. In the `gke-tpu-v6-advanced.yaml`:
+2. In the `gke-tpu-v6e-advanced.yaml`:
 Find the section commented # --- MANAGED LUSTRE ADDITIONS ---. **Uncomment** the entire block of four modules: `private_service_access`, `lustre_firewall_rule`, `managed-lustre`, and `lustre-pv`.
 
 After making these changes, run the `gcluster deploy` command as usual.
@@ -283,7 +285,7 @@ The blueprint also supports [Hyperdisk Balanced](https://docs.cloud.google.com/c
 
 To enable Hyperdisk Balanced integration, you must make these changes before deploying:
 
-1. Ensure the GKE cluster is configured to support standard Persistent Disks (the Hyperdisk CSI driver runs automatically once enabled). Verify the `gke-tpu-v6-cluster` module setting `enable_persistent_disk_csi: true` is present.
+1. Ensure the GKE cluster is configured to support standard Persistent Disks (the Hyperdisk CSI driver runs automatically once enabled). Verify the `gke-tpu-v6e-cluster` module setting `enable_persistent_disk_csi: true` is present.
 
 2. Find the section commented `--- HYPERDISK BALANCED ADDITIONS ---`. Uncomment the entire block containing the following two modules:
    * `hyperdisk-balanced-setup`: This module creates a **StorageClass** and a **PersistentVolumeClaim (PVC)** that will dynamically provision a Hyperdisk Balanced volume in your cluster.
@@ -327,7 +329,7 @@ The logs of the pod verifies the disk is mounted successfully and performs a mix
 
 To enable Filestore integration, perform the following steps before deploying:
 
-1. In the `gke-tpu-v6-cluster` module settings, ensure `enable_filestore_csi: true` is set.
+1. In the `gke-tpu-v6e-cluster` module settings, ensure `enable_filestore_csi: true` is set.
 2. Find the section commented `--- FILESTORE ADDITIONS ---`. Uncomment the following modules:
 
 * `filestore`: Provisions the Filestore instance and specifies the `local_mount` point.

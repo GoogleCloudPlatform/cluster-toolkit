@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: gke-tpu-v6
+blueprint_name: gke-tpu-v6e
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-tpu-v6
+  deployment_name: gke-tpu-v6e
 
   # The GCP Region used for this deployment.
   region:
@@ -46,7 +46,7 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of TPU v6 nodes
+  # The name of the compute engine reservation of TPU v6e nodes
   reservation:
 
   system_node_pool_disk_size_gb: 200
@@ -76,7 +76,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-tpu-v6-net-0
+  - id: gke-tpu-v6e-net-0
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
@@ -101,7 +101,7 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-tpu-v6-net-1
+  - id: gke-tpu-v6e-net-1
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
@@ -162,9 +162,9 @@ deployment_groups:
       force_destroy: false
       enable_hierarchical_namespace: true
 
-  - id: gke-tpu-v6-cluster
+  - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-tpu-v6-net-0, workload_service_account]
+    use: [gke-tpu-v6e-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -181,8 +181,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-tpu-v6-net-1.network_name,
-            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -204,12 +204,12 @@ deployment_groups:
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
     outputs: [instructions]
 
-  - id: gke-tpu-v6-pool
+  - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
-    use: [gke-tpu-v6-cluster, node_pool_service_account]
+    use: [gke-tpu-v6e-cluster, node_pool_service_account]
     settings:
       num_slices: $(vars.num_slices)
-      name: gke-tpu-v6-pool
+      name: gke-tpu-v6e-pool
       disk_type: hyperdisk-balanced
       machine_type: $(vars.machine_type)
       auto_upgrade: true
@@ -219,8 +219,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-tpu-v6-net-1.network_name,
-            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -247,14 +247,14 @@ deployment_groups:
   # # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   # - id: private_service_access
   #   source: modules/network/private-service-access
-  #   use: [gke-tpu-v6-net-0]
+  #   use: [gke-tpu-v6e-net-0]
   #   settings:
   #     prefix_length: 24
 
   # # Firewall to allow Managed Lustre connection
   # - id: lustre_firewall_rule
   #   source: modules/network/firewall-rules
-  #   use: [gke-tpu-v6-net-0]
+  #   use: [gke-tpu-v6e-net-0]
   #   settings:
   #     ingress_rules:
   #     - name: $(vars.deployment_name)-allow-lustre-traffic
@@ -268,7 +268,7 @@ deployment_groups:
 
   # - id: managed-lustre
   #   source: modules/file-system/managed-lustre
-  #   use: [gke-tpu-v6-net-0, private_service_access]
+  #   use: [gke-tpu-v6e-net-0, private_service_access]
   #   settings:
   #     name: $(vars.lustre_instance_id)
   #     local_mount: /lustre
@@ -281,20 +281,20 @@ deployment_groups:
 
   # - id: lustre-pv
   #   source: modules/file-system/gke-persistent-volume
-  #   use: [managed-lustre, gke-tpu-v6-cluster]
+  #   use: [managed-lustre, gke-tpu-v6e-cluster]
   #   settings:
   #     capacity_gib: $(vars.lustre_size_gib)
 
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [gke-tpu-v6-cluster]
+    use: [gke-tpu-v6e-cluster]
     settings:
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6-pool.tpu_chips_per_node)
-          accelerator_type: $(gke-tpu-v6-pool.tpu_accelerator_type)
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
       jobset:
         install: true
 
@@ -317,7 +317,7 @@ deployment_groups:
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, gke-tpu-v6-cluster]
+    use: [gcs-training, gke-tpu-v6e-cluster]
     settings:
       gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
@@ -325,7 +325,7 @@ deployment_groups:
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, gke-tpu-v6-cluster]
+    use: [gcs-checkpointing, gke-tpu-v6e-cluster]
     settings:
       gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
@@ -334,7 +334,7 @@ deployment_groups:
   # benchmark against the training and checkpointing buckets.
   - id: fio-bench-job-template
     source: modules/compute/gke-job-template
-    use: [checkpointing-pv, training-pv, gke-tpu-v6-pool]
+    use: [checkpointing-pv, training-pv, gke-tpu-v6e-pool]
     settings:
       node_count: $(vars.static_node_count)
       security_context:  # to make sure the job have enough access to install the fio packages
@@ -400,7 +400,7 @@ deployment_groups:
   # # Set up storage class and persistent volume claim for Hyperdisk
   # - id: hyperdisk-balanced-setup
   #   source: modules/file-system/gke-storage
-  #   use: [gke-tpu-v6-cluster]
+  #   use: [gke-tpu-v6e-cluster]
   #   settings:
   #     storage_type: Hyperdisk-balanced
   #     access_mode: ReadWriteOnce
@@ -415,7 +415,7 @@ deployment_groups:
   # - id: fio-bench-job-hyperdisk
   #   source: modules/compute/gke-job-template
   #   use:
-  #   - gke-tpu-v6-pool
+  #   - gke-tpu-v6e-pool
   #   - hyperdisk-balanced-setup
   #   settings:
   #     name: fio-benchmark
@@ -470,19 +470,19 @@ deployment_groups:
   # # --- FILESTORE ADDITIONS ---
   # - id: filestore
   #   source: modules/file-system/filestore
-  #   use: [gke-tpu-v6-net-0]
+  #   use: [gke-tpu-v6e-net-0]
   #   settings: {local_mount: /mnt/v6e-filestore}
 
   # - id: shared-filestore-pv
   #   source: modules/file-system/gke-persistent-volume
-  #   use: [gke-tpu-v6-cluster, filestore]
+  #   use: [gke-tpu-v6e-cluster, filestore]
 
   # # Shared Filestore Job
   # - id: shared-fs-job
   #   source: modules/compute/gke-job-template
   #   use:
-  #   - gke-tpu-v6-cluster
-  #   - gke-tpu-v6-pool
+  #   - gke-tpu-v6e-cluster
+  #   - gke-tpu-v6e-pool
   #   - shared-filestore-pv
   #   settings:
   #     image: alpine/git:latest
