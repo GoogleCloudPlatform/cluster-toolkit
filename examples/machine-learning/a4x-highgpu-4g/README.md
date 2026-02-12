@@ -1,7 +1,7 @@
 # A4X High Blueprints
 
 This document outlines the deployment steps for provisioning A4X High
-`a4x-highgpu-4g` VMs using Slurm as an orchestrator.
+`a4x-highgpu-4g` VMs using either Slurm as an orchestrator or as a standalone VM group.
 
 ## A4X-High Slurm Cluster Deployment
 
@@ -35,7 +35,7 @@ instances.
 
 ## A4X-High Slurm Cluster Deployment
 
-### Create/modify the deployment file with your preferred configuration
+### Modify the deployment file with your preferred configuration
 
 For example, set the such as size, reservation to be used, etc, as well as the
 name of the bucket that you just created. Below are example contents for `a4xhigh-slurm-deployment.yaml`.
@@ -83,6 +83,45 @@ Example (deploy only the primary group for this blueprint):
 
 ```bash
 ./gcluster deploy -d a4xhigh-slurm-deployment.yaml a4xhigh-slurm-blueprint.yaml --only primary
+```
+
+## A4X-High VM Deployment
+----------------------
+
+This section covers deploying A4X High VMs as a standalone group, which is suitable for workloads that do not require the Slurm scheduler.
+
+### Modify the deployment file with your preferred configuration
+
+Update `a4x-vm-deployment.yaml` with your project-specific details, such as the reservation name and desired instance count.
+
+```yaml
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: TF_STATE_BUCKET_NAME
+
+vars:
+  deployment_name: a4x-vm
+  project_id: <PROJECT_ID>
+  region: <REGION>
+  zone: <ZONE>
+  reservation_name: <RESERVATION_NAME>
+  instance_count: <INSTANCE_COUNT>
+```
+
+### Deploy the VMs
+
+``` bash
+#!/bin/bash
+gcluster deploy -d a4x-vm-deployment.yaml a4x-vm.yaml
+```
+
+### Destroy the VM group
+
+``` bash
+#!/bin/bash
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
 ```
 
 ### Cloud Storage FUSE
