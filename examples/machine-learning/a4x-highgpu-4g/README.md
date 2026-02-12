@@ -111,7 +111,7 @@ vars:
   instance_count: 
 ```
 
-### Deploy the cluster
+### Deploy the VMs
 
 ``` bash
 #!/bin/bash
