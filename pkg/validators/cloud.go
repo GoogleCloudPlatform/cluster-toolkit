@@ -415,7 +415,6 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }
 
-
 func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
 	// 1. Determine if the validator was explicitly added to the blueprint YAML
 	const validatorName = "test_disk_type_in_zone"
