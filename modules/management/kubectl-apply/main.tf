@@ -87,7 +87,7 @@ module "kubectl_apply_manifests" {
 module "install_kueue" {
   source           = "./helm_install"
   count            = local.install_kueue ? 1 : 0
-  wait             = try(var.kueue.wait, false)
+  wait             = true
   timeout          = 1200
   release_name     = "kueue"
   chart_repository = "oci://registry.k8s.io/kueue/charts"
@@ -98,6 +98,8 @@ module "install_kueue" {
   values_yaml = [
     file("${path.module}/kueue/kueue-helm-values.yaml")
   ]
+
+  dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
   depends_on = [var.gke_cluster_exists]
 }

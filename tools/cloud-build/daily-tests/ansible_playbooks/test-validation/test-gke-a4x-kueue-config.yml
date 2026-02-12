@@ -232,6 +232,14 @@
     ansible.builtin.debug:
       var: job_completion.stdout_lines
   always:
+  - name: Clean up resources from the cluster
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete jobs,localqueue,clusterqueue,resourceflavor,topology --all --all-namespaces --ignore-not-found
+    args:
+      executable: /bin/bash
+    changed_when: False
+
   - name: Clean up temporary job files (always run)
     delegate_to: localhost
     ansible.builtin.file:
