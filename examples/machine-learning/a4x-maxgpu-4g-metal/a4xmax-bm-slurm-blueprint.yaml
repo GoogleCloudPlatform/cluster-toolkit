@@ -35,6 +35,7 @@ vars:
   # Cluster env settings
   net0_range: 10.1.1.0/24
   net1_range: 10.1.2.0/24
+  # To use filestore, uncomment the following and the homefs module in cluster-env:
   # filestore_ip_range: 10.1.3.0/24
 
   # Cluster Settings
