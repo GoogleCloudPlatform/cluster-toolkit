@@ -74,7 +74,8 @@ check_tpu_capacity() {
 
 	# --- TPU Capacity Check ---
 	for i in $(seq 1 "${NUM_NODES}"); do
-		local tpu_name="${FULL_INSTANCE_PREFIX}$(printf "%02d" "$i")"
+		local tpu_name
+		tpu_name="${FULL_INSTANCE_PREFIX}$(printf "%02d" "$i")"
 		local gcloud_tpu_cmd=(
 			gcloud compute tpus tpu-vm create "${tpu_name}"
 			--project="${PROJECT_ID}"
@@ -121,7 +122,11 @@ check_vm_capacity() {
 	local success=false
 
 	readarray -t instance_names_array < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
-	local instance_names_str=$(IFS=,; echo "${instance_names_array[*]}")
+	local instance_names_str
+	instance_names_str=$(
+		IFS=,
+		echo "${instance_names_array[*]}"
+	)
 
 	local gcloud_cmd=(
 		gcloud compute instances bulk create
