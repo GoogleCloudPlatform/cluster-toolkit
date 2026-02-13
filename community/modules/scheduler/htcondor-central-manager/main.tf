@@ -149,10 +149,11 @@ resource "google_compute_address" "cm" {
 
 module "central_manager_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 12.1"
+  version = ">= 12.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
+  region      = var.region
   network     = var.network_self_link
   subnetwork  = var.subnetwork_self_link
   service_account = {
@@ -177,7 +178,7 @@ module "central_manager_instance_template" {
 
 module "htcondor_cm" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "~> 12.1"
+  version = ">= 12.1"
 
   project_id                       = var.project_id
   region                           = var.region

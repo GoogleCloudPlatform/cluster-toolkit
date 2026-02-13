@@ -135,6 +135,47 @@ variable "subnetwork_self_link" {
   default     = null
 }
 
+variable "network_interfaces" {
+  description = <<-EOT
+    A list of network interfaces to attach to HTCondor execute point instances.
+    Each network interface should have the following fields:
+    - network (required): The self link of the network
+    - subnetwork (optional): The self link of the subnetwork
+    - nic_type (optional): "GVNIC" or "VIRTIO_NET"
+    - stack_type (optional): "IPV4_ONLY" or "IPV4_IPV6"
+    - network_ip (optional): Specific IP address to assign
+    - queue_count (optional): Queue count for multiqueue NIC
+    - access_config (optional): List of NAT config objects
+    - ipv6_access_config (optional): List of IPv6 access config objects
+    - alias_ip_range (optional): List of alias IP ranges
+    
+    If the list is empty, the module will fall back to using var.network_self_link
+    and var.subnetwork_self_link for backward compatibility.
+  EOT
+
+  type = list(object({
+    network     = string
+    subnetwork  = optional(string)
+    nic_type    = optional(string)
+    stack_type  = optional(string)
+    network_ip  = optional(string, "")
+    queue_count = optional(number)
+    access_config = optional(list(object({
+      nat_ip       = optional(string)
+      network_tier = optional(string)
+    })), [])
+    ipv6_access_config = optional(list(object({
+      network_tier = optional(string)
+    })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
+  }))
+
+  default = []
+}
+
 variable "target_size" {
   description = "Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size."
   type        = number
