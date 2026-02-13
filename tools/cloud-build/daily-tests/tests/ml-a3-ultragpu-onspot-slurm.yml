@@ -22,7 +22,7 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: "{{ build[0:4] }}-net-0"
+network: "a3u-{{ build[0:4] }}-net-0"
 nccl_test_path: "examples/machine-learning/a3-ultragpu-8g/nccl-tests"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -51,5 +51,5 @@ cli_deployment_vars:
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   disk_size_gb: 100
   a3u_cluster_size: 2
-  base_network_name: "a3u- {{ build[0:4] }}"
+  base_network_name: "a3u-{{ build[0:4] }}"
   a3u_enable_spot_vm: true
