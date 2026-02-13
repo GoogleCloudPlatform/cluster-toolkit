@@ -204,13 +204,6 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	echo "INFO: Trying provisioning model: ${PROVISIONING_MODEL}"
 
 	for ZONE in "${ZONES_ARRAY[@]}"; do
-		# >>> START Modification: Simulate SPOT failure in us-central1-a <<<
-        if [[ "${PROVISIONING_MODEL}" == "SPOT" && "${ZONE}" == "us-central1-a" ]]; then
-            echo "INFO: Simulating SPOT capacity failure in ${ZONE} for testing purposes."
-            cleanup_vm_instances "${PROJECT_ID}" "${ZONE}" "${FULL_INSTANCE_PREFIX}"
-            continue # Skip to the next zone/model
-        fi
-        # >>> END Modification <<<
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
 			if check_tpu_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
 				SELECTED_ZONE="${ZONE}"
