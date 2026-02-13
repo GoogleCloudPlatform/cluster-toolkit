@@ -66,9 +66,15 @@ func (w *timestampWriter) Write(p []byte) (n int, err error) {
 
 func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
 	if w.startOfLine {
-		ts := time.Now().UTC().Format(time.RFC3339)
-		coloredTs := logging.TsColor.Sprint(ts)
-		buf.WriteString(coloredTs + " ")
+		if len(p) > 0 {
+			firstChar := p[0]
+			// Avoid printing timestamp if the segment starts with an indentation or newline
+			if firstChar != ' ' && firstChar != '\t' && firstChar != '\n' {
+				ts := time.Now().UTC().Format(time.RFC3339)
+				coloredTs := logging.TsColor.Sprint(ts)
+				buf.WriteString(coloredTs + " ")
+			}
+		}
 	}
 	buf.Write(p)
 }
