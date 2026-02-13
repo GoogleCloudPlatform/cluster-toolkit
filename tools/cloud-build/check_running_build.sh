@@ -19,9 +19,14 @@ TRIGGER_BUILD_CONFIG_PATH="$1"
 
 echo "$TRIGGER_BUILD_CONFIG_PATH"
 
-if [[ "$TRIGGER_BUILD_CONFIG_PATH" == *"onspot"* && "$TRIGGER_BUILD_CONFIG_PATH" == *"PR"* ]]; then
-	echo "Skipping check for onspot PR build: $TRIGGER_BUILD_CONFIG_PATH"
-	exit 0
+# Skip the matching build check for onspot PR builds.
+# PR builds have $_PR_NUMBER defined in their substitutions.
+if [[ "$TRIGGER_BUILD_CONFIG_PATH" == *"onspot"* && -n "${BUILD_ID:-}" ]]; then
+    PR_NUMBER=$(gcloud builds describe "$BUILD_ID" --format="value(substitutions._PR_NUMBER)" 2>/dev/null || true)
+    if [[ -n "$PR_NUMBER" ]]; then
+        echo "Skipping matching build check for onspot PR build ($PR_NUMBER): $TRIGGER_BUILD_CONFIG_PATH"
+        exit 0
+    fi
 fi
 
 MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\"")
