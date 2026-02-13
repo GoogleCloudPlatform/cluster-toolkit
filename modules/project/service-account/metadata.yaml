@@ -17,3 +17,20 @@ spec:
   requirements:
     services:
     - iam.googleapis.com
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [descriptions]
+      deprecated: true
+    error_message: "Unsupported variable: 'descriptions'. Please use 'description' instead."
+  - validator: required
+    inputs:
+      vars: [names]
+      deprecated: true
+    error_message: "Unsupported variable: 'names'. Please use 'name' instead."
+  - validator: required
+    inputs:
+      vars: [prefix]
+      deprecated: true
+    error_message: "Unsupported variable: 'prefix'. Please use 'deployment_name' instead."

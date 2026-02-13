@@ -706,73 +706,6 @@ func TestExclusiveValidator(t *testing.T) {
 	})
 }
 
-func TestIsVarSet(t *testing.T) {
-	tests := []struct {
-		name string
-		val  []cty.Value
-		want bool
-	}{
-		{"null", []cty.Value{cty.NilVal}, false},
-		{"empty string", []cty.Value{cty.StringVal("")}, false},
-		{"valid string", []cty.Value{cty.StringVal("ok")}, true},
-		{"bool false", []cty.Value{cty.BoolVal(false)}, false},
-		{"bool true", []cty.Value{cty.BoolVal(true)}, true},
-		{"num 0", []cty.Value{cty.NumberIntVal(0)}, false},
-		{"num positive", []cty.Value{cty.NumberIntVal(5)}, true},
-		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
-		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
-		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
-		{"populated object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"a": cty.True})}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isVarSet(tt.val); got != tt.want {
-				t.Errorf("isVarSet() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestConvertToCty(t *testing.T) {
-	val := convertToCty(nil)
-	if !val.IsNull() {
-		t.Error("convertToCty(nil) should return NilVal")
-	}
-
-	val = convertToCty("test")
-	if val.AsString() != "test" {
-		t.Error("convertToCty(string) failed")
-	}
-
-	// Test Slice
-	sliceInput := []interface{}{"a", 1}
-	val = convertToCty(sliceInput)
-	if !val.Type().IsTupleType() || val.LengthInt() != 2 {
-		t.Errorf("convertToCty(slice) failed, got %s", val.GoString())
-	}
-
-	// Test Map
-	mapInput := map[string]interface{}{"key": true}
-	val = convertToCty(mapInput)
-	if !val.Type().IsObjectType() || !val.GetAttr("key").True() {
-		t.Error("convertToCty(map) failed")
-	}
-}
-
-func TestValuesMatch(t *testing.T) {
-	if !ValuesMatch([]cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}) {
-		t.Error("ValuesMatch: null should equal false")
-	}
-	if !ValuesMatch([]cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}) {
-		t.Error("ValuesMatch: numbers should match")
-	}
-	vList1 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	vList2 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	if !ValuesMatch(vList1, vList2) {
-		t.Error("ValuesMatch: identical lists should match")
-	}
-}
-
 func TestConditionalValidator_Triggers(t *testing.T) {
 	baseBP := config.Blueprint{
 		BlueprintName: "test-bp",
@@ -934,4 +867,172 @@ func TestConditionalValidator_Dependents(t *testing.T) {
 			t.Fatalf("error message format incorrect: %v", err)
 		}
 	})
+}
+func TestRequiredValidator(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Settings: config.NewDict(map[string]cty.Value{
+							"required_var": cty.StringVal("present"),
+							"unset_var":    cty.NullVal(cty.String),
+						}),
+					},
+				},
+			},
+		},
+	}
+	validator := RequiredValidator{}
+
+	t.Run("passes_when_required_vars_are_present", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"required_var"},
+			},
+		}
+
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_when_required_vars_are_missing", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"unset_var"},
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error for missing variable, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing required settings") {
+			t.Fatalf("expected error message to contain 'missing required settings', got: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_when_deprecated_vars_are_absent", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"unset_var"},
+				"deprecated": true,
+			},
+		}
+
+		if err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_when_deprecated_vars_are_present", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator: "required",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"required_var"},
+				"deprecated": true,
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error for deprecated variable, got nil")
+		}
+		if !strings.Contains(err.Error(), "unwanted settings") {
+			t.Fatalf("expected error message to contain 'unwanted settings', got: %q", err.Error())
+		}
+	})
+
+	t.Run("checks_custom_error_message", func(t *testing.T) {
+		rule := modulereader.ValidationRule{
+			Validator:    "required",
+			ErrorMessage: "Custom Error",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"unset_var"},
+			},
+		}
+
+		err := validator.Validate(baseBP, baseBP.Groups[0].Modules[0], rule, baseBP.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "Custom Error: missing required settings") {
+			t.Fatalf("expected error message to contain 'Custom Error: missing required settings', got: %q", err.Error())
+		}
+	})
+}
+
+func TestIsVarSet(t *testing.T) {
+	tests := []struct {
+		name string
+		val  []cty.Value
+		want bool
+	}{
+		{"null", []cty.Value{cty.NilVal}, false},
+		{"empty string", []cty.Value{cty.StringVal("")}, false},
+		{"valid string", []cty.Value{cty.StringVal("ok")}, true},
+		{"bool false", []cty.Value{cty.BoolVal(false)}, false},
+		{"bool true", []cty.Value{cty.BoolVal(true)}, true},
+		{"num 0", []cty.Value{cty.NumberIntVal(0)}, false},
+		{"num positive", []cty.Value{cty.NumberIntVal(5)}, true},
+		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
+		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
+		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
+		{"populated object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"a": cty.True})}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isVarSet(tt.val); got != tt.want {
+				t.Errorf("isVarSet() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConvertToCty(t *testing.T) {
+	val := convertToCty(nil)
+	if !val.IsNull() {
+		t.Error("convertToCty(nil) should return NilVal")
+	}
+
+	val = convertToCty("test")
+	if val.AsString() != "test" {
+		t.Error("convertToCty(string) failed")
+	}
+
+	// Test Slice
+	sliceInput := []interface{}{"a", 1}
+	val = convertToCty(sliceInput)
+	if !val.Type().IsTupleType() || val.LengthInt() != 2 {
+		t.Errorf("convertToCty(slice) failed, got %s", val.GoString())
+	}
+
+	// Test Map
+	mapInput := map[string]interface{}{"key": true}
+	val = convertToCty(mapInput)
+	if !val.Type().IsObjectType() || !val.GetAttr("key").True() {
+		t.Error("convertToCty(map) failed")
+	}
+}
+
+func TestValuesMatch(t *testing.T) {
+	if !ValuesMatch([]cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}) {
+		t.Error("ValuesMatch: null should equal false")
+	}
+	if !ValuesMatch([]cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}) {
+		t.Error("ValuesMatch: numbers should match")
+	}
+	vList1 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
+	vList2 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
+	if !ValuesMatch(vList1, vList2) {
+		t.Error("ValuesMatch: identical lists should match")
+	}
 }

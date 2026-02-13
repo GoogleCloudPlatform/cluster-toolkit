@@ -179,6 +179,35 @@ validators:
     error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
 ```
 
+### Required Validator
+The `required` validator ensures that a specific set of variables are either present or absent depending on the deprecated flag. It is used to enforce mandatory inputs or to block restricted and deprecated configurations.
+
+vars (list of strings): The list of variable names to check.
+deprecated (boolean, optional): If true, the validator checks that the specified variables are not set. Defaults to false (checks that variables are set).
+
+**Example: Enforcing required variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [vpc_network_name, subnetwork_name]
+    error_message: "Network details must be provided."
+```
+
+**Example: Deprecated variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [legacy_option]
+      deprecated: true
+    error_message: "The 'legacy_option' is no longer supported."
+```
+
 ### Conditional Validator
 The `conditional` validator enforces that a dependent variable is set or matches a specific value only when a trigger variable condition is met. This is useful for cross-variable dependencies (e.g., if feature X is enabled, setting Y is required).
 

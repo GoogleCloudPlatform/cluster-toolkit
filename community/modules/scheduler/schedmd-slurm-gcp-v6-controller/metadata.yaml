@@ -36,3 +36,8 @@ ghpc:
     inputs:
       vars: [instance_image.name, instance_image.family]
     error_message: "In 'instance_image', at most one of the \"family\" or \"name\" fields can be set."
+  - validator: required
+    inputs:
+      vars: [enable_smt, disable_smt]
+      deprecated: true
+    error_message: "Unsupported variables: 'enable_smt', 'disable_smt'. Please use 'advanced_machine_features.threads_per_core' instead."

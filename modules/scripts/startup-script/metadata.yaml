@@ -17,3 +17,15 @@ spec:
   requirements:
     services:
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [enable_docker_world_writable]
+      deprecated: true
+    error_message: "Unsupported variable: 'enable_docker_world_writable'. Please use 'docker' instead."
+  - validator: required
+    inputs:
+      vars: [install_docker]
+      deprecated: true
+    error_message: "Unsupported variable: 'install_docker'. Please use 'docker' instead."

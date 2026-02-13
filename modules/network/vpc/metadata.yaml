@@ -24,3 +24,18 @@ ghpc:
     inputs:
       vars: [secondary_ranges, secondary_ranges_list]
     error_message: "Only one of 'secondary_ranges' or 'secondary_ranges_list' should be specified"
+  - validator: required
+    inputs:
+      vars: [primary_subnetwork]
+      deprecated: true
+    error_message: "Unsupported variable: 'primary_subnetwork'. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
+  - validator: required
+    inputs:
+      vars: [additional_subnetworks]
+      deprecated: true
+    error_message: "Unsupported variable: 'additional_subnetworks'. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
+  - validator: required
+    inputs:
+      vars: [subnetwork_size]
+      deprecated: true
+    error_message: "Unsupported variable: 'subnetwork_size'. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
