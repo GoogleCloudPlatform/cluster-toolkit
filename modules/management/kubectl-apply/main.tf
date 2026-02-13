@@ -19,6 +19,15 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+  kueue_config_content = (
+    var.kueue.config_path != null && var.kueue.config_path != "" ?
+    (
+      endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
+      templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
+      file(var.kueue.config_path)
+    ) : ""
+  )
+  configure_kueue = local.install_kueue && try(var.kueue.config_path, "") != ""
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -46,7 +55,9 @@ locals {
       server_side_apply = manifest.server_side_apply
       wait_for_rollout  = manifest.wait_for_rollout
     }
-  })
+    }
+
+  )
 
   install_kueue             = try(var.kueue.install, false)
   install_jobset            = try(var.jobset.install, false)
@@ -105,17 +116,23 @@ module "install_kueue" {
 }
 
 module "configure_kueue" {
-  source        = "./kubectl"
-  source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
-  template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
-  depends_on    = [module.install_kueue]
+  source           = "./helm_install"
+  count            = local.configure_kueue ? 1 : 0
+  release_name     = "kueue-config"
+  chart_name       = "${path.module}/raw-config-chart"
+  chart_version    = "0.1.0"
+  namespace        = "kueue-system"
+  create_namespace = true
+  wait             = false # Configuration resources (Queues) usually don't need wait
 
-  server_side_apply = true
-  wait_for_rollout  = true
+  values_yaml = [
+    yamlencode({
+      manifests = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+    })
+  ]
 
-  providers = {
-    kubectl = kubectl
-  }
+  depends_on = [module.install_kueue]
+
 }
 
 module "install_jobset" {
