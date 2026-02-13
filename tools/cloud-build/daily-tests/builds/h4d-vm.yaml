@@ -73,10 +73,10 @@ steps:
           provisioning_model: "'"$$PROVISIONING_MODEL"'"
     }' $${BLUEPRINT}
 
-    SPOT_VAR=""
+    ENABLE_SPOT="true"
     H4D_VARS_FILE="tools/cloud-build/daily-tests/tests/h4d-vm.yml"
     if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
-      SPOT_VAR="--extra-vars=enable_spot=false"
+      ENABLE_SPOT="false"
       sed -i '/instance_labels:/,+1d' "$${H4D_VARS_FILE}"
       sed -i '/enable_spot: true/d' "$${H4D_VARS_FILE}"
     else
@@ -87,7 +87,7 @@ steps:
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
-        $$SPOT_VAR \
+        --extra-vars="enable_spot=$${ENABLE_SPOT}" \
         --extra-vars="@$${H4D_VARS_FILE}"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
