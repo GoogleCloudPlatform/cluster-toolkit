@@ -1,0 +1,50 @@
+# Copyright 2024 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    # The GCS bucket used for storing terraform state
+    bucket: BUCKET_NAME
+
+vars:
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: DEPLOYMENT_NAME
+
+  # Your GCP Project ID
+  project_id: PROJECT_ID
+
+  # The GCP Region used for this deployment.
+  region: COMPUTE_REGION
+
+  # The GCP Zone used for this deployment.
+  zone: COMPUTE_ZONE
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
+
+  # The number of nodes to be created
+  static_node_count: NODE_COUNT
+
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: RESERVATION_NAME
+
+  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
+  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
