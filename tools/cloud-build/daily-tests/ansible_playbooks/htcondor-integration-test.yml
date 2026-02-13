@@ -123,7 +123,7 @@
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --robust --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -184,7 +184,7 @@
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --robust --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
