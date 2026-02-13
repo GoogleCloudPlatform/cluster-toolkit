@@ -29,6 +29,8 @@ func (s *MySuite) TestTimestampWriter(c *C) {
 
 	testCases := []string{
 		"line 1\n",
+		"  indented non-timestamped line\n",
+		"\n", // blank line
 		"line 2 start...",
 		"...line 2 end\n",
 		"line 3",
