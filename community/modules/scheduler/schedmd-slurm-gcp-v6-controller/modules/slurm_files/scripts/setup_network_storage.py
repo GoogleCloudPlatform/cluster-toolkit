@@ -123,16 +123,36 @@ def setup_network_storage():
         fs_type = mount.fs_type
         server_ip = mount.server_ip or ""
         src = mount.remote_mount if fs_type == "gcsfuse" else f"{server_ip}:{mount.remote_mount}"
-        
+
         log.info(f"Setting up mount ({fs_type}) {src} to {local_mount}")
         util.mkdirp(local_mount)
 
         mount_options = mount.mount_options.split(",") if mount.mount_options else []
+
+        if fs_type == "gcsfuse":
+            ctk_tag="ctk-from-python"
+            log.info(f"DEBUG [setup_network_storage.py]: fs_type={fs_type} mount_options={mount_options}")
+
+            # Check if any option contains "ctk" (case-insensitive)
+            if not any("ctk" in opt.lower() for opt in mount_options):
+                # Check if app_name exists
+                app_name_found = False
+                for i, opt in enumerate(mount_options):
+                    if opt.startswith("app_name="):
+                        mount_options[i] = f"{opt}-{ctk_tag}"
+                        app_name_found = True
+                        break
+
+                if not app_name_found:
+                    mount_options.append("app_name={ctk_tag}")
+
+            log.info(f"DEBUG [setup_network_storage.py]: POST fs_type={fs_type} mount_options={mount_options}")
+
         if "_netdev" not in mount_options:
             mount_options += ["_netdev"]
         options_line = ",".join(mount_options)
-        
-        
+
+
         fstab_entries.append(f"{src}   {local_mount}     {fs_type}     {options_line}     0 0")
 
     fstab = Path("/etc/fstab")
