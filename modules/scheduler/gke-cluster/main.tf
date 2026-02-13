@@ -124,7 +124,7 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  enable_shielded_nodes = true
+  enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
     # Controls auto provisioning of node-pools

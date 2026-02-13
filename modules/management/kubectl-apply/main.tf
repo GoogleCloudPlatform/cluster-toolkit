@@ -53,6 +53,7 @@ locals {
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
+  install_asapd_lite        = try(var.asapd_lite.install, false)
 }
 
 data "http" "manifest_from_url" {
@@ -173,7 +174,7 @@ module "install_nvidia_dra_driver" {
                     - key: cloud.google.com/gke-accelerator
                       operator: In
                       values:
-                        - nvidia-gb200
+                        - ${var.nvidia_dra_driver.accelerator_type}
                     - key: kubernetes.io/arch
                       operator: In
                       values:
@@ -265,6 +266,17 @@ module "install_gib" {
   source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
   template_vars     = var.gib.template_vars
+  wait_for_rollout  = true
+
+  providers = {
+    kubectl = kubectl
+  }
+}
+
+module "install_asapd_lite" {
+  source            = "./kubectl"
+  source_path       = local.install_asapd_lite ? var.asapd_lite.config_path : null
+  server_side_apply = true
   wait_for_rollout  = true
 
   providers = {

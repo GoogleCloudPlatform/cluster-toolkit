@@ -236,9 +236,10 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     linux_node_config {
-      sysctls = {
-        "net.ipv4.tcp_rmem" = "4096 87380 16777216"
-        "net.ipv4.tcp_wmem" = "4096 16384 16777216"
+      sysctls = var.linux_node_config.sysctls
+      hugepages_config {
+        hugepage_size_2m = try(var.linux_node_config.hugepages_config.hugepage_size_2m, null)
+        hugepage_size_1g = try(var.linux_node_config.hugepages_config.hugepage_size_1g, null)
       }
     }
 
