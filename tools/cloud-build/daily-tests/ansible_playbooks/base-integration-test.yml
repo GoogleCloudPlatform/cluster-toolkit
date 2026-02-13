@@ -119,7 +119,7 @@
     - name: Print remote node's public IP
       ansible.builtin.debug:
         var: remote_ip
-    
+
     - name: Generate random second and third octets for IP range
       ansible.builtin.set_fact:
         octet2: "{{ 254 | random(start=1) }}"
