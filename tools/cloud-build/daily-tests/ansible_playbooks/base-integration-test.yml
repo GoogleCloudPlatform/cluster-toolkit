@@ -55,7 +55,7 @@
 
   - name: Generate random suffix for networking
     ansible.builtin.set_fact:
-     random_id: "{{ query('password', '/dev/null chars=ascii_lowercase,digits length=4') | first }}"
+      random_id: "{{ query('password', '/dev/null chars=ascii_lowercase,digits length=4') | first }}"
 
   - name: Generic randomization of networking keys in blueprint
     ansible.builtin.replace:
@@ -63,9 +63,9 @@
       regexp: '^(\s*)({{ item }}):\s*([^#\n\s]+)(.*)$'
       replace: '\1\2: \3-{{ random_id }}\4'
     loop:
-     - network_name
-     - subnetwork_name
-     - network_name_prefix
+    - network_name
+    - subnetwork_name
+    - network_name_prefix
 
 
   ## Create cluster
@@ -139,8 +139,8 @@
         # Replaces the existing range with the unique one
         replace: '\1\2: {{ unique_cidr }}\4'
       loop:
-        - ip_cidr_range
-        - ip_range
+      - ip_cidr_range
+      - ip_range
 
     - name: Prefix networking resources with Build ID to prevent 409 conflicts
       ansible.builtin.replace:
@@ -150,10 +150,10 @@
         # Prefixes with build ID (e.g., a1b2c3-a3u-onspot-slurm-net)
         replace: '\1\2: {{ build }}-\3\4'
       loop:
-        - network_name          # VPC Networks (Primary target for this error)
-        - network_id            # Some modules use network_id instead of network_name
-        - subnetwork_name       # GKE Subnets
-        - network_name_prefix   # GKE Multi-VPC
+      - network_name          # VPC Networks (Primary target for this error)
+      - network_id            # Some modules use network_id instead of network_name
+      - subnetwork_name       # GKE Subnets
+      - network_name_prefix   # GKE Multi-VPC
 
 
     - name: Force randomization of networking strings in blueprint
