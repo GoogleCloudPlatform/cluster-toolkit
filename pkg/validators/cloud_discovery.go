@@ -238,3 +238,23 @@ func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType 
 	// Case 3: Validation Failure - The machine type is genuinely invalid or unavailable
 	return fmt.Errorf(config.ErrMsgResourceInZone, "machine type", machineType, zone, projectID)
 }
+
+// validateDiskTypeInZone calls the Compute Engine API to verify if a specific
+// disk type is available in the given zone and project.
+func validateDiskTypeInZone(s *compute.Service, projectID, zone, diskType string, validatorName string) error {
+	_, err := s.DiskTypes.Get(projectID, zone, diskType).Do()
+
+	// Case 1: Success - The disk type exists
+	if err == nil {
+		return nil
+	}
+
+	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
+	if msg, isSoft := getSoftWarningMessage(err, validatorName, projectID, "Compute Engine API", "compute.diskTypes.get"); isSoft {
+		fmt.Println(msg)
+		return errSoftWarning
+	}
+
+	// Case 3: Validation Failure - The disk type is genuinely invalid or unavailable
+	return fmt.Errorf(config.ErrMsgResourceInZone, "disk type", diskType, zone, projectID)
+}
