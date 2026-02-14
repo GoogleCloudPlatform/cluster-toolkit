@@ -1,0 +1,72 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: c4a-vm
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: c4a-vm
+  region: us-central1
+  zone: us-central1-a
+  hostname_prefix: $(vars.deployment_name)
+  base_network_name: $(vars.deployment_name)
+  instance_image:
+    family: rocky-linux-8-optimized-gcp-arm64
+    project: rocky-linux-cloud
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+
+  - id: cluster-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [cluster-net-0]
+    settings:
+      local_mount: /home
+    outputs:
+    - network_storage
+
+  - id: c4a_startup
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - $(vars.hostname_prefix)-*
+
+  - id: c4a-vms
+    source: modules/compute/vm-instance
+    use: [c4a_startup, homefs, cluster-net-0]
+    settings:
+      machine_type: c4a-standard-72
+      instance_count: 2
+      disk_type: hyperdisk-balanced
+      bandwidth_tier: tier_1_enabled
+
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(c4a-vms.name)
+      timeout: 7200

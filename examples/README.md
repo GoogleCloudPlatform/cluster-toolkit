@@ -16,6 +16,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
+  * [c4a-vm.yaml](#c4a-vmyaml-) ![core-badge]
+  * [hpc-slurm-c4a.yaml](#hpc-slurm-c4ayaml-) ![core-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
@@ -162,6 +164,50 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
+
+### [c4a-vm.yaml] ![core-badge]
+
+The [c4a-vm.yaml] blueprint creates a small, two-node cluster of C4A (ARM64) VMs. It includes a Filestore instance mounted to `/home` and uses Hyperdisk for the boot disks.
+
+To deploy this blueprint:
+
+```bash
+gcluster deploy examples/c4a-vm.yaml \
+    -v project_id=<YOUR-PROJECT-ID> \
+    -v deployment_name=c4a-vm
+```
+
+#### Quota Requirements for c4a-vm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Hyperdisk Balanced (GB): **~100 GB** (50 GB/node)
+* Compute Engine API: C4A CPUs: **144** (2 nodes * 72 vCPUs)
+
+[c4a-vm.yaml]: ./c4a-vm.yaml
+
+### [hpc-slurm-c4a.yaml] ![core-badge]
+
+This blueprint creates a small Slurm cluster using C4A (ARM64) instances. It provisions a `c4a-standard-4` for the controller and login nodes, and a dynamic partition of `c4a-highcpu-72` compute nodes. All nodes use Hyperdisk Balanced for their boot disks. It also includes a 2.5 TiB Basic SSD Filestore instance for `/home`. This blueprint is a good starting point for running ARM-based workloads on a Slurm cluster.
+
+To deploy this blueprint:
+
+```bash
+gcluster deploy examples/hpc-slurm-c4a.yaml \
+    -v project_id=<YOUR-PROJECT-ID> \
+    -v deployment_name=slurm-c4a
+```
+
+#### Quota Requirements for hpc-slurm-c4a.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB): **2,560 GB**
+* Compute Engine API: Hyperdisk Balanced (GB): **~200 GB** (50 GB/node for 2 compute nodes + 50 GB for controller boot disk + 50 GB for controller state disk + 50 GB for login)
+* Compute Engine API: C4A CPUs: **152** (4 for controller + 4 for login + 2 nodes * 72 vCPUs)
+
+[hpc-slurm-c4a.yaml]: ./hpc-slurm-c4a.yaml
 
 ### [hpc-slurm.yaml] ![core-badge]
 
