@@ -10,6 +10,9 @@ Refer to [Run high performance computing (HPC) workloads with H4D](https://docs.
 ## Run a test using the MPI Operator
 The MPI Operator is installed on the cluster during the deployment. To run a test using the MPI Operator on the GKE H4D cluster, refer to https://github.com/GoogleCloudPlatform/kubernetes-engine-samples/tree/main/hpc/mpi.
 
+## iRDMA Health Check
+The [irdma-health-check](./irdma-health-check/) folder includes the [readme](./irdma-health-check/README.md) with steps on how to create a mutating webhook that can inject the initContainer code to check the health of the iRDMA network on H4D nodes.
+
 ## Clean Up
 To destroy all resources associated with creating the GKE cluster, run the following command:
 

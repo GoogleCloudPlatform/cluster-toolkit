@@ -1,0 +1,12 @@
+# cert-manager is a popular open-source tool for managing TLS certificates in Kubernetes.
+# It can automatically provision certificates from various sources, such as Let's Encrypt,
+# or self-signed issuers, and keep them up-to-date.
+#
+# For this webhook, cert-manager will create a self-signed certificate and automatically
+# inject the CA bundle into the MutatingWebhookConfiguration.
+#
+# Please install cert-manager by following the official instructions:
+# https://cert-manager.io/docs/installation/
+#
+# For example, using kubectl:
+# kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml

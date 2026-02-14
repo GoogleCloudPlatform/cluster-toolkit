@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-h4d-app-rdma-check-rocky8
+  labels:
+    # This label is the trigger for our mutating webhook.
+    irdma-health-check: "true"
+  annotations:
+    # Essential for H4D RDMA: Configure multi-networking
+    networking.gke.io/default-interface: 'eth0'
+    networking.gke.io/interfaces: |
+      [
+        {"interfaceName":"eth0","network":"default"},
+        {"interfaceName":"eth1","network":"rdma-0"}
+      ]
+spec:
+  # Ensure the Pod schedules only on H4D nodes
+  nodeSelector:
+    node.kubernetes.io/instance-type: h4d-highmem-192-lssd
+  tolerations:
+  - key: "node-type"
+    operator: "Equal"
+    value: "h4d"
+    effect: "NoSchedule"
+
+  restartPolicy: Never # Prevents the Pod from restarting on failure
+
+  # NOTE: The initContainers block is intentionally omitted.
+  # The mutating webhook is responsible for injecting it.
+
+  containers:
+  - name: my-main-application
+    # Replace with your actual application image and command
+    image: busybox
+    command: ["/bin/sh", "-c", "echo 'RDMA health check init container completed successfully.'; echo 'Main application starting...'; sleep 3600"]
+    # Example resource requests/limits for the main application
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+        networking.gke.io.networks/rdma-0: 1
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+        networking.gke.io.networks/rdma-0: 1
