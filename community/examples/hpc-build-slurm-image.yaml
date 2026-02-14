@@ -23,7 +23,7 @@ vars:
   image_build_machine_type: n2d-standard-16
   build_from_image_family: hpc-rocky-linux-8
   build_from_image_project: cloud-hpc-image-public
-  build_from_git_ref: 6.10.6
+  build_from_git_ref: slurm-25.11.2
   built_image_family: my-custom-slurm
   built_instance_image:
     family: $(vars.built_image_family)
@@ -39,20 +39,18 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       # Do not create Ansible virtual env; Install system wide Ansible below.
-      install_ansible: false
+      install_ansible: true
       runners:
       - type: shell
         destination: prep-for-slurm-build.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
-          # Slurm build on Rocky8 will upgrade to python38 as part of build
-          # This is not compatible with ansible-local runner
-          dnf install -y python38
-          alternatives --set python3 /usr/bin/python3.8
+          # Slurm build on Rocky8 will upgrade to python3.12 as part of build
+          dnf install -y python3.12 python3.12-pip
+          alternatives --set python3 /usr/bin/python3.12
           python3 -m pip install pip --upgrade
-          python3 -m pip install ansible==6.7.0
-          python3 -m pip install selinux
+          python3 -m pip install ansible==8.7.0
           export PATH=/usr/local/bin:$PATH
           ansible --version
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
@@ -75,7 +73,7 @@ deployment_groups:
           #!/bin/bash
           set -e -o pipefail
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_from_git_ref) \
+              -U https://github.com/AdarshK15/slurm-gcp -C $(vars.build_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
