@@ -117,6 +117,21 @@ locals {
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
 }
 
+# KMS CRYPTED KEYS
+locals {
+  cloudsql = var.cloudsql != null ? {
+    server_ip = var.cloudsql.server_ip,
+    user      = var.cloudsql.user,
+    password = (
+      var.with_kms
+      ? one(google_kms_secret_ciphertext.sql_password[*].ciphertext)
+      : var.cloudsql.password
+    )
+    db_name = var.cloudsql.db_name
+  } : null
+  munge_key = var.with_kms ? one(google_kms_secret_ciphertext.munge_key[*].ciphertext) : var.munge_key
+  jwt_key   = var.with_kms ? one(google_kms_secret_ciphertext.jwt_key[*].ciphertext) : var.jwt_key
+}
 module "daos_network_storage_scripts" {
   count = length(local.daos_ns) > 0 ? 1 : 0
 
@@ -145,7 +160,10 @@ module "slurm_files" {
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
-
+  cloudsql                           = local.cloudsql
+  kms_key                            = local.kms_key
+  munge_key                          = local.munge_key
+  jwt_key                            = local.jwt_key
   controller_startup_scripts         = local.ghpc_startup_script_controller
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
   nodeset_startup_scripts            = local.nodeset_startup_scripts

@@ -43,6 +43,7 @@ locals {
   config = {
     enable_bigquery_load  = var.enable_bigquery_load
     cloudsql_secret       = var.cloudsql_secret
+    cloudsql              = var.cloudsql
     cluster_id            = random_uuid.cluster_id.result
     project               = var.project_id
     slurm_cluster_name    = var.slurm_cluster_name
@@ -62,6 +63,9 @@ locals {
 
     munge_mount     = local.munge_mount
     slurm_key_mount = var.slurm_key_mount
+    kms_key         = var.kms_key
+    munge_key       = var.munge_key
+    jwt_key         = var.jwt_key
 
     # slurm conf
     prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
