@@ -17,45 +17,18 @@ set -e
 
 TRIGGER_BUILD_CONFIG_PATH="$1"
 
-# Skip the matching build check for onspot PR builds.
-# PR builds in Cloud Build for GitHub are checked out in detached HEAD
-# and fetch a specific PR ref like refs/pull/123/head.
-if [[ "$TRIGGER_BUILD_CONFIG_PATH" == *"onspot"* ]]; then
-    echo "DEBUG: Detected 'onspot' in config path: $TRIGGER_BUILD_CONFIG_PATH"
-    
-    # In Google Cloud Build GitHub App triggers, PRs are fetched into FETCH_HEAD.
-    # The output usually contains 'refs/pull/'.
-    if git rev-parse --git-dir > /dev/null 2>&1; then
-        echo "DEBUG: Inside a git repository."
-        
-        # Check git show output
-        if git show FETCH_HEAD 2>/dev/null | grep -q "refs/pull/"; then
-            echo "Skipping matching build check for onspot PR build: $TRIGGER_BUILD_CONFIG_PATH (matched via git show FETCH_HEAD)"
-            exit 0
-        else
-            echo "DEBUG: Did not find 'refs/pull/' in 'git show FETCH_HEAD'."
-        fi
-        
-        # Check .git/FETCH_HEAD file
-        if grep -q "refs/pull/" .git/FETCH_HEAD 2>/dev/null; then
-            echo "Skipping matching build check for onspot PR build: $TRIGGER_BUILD_CONFIG_PATH (matched via .git/FETCH_HEAD file)"
-            exit 0
-        else
-            echo "DEBUG: Did not find 'refs/pull/' in '.git/FETCH_HEAD' file."
-            echo "DEBUG: Contents of .git/FETCH_HEAD:"
-            cat .git/FETCH_HEAD || echo "DEBUG: Could not read .git/FETCH_HEAD"
-        fi
-        
-        # Checking to see what branch/ref we are currently on just in case
-        echo "DEBUG: Current HEAD reference:"
-        git log -1 --format="%H %D" || true
-    else
-        echo "DEBUG: Not inside a git repository."
-    fi
-else
-    echo "DEBUG: 'onspot' not found in config path: $TRIGGER_BUILD_CONFIG_PATH"
+# ... after TRIGGER_BUILD_CONFIG_PATH is defined ...
+
+# Skip ongoing build check if it's an 'onspot' PR test
+# Referencing prefix: _TEST_PREFIX = "pr-"
+if [[ "$TRIGGER_BUILD_CONFIG_PATH" == *"onspot"* ]] && [[ "${_TEST_PREFIX:-}" == "pr-" ]]; then
+    echo "DEBUG: Skipping ongoing build check for 'onspot' PR test (prefix: pr-)."
+    exit 0
 fi
 
+echo "DEBUG: Proceeding with check for running builds..."
+
+# Existing logic to check for other running builds
 echo "DEBUG: Checking for running builds matching trigger: $TRIGGER_BUILD_CONFIG_PATH"
 
 MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\"")
