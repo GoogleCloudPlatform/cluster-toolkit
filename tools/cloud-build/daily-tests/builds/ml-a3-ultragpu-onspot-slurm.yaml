@@ -74,8 +74,6 @@ steps:
     BLUEPRINT="/workspace/examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
-    sed -i 's/filestore_tier: HIGH_SCALE_SSD/filestore_tier: BASIC_SSD/' $${BLUEPRINT}
-    sed -i 's/filestore_ip_range: 192.168.32.0\/24/filestore_ip_range: 192.168.32.0\/29/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
