@@ -17,10 +17,25 @@ set -e
 
 TRIGGER_BUILD_CONFIG_PATH="$1"
 
-echo "$TRIGGER_BUILD_CONFIG_PATH"
+# ... after TRIGGER_BUILD_CONFIG_PATH is defined ...
+
+# Skip ongoing build check if it's an 'onspot' PR test
+# Referencing prefix: _TEST_PREFIX = "pr-"
+if [[ "$TRIGGER_BUILD_CONFIG_PATH" == *"onspot"* ]] && [[ "${_TEST_PREFIX:-}" == "pr-" ]]; then
+    echo "DEBUG: Skipping ongoing build check for 'onspot' PR test (prefix: pr-)."
+    exit 0
+fi
+
+echo "DEBUG: Proceeding with check for running builds..."
+
+# Existing logic to check for other running builds
+echo "DEBUG: Checking for running builds matching trigger: $TRIGGER_BUILD_CONFIG_PATH"
 
 MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\"")
 MATCHING_COUNT=$(echo "$MATCHING_BUILDS" | wc -w)
+
+echo "DEBUG: MATCHING_BUILDS output: '$MATCHING_BUILDS'"
+echo "DEBUG: MATCHING_COUNT: $MATCHING_COUNT"
 
 if [ "$MATCHING_COUNT" -gt 1 ]; then
 	echo "Found more than 1 matching running build(s):"
