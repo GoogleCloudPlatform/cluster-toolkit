@@ -449,14 +449,17 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
             f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
             for err in failed_ops[0]["error"]["errors"]
         )
+        # Handle temporary resource issues by setting nodes to POWER_DOWN
+        # https://docs.cloud.google.com/compute/docs/troubleshooting/troubleshooting-bulk-vm-creation#request_status_errors
+        state = "POWER_DOWN" if code in ["QUOTA_EXCEEDED", "ZONE_RESOURCE_POOL_EXHAUSTED", "ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS"] else "DOWN"
         if code != "RESOURCE_ALREADY_EXISTS":
-            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
+            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data, state=state)
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
 
 
-def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
+def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData], state: str = "DOWN") -> None:
     """set nodes down with reason"""
     nodes_set = set(nodes) # turn into set to speed up intersection
     jobs = resume_data.jobs if resume_data else []
@@ -469,8 +472,8 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
         run(f"{lookup().scontrol} notify {job.job_id} {reason_quoted}", check=False)
 
     nodelist = util.to_hostlist(nodes)
-    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+    log.error(f"Marking nodes {nodelist} as {state}, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state={state} reason={reason_quoted}", check=False)
     
     
 
