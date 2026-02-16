@@ -1445,14 +1445,14 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
+This blueprint provisions a GKE cluster with A3 High nodes (`a3-highgpu-8g`). Refer to the [A3 High Deployment Guide](./gke-a3-highgpu/README.md) for detailed instructions.
 
-After provisioning the cluster and the nodepool, the below components will be installed
-to enable GPUDirect for the A3 High machines.
+A3 High VMs feature 8 NVIDIA H100 GPUs and are optimized for high-performance ML training. The blueprint automatically configures:
 
-* NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
-* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
-* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
+* **GPU-Direct TCPX**: High-bandwidth, low-latency networking stack.
+* **Multi-networking**: 4 dedicated VPC networks for GPU-to-GPU communication.
+* **Topology Aware Scheduling (TAS)**: Optimized workload placement via Kueue.
+* **Cluster Health Services (CHS)**: Automated GPU health checks.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1460,24 +1460,23 @@ to enable GPUDirect for the A3 High machines.
 > to apply a manifest. **You must use
 > the `authorized_cidr` variable to supply an authorized network which contains
 > the IP address of the machine deploying the blueprint, for example
-> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
-> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+> `--vars authorized_cidr=<your-ip-address>/32`.**
 
 #### Troubleshooting
 
 ##### Externally Managed Environment Error
 
-If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager.
 
 ```shell
-  ## One time step of creating the venv
-  VENV_DIR=~/venvp3
-  python3 -m venv $VENV_DIR
-  ## Enter your venv.
-  source $VENV_DIR/bin/activate
+## One time step of creating the venv
+VENV_DIR=~/venvp3
+python3 -m venv $VENV_DIR
+## Enter your venv.
+source $VENV_DIR/bin/activate
 ```
 
-[gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+[gke-a3-highgpu.yaml]: ./gke-a3-highgpu/gke-a3-highgpu.yaml
 
 ### [gke-a3-highgpu-inference-gateway.yaml] ![core-badge]
 
