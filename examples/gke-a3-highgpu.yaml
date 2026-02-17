@@ -26,8 +26,7 @@ vars:
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
 
-  network_name: $(vars.deployment_name)-net
-  subnet_prefix: $(vars.deployment_name)
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: primary
@@ -35,12 +34,12 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.network_name)
-      subnetwork_name: $(vars.subnet_prefix)-subnet
+      network_name: $(vars.base_network_name)-net
+      subnetwork_name: $(vars.base_network_name)-subnet
       ips_per_nat: 6
       mtu: 8244
       secondary_ranges_list:
-      - subnetwork_name: $(vars.subnet_prefix)-subnet
+      - subnetwork_name: $(vars.base_network_name)-subnet
         ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
@@ -74,7 +73,7 @@ deployment_groups:
   - id: gpunets
     source: modules/network/multivpc
     settings:
-      network_name_prefix: $(vars.deployment_name)-gpunet
+      network_name_prefix: $(vars.base_network_name)-gpunet
       global_ip_address_range: 192.169.0.0/16
       network_count: 4
       subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
