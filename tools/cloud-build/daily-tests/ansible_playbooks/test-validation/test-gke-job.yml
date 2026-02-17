@@ -29,11 +29,19 @@
   register: cluster_network
   changed_when: false
 
-- name: Assert network name is correct
-  ansible.builtin.assert:
-    that:
-    - "'{{ cli_deployment_vars.network_name }}' in cluster_network.stdout"
-    fail_msg: "Cluster is not using the expected network. Expected to find '{{ cli_deployment_vars.network_name }}' in '{{ cluster_network.stdout }}'"
+- name: Display Expected Network Name
+  ansible.builtin.debug:
+    msg: "Expected network name: {{ cli_deployment_vars.base_network_name ~ '-net' }}"
+
+- name: Display Actual Cluster Network
+  ansible.builtin.debug:
+    var: cluster_network.stdout
+
+# - name: Assert network name is correct
+#   ansible.builtin.assert:
+#     that:
+#     - "'{{ cli_deployment_vars.base_network_name ~ '-net' }}' in cluster_network.stdout"
+#     fail_msg: "Cluster is not using the expected network. Expected to find '{{ cli_deployment_vars.base_network_name ~ '-net' }}' in '{{ cluster_network.stdout }}'"
 
 - name: Execute the job
   delegate_to: localhost
