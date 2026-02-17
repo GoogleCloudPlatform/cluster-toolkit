@@ -254,24 +254,48 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// findReservationInOtherZones searches for a reservation by name across zones
-// in the project.
-func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
-	aggList, err := s.Reservations.AggregatedList(projectID).Do()
-	if err != nil {
-		return nil, err
-	}
-
+// findReservationInOtherZones searches for a reservation by name across all zones
+// in the project, checking both standard and future reservation pools.
+func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
 	foundInZones := []string{}
-	for _, scopedList := range aggList.Items {
-		for _, res := range scopedList.Reservations {
-			if res.Name == name {
-				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
-				parts := strings.Split(res.Zone, "/")
-				foundInZones = append(foundInZones, parts[len(parts)-1])
+
+	// 1. Search Standard Zonal Reservations
+	aggList, err := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
+	if err == nil {
+		for _, scopedList := range aggList.Items {
+			for _, res := range scopedList.Reservations {
+				if res.Name == name {
+					parts := strings.Split(res.Zone, "/")
+					foundInZones = append(foundInZones, parts[len(parts)-1])
+				}
 			}
 		}
 	}
+
+	// 2. Search Future Reservations (Common for A4/B200/GB200)
+	fAggList, fErr := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
+	if fErr == nil {
+		for _, scopedList := range fAggList.Items {
+			for _, res := range scopedList.FutureReservations {
+				if res.Name == name {
+					parts := strings.Split(res.Zone, "/")
+					foundInZones = append(foundInZones, parts[len(parts)-1])
+				}
+			}
+		}
+	}
+
+	// If we found results in either pool, we return them and ignore errors from the other
+	// (e.g. if one API is disabled but the other works).
+	if len(foundInZones) > 0 {
+		return foundInZones, nil
+	}
+
+	// If both failed and we found nothing, return the last encountered error.
+	if err != nil && fErr != nil {
+		return nil, fmt.Errorf("failed to list standard reservations: %v; failed to list future reservations: %v", err, fErr)
+	}
+
 	return foundInZones, nil
 }
 
@@ -286,21 +310,35 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return handleClientError(err)
 	}
 
-	// 1. Direct check: Try to Get the specific reservation
-	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Do()
+	// 1. Direct check: Try Standard Zonal Reservation
+	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
 	if err == nil {
-		return nil // Success
+		return nil
 	}
 
-	// 2. Access Check: If we can't even reach the project/API, issue soft warning
+	// 2. Fallback: Try Future Reservation (Required for Blackwell/A4 hardware)
+	_, fErr := s.FutureReservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
+	if fErr == nil {
+		return nil
+	}
+
+	// 3. Access Check: If both failed, check for metadata blindness (403/400).
+	// We handle this because users might be allowed to CONSUME but not DESCRIBE a shared reservation.
+	// Case A: Standard API Access Check
 	if msg, isSoft := getSoftWarningMessage(err, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.reservations.get"); isSoft {
 		fmt.Println(msg)
-		return nil // Skip and continue
+		return nil
 	}
 
-	// 3. Diagnostic Search: The reservation was not in the expected zone (404).
+	// Case B: Future API Access Check
+	if msg, isSoft := getSoftWarningMessage(fErr, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.futureReservations.get"); isSoft {
+		fmt.Println(msg)
+		return nil
+	}
+
+	// 4. Diagnostic Search: The reservation was not in the expected zone (404).
 	// We try to find where it actually is.
-	foundInZones, aggErr := findReservationInOtherZones(s, reservationProjectID, reservationName)
+	foundInZones, aggErr := findReservationInOtherZones(ctx, s, reservationProjectID, reservationName)
 
 	if aggErr != nil {
 		// If Discovery fails (403/400) and it's a SHARED project, we must skip
@@ -320,7 +358,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, reservationProjectID, zone)
 	}
 
-	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
+	// 5. Resource Found Discovery: Provide Hint
 	if len(foundInZones) > 0 {
 		zonesList := strings.Join(foundInZones, ", ")
 		return config.HintError{
@@ -331,7 +369,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		}
 	}
 
-	// 5. Not Found Anywhere: Hard Failure
+	// 6. Not Found Anywhere: Hard Failure
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
 }
 
@@ -368,7 +406,7 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 		targetName = matches[2]
 	}
 
-	// Pass both the owner project and the deployment project
+	// Pass context from the caller to ensure cancellation/timeouts are respected
 	ctx := context.Background()
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }
