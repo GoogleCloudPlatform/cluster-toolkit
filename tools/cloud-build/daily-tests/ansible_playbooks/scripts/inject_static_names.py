@@ -39,7 +39,7 @@ def main():
             
             src = mod.get("source", "")
 
-            if src.startswith("modules/network/"):
+            if src in ["modules/network/vpc", "modules/network/pre-existing-vpc"]:
                 if "settings" not in mod:
                     mod["settings"] = {}
                 
@@ -53,6 +53,32 @@ def main():
 
                 mod["settings"]["network_name"] = net_name
                 mod["settings"]["subnetwork_name"] = sub_name
+                net_count += 1
+                
+            elif src == "modules/network/multivpc":
+                if "settings" not in mod:
+                    mod["settings"] = {}
+                
+                # multivpc creates multiple networks, pass prefix
+                # To prevent collisions, we suffix it with current count
+                if net_count == 0:
+                    net_name_prefix = f"{static_test_name}-net"[:63]
+                else:
+                    net_name_prefix = f"{static_test_name}-n{net_count}"[:63]
+                    
+                mod["settings"]["network_name_prefix"] = net_name_prefix
+                net_count += mod.get("settings", {}).get("network_count", 4)
+                
+            elif src == "modules/network/gpu-rdma-vpc":
+                if "settings" not in mod:
+                    mod["settings"] = {}
+                
+                if net_count == 0:
+                    net_name = f"{static_test_name}-net"[:63]
+                else:
+                    net_name = f"{static_test_name}-n{net_count}"[:63]
+                    
+                mod["settings"]["network_name"] = net_name
                 net_count += 1
                 
             elif src in ["modules/file-system/filestore", "modules/file-system/managed-lustre"]:

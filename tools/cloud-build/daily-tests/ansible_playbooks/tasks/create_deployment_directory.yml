@@ -46,7 +46,6 @@
       --backend-config bucket={{ state_bucket }} \
       --vars project_id={{ project }} \
       --vars deployment_name={{ deployment_name }} \
-      --vars static_test_name={{ static_test_name }} \
       {{ deployment_vars_str if deployment_vars_str is defined else '' }}
   args:
     creates: "{{ workspace }}/{{ deployment_name }}"
