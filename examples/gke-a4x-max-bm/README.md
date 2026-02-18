@@ -45,7 +45,7 @@ The following requirements apply to an AI-optimized A4X-Max Bare Metal GKE clust
    * COMPUTE_ZONE: the compute zone for the node pool of A4X Max machines. Note that this zone should match the zone where machines are available in your reservation.
    * NODE_COUNT: the number of A4X Max nodes in your cluster's node pool, which must be 18 nodes or less. We recommend using 18 nodes to obtain the GPU topology of 1x72 in one subblock using an NVLink domain.
    * IP_ADDRESS/SUFFIX: the IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine that you want to use to call Terraform. For more information, see [How authorized networks work](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#how_authorized_networks_work).
-   * For the extended\_reservation field, use one of the following, depending on whether you want to target specific [blocks](https://docs.cloud.google.com/ai-hypercomputer/docs/terminology#block) in a reservation when provisioning the node pool:
+   * For the reservation field, use one of the following, depending on whether you want to target specific [blocks](https://docs.cloud.google.com/ai-hypercomputer/docs/terminology#block) in a reservation when provisioning the node pool:
      * To place the node pool anywhere in the reservation, provide the name of your reservation (RESERVATION_NAME).
      * To target a specific block within your reservation, use the reservation and block names in the following format:
 

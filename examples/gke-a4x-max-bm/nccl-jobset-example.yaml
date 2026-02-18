@@ -40,8 +40,6 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: allgather
-  # labels:
-  #   kueue.x-k8s.io/queue-name: a4x-max
 spec:
   ttlSecondsAfterFinished: 1200
   network:
@@ -53,10 +51,6 @@ spec:
         parallelism: 2
         completions: 2
         template:
-          # metadata:
-          #   annotations:
-          #     kueue.x-s.io/podset-required-topology: "cloud.google.com/gce-topology-subblock"
-
           spec:
             terminationGracePeriodSeconds: 5
             activeDeadlineSeconds: 3600

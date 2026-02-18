@@ -50,27 +50,18 @@ locals {
     }
   ]
 
-  output_subnets_gke = local.is_roce_metal ? [
-    for i in range(8) : {
+  subnet_count   = local.is_roce_metal ? 8 : length(module.vpc.subnets)
+  nic_type_val   = local.is_roce_metal ? "MRDMA" : var.nic_type
+  stack_type_val = local.is_roce_metal ? "IPV6_ONLY" : null
+
+  output_subnets_gke = [
+    for i in range(local.subnet_count) : {
       network            = local.network_name
-      subnetwork         = "default-subnet-1-${local.network_name}"
+      subnetwork         = local.is_roce_metal ? "default-subnet-1-${local.network_name}" : local.template_subnetworks[i].subnet_name
       subnetwork_project = var.project_id
       network_ip         = null
-      nic_type           = "MRDMA"
-      stack_type         = "IPV6_ONLY"
-      queue_count        = null
-      access_config      = []
-      ipv6_access_config = []
-      alias_ip_range     = []
-    }
-    ] : [
-    for i in range(length(module.vpc.subnets)) : {
-      network            = local.network_name
-      subnetwork         = local.template_subnetworks[i].subnet_name
-      subnetwork_project = var.project_id
-      network_ip         = null
-      nic_type           = var.nic_type
-      stack_type         = null
+      nic_type           = local.nic_type_val
+      stack_type         = local.stack_type_val
       queue_count        = null
       access_config      = []
       ipv6_access_config = []
