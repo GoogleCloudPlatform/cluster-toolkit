@@ -281,11 +281,10 @@ module "install_gib" {
   source = "./helm_install"
   count  = local.install_gib ? 1 : 0
 
-  release_name     = "nccl-gib"
-  chart_name       = "${path.module}/raw-config-chart"
-  namespace        = "kube-system"
-  create_namespace = true
-  wait             = true
+  release_name = "nccl-gib"
+  chart_name   = "${path.module}/raw-config-chart"
+  namespace    = "kube-system"
+  wait         = true
   values_yaml = local.install_gib ? [
     yamlencode({
       manifests = [
