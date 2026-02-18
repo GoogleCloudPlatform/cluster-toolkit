@@ -278,9 +278,8 @@ module "install_gpu_operator" {
 }
 
 module "install_gib" {
-  source     = "./helm_install"
-  count      = local.install_gib ? 1 : 0
-  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+  source = "./helm_install"
+  count  = local.install_gib ? 1 : 0
 
   release_name     = "nccl-gib"
   chart_name       = "${path.module}/raw-config-chart"
