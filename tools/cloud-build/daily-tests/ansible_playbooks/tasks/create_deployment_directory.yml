@@ -30,16 +30,32 @@
     deployment_vars_str: "--vars \"\\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\"\" --vars \"\\\"') }}\\\"\""
   when: cli_deployment_vars is defined and cli_deployment_vars is mapping
 
+- name: Create Temporary Injected Blueprint
+  ansible.builtin.copy:
+    src: "{{ blueprint_yaml }}"
+    dest: "{{ workspace }}/.injected-{{ deployment_name }}.yaml"
+    remote_src: yes
+
+- name: Inject Static Module Overrides (Network & Storage)
+  ansible.builtin.command: |
+    {{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/scripts/inject_static_names.py "{{ workspace }}/.injected-{{ deployment_name }}.yaml" "{{ static_test_name }}"
+
 - name: Create Blueprint
   ansible.builtin.command: |
-      ./gcluster create -l ERROR "{{ blueprint_yaml }}" \
+      ./gcluster create -l ERROR "{{ workspace }}/.injected-{{ deployment_name }}.yaml" \
       --backend-config bucket={{ state_bucket }} \
       --vars project_id={{ project }} \
       --vars deployment_name={{ deployment_name }} \
+      --vars static_test_name={{ static_test_name }} \
       {{ deployment_vars_str if deployment_vars_str is defined else '' }}
   args:
     creates: "{{ workspace }}/{{ deployment_name }}"
     chdir: "{{ workspace }}"
+
+- name: Cleanup Temporary Injected Blueprint
+  ansible.builtin.file:
+    path: "{{ workspace }}/.injected-{{ deployment_name }}.yaml"
+    state: absent
 
 - name: Compress Blueprint
   ansible.builtin.command:
