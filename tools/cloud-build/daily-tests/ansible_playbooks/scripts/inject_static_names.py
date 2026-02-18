@@ -39,7 +39,7 @@ def main():
             
             src = mod.get("source", "")
 
-            if src in ["modules/network/vpc", "modules/network/pre-existing-vpc"]:
+            if src in ["modules/network/vpc"]:
                 if "settings" not in mod:
                     mod["settings"] = {}
                 
@@ -53,6 +53,13 @@ def main():
 
                 mod["settings"]["network_name"] = net_name
                 mod["settings"]["subnetwork_name"] = sub_name
+                
+                # Ensure secondary ranges lists track the statically assigned subnet_name, 
+                # as otherwise GKE gets confused if the subnets defined in yaml don't match exactly.
+                if "secondary_ranges_list" in mod["settings"]:
+                    for smod in mod["settings"]["secondary_ranges_list"]:
+                        smod["subnetwork_name"] = sub_name
+
                 net_count += 1
                 
             elif src == "modules/network/multivpc":
@@ -62,9 +69,9 @@ def main():
                 # multivpc creates multiple networks, pass prefix
                 # To prevent collisions, we suffix it with current count
                 if net_count == 0:
-                    net_name_prefix = f"{static_test_name}-net"[:63]
+                    net_name_prefix = f"{static_test_name}-net"[:54]
                 else:
-                    net_name_prefix = f"{static_test_name}-n{net_count}"[:63]
+                    net_name_prefix = f"{static_test_name}-n{net_count}"[:54]
                     
                 mod["settings"]["network_name_prefix"] = net_name_prefix
                 net_count += mod.get("settings", {}).get("network_count", 4)
@@ -74,11 +81,17 @@ def main():
                     mod["settings"] = {}
                 
                 if net_count == 0:
-                    net_name = f"{static_test_name}-net"[:63]
+                    net_name = f"{static_test_name}-net"[:56]
+                    sub_name = f"{static_test_name}-sub"[:63]
                 else:
-                    net_name = f"{static_test_name}-n{net_count}"[:63]
+                    net_name = f"{static_test_name}-n{net_count}"[:56]
+                    sub_name = f"{static_test_name}-n{net_count}-sub"[:63]
                     
                 mod["settings"]["network_name"] = net_name
+                
+                if "subnetworks_template" in mod["settings"] and isinstance(mod["settings"]["subnetworks_template"], dict):
+                    mod["settings"]["subnetworks_template"]["name_prefix"] = sub_name
+                    
                 net_count += 1
                 
             elif src in ["modules/file-system/filestore", "modules/file-system/managed-lustre"]:
