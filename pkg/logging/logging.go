@@ -53,7 +53,7 @@ func Info(f string, a ...any) {
 // Warn prints message to stderr but does not end the program
 func Warn(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	errorlog.Printf("%s: %s: %s", formatTs(), WarningColor.Sprint("WARNING"), msg)
+	errorlog.Printf("%s: %s", formatTs(), WarningColor.Sprint("WARNING: "+msg))
 }
 
 // Error prints message to stderr but does not end the program

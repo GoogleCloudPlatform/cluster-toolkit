@@ -137,14 +137,17 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	}
 	logging.Error("%s", renderError(err, ctx))
 
-	var errorMsg strings.Builder
-	errorMsg.WriteString("One or more blueprint validators has failed. See messages above for suggested actions.\n")
-	errorMsg.WriteString("General troubleshooting guidance and instructions for configuring alidators are shown below:\n\n")
-	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-troubleshooting\n")
-	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-validation\n\n")
-	errorMsg.WriteString("Validators can be silenced or treated as warnings or errors:\n\n")
-	errorMsg.WriteString("- https://goo.gle/hpc-toolkit-validation-levels\n")
-	logging.Error("%s", errorMsg.String())
+	const errorMsg = `One or more blueprint validators has failed. See messages above for suggested
+actions. General troubleshooting guidance and instructions for configuring validators are shown below.
+
+- https://goo.gle/hpc-toolkit-troubleshooting
+- https://goo.gle/hpc-toolkit-validation
+
+Validators can be silenced or treated as warnings or errors:
+
+- https://goo.gle/hpc-toolkit-validation-levels
+`
+	logging.Error("%s", errorMsg)
 
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
