@@ -16,23 +16,23 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: customer-bucket
+    bucket: # supply bucket to store Terraform state
 
 vars:
-  deployment_name: a3mega-base
-  project_id: customer-project
-  region: customer-region
-  zone: customer-zone
-  network_name_system: a3mega-sys-net
-  subnetwork_name_system: a3mega-sys-subnet
+  deployment_name: # supply unique deployment name
+  project_id: # supply existing project id
+  region: # supply region with a3-megagpu-8g capacity in reservation
+  zone: # supply zone with a3-megagpu-8g capacity in reservation
+  network_name_system: # supply name of the VPC network
+  subnetwork_name_system: # supply name of the subnetwork
   enable_ops_agent: true
   enable_nvidia_dcgm: true
   enable_nvidia_persistenced: true
   disk_size_gb: 200
   final_image_family: slurm-a3mega
-  slurm_cluster_name: a3mega # (lowercase alphanumeric, max 10 characters, must start with a letter)
-  a3mega_cluster_size: 2 # supply cluster size
-  a3mega_reservation_name: "" # supply reservation name
+  slurm_cluster_name: # supply name for slurm cluster (lowercase alphanumeric, max 10 characters, must start with a letter)
+  a3mega_cluster_size:  # supply cluster size
+  a3mega_reservation_name: # supply reservation name
   # Additional provisioning models (pick only one), can be used to substitute `a3mega_reservation_name`:
   a3mega_dws_flex_enabled: false # To make use of DWS Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
   a3mega_enable_spot_vm: false # To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot

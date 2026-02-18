@@ -4,24 +4,24 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+---
 
-terraform {
-  required_version = "= 1.12.2"
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: # supply existing bucket to store Terraform state
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "> 5.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:mig/v1.82.0"
-  }
-}
+vars:
+  deployment_name: # supply unique deployment name
+  project_id: # supply existing project id
+  region: # supply region with a4x-highgpu-8g capacity in reservation
+  zone: # supply zone with a4x-highgpu-8g capacity in reservation
+  reservation_name: # supply a4x-highgpu-8g reservation name
+  instance_count: # supply number of vms desired

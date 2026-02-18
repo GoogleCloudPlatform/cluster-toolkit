@@ -1,4 +1,4 @@
-# Copyright 2026 Google LLC
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = "= 1.12.2"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "> 5.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:mig/v1.82.0"
-  }
-}
+apiVersion: v2
+name: raw-config-chart
+description: Generic chart to apply raw manifests
+type: application
+version: 0.1.0
+appVersion: "1.16.0"

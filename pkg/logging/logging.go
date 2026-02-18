@@ -52,12 +52,12 @@ func Info(f string, a ...any) {
 // Error prints info to stderr but does not end the program
 func Error(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	errorlog.Printf("%s ERROR: %s", formatTs(), msg)
+	errorlog.Printf("%s: %s", formatTs(), msg)
 }
 
 // Fatal prints info to stderr and ends the program
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	fatallog.Printf("%s FATAL: %s", formatTs(), msg)
+	fatallog.Printf("%s: %s", formatTs(), msg)
 	Exit(1)
 }

@@ -314,6 +314,7 @@ deployment_groups:
       name_prefix: $(vars.deployment_name)
       placement_policy:
         collocation: COLLOCATED
+        gpu_topology: "1x72"
       disk_type: hyperdisk-balanced
       disk_size_gb: $(vars.disk_size_gb)
       automatic_restart: true
