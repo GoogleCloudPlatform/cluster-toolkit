@@ -20,6 +20,9 @@
   vars:
     delete_image: true
   tasks:
+  - name: Set up Test Namespace Lock
+    ansible.builtin.include_tasks: tasks/setup_lock.yml
+
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
@@ -34,6 +37,9 @@
       environment:
         TF_IN_AUTOMATION: "TRUE"
     always:
+    - name: Release Test Namespace Lock
+      ansible.builtin.include_tasks: tasks/release_lock.yml
+
     - name: Destroy deployment
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed

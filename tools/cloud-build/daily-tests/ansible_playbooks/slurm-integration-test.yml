@@ -58,6 +58,10 @@
     loop_control:
       loop_var: pre_deploy_task
 
+  ## Define Lock Variables and Acquire
+  - name: Set up Test Namespace Lock
+    ansible.builtin.include_tasks: tasks/setup_lock.yml
+
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
@@ -207,6 +211,10 @@
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
 
+    always:
+    - name: Release Test Namespace Lock
+      ansible.builtin.include_tasks: tasks/release_lock.yml
+
 - name: Run Integration Tests
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
@@ -355,6 +363,9 @@
     - name: Print Slurm slurmsync.log
       ansible.builtin.debug:
         var: slurmsync_output.stdout_lines
+
+    - name: Release Test Namespace Lock
+      ansible.builtin.include_tasks: tasks/release_lock.yml
 
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:

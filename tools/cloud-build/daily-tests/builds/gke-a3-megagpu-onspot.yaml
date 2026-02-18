@@ -93,6 +93,7 @@ steps:
       --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-megagpu-onspot.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']

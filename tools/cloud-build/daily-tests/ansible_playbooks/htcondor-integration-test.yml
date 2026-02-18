@@ -38,6 +38,10 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
+  ## Define Lock Variables and Acquire
+  - name: Set up Test Namespace Lock
+    ansible.builtin.include_tasks: tasks/setup_lock.yml
+
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
@@ -142,6 +146,10 @@
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
 
+    always:
+    - name: Release Test Namespace Lock
+      ansible.builtin.include_tasks: tasks/release_lock.yml
+
 - name: Run Integration Tests
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
@@ -167,6 +175,8 @@
       loop_control:
         loop_var: test
     always:
+    - name: Release Test Namespace Lock
+      ansible.builtin.include_tasks: tasks/release_lock.yml
     - name: Delete Firewall Rule
       delegate_to: localhost
       register: fw_deleted

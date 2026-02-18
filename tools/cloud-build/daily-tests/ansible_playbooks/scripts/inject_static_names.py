@@ -31,9 +31,9 @@ def main():
     if "deployment_groups" in data:
         for group in data["deployment_groups"]:
             if "modules" in group:
-                for mod in group["modules"]:
+                for idx, mod in enumerate(group["modules"]):
                     src = mod.get("source", "")
-                    mod_id = mod.get("id", "unknown")
+                    mod_id = mod.get("id", f"unknown-mod-{idx}")
 
                     if src.startswith("modules/network/"):
                         if "settings" not in mod:
