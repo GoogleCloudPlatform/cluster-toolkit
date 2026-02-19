@@ -279,15 +279,22 @@ module "install_gpu_operator" {
 }
 
 module "install_gib" {
-  source            = "./kubectl"
-  source_path       = local.install_gib ? var.gib.path : null
-  server_side_apply = true
-  template_vars     = var.gib.template_vars
-  wait_for_rollout  = true
+  source = "./helm_install"
+  count  = local.install_gib ? 1 : 0
 
-  providers = {
-    kubectl = kubectl
-  }
+  release_name = "nccl-gib"
+  chart_name   = "${path.module}/raw-config-chart"
+  namespace    = "kube-system"
+  wait         = true
+  depends_on   = [var.gke_cluster_exists]
+
+  values_yaml = local.install_gib ? [
+    yamlencode({
+      manifests = [
+        templatefile(var.gib.path, var.gib.template_vars)
+      ]
+    })
+  ] : []
 }
 
 module "install_asapd_lite" {

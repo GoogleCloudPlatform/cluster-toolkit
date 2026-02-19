@@ -160,9 +160,17 @@ deployment_groups:
           set -ex -o pipefail
           add-nvidia-repositories -y
           apt update -y
-          apt install -y cuda-toolkit-12-8
-          apt install -y datacenter-gpu-manager-4-cuda12
-          apt install -y datacenter-gpu-manager-4-dev
+          apt install -y \
+              cuda-toolkit-12-8 \
+              datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
+              datacenter-gpu-manager-4-dev=1:4.5.1-1 \
+              datacenter-gpu-manager-4-core=1:4.5.1-1
+
+          # 2. Hold ALL components
+          apt-mark hold \
+              datacenter-gpu-manager-4-cuda12 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
       - type: ansible-local
         destination: configure_cuda_dcgm.yml
         content: |
