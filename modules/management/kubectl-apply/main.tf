@@ -285,6 +285,8 @@ module "install_gib" {
   chart_name   = "${path.module}/raw-config-chart"
   namespace    = "kube-system"
   wait         = true
+  depends_on   = [var.gke_cluster_exists]
+
   values_yaml = local.install_gib ? [
     yamlencode({
       manifests = [
