@@ -13,16 +13,6 @@
 # limitations under the License.
 
 ---
-- name: Define Base Lock Variables
-  ansible.builtin.set_fact:
-    static_test_name: "{{ test_prefix | default('') }}{{ test_name }}"
-    gcs_lock_bucket: "gs://{{ project }}-hpc-toolkit-locks"
-
-- name: Define Derived Lock Paths
-  ansible.builtin.set_fact:
-    static_network_name: "{{ static_test_name }}-net"
-    lock_file_path: "{{ gcs_lock_bucket }}/locks/{{ static_test_name }}.lock"
-    local_lock_file: "/tmp/{{ static_test_name }}.lock"
 
 - name: Create Local Empty Lock File
   ansible.builtin.file:
@@ -31,21 +21,21 @@
 
 - name: Verify Lock Bucket Exists (Fail Fast)
   ansible.builtin.shell: |
-    gsutil ls "{{ gcs_lock_bucket }}"
+    gsutil ls "{{ hostvars['localhost']['gcs_lock_bucket'] }}"
   register: bucket_check
   delegate_to: localhost
   failed_when: bucket_check.rc != 0
 
 - name: "Check and Break Stale Locks (TTL: 4 hours)"
   ansible.builtin.shell: |
-    CREATE_TIME=$(gsutil stat "{{ lock_file_path }}" 2>/dev/null | grep "Creation time:" | awk -F': ' '{print $2}') || true
+    CREATE_TIME=$(gsutil stat "{{ hostvars['localhost']['lock_file_path'] }}" 2>/dev/null | grep "Creation time:" | awk -F': ' '{print $2}') || true
     if [ -n "$CREATE_TIME" ]; then
       CREATE_EPOCH=$(date -d "$CREATE_TIME" +%s 2>/dev/null || date -j -f "%a, %d %b %Y %H:%M:%S %Z" "$CREATE_TIME" +%s)
       NOW_EPOCH=$(date +%s)
       AGE_SECONDS=$((NOW_EPOCH - CREATE_EPOCH))
       if [ "$AGE_SECONDS" -gt 14400 ]; then
         echo "Lock is older than 4 hours ($AGE_SECONDS seconds). Breaking stale lock."
-        gsutil rm "{{ lock_file_path }}"
+        gsutil rm "{{ hostvars['localhost']['lock_file_path'] }}"
       fi
     fi
   delegate_to: localhost
@@ -53,7 +43,7 @@
 
 - name: Acquire Test Namespace Lock
   ansible.builtin.shell: |
-    timeout 60s gsutil cp -n "{{ local_lock_file }}" "{{ lock_file_path }}"
+    timeout 60s gsutil cp -n "{{ hostvars['localhost']['local_lock_file'] }}" "{{ hostvars['localhost']['lock_file_path'] }}"
   register: lock_acquired
   changed_when: lock_acquired.rc == 0
   retries: 30  # Retry for 30 minutes

@@ -40,6 +40,10 @@
   ansible.builtin.command: |
     {{ workspace }}/tools/cloud-build/daily-tests/ansible_playbooks/scripts/inject_static_names.py "{{ workspace }}/.injected-{{ deployment_name }}.yaml" "{{ static_test_name }}"
 
+- name: Display Injected Blueprint
+  ansible.builtin.command: |
+    cat "{{ workspace }}/.injected-{{ deployment_name }}.yaml"
+
 - name: Create Blueprint
   ansible.builtin.command: |
       ./gcluster create -l ERROR "{{ workspace }}/.injected-{{ deployment_name }}.yaml" \

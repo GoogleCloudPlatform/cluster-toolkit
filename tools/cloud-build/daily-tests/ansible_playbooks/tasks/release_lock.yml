@@ -15,7 +15,7 @@
 ---
 - name: Release Network Lock
   ansible.builtin.shell: |
-    gsutil rm "{{ lock_file_path }}"
+    gsutil rm "{{ hostvars['localhost']['lock_file_path'] }}"
   register: lock_released
   changed_when: lock_released.rc == 0
   delegate_to: localhost
