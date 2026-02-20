@@ -90,8 +90,10 @@ steps:
     sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: true' $${EXAMPLE_BP}
     sed -i '/reservation/d' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-megagpu-onspot.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']

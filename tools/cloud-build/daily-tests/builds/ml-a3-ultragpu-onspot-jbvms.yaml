@@ -70,6 +70,7 @@ steps:
     # Removing reservation and automatic restart from blueprint for spot VMs to work.
     sed -i -e '/reservation/d' -e '/automatic_restart/d' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \

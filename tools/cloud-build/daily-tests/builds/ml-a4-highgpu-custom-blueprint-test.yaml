@@ -65,6 +65,7 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
       --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
