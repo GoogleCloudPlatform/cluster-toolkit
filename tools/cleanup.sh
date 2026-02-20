@@ -830,8 +830,54 @@ process_filestore() {
 	log "INFO" "Finished processing Filestore Instances. $count instances actioned."
 }
 
+process_managed_lustre() {
+        log "INFO" "--- Processing: Managed Lustre Instances ---"
+ 
+    local lustre_locations
+    if ! lustre_locations=$(gcloud lustre locations list \
+        --project="$PROJECT_ID" \
+        --format="value(locationId)"); then
+        log "ERROR" "Failed to list Managed Lustre locations."
+        ((ERROR_COUNT++)) || true
+        return 0
+    fi
+ 
+    local count=0
+ 
+    for loc in $lustre_locations; do
+        log "INFO" "Checking Managed Lustre in location: $loc"
+ 
+        local lustre_data
+        if ! lustre_data=$(gcloud lustre instances list \
+            --project="$PROJECT_ID" \
+            --location="$loc" \
+            --filter="createTime < '$CUTOFF_TIME'" \
+            --format="value(name,location,labels.map())"); then
+            log "WARNING" "Failed to list Managed Lustre instances in $loc."
+            continue
+        fi
+ 
+        [[ -z "$lustre_data" ]] && continue
+ 
+        while IFS=$'\t' read -r name location labels_str; do
+            [[ -z "$name" ]] && continue
+ 
+            if ! is_excluded "$name" "${labels_str:-}"; then
+                execute_delete "Managed Lustre Instance" "$name" "($location)" \
+                    gcloud lustre instances delete "$name" \
+                    --location="$location" \
+                    --project="$PROJECT_ID" \
+                    --quiet
+                ((count++)) || true
+            fi
+        done <<<"$lustre_data"
+    done
+ 
+    log "INFO" "Finished processing Managed Lustre. $count instances actioned."
+}
+
 process_subnetworks() {
-	log "INFO" "--- Processing: Subnetworks ---"
+       	log "INFO" "--- Processing: Subnetworks ---"
 	local subnets
 	if ! subnets=$(gcloud compute networks subnets list --project="$PROJECT_ID" --filter="creationTimestamp < '$CUTOFF_TIME'" --format="value(name,region.basename(),network)"); then
 		log "ERROR" "Failed to list Subnetworks."
@@ -967,6 +1013,7 @@ main() {
 		"zone" \
 		"gcloud" "compute" "instances" "delete" "--project=$PROJECT_ID" "--delete-disks=all"
 	process_filestore
+	process_managed_lustre
 
 	# --- Phase 2: Images & Artifacts (VM Images, Docker Images, Instance Templates) ---
 	log "INFO" "--- PHASE 2: Deleting Images and Artifacts ---"
