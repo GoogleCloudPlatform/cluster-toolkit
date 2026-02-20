@@ -857,7 +857,9 @@ process_managed_lustre() {
 			continue
 		fi
 
-		[[ -z "$lustre_data" ]] && continue
+	       if [[ -z "$lustre_data" ]];
+		   continue
+               fi
 
 		while IFS=$'\t' read -r name location labels_str; do
 			[[ -z "$name" ]] && continue
