@@ -125,7 +125,7 @@ variable "kueue" {
 }
 
 variable "gke_cluster_exists" {
-  description = "A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations."
+  description = "A static flag that signals to downstream modules that a cluster has been created."
   type        = bool
   default     = false
 }
