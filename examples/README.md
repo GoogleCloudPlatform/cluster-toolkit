@@ -734,7 +734,9 @@ providing a high-performance file system for demanding workloads.
    kubectl get pvc
    ```
 
-   You should see a PVC named $(vars.lustre_instance_id)-pvc with STATUS: Bound
+   You should see a PVC named [LUSTRE_INSTANCE_PVC] with STATUS: Bound
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
 1. Example Pod: Create a file named lustre-client-pod.yaml to deploy a test pod that mounts the Lustre volume
 
@@ -754,8 +756,10 @@ providing a high-performance file system for demanding workloads.
      volumes:
      - name: lustre-volume
        persistentVolumeClaim:
-         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name
+         claimName: [LUSTRE_INSTANCE_PVC] # Matches the PVC name
    ```
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
    Note: This is just an example job using busybox image.
 
