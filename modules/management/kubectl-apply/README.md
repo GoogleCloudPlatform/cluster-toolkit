@@ -3,7 +3,7 @@
 This module simplifies the following functionality:
 
 * Applying Kubernetes manifests to GKE clusters: It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
-* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/) or [Jobset](https://jobset.sigs.k8s.io/docs/).
+* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/),[Jobset](https://jobset.sigs.k8s.io/docs/) or [NCCL gIB plugin](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview).
 
 > Note: Kueue can work with a variety of frameworks out of the box, find them [here](https://kueue.sigs.k8s.io/docs/tasks/run/)
 
@@ -89,6 +89,22 @@ You can specify a particular kueue version that you would like to use using the 
         config_template_vars: {name: "dev-config", public: "false"}
       jobset:
         install: true
+```
+
+You can also install the `gib` plugin by setting the `gib` input variable.
+The `path` field accepts a template file. You will need to provide variables for the template using `template_vars` field and can also specify a particular gib version that you would like to use using the `version` flag. You can find the list of supported machine types for the `gib` plugin [here](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview).
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      gib:
+        install: true
+        path: $(ghpc_stage("manifests/daemonset-gib.yaml.tftpl"))
+        template_vars:
+          version: v1.1.0
+          accelerator_count: 2
 ```
 
 > **_NOTE:_**
