@@ -52,15 +52,6 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
-  - name: "####### Debug: Display time_to_live variable from extra-vars #######"
-    ansible.builtin.debug:
-      var: time_to_live
-
-  - name: "####### Debug: Display custom_vars before templating #######"
-    ansible.builtin.debug:
-      var: custom_vars
-    when: custom_vars is defined
-
   - name: Run Pre Deploy Tasks
     ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
     loop: "{{ pre_deploy_tasks | default([]) }}"
