@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,4 +37,12 @@ output "tpu_chips_per_node" {
 output "tpu_taint" {
   description = "A list containing the standard TPU taint object if the node pool is for TPUs."
   value       = local.tpu_taint
+}
+
+output "kubernetes_label" {
+  description = "A map of Kubernetes labels to apply to the node pool for TPU discovery."
+  value = local.is_tpu ? {
+    "cloud.google.com/gke-tpu-accelerator" = local.tpu_accelerator_type
+    "cloud.google.com/gke-tpu-topology"    = var.placement_policy.tpu_topology
+  } : {}
 }

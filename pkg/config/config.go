@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -618,7 +618,7 @@ func (err InputValueError) Error() string {
 
 var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
 var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
-var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z](?:[a-z0-9]{0,9})$`)
+var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z][-a-z0-9]{0,19}$`)
 
 // isValidLabelName checks if a string is a valid name for a GCP label.
 // For more information on valid label names, see the docs at:

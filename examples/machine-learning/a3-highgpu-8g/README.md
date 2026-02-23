@@ -183,14 +183,14 @@ size using `a3_static_cluster_size` variable. Recall that there are 8 NVIDIA H10
 Provision the cluster blueprint (approximately 40 minutes):
 
 ```shell
-./gcluster deploy -d a3high-slurm-deployment.yaml a3high-slurm-blueprint.yaml --auto-approve
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --auto-approve
 ```
 
 Building the image is time-consuming due to the installation of linux kernel, nvidia drivers, cuda toolkit, and slurm.
 To significantly reduce deployment time when recreating the cluster, use the `--skip image` flag:
 
 ```shell
-./gcluster deploy -d a3high-slurm-deployment.yaml a3high-slurm-blueprint.yaml --auto-approve --skip image
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --auto-approve --skip image
 ```
 
 Important Restrictions:
@@ -202,7 +202,7 @@ Selective deployment and teardown for this blueprint are documented centrally. S
 Example (deploy only the primary group for this blueprint):
 
 ```bash
-./gcluster deploy -d a3high-slurm-deployment.yaml a3high-slurm-blueprint.yaml --only primary
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only primary
 ```
 
 ## Receive Data Path Manager (RxDM)

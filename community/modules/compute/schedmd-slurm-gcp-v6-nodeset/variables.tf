@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -524,7 +524,7 @@ variable "reservation_name" {
     - RESERVATION_NAME: The name assigned to the specific reservation.
     - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
 
-    Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project.
+    Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
   EOD
   type        = string
   default     = ""
@@ -647,4 +647,10 @@ variable "placement_max_distance" {
     condition     = coalesce(var.placement_max_distance, 1) >= 1 && coalesce(var.placement_max_distance, 3) <= 3
     error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
   }
+}
+
+variable "confidential_instance_type" {
+  type        = string
+  description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
+  default     = null
 }

@@ -1,5 +1,5 @@
 /**
-* Copyright 2022 Google LLC
+* Copyright 2026 Google LLC
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -207,7 +207,7 @@ func writeVersions(providers map[string]config.TerraformProvider, dst string) er
 	body := f.Body()
 	body.AppendNewline()
 	tfb := body.AppendNewBlock("terraform", []string{}).Body()
-	tfb.SetAttributeValue("required_version", cty.StringVal(">= 1.2"))
+	tfb.SetAttributeValue("required_version", cty.StringVal("= 1.12.2"))
 	tfb.AppendNewline()
 
 	pb := tfb.AppendNewBlock("required_providers", []string{}).Body()

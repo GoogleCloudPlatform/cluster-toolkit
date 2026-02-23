@@ -94,9 +94,9 @@ The format of the `reservation_name` input determines the type of reservation us
   * `RESERVATION_NAME` is the name assigned to the specific reservation.
   * `BLOCK_ID` (Optional) is the identifier for a specific reservation block, if the reservation is composed of multiple blocks.
 
-> **_NOTE:_** Using a shared reservation requires the 'compute.reservations.get'
-> permission for the node service account in the host project (HOST_PROJECT_ID).
-> Ensure this permission is granted before deploying.
+> **_NOTE:_** Using a shared reservation ideally requires the 'compute.reservations.get'
+> permission for the node service account in the host project (HOST_PROJECT_ID) to fetch full reservation details.
+> However, if this permission is missing, the system will fall back to minimal reservation settings and proceed.
 
 ### No Reservation
 
@@ -165,7 +165,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.4 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.11 |
 
 ## Providers
@@ -173,7 +173,6 @@ modules. For support with the underlying modules, see the instructions in the
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 5.11 |
-| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -186,8 +185,6 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Type |
 |------|------|
-| [terraform_data.machine_type_zone_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
-| [google_compute_machine_types.machine_types_by_zone](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
@@ -203,6 +200,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Configures the network interface card and the maximum egress bandwidth for VMs.<br/>  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.<br/>  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.<br/>  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).<br/>  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.<br/>  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.<br/>  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"platform_default"` | no |
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example. | `bool` | `false` | no |
+| <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3. | `string` | `null` | no |
 | <a name="input_disable_public_ips"></a> [disable\_public\_ips](#input\_disable\_public\_ips) | DEPRECATED: Use `enable_public_ips` instead. | `bool` | `null` | no |
 | <a name="input_disk_auto_delete"></a> [disk\_auto\_delete](#input\_disk\_auto\_delete) | Whether or not the boot disk should be auto-deleted. | `bool` | `true` | no |
 | <a name="input_disk_labels"></a> [disk\_labels](#input\_disk\_labels) | Labels specific to the boot disk. These will be merged with var.labels. | `map(string)` | `{}` | no |
@@ -240,7 +238,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/><br/>Note: Using a shared reservation requires the 'compute.reservations.get' permission for the node service account in the host project. | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/><br/>Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults. | `string` | `""` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the compute instances. | `string` | `null` | no |

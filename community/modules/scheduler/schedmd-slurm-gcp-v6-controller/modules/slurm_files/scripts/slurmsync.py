@@ -21,6 +21,7 @@ import logging
 import re
 import sys
 import shlex
+import subprocess
 from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
@@ -48,6 +49,7 @@ import tpu
 import conf
 import conf_v2411
 import watch_delete_vm_op
+import repair
 
 log = logging.getLogger()
 
@@ -119,6 +121,17 @@ class NodeActionDown():
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes set down ({hostlist}) with reason={self.reason}")
         run(f"{lookup().scontrol} update nodename={hostlist} state=down reason={shlex.quote(self.reason)}")
+
+@dataclass(frozen=True)
+class NodeActionRepair():
+    reason: str
+    def apply(self, nodes: List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} nodes to repair ({hostlist}) with reason={self.reason}")
+        for node in nodes:
+            op_id = repair.call_rr_api(node, self.reason)
+            if op_id:
+                repair.store_operation(node, op_id, self.reason)
 
 @dataclass(frozen=True)
 class NodeActionUnknown():
@@ -238,11 +251,32 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
     return NodeActionUnchanged()
 
+def get_node_reason(nodename: str) -> Optional[str]:
+    """Get the reason for a node's state using JSON output."""
+    try:
+        # Use --json to get structured data
+        result = run(f"{lookup().scontrol} show node {nodename} --json")
+        data = json.loads(result.stdout)
+
+        # Access the reason field directly from the JSON structure
+        nodes = data.get('nodes', [])
+        if nodes:
+            reason = nodes[0].get('reason')
+            # Handle the specific formatting logic for brackets if needed
+            if reason and "[" in reason:
+                return reason.split("[")[0].strip()
+            return reason
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        log.error(f"Failed to execute scontrol or parse its JSON output for node {nodename}: {e}")
+    except Exception as e:
+        log.error(f"An unexpected error occurred while getting reason for node {nodename}: {e}")
+    return None
+
+
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     lkp = lookup()
     state = lkp.node_state(nodename)
-
     if lkp.node_is_gke(nodename):
         return NodeActionUnchanged()
 
@@ -263,6 +297,14 @@ def get_node_action(nodename: str) -> NodeAction:
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
+
+    if state is not None and "DRAIN" in state.flags:
+        reason = get_node_reason(nodename)
+        if reason in repair.REPAIR_REASONS:
+            if repair.is_node_being_repaired(nodename):
+                return NodeActionUnchanged()
+            if inst:
+                return NodeActionRepair(reason=reason)
 
     if (state is None) and (inst is None):
         # Should never happen
@@ -642,6 +684,11 @@ def main():
             sync_instances()
         except Exception:
             log.exception("failed to sync instances")
+
+        try:
+            repair.poll_operations()
+        except Exception:
+            log.exception("failed to poll repair operations")
 
         try:
             sync_flex_migs(lkp)

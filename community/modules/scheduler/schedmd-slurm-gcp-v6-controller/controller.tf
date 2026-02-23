@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -146,6 +146,7 @@ resource "google_compute_instance_from_template" "controller" {
     }
     network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
     subnetwork = var.subnetwork_self_link
+    stack_type = var.subnetwork_stack_type
   }
 
   dynamic "network_interface" {

@@ -1,4 +1,4 @@
-// Copyright 2025 "Google LLC"
+// Copyright 2026 "Google LLC"
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -80,7 +80,10 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 		}
 	}
 
-	val, _ := getNestedValue(mod.Settings, settingName)
+	val, ok := getNestedValue(mod.Settings, settingName)
+	if !ok {
+		return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)
+	}
 
 	if evaledVal, err := bp.Eval(val); err == nil {
 		val = evaledVal
@@ -115,12 +118,53 @@ func parseStringList(v interface{}) ([]string, bool) {
 	}
 }
 
+// parseString normalizes an input that may be a single string or a list containing a single string into a string.
+func parseString(v interface{}) (string, bool) {
+	if v == nil {
+		return "", false
+	}
+	switch vv := v.(type) {
+	case string:
+		return vv, true
+	case []interface{}:
+		if len(vv) == 1 {
+			s, ok := vv[0].(string)
+			return s, ok
+		}
+	case []string:
+		if len(vv) == 1 {
+			return vv[0], true
+		}
+	}
+	return "", false
+}
+
 // Target represents a resolved target (module-setting or blueprint var) for validation.
 type Target struct {
 	Name        string
 	Values      []cty.Value
 	Path        config.Path
 	IsBlueprint bool // true if came from blueprint vars, false if module.settings
+}
+
+// parseIntInput parses an integer from the input map and returns a pointer.
+// It returns nil if the key is not found.
+func parseIntInput(inputs map[string]interface{}, key string) (*int, error) {
+	v, ok := inputs[key]
+	if !ok {
+		return nil, nil
+	}
+
+	var val int
+	switch t := v.(type) {
+	case int:
+		val = t
+	case float64:
+		val = int(t)
+	default:
+		return nil, fmt.Errorf("'%s' must be an integer, not %T", key, v)
+	}
+	return &val, nil
 }
 
 // processModuleSettings processes a list of names interpreted as module settings.
@@ -182,4 +226,107 @@ func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) 
 		return false, fmt.Errorf("'%s' must be a boolean, not %T", key, v)
 	}
 	return b, nil
+}
+
+// isVarSet returns true if the value is known, non-null, and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+func isVarSet(values []cty.Value) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for _, val := range values {
+		if val.IsNull() || !val.IsKnown() {
+			return false
+		}
+		switch val.Type() {
+		case cty.String:
+			if val.AsString() == "" {
+				return false
+			}
+		case cty.Number:
+			if val.AsBigFloat().Sign() <= 0 {
+				return false
+			}
+		case cty.Bool:
+			if val.False() {
+				return false
+			}
+		default:
+			// For lists, maps, and sets, consider them "not set" if they are empty.
+			if val.LengthInt() == 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// convertToCty converts a primitive Go interface{} to a cty.Value.
+// Returns cty.Value if input was not nil, otherwise cty.NilVal.
+func convertToCty(in interface{}) cty.Value {
+	if in == nil {
+		return cty.NilVal
+	}
+	switch v := in.(type) {
+	case bool:
+		return cty.BoolVal(v)
+	case int:
+		return cty.NumberIntVal(int64(v))
+	case float64:
+		return cty.NumberFloatVal(v)
+	case string:
+		return cty.StringVal(v)
+	case []interface{}:
+		if len(v) == 0 {
+			return cty.EmptyTupleVal
+		}
+		vals := make([]cty.Value, len(v))
+		for i, val := range v {
+			vals[i] = convertToCty(val)
+		}
+		return cty.TupleVal(vals)
+	case map[string]interface{}:
+		if len(v) == 0 {
+			return cty.EmptyObjectVal
+		}
+		vals := make(map[string]cty.Value)
+		for k, val := range v {
+			vals[k] = convertToCty(val)
+		}
+		return cty.ObjectVal(vals)
+	default:
+		return cty.NilVal
+	}
+}
+
+// ValuesMatch compares two slices of cty.Value for equality, treating "unset" values as equal.
+func ValuesMatch(original []cty.Value, expected []cty.Value) bool {
+	if len(original) != len(expected) {
+		return false
+	}
+	for i := range original {
+		originalVal := original[i]
+		expectedVal := expected[i]
+
+		isOriginalSet := isVarSet([]cty.Value{originalVal})
+		isExpectedSet := isVarSet([]cty.Value{expectedVal})
+		if !isOriginalSet && !isExpectedSet {
+			continue
+		}
+		if !originalVal.Equals(expectedVal).True() {
+			return false
+		}
+	}
+	return true
+}
+
+// formatValue formats a cty.Value slice for display in error messages.
+func formatValue(vals []cty.Value) string {
+	if len(vals) == 0 {
+		return "null"
+	}
+	val := vals[0]
+	if val.IsNull() {
+		return "null"
+	}
+	return string(config.TokensForValue(val).Bytes())
 }

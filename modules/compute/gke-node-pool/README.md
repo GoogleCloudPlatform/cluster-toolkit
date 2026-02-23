@@ -63,7 +63,7 @@ equivalent toleration is required. The `gke-job-template` module will
 automatically apply this toleration when using a node pool with GPUs.
 
 Nvidia GPU drivers must be installed.  The recommended approach for GKE to install
-GPU dirvers is by applying a DaemonSet to the cluster. See
+GPU drivers is by applying a DaemonSet to the cluster. See
 [these instructions](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus#cos).
 
 However, in some cases it may be desired to compile a different driver (such as
@@ -260,7 +260,7 @@ reservation_affinity:
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2023 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -278,7 +278,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
@@ -319,6 +319,8 @@ limitations under the License.
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_auto_repair"></a> [auto\_repair](#input\_auto\_repair) | Whether the nodes will be automatically repaired. | `bool` | `true` | no |
 | <a name="input_auto_upgrade"></a> [auto\_upgrade](#input\_auto\_upgrade) | Whether the nodes will be automatically upgraded. | `bool` | `false` | no |
+| <a name="input_autoscaling_max_node_count"></a> [autoscaling\_max\_node\_count](#input\_autoscaling\_max\_node\_count) | Maximum number of nodes per zone in the NodePool. Cannot be used with autoscaling\_total\_max\_nodes. | `number` | `null` | no |
+| <a name="input_autoscaling_min_node_count"></a> [autoscaling\_min\_node\_count](#input\_autoscaling\_min\_node\_count) | Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling\_total\_min\_nodes. | `number` | `null` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
@@ -340,6 +342,7 @@ limitations under the License.
 | <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. | `bool` | `true` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_linux_node_config"></a> [linux\_node\_config](#input\_linux\_node\_config) | Linux node configuration (e.g., sysctls, hugepages). | <pre>object({<br/>    sysctls = optional(map(string), {<br/>      "net.ipv4.tcp_rmem" = "4096 87380 16777216"<br/>      "net.ipv4.tcp_wmem" = "4096 16384 16777216"<br/>    })<br/>    hugepages_config = optional(object({<br/>      hugepage_size_2m = optional(number)<br/>      hugepage_size_1g = optional(number)<br/>    }))<br/>  })</pre> | `{}` | no |
 | <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |

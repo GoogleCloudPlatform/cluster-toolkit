@@ -90,6 +90,8 @@ Modules that are still in development and less stable are labeled with the
 
 * **[filestore]** ![core-badge] : Creates a
   [filestore](https://cloud.google.com/filestore) file system.
+* **[netapp-volume]** ![core-badge] : Creates a
+  [netapp-volume](https://docs.cloud.google.com/netapp/volumes/docs/discover/overview) file system.
 * **[parallelstore]** ![core-badge] ![experimental-badge] ![deprecated-badge]: Creates a
   [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
@@ -105,6 +107,7 @@ Modules that are still in development and less stable are labeled with the
   and mounts [WEKA](https://www.weka.io/) filesystems.
 
 [filestore]: file-system/filestore/README.md
+[netapp-volume]: file-system/netapp-volume/README.md
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [managed-lustre]: file-system/managed-lustre/README.md
@@ -112,6 +115,12 @@ Modules that are still in development and less stable are labeled with the
 [cloud-storage-bucket]: file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
+
+### Management
+
+* **[kubectl-apply]** ![core-badge] : Simplifies applying Kubernetes manifests to GKE clusters and deploying common infrastructure like Kueue, Jobset or NCCL gIB plugin.
+
+[kubectl-apply]: management/kubectl-apply/README.md
 
 ### Monitoring
 
@@ -237,7 +246,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [startup-script]: scripts/startup-script/README.md
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
-[kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md

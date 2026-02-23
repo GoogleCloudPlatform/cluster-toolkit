@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -209,4 +209,10 @@ variable "postrender" {
     binary_path = string # Path to the post-renderer executable
   })
   default = null # Disabled by default
+}
+
+variable "dependencies" {
+  description = "A list of resource IDs (e.g., node pool IDs) that this release depends on. Used to force Terraform dependencies."
+  type        = list(string)
+  default     = []
 }

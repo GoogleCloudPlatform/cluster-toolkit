@@ -29,16 +29,15 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
-  * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml--) ![community-badge]
+  * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![core-badge]
+  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml-) ![core-badge]
   * [hpc-slinky.yaml](#hpc-slinkyyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [af3-slurm.yaml](#af3-slurmyaml--) ![core-badge] ![experimental-badge]
@@ -59,13 +58,15 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [gke-tpu-v6](#gke-tpu-v6-) ![core-badge]
+  * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
-  * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
+  * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
+  * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
+  * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -420,13 +421,29 @@ example takes the following steps:
 4. Deploys a Slurm cluster using the custom image (see
 [Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
 
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
 #### Building and using the custom image
 
 Create the deployment folder from the blueprint:
 
 ```text
 ./gcluster create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./gcluster deploy image-builder-v6-001"
+./gcluster deploy image-builder-v6-001
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -434,28 +451,15 @@ For example, the network is created in the first deployment group, the VM image
 is created in the second group, and the third group uses the image to create an
 HPC cluster using the Slurm scheduler.
 
-When you are done, clean up the resources in reverse order of creation:
-
-```text
-terraform -chdir=image-builder-v6-001/cluster destroy --auto-approve
-terraform -chdir=image-builder-v6-001/primary destroy --auto-approve
-```
-
-Finally, browse to the [Cloud Console][console-images] to delete your custom
-image. It will be named beginning with `my-slurm-image` followed by a date and
-timestamp for uniqueness.
-
-[console-images]: https://console.cloud.google.com/compute/images
-
 #### Why use a custom image?
 
 Using a custom VM image can be more scalable and reliable than installing
 software using boot-time startup scripts because:
 
-* it avoids reliance on continued availability of package repositories
+* It avoids reliance on continued availability of package repositories.
 * VMs will join an HPC cluster and execute workloads more rapidly due to reduced
-  boot-time configuration
-* machines are guaranteed to boot with a static software configuration chosen
+  boot-time configuration.
+* Machines are guaranteed to boot with a static software configuration chosen
   when the custom image was created. No potential for some machines to have
   different software versions installed due to `apt`/`yum`/`pip` installations
   executed after remote repositories have been updated.
@@ -503,30 +507,28 @@ Once the Slurm cluster has been deployed we can test that our Slurm compute
 partition is using the custom image. Each compute node should contain the
 `hello.txt` file added by the startup-script.
 
-1. SSH into the login node `imagebuild-login-login-001`.
+1. SSH into the login node `imagebuild-slurm-login-001`.
 2. Run a job that prints the contents of the added file:
 
   ```bash
-  $ srun -N 2 cat /home/hello.txt
+  $ srun -N 2 cat /usr/local/hello.txt
   Hello World
   Hello World
   ```
 
-#### Quota Requirements for image-builder.yaml
+To avoid recurring charges for the resources provisioned by Cluster Toolkit, clean up the resources using the following command:
 
-For this example the following is needed in the selected region:
+```text
+./gcluster destroy image-builder-v6-001
+```
 
-* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
-* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
-  GB/node** up to 704 GB
-* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
-* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
-  in `compute` partition up to 1,204
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
+Follow the on-screen prompts to approve the deletion of each deployment group. For example, the resources are removed in reverse order. The cluster is destroyed first, followed by the primary is destroyed in the deployment group.
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` followed by a date and
+timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
 
 ### [serverless-batch.yaml] ![core-badge]
 
@@ -539,6 +541,19 @@ an instance template to be used for the Google Cloud Batch compute VMs and
 renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
+
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy hello-workload
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./gcluster destroy hello-workload
+```
 
 [serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
@@ -719,7 +734,9 @@ providing a high-performance file system for demanding workloads.
    kubectl get pvc
    ```
 
-   You should see a PVC named $(vars.lustre_instance_id)-pvc with STATUS: Bound
+   You should see a PVC named [LUSTRE_INSTANCE_PVC] with STATUS: Bound
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
 1. Example Pod: Create a file named lustre-client-pod.yaml to deploy a test pod that mounts the Lustre volume
 
@@ -739,8 +756,10 @@ providing a high-performance file system for demanding workloads.
      volumes:
      - name: lustre-volume
        persistentVolumeClaim:
-         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name
+         claimName: [LUSTRE_INSTANCE_PVC] # Matches the PVC name
    ```
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
    Note: This is just an example job using busybox image.
 
@@ -1219,7 +1238,6 @@ Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../examples/ml-gke.yaml
-[`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![core-badge]
 
@@ -1419,9 +1437,17 @@ This blueprint takes care of the initial infrastructure setup (e.g., network cre
 
 ### [gke-consumption-options] ![core-badge]
 
-This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
-* [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
-* [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
+This folder holds multiple GKE blueprint examples that demonstrate different consumption options on GKE, covering hardware such as A3 Ultra (A3U), TPU v6e, and TPU 7x.
+
+* [**DWS Flex Start**](../examples/gke-consumption-options/dws-flex-start/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e)
+
+* [**DWS Flex Start with Queued Provisioning**](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-v6e)
 
 [gke-consumption-options]: ../examples/gke-consumption-options
 
@@ -1536,11 +1562,11 @@ deployment_groups:
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
-### [gke-tpu-v6] ![core-badge]
+### [gke-tpu-v6e] ![core-badge]
 
-This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-v6/README.md).
+This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-v6e/README.md).
 
-[gke-tpu-v6]: ../examples/gke-tpu-v6
+[gke-tpu-v6e]: ../examples/gke-tpu-v6e
 
 ### [xpk-n2-filestore] ![community-badge] ![experimental-badge]
 
@@ -1668,6 +1694,24 @@ arbitrary `gcloud` commands during deployment and destroy. It shows an example
 of creating and deleting a network, subnet, and VM instance.
 
 [gcloud-example.yaml]: ../community/examples/gcloud-example.yaml
+
+### [eda-all-on-cloud.yaml] ![community-badge]
+
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called `eda-net` which connects VMs, Slurm and storage and a RDMA network called `eda-rdma-net` between the H4D nodes, along with four [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) mounted to `/home`, `/tools`, `/library` and `/scratch`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
+
+[eda-all-on-cloud.yaml]: ../community/examples/eda/eda-all-on-cloud.yaml
+
+### [eda-hybrid-cloud.yaml] ![community-badge]
+
+Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called `eda-rdma-net` for low latency communication between the compute nodes. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+
+Four pre-existing NFS volumes are mounted to `/home`, `/tools`, `/library` and `/scratch`. Using [FlexCache](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/cache-ontap-volumes/overview) volumes allows to bring on-premises data to Google Cloud compute, without having to manually copy the data. This enables "burst to the cloud" use cases.
+
+The deployment instructions can be found in the [README](../community/examples/eda/README.md).
+
+[eda-hybrid-cloud.yaml]: ../community/examples/eda/eda-hybrid-cloud.yaml
 
 ## Blueprint Schema
 

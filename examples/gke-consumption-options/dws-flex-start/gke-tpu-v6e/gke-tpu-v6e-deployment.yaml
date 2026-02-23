@@ -1,0 +1,64 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    # The GCS bucket used for storing terraform state
+    bucket:
+
+vars:
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: gke-tpu-v6-flex
+
+  # The GCP Region used for this deployment.
+  # example: us-east5
+  region:
+
+  # The GCP Zone used for this deployment.
+  # example: us-east5-c
+  zone:
+
+  # The number of TPU slices to create
+  num_slices: 1
+
+  # Machine type
+  machine_type: ct6e-standard-4t
+
+  # The TPU placement topology for pod slice node pool.
+  tpu_topology: 4x4
+
+  # --- FLEX START SETTINGS ---
+  # Flex Start (Dynamic Provisioning)
+  # For TPUs, max node count should be num of chips based on topology divided by
+  # num chips for the machine type (e.g. 4 for ct6e-standard-4t).
+  # Reference: https://cloud.google.com/tpu/docs/v6e
+  enable_flex_start: true
+  autoscaling_min_node_count: 0
+  autoscaling_max_node_count: 4
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The disk size of system node pool for this deployment.
+  system_node_pool_disk_size_gb:
+
+  # The disk size of v6e node pool for this deployment.
+  v6e_node_pool_disk_size_gb:

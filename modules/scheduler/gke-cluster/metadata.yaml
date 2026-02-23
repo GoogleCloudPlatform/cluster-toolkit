@@ -1,4 +1,4 @@
-# Copyright 2023 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,3 +17,11 @@ spec:
   requirements:
     services:
     - container.googleapis.com
+
+ghpc:
+  validators:
+  - validator: regex
+    inputs:
+      vars: [network_id]
+      pattern: ^projects/[^/]+/global/networks/[^/]+$
+    error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."

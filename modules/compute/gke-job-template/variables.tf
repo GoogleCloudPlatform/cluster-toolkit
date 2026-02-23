@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -140,7 +140,7 @@ variable "backoff_limit" {
   default     = 0
 }
 
-variable "random_name_sufix" {
+variable "random_name_suffix" {
   description = "Appends a random suffix to the job name to avoid clashes."
   type        = bool
   default     = true
