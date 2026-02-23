@@ -152,8 +152,9 @@ variable "gpu_operator" {
 variable "nvidia_dra_driver" {
   description = "Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes"
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "v25.3.0")
+    install          = optional(bool, false)
+    version          = optional(string, "v25.3.0")
+    accelerator_type = optional(string, "nvidia-gb200")
   })
   default = {}
 }
@@ -195,4 +196,16 @@ variable "system_node_pool_id" {
   description = "The ID of the system node pool. Used to ensure the node pool remains active during Kueue uninstallation."
   type        = string
   default     = null
+}
+
+variable "asapd_lite" {
+  description = "Install the asapd-lite daemonset for A4X-Max Bare Metal."
+  type = object({
+    install     = bool
+    config_path = string
+  })
+  default = {
+    install     = false
+    config_path = ""
+  }
 }

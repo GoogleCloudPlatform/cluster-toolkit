@@ -50,14 +50,18 @@ locals {
     }
   ]
 
+  subnet_count   = local.is_roce_metal ? 8 : length(module.vpc.subnets)
+  nic_type_val   = local.is_roce_metal ? "MRDMA" : var.nic_type
+  stack_type_val = local.is_roce_metal ? "IPV6_ONLY" : null
+
   output_subnets_gke = [
-    for i in range(length(module.vpc.subnets)) : {
+    for i in range(local.subnet_count) : {
       network            = local.network_name
-      subnetwork         = local.template_subnetworks[i].subnet_name
+      subnetwork         = local.is_roce_metal ? "default-subnet-1-${local.network_name}" : local.template_subnetworks[i].subnet_name
       subnetwork_project = var.project_id
       network_ip         = null
-      nic_type           = var.nic_type
-      stack_type         = null
+      nic_type           = local.nic_type_val
+      stack_type         = local.stack_type_val
       queue_count        = null
       access_config      = []
       ipv6_access_config = []
