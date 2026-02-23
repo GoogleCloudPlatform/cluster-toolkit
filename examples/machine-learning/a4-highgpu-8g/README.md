@@ -89,6 +89,17 @@ vars:
   number_of_vms: <RESERVATION_SIZE>
 ```
 
+### Additional ways to provision
+Cluster toolkit also supports  Spot VMs as well as reservations as ways to provision instances.
+[For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
+
+To use one of these alternative models, modify the `vars` section in the `a4high-vm-deployment.yaml` file
+Replace the line defining `a4h_reservation_name` with one of the following:
+
+* `a4h_provisioning_model: SPOT`
+
+and update `automatic_restart` policy to false in the `a4high-vm.yaml` file.
+
 ### Deploy the VMs
 
 ```bash
