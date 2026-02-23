@@ -39,7 +39,7 @@ custom_vars:
   test_persistenced: true
   partitions:
   - a3ultra
-  mounts: 
+  mounts:
   - /home
   - /gcs
   instance_labels:
