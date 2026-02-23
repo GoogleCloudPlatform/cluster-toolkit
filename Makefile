@@ -74,7 +74,7 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
-	pip install mypy==1.18.2
+	pip install mypy==1.18.2 PyYAML
 
 
 clean:

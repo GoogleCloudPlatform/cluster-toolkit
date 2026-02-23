@@ -31,7 +31,7 @@ def get_mock_vars(blueprint_file: str, predefined_vars_str: str = "", deployment
             with open(path, 'r') as f:
                 data = yaml.safe_load(f) or {}
                 return data.get('vars', {})
-        except Exception as e:
+        except (yaml.YAMLError, OSError) as e:
             print(f"Error reading {path}: {e}", file=sys.stderr)
             return {}
 
@@ -70,9 +70,10 @@ def get_mock_vars(blueprint_file: str, predefined_vars_str: str = "", deployment
         )
 
         if needs_mock:
-            if any(x in var_name for x in ["size", "count", "num_"]):
+            var_name_lower = var_name.lower()
+            if any(x in var_name_lower for x in ["size", "count", "num_"]):
                 final_mock_vars[var_name] = "1"
-            elif "enable" in var_name:
+            elif "enable" in var_name_lower:
                 final_mock_vars[var_name] = "false"
             else:
                 final_mock_vars[var_name] = "test-value"

@@ -15,6 +15,12 @@
 
 set -e -o pipefail
 
+# Ensure PyYAML is installed for get_mock_vars.py
+if ! python3 -c "import yaml" &>/dev/null; then
+	echo "PyYAML not found. Installing..."
+	pip install PyYAML --user
+fi
+
 run_test() {
 	example=$1
 	if [ -n "$2" ]; then
@@ -36,8 +42,8 @@ run_test() {
 	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_deployment_variable_not_used"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
-	# Cover the three possible starting sequences for local sources: ./ ../ /
-	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
+	# Cover local sources: ./ ../ / modules/ community/
+	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\|modules/\|community/\)'
 
 	echo "testing ${example} in ${tmpdir}"
 
@@ -171,20 +177,19 @@ for example in $TARGET_BLUEPRINTS; do
 		shopt -s nullglob
 		possible_deployments=("$dir"/*-deployment.yaml)
 		shopt -u nullglob
-		if [ ${#possible_deployments[@]} -eq 1 ]; then
-			d_base=$(basename "${possible_deployments[0]}" -deployment.yaml)
+
+		best_match=""
+		max_len=0
+		for d in "${possible_deployments[@]}"; do
+			d_base=$(basename "$d" -deployment.yaml)
 			if [[ "$base" == "$d_base"* ]]; then
-				deployment="${possible_deployments[0]}"
-			fi
-		elif [ ${#possible_deployments[@]} -gt 1 ]; then
-			for d in "${possible_deployments[@]}"; do
-				d_base=$(basename "$d" -deployment.yaml)
-				if [[ "$base" == "$d_base"* ]]; then
-					deployment="$d"
-					break
+				if [ "${#d_base}" -gt "$max_len" ]; then
+					max_len=${#d_base}
+					best_match="$d"
 				fi
-			done
-		fi
+			fi
+		done
+		[ -n "$best_match" ] && deployment="$best_match"
 	fi
 
 	JNUM=$(jobs | wc -l)
