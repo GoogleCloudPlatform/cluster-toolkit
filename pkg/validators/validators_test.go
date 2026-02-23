@@ -15,14 +15,8 @@
 package validators
 
 import (
-	"context"
 	"hpc-toolkit/pkg/config"
-	"net/http"
-	"net/http/httptest"
 	"testing"
-
-	compute "google.golang.org/api/compute/v1"
-	"google.golang.org/api/option"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -123,7 +117,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		bp := config.Blueprint{Vars: config.Dict{}.
 			With("project_id", cty.StringVal("f00b"))}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, quotaProjectOnly})
+			unusedMods, unusedVars, projectExists, apisEnabled})
 	}
 
 	{
@@ -132,7 +126,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("region", cty.StringVal("narnia"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, quotaRegion})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists})
 	}
 
 	{

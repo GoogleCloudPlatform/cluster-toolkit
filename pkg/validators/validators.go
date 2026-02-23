@@ -306,18 +306,6 @@ func defaults(bp config.Blueprint) []config.Validator {
 		})
 	}
 
-	// Quota Validator
-	if projectIDExists {
-		inputs := config.Dict{}.With("project_id", projectRef)
-		if regionExists {
-			inputs = inputs.With("region", regionRef)
-		}
-		defaults = append(defaults, config.Validator{
-			Validator: testQuotaAvailabilityName,
-			Inputs:    inputs,
-		})
-	}
-
 	return defaults
 }
 
