@@ -15,6 +15,12 @@
 
 set -e -o pipefail
 
+# Ensure PyYAML is installed for get_mock_vars.py
+if ! python3 -c "import yaml" &>/dev/null; then
+	echo "PyYAML not found. Installing..."
+	pip install PyYAML --user
+fi
+
 run_test() {
 	example=$1
 	if [ -n "$2" ]; then
@@ -24,13 +30,20 @@ run_test() {
 	fi
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
-	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
+	# Generates a short deployment name to satisfy constraints (e.g. 10 char limit for slurm_cluster_name)
+	# Logic: takes first 4 chars of filename (w/o dashes) + first 5 chars of random suffix
+	base_clean=${exampleFile%.yaml}
+	base_clean=${base_clean//-/}
+	suffix=$(basename "${tmpdir##*.}")
+	suffix=${suffix,,}
+	DEPLOYMENT="${base_clean:0:4}${suffix:0:5}"
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_machine_type_in_zone,test_reservation_exists"
+	# Skip test_deployment_variable_not_used to allow passing a broad set of mock variables
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_deployment_variable_not_used"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
-	# Cover the three possible starting sequences for local sources: ./ ../ /
-	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
+	# Cover local sources: ./ ../ / modules/ community/
+	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\|modules/\|community/\)'
 
 	echo "testing ${example} in ${tmpdir}"
 
@@ -41,9 +54,23 @@ run_test() {
 	else
 		cd "${tmpdir}"
 	fi
-	${GHPC_PATH} create "${BP_PATH}" -l ERROR \
-		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
-		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
+
+	# Predefine common variables
+	PREDEFINED_VARS="project_id=${PROJECT},deployment_name=${DEPLOYMENT},region=us-central1,zone=us-central1-a,zones=['us-central1-a'],authorized_cidr=0.0.0.0/0"
+	PREDEFINED_VARS+=",health_check_schedule='0 0 * * 0',number_of_vms=2,static_node_count=2,slurm_cluster_name=testname,a3_partition_name=testname"
+
+	# Generate all other mock variables dynamically
+	# We use python to parse the blueprint and fill in the rest
+	DEPLOYMENT_FILE=""
+	if [ -n "$2" ]; then
+		DEPLOYMENT_FILE="${cwd}/$2"
+	fi
+	MOCK_VARS=$("${cwd}/tools/validate_configs/get_mock_vars.py" "${cwd}/${example}" "${PREDEFINED_VARS}" "${DEPLOYMENT_FILE}")
+	echo "DEBUG: MOCK_VARS for ${exampleFile}: ${MOCK_VARS}"
+
+	${GHPC_PATH} create "${BP_PATH}" "${deployment_args[@]}" -l ERROR \
+		--skip-validators="${VALIDATORS_TO_SKIP}" \
+		--vars="${MOCK_VARS}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with gcluster for ${exampleFile}"
 			exit 1
@@ -57,10 +84,8 @@ run_test() {
 	}
 	for folder in */; do
 		cd "$folder"
-		pkrdirs=()
-		while IFS= read -r -d $'\n'; do
-			pkrdirs+=("$REPLY")
-		done < <(find . -name "*.pkr.hcl" -printf '%h\n' | sort -u)
+		# Use mapfile (readarray) for cleaner array reading (Bash 4.0+)
+		mapfile -t pkrdirs < <(find . -name "*.pkr.hcl" -printf '%h\n' | sort -u)
 		if [ -f 'main.tf' ]; then
 			tfpw=$(pwd)
 			terraform init -no-color -backend=false >"${exampleFile}.init" ||
@@ -96,31 +121,16 @@ run_test() {
 }
 
 check_background() {
-	# "wait -n" was introduced in bash 4.3; support CentOS 7: 4.2 and MacOS: 3.2!
-	if [[ "${BASH_VERSINFO[0]}" -ge 5 || "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 3 ]]; then
-		if ! wait -n; then
-			wait
-			echo "*** ERROR: a test failed. Exiting with status 1."
-			exit 1
-
-		fi
-	else
-		failed=0
-		for pid in "${pids[@]}"; do
-			if ! wait "$pid"; then
-				failed=1
-			fi
-		done
-		pids=()
-
-		if [[ $failed -eq 1 ]]; then
-			echo "*** ERROR: a test failed. Exiting with status 1."
-			exit 1
-		fi
+	# "wait -n" is available since Bash 4.3. We assume a reasonably modern environment.
+	if ! wait -n; then
+		wait
+		echo "*** ERROR: a test failed. Exiting with status 1."
+		exit 1
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/machine-learning/build-service-images/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'examples/machine-learning/a4x-highgpu-4g/*' -not -path 'examples/machine-learning/a4x-maxgpu-4g-metal/*' -not -path 'community/examples/gke-tpu-v6e/*' -not -path 'community/examples/xpk-n2-filestore/*' -not -path 'examples/gke-a4x/*' -not -path 'examples/science/af3-slurm/*' -not -path 'examples/gke-h4d/*' -not -path 'community/examples/hpc-slinky/*' -not -path 'examples/gke-g4/*' -not -path 'community/examples/slurm-gke/*' -not -path 'examples/hpc-slurm-h4d/*' -not -path 'examples/machine-learning/a3-highgpu-8g/*' -not -path 'examples/netapp-volumes.yaml' -not -path 'examples/gke-tpu-7x/*' -not -path 'examples/gke-tpu-v6e/*' -not -path 'examples/gke-a4x-max-bm/*')
+TARGET_BLUEPRINTS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path "*/build-service-images/*")
+
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
@@ -134,10 +144,53 @@ cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
 pids=()
-for example in $CONFIGS; do
+for example in $TARGET_BLUEPRINTS; do
 	if [[ ${EXCLUDE_EXAMPLE[$example]+_} ]]; then
 		echo "Skipping example: $example"
 		continue
+	fi
+
+	# Skip deployment files; they will be used by the blueprint loop
+	if [[ "$example" == *"-deployment.yaml" || "$example" == *"/deployment.yaml" ]]; then
+		continue
+	fi
+	# Skip if it doesn't look like a blueprint
+	if ! grep -q "^blueprint_name:" "$example" && ! grep -q "^---" "$example"; then
+		echo "Skipping non-blueprint: $example"
+		continue
+	fi
+	# Even if it has ---, ensure it's not just a k8s manifest
+	if grep -q "kind:" "$example" && ! grep -q "blueprint_name:" "$example"; then
+		echo "Skipping manifest: $example"
+		continue
+	fi
+
+	dir=$(dirname "$example")
+	base=$(basename "$example" .yaml)
+
+	# Handle cases like a3mega-slurm-gcsfuse-lssd-blueprint.yaml sharing a3mega-slurm-deployment.yaml
+	# or blueprints named without '-blueprint' suffix.
+	prefix=${base%-blueprint}
+	deployment="$dir/${prefix}-deployment.yaml"
+
+	if [ ! -f "$deployment" ]; then
+		# Try to find any deployment file in the same directory if the specific one doesn't exist
+		shopt -s nullglob
+		possible_deployments=("$dir"/*-deployment.yaml)
+		shopt -u nullglob
+
+		best_match=""
+		max_len=0
+		for d in "${possible_deployments[@]}"; do
+			d_base=$(basename "$d" -deployment.yaml)
+			if [[ "$base" == "$d_base"* ]]; then
+				if [ "${#d_base}" -gt "$max_len" ]; then
+					max_len=${#d_base}
+					best_match="$d"
+				fi
+			fi
+		done
+		[ -n "$best_match" ] && deployment="$best_match"
 	fi
 
 	JNUM=$(jobs | wc -l)
@@ -145,7 +198,12 @@ for example in $CONFIGS; do
 	if [ "$JNUM" -ge "$NPROCS" ]; then
 		check_background
 	fi
-	run_test "$example" &
+
+	if [ -f "$deployment" ]; then
+		run_test "$example" "$deployment" &
+	else
+		run_test "$example" &
+	fi
 	pids+=("$!")
 done
 JNUM=$(jobs | wc -l)
@@ -153,7 +211,5 @@ while [ "$JNUM" -gt 0 ]; do
 	check_background
 	JNUM=$(jobs | wc -l)
 done
-
-run_test "examples/science/af3-slurm/af3-slurm.yaml" "examples/science/af3-slurm/af3-slurm-deployment.yaml"
 
 echo "All configs have been validated successfully (passed)."
