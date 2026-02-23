@@ -23,7 +23,7 @@ vars:
   zone: ## A4X Reservation Zone ##
   a4x_cluster_size: # supply cluster size
   # Image settings
-  build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-570
+  build_from_image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20260218
   build_from_image_project: ubuntu-os-accelerator-images
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
@@ -253,7 +253,7 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.build_from_image_family)
+      source_image: $(vars.build_from_image)
       source_image_project_id: [$(vars.build_from_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
