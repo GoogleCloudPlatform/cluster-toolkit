@@ -37,7 +37,6 @@ steps:
   name: gcr.io/cloud-builders/gcloud
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-onspot-slurm.yaml"
 
-
 - id: ml-a3-ultragpu-onspot-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
@@ -84,7 +83,6 @@ steps:
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
-      --extra-vars="time_to_live=$${TTL_LABEL}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-slurm.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
