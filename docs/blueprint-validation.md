@@ -59,6 +59,13 @@ Each validator is described below:
     region
   * Common failure: changing 1 value but not the other
   * Manual test: `gcloud compute regions describe us-central1 --format="text(zones)" --project $(vars.project_id)`
+* `test_machine_type_in_zone`
+  * Inputs: `project_id` (string), `zone` (string), `machine_type` (string)
+  * PASS: If the machine type is available in the specified zone and project.
+  * SKIP (Soft Warning): If the Compute Engine API is disabled or the credentials lack `compute.machineTypes.get` permissions, the validator prints a warning and the check is skipped.
+  * FAIL: If the machine type is invalid or unavailable in that zone.
+  * Note: To explicitly verify multiple machine types in a zone, add this validator to the blueprint multiple times.
+  * Manual test: `gcloud compute machine-types describe $(vars.machine_type) --zone $(vars.zone) --project $(vars.project_id)`
 * `test_module_not_used`
   * Inputs: none; reads whole blueprint
   * PASS: if all instances of use keyword pass matching variables
@@ -100,11 +107,31 @@ validators:
       project_id: $(vars.project_id)
       region: $(vars.region)
       zone: $(vars.zone)
+  - validator: test_machine_type_in_zone
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+      machine_type: c2-standard-60  # any machine type to verify in the zone
 ```
 
 ## Module-level (Metadata) Validators
 
 Module-level validators are defined directly within a module's `metadata.yaml` file under the `ghpc.validators` field. These are primarily used for early validation of module-specific input variables before any infrastructure is provisioned.
+
+By default, a failure in a module-level validator will stop execution and return an error. You can make a validator optional by setting the `level` field to `warning`. In this case, a failure will print a warning message but allow the toolkit to continue.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: range
+    inputs:
+      vars: [versions]
+      min: 1
+    error_message: "The 'versions' list must contain at least one version."
+    level: warning # Optional: failure issues a warning instead of an error
+```
 
 ### Regex Validator
 The `regex` validator ensures that input variables match a specific regular expression pattern. This is commonly used to enforce Google Cloud naming conventions or specific software requirements (like Slurm partition name lengths).
@@ -119,6 +146,23 @@ ghpc:
         vars: [partition_name]
         pattern: "^[a-z0-9]{1,10}$"
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
+```
+
+### Allowed Enum Validator
+The `allowed_enum` validator ensures that user-provided settings conform to a predefined list of allowed values (enums). Supports optional `case_sensitive` (defaults to true) and `allow_null` (defaults to false) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [network_routing_mode]
+      allowed: [GLOBAL, REGIONAL]
+      case_sensitive: false
+      allow_null: false
+    error_message: "'network_routing_mode' must be GLOBAL or REGIONAL."
 ```
 
 ### Range Validator
@@ -136,6 +180,68 @@ ghpc:
       max: 8
       length_check: true # enables validation of the list's length rather than the individual values it contains.
     error_message: "The 'versions' list must contain at least one version."
+```
+
+### Exclusive Validator
+The `exclusive` validator ensures that at most one of the specified variables is set. It treats variables as 'set' if they are non-empty strings, non-zero numbers, true booleans, or non-empty lists/maps.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+validators:
+  - validator: exclusive
+    inputs:
+      vars: [preemptible, reserved]
+    error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
+```
+
+### Required Validator
+The `required` validator ensures that a specific set of variables are either present or absent depending on the deprecated flag. It is used to enforce mandatory inputs or to block restricted and deprecated configurations.
+
+vars (list of strings): The list of variable names to check.
+deprecated (boolean, optional): If true, the validator checks that the specified variables are not set. Defaults to false (checks that variables are set).
+
+**Example: Enforcing required variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [vpc_network_name, subnetwork_name]
+    error_message: "Network details must be provided."
+```
+
+**Example: Deprecated variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [legacy_option]
+      deprecated: true
+    error_message: "The 'legacy_option' is no longer supported."
+```
+
+### Conditional Validator
+The `conditional` validator enforces that a dependent variable is set or matches a specific value only when a trigger variable condition is met. This is useful for cross-variable dependencies (e.g., if feature X is enabled, setting Y is required).
+
+If trigger_value or dependent_value is omitted, the validator checks if the variable is simply "set" (non-null, true bool, positive integer, and non-empty list/tuple/map).
+If a value is provided, it must match exactly. This also supports matching against null to check if a variable is explicitly omitted.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional
+      inputs:
+        trigger: enable_hybrid
+        trigger_value: true
+        dependent: slurm_control_host
+      error_message: "slurm_control_host is required when enable_hybrid is true."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.
@@ -203,6 +309,8 @@ They can be set to 3 differing levels of behavior using the command-line
   which validator(s) failed and how.
 * `"IGNORE"`: Do not execute any validators, even if they are explicitly defined
   in a `validators` block or the default set is implicitly added.
+
+>**Note:** The individual `level: warning` setting allows specific rules to be optional even when the global `--validation-level` is set to `ERROR`. However, the global `--validation-level IGNORE` flag will skip all validators regardless of their individual settings.
 
 For example, this command will set all validators to `WARNING` behavior:
 

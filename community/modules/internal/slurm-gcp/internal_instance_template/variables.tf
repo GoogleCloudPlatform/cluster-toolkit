@@ -250,6 +250,7 @@ variable "additional_networks" {
     subnetwork_project = string
     network_ip         = string
     nic_type           = string
+    stack_type         = optional(string)
     access_config = list(object({
       nat_ip       = string
       network_tier = string
@@ -394,5 +395,11 @@ variable "provisioning_model" {
 variable "reservation_affinity" {
   description = "Specifies the reservations that this instance can consume from."
   type        = object({ type = string })
+  default     = null
+}
+
+variable "confidential_instance_type" {
+  type        = string
+  description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
   default     = null
 }

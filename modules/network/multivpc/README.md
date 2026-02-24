@@ -2,7 +2,7 @@
 
 This module accomplishes the following:
 
-* Creates 2 to 8 [VPC networks][vpc]
+* Creates 1 to 8 [VPC networks][vpc]
   * Each VPC contains exactly 1 subnetwork
   * Each subnetwork contains distinct IP address ranges
 * Outputs the `additional_networks` parameter, which is compatible with Slurm
@@ -76,7 +76,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.4.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
 

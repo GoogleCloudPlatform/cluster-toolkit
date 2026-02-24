@@ -40,7 +40,7 @@ locals {
   }
 }
 
-resource "google_storage_bucket_object" "parition_config" {
+resource "google_storage_bucket_object" "partition_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${var.slurm_bucket_dir}/partition_configs/${var.partition_name}.yaml"
   content = yamlencode(local.partition)

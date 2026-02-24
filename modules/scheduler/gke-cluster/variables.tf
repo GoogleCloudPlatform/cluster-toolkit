@@ -221,6 +221,12 @@ variable "enable_node_local_dns_cache" {
   default     = false
 }
 
+variable "enable_shielded_nodes" {
+  description = "Enable Shielded Nodes features on all nodes in this cluster."
+  type        = bool
+  default     = true
+}
+
 variable "system_node_pool_enabled" {
   description = "Create a system node pool."
   type        = bool
@@ -422,7 +428,7 @@ variable "enable_multi_networking" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster."
+  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster."
   default     = []
   type = list(object({
     network            = string

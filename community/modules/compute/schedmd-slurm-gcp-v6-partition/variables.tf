@@ -17,8 +17,8 @@ variable "partition_name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]*)$", var.partition_name))
-    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9]*)$'."
+    condition     = can(regex("^[a-z](?:[a-z0-9-]*)$", var.partition_name))
+    error_message = "Variable 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9-]*)$'."
   }
 }
 
@@ -77,6 +77,7 @@ variable "nodeset" {
     disk_size_gb                     = optional(number)
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
+    confidential_instance_type       = optional(string)
     enable_placement                 = optional(bool, false)
     placement_max_distance           = optional(number, null)
     enable_oslogin                   = optional(bool, true)

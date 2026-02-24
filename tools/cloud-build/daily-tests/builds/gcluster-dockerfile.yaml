@@ -15,6 +15,9 @@
 ---
 tags: [dockerfile, m.pre-existing-vpc, m.vm-instance, vm]
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 3600s  # 1hr
 steps:
 - id: check_for_running_build

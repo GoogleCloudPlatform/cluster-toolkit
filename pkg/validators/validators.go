@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
@@ -55,6 +56,8 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testMachineTypeInZone             = "test_machine_type_in_zone"
+	testReservationExistsName         = "test_reservation_exists"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -66,6 +69,8 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
+		testReservationExistsName:         testReservationExists,
 	}
 }
 
@@ -148,6 +153,10 @@ func validateBlueprintWithMetadata(bp config.Blueprint) error {
 
 				if err := validator.Validate(bp, mod, rule, group, j); err != nil {
 					// The validator is responsible for creating a BpError with the correct path.
+					if rule.Level == "warning" {
+						logging.Error("WARNING: validation failed for module %q: %v", mod.ID, err)
+						continue
+					}
 					return err
 				}
 			}
@@ -237,7 +246,28 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"project_id": projectRef,
 				"zone":       zoneRef,
 			}),
+		}, config.Validator{
+			Validator: testMachineTypeInZone,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
 		})
+		for _, varName := range bp.Vars.Keys() {
+			if resKeyRegex.MatchString(varName) {
+				resRef := config.GlobalRef(varName).AsValue()
+
+				// Automatically add a reservation check for every detected reservation variable
+				defaults = append(defaults, config.Validator{
+					Validator: testReservationExistsName,
+					Inputs: config.NewDict(map[string]cty.Value{
+						"project_id":       projectRef,
+						"zone":             zoneRef,
+						"reservation_name": resRef,
+					}),
+				})
+			}
+		}
 	}
 
 	if projectIDExists && regionExists && zoneExists {

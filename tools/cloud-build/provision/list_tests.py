@@ -39,9 +39,9 @@ import itertools
 # not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
 # for the configuration.
 TO_SKIP = frozenset([
-    "ofe-deployment", 
-    "ml-a3-ultragpu-slurm", 
-    "gke-a3-ultragpu", 
+    "ofe-deployment",
+    "ml-a3-ultragpu-slurm",
+    "gke-a3-ultragpu",
     "ml-a3-ultragpu-jbvms"
 ])
 
@@ -54,12 +54,15 @@ TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     ((
         "ml-a4-highgpu-slurm",
-        "ml-a4-highgpu-onspot-slurm",
         "gke-a4"
     ), 2*60),
     ((
-        "ml-a3-ultragpu-onspot-slurm", 
-        "ml-a3-ultragpu-onspot-jbvms", 
+        "ml-a4-highgpu-onspot-slurm",
+        "gke-a4-onspot"
+    ), 2*60),
+    ((
+        "ml-a3-ultragpu-onspot-slurm",
+        "ml-a3-ultragpu-onspot-jbvms",
         "gke-a3-ultragpu-onspot"
     ), 2*60),
     ((
@@ -69,8 +72,12 @@ TEMPORAL_CONSTAINTS = [
         "gke-a3-megagpu-onspot"
     ), 1*60),
     ((
-        "ml-a3-highgpu-slurm", 
+        "ml-a3-highgpu-slurm",
         "gke-a3-highgpu"
+    ), 1*60),
+    ((
+        "ml-a3-highgpu-onspot-slurm",
+        "gke-a3-highgpu-onspot"
     ), 1*60),
 ]
 # TODO:
@@ -103,8 +110,8 @@ def check_resource_constraints(schedule: dict[str, int]) -> bool:
 
 
 def crontab(schedule: dict[str, int]) -> dict[str, str]:
-    return { # test: "{minutes} {hours} * * MON-FRI"
-        k: f"{t % 60} {t // 60} * * MON-FRI" for k, t in schedule.items()}
+    return { # test: "{minutes} {hours} * * MON,TUE,THU,FRI"
+        k: f"{t % 60} {t // 60} * * MON,TUE,THU,FRI" for k, t in schedule.items()}
 
 MAX_TRIES = 102000
 if __name__ == "__main__":
@@ -118,7 +125,7 @@ if __name__ == "__main__":
 
     assert args.start_time < args.end_time
     builds = list_builds()
-    
+
     for _ in range(MAX_TRIES):
         schedule = schedule_evenly(builds, args.start_time, args.end_time)
         if check_resource_constraints(schedule):

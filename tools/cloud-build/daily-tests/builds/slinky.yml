@@ -22,6 +22,9 @@ tags:
 - m.vpc
 - m.slinky
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -40,10 +43,14 @@ steps:
   - |
     set -x -e
     cd /workspace
-    gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-    unzip -o gcluster-bundle.zip
-    # Grant execution permissions to the binary
-    chmod +x gcluster
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=community/examples/hpc-slinky/hpc-slinky.yaml

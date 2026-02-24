@@ -114,7 +114,7 @@ locals {
     }
   ]
 
-  suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
+  suffix = var.random_name_suffix ? "-${random_id.resource_name_suffix.hex}" : ""
   machine_family_node_selector = var.machine_family != null ? [{
     key   = "cloud.google.com/machine-family"
     value = var.machine_family

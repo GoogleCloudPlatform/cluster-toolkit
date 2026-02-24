@@ -3,7 +3,7 @@
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
 
 ## Providers
@@ -51,5 +51,5 @@
 
 | Name | Description |
 |------|-------------|
-| <a name="output_nodeset_name"></a> [nodeset\_name](#output\_nodeset\_name) | Name of the new Slinky nodset |
+| <a name="output_nodeset_name"></a> [nodeset\_name](#output\_nodeset\_name) | Name of the new Slinky nodeset |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

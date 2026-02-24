@@ -109,17 +109,17 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.2 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.13 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.13 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.2 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.13 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.13 |
 
 ## Modules
 
@@ -142,7 +142,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_authenticator_security_group"></a> [authenticator\_security\_group](#input\_authenticator\_security\_group) | The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com | `string` | `null` | no |
 | <a name="input_autoscaling_profile"></a> [autoscaling\_profile](#input\_autoscaling\_profile) | (Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE\_UTILIZATION. | `string` | `"OPTIMIZE_UTILIZATION"` | no |
 | <a name="input_cloud_dns_config"></a> [cloud\_dns\_config](#input\_cloud\_dns\_config) | Configuration for Using Cloud DNS for GKE. <br/><br/>  additive\_vpc\_scope\_dns\_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster\_dns = "CLOUD\_DNS" and cluster\_dns\_scope = "CLUSTER\_SCOPE" must both be set as well.<br/>  cluster\_dns: Which in-cluster DNS provider should be used. PROVIDER\_UNSPECIFIED (default) or PLATFORM\_DEFAULT or CLOUD\_DNS.<br/>  cluster\_dns\_scope: The scope of access to cluster DNS records. DNS\_SCOPE\_UNSPECIFIED (default) or CLUSTER\_SCOPE or VPC\_SCOPE.<br/>  cluster\_dns\_domain: The suffix used for all cluster service records. | <pre>object({<br/>    additive_vpc_scope_dns_domain = optional(string)<br/>    cluster_dns                   = optional(string, "PROVIDER_UNSPECIFIED")<br/>    cluster_dns_scope             = optional(string, "DNS_SCOPE_UNSPECIFIED")<br/>    cluster_dns_domain            = optional(string)<br/>  })</pre> | <pre>{<br/>  "additive_vpc_scope_dns_domain": null,<br/>  "cluster_dns": "PROVIDER_UNSPECIFIED",<br/>  "cluster_dns_domain": null,<br/>  "cluster_dns_scope": "DNS_SCOPE_UNSPECIFIED"<br/>}</pre> | no |
@@ -169,6 +169,7 @@ limitations under the License.
 | <a name="input_enable_private_ipv6_google_access"></a> [enable\_private\_ipv6\_google\_access](#input\_enable\_private\_ipv6\_google\_access) | The private IPv6 google access type for the VMs in this subnet. | `bool` | `true` | no |
 | <a name="input_enable_private_nodes"></a> [enable\_private\_nodes](#input\_enable\_private\_nodes) | (Beta) Whether nodes have internal IP addresses only. | `bool` | `true` | no |
 | <a name="input_enable_ray_operator"></a> [enable\_ray\_operator](#input\_enable\_ray\_operator) | The status of the Ray operator addon, This feature enables Kubernetes APIs for managing and scaling Ray clusters and jobs. You control and are responsible for managing ray.io custom resources in your cluster. This feature is not compatible with GKE clusters that already have another Ray operator installed. Supports clusters on Kubernetes version 1.29.8-gke.1054000 or later. | `bool` | `false` | no |
+| <a name="input_enable_shielded_nodes"></a> [enable\_shielded\_nodes](#input\_enable\_shielded\_nodes) | Enable Shielded Nodes features on all nodes in this cluster. | `bool` | `true` | no |
 | <a name="input_gcp_public_cidrs_access_enabled"></a> [gcp\_public\_cidrs\_access\_enabled](#input\_gcp\_public\_cidrs\_access\_enabled) | Whether the cluster master is accessible via all the Google Compute Engine Public IPs. To view this list of IP addresses look here https://cloud.google.com/compute/docs/faq#find_ip_range | `bool` | `false` | no |
 | <a name="input_k8s_network_names"></a> [k8s\_network\_names](#input\_k8s\_network\_names) | Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values. | <pre>object({<br/>    gvnic_prefix      = optional(string, "")<br/>    gvnic_start_index = optional(number, 1)<br/>    gvnic_postfix     = optional(string, "")<br/>    rdma_prefix       = optional(string, "")<br/>    rdma_start_index  = optional(number, 0)<br/>    rdma_postfix      = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "gvnic_postfix": "",<br/>  "gvnic_prefix": "gvnic-",<br/>  "gvnic_start_index": 1,<br/>  "rdma_postfix": "",<br/>  "rdma_prefix": "rdma-",<br/>  "rdma_start_index": 0<br/>}</pre> | no |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name to use with the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |
@@ -213,8 +214,9 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
-| <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations. |
+| <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

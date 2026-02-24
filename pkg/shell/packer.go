@@ -56,11 +56,12 @@ func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error 
 
 	// capture stdout/stderr; print to screen in real-time or upon error
 	var wg sync.WaitGroup
-	var outBuf io.ReadWriter
-	var errBuf io.ReadWriter
+	var outBuf io.Writer
+	var errBuf io.Writer
+
 	if printToScreen {
-		outBuf = os.Stdout
-		errBuf = os.Stderr
+		outBuf = newTimestampWriter(os.Stdout)
+		errBuf = newTimestampWriter(os.Stderr)
 	} else {
 		outBuf = bytes.NewBuffer([]byte{})
 		errBuf = bytes.NewBuffer([]byte{})
@@ -79,8 +80,14 @@ func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error 
 
 	if err := cmd.Wait(); err != nil {
 		if !printToScreen {
-			io.Copy(os.Stdout, outBuf)
-			io.Copy(os.Stderr, errBuf)
+			if out, ok := outBuf.(*bytes.Buffer); ok {
+				// Explicitly ignore the error to satisfy the linter
+				_, _ = io.Copy(os.Stdout, out)
+			}
+			if errB, ok := errBuf.(*bytes.Buffer); ok {
+				// Explicitly ignore the error to satisfy the linter
+				_, _ = io.Copy(os.Stderr, errB)
+			}
 		}
 		return err
 	}

@@ -39,11 +39,15 @@ README
    ```
 
    This will run an example of training a 5B parameter GPT3 model for 10 steps
-   using mock data as the input.
+   using mock data as the input. Note: Please update `NUM_NODES` to
+   actual number of nodes in the deployment.
 
    ```shell
    cd launcher_scripts
-   mkdir data
+   mkdir -p data/bpe
+
+   wget https://huggingface.co/gpt2/resolve/main/vocab.json -O ./data/bpe/vocab.json
+   wget https://huggingface.co/gpt2/resolve/main/merges.txt -O ./data/bpe/merges.txt
 
    MAX_STEPS=10
    NUM_NODES=8
@@ -52,9 +56,8 @@ README
        launcher_scripts_path=${PWD} \
        stages=[training] \
        training=gpt3/5b \
-       env_vars.TRANSFORMERS_OFFLINE=0 \
        container=../nemofw+tcpxo-24.12.sqsh \
-       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64] \
+       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64,/sys/bus/pci] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \

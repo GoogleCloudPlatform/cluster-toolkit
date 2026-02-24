@@ -114,10 +114,9 @@ variable "apply_manifests" {
 
 
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. If `wait` is true, the installation will wait for resources to be ready. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    wait                 = optional(bool, false)
     version              = optional(string, "0.13.3")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
@@ -126,7 +125,7 @@ variable "kueue" {
 }
 
 variable "gke_cluster_exists" {
-  description = "A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations."
+  description = "A static flag that signals to downstream modules that a cluster has been created."
   type        = bool
   default     = false
 }
@@ -153,8 +152,9 @@ variable "gpu_operator" {
 variable "nvidia_dra_driver" {
   description = "Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes"
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "v25.3.0")
+    install          = optional(bool, false)
+    version          = optional(string, "v25.3.0")
+    accelerator_type = optional(string, "nvidia-gb200")
   })
   default = {}
 }
@@ -189,5 +189,23 @@ variable "gib" {
       version           = ""
       accelerator_count = 0
     }
+  }
+}
+
+variable "system_node_pool_id" {
+  description = "The ID of the system node pool. Used to ensure the node pool remains active during Kueue uninstallation."
+  type        = string
+  default     = null
+}
+
+variable "asapd_lite" {
+  description = "Install the asapd-lite daemonset for A4X-Max Bare Metal."
+  type = object({
+    install     = bool
+    config_path = string
+  })
+  default = {
+    install     = false
+    config_path = ""
   }
 }

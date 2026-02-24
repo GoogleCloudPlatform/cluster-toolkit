@@ -22,6 +22,6 @@ ghpc:
   - validator: range
     inputs:
       vars: [network_count]
-      min: 2
+      min: 1
       max: 8
-    error_message: "The 'network_count' must be between 2 and 8. Use the standard Toolkit module at 'modules/network/vpc' for count = 1."
+    error_message: "The 'network_count' must be between 1 and 8."
