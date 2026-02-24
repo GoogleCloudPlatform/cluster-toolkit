@@ -76,6 +76,10 @@ steps:
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
 
+    # Calculate Time-To-Live label (Current UTC time + 4 hours)
+    TTL_LABEL=$(date -u -d '+4 hours' +'%Y-%m-%d_%H-%M')
+    sed -i "/^vars:/a \  labels:\n    time-to-live: \"$$TTL_LABEL\"" $${BLUEPRINT}
+
     ENABLE_SPOT="true"
     SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-onspot-slurm.yml"
     if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
