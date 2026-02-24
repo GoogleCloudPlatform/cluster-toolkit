@@ -8,11 +8,17 @@ see:
 
 Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
-Example (deploy only the primary group for this blueprint):
+### Additional ways to provision
+Cluster toolkit also supports DWS Flex-Start, Spot VMs, as well as reservations as ways to provision instances.
 
-```bash
-./gcluster deploy -d a4high-slurm-deployment.yaml a4high-slurm-blueprint.yaml --only primary
-```
+[For more information on DWS Flex-Start in Slurm](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
+[For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
+
+To use one of these alternative models, modify the `vars` section in the `a4high-slurm-deployment.yaml` file.
+Replace the line defining `a4h_reservation_name` with one of the following:
+
+* `a4h_enable_spot_vm: true` (for Spot VMs)
+* `a4h_dws_flex_enabled: true` (for DWS Flex-Start)
 
 ### Cloud Storage FUSE
 
@@ -84,22 +90,28 @@ vars:
 ```
 
 ### Additional ways to provision
-Cluster toolkit also supports DWS Flex-Start, Spot VMs, as well as reservations as ways to provision instances.
-
-[For more information on DWS Flex-Start in Slurm](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
+Cluster toolkit also supports  Spot VMs as well as reservations as ways to provision instances.
 [For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
 
-We provide ways to enable the alternative provisioning models in the
-`a4high-slurm-deployment.yaml` file.
+To use one of these alternative models, modify the `vars` section in the `a4high-vm-deployment.yaml` file
+Replace the line defining `a4h_reservation_name` with one of the following:
 
-To make use of these other models, replace `a4h_reservation_name` in the
-deployment file with the variable of choice below.
+* `a4h_provisioning_model: SPOT`
 
-`a4h_enable_spot_vm: true` for spot or `a4h_dws_flex_enabled: true` for DWS Flex-Start.
+and update `automatic_restart` policy to false in the `a4high-vm.yaml` file.
 
 ### Deploy the VMs
 
 ```bash
 #!/bin/bash
-./gcluster deploy -d a4high-vm-deployment.yaml a4high-vm.yaml --auto-approve
+./gcluster deploy -d examples/machine-learning/a4-highgpu-8g/a4high-vm-deployment.yaml examples/machine-learning/a4-highgpu-8g/a4high-vm.yaml --auto-approve
 ```
+
+## Clean Up
+To destroy all resources created by the blueprint, run the following command:
+
+```sh
+./gcluster destroy DEPLOYMENT_NAME
+```
+
+Replace `DEPLOYMENT_NAME` with the `deployment_name` you specified in your deployment file.
