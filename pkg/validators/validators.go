@@ -58,6 +58,7 @@ const (
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
 	testMachineTypeInZone             = "test_machine_type_in_zone"
 	testReservationExistsName         = "test_reservation_exists"
+	testDiskTypeInZone                = "test_disk_type_in_zone"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -71,6 +72,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
 		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 		testReservationExistsName:         testReservationExists,
+		testDiskTypeInZone:                testDiskTypeInZoneAvailability,
 	}
 }
 
@@ -248,6 +250,12 @@ func defaults(bp config.Blueprint) []config.Validator {
 			}),
 		}, config.Validator{
 			Validator: testMachineTypeInZone,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		}, config.Validator{
+			Validator: testDiskTypeInZone,
 			Inputs: config.NewDict(map[string]cty.Value{
 				"project_id": projectRef,
 				"zone":       zoneRef,

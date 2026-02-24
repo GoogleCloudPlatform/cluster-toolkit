@@ -26,7 +26,7 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_machine_type_in_zone,test_reservation_exists"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
