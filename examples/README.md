@@ -23,6 +23,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
@@ -62,6 +63,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
+  * [gke-a4](#gke-a4-) ![core-badge]
+  * [gke-a4x](#gke-a4x-) ![core-badge]
+  * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
@@ -403,6 +407,27 @@ image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
+
+### [ml-slurm-g4.yaml] ![core-badge]
+
+This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads.
+
+Before deploying the blueprint, ensure you are utilizing one of the provision models specified within the blueprint.
+
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/ml-slurm-g4.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy g4-ml-example
+```
+
+When you are done, clean up the resources:
+
+```text
+./gcluster destroy g4-ml-example
+```
+
+[ml-slurm-g4.yaml]: ../examples/ml-slurm-g4.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -1625,6 +1650,24 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
 
 [gke-g4]: ../examples/gke-g4
+
+### [gke-a4] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-a4-vms-powered-by-nvidia-b200-gpu-aka-blackwell). The deployment instructions can be found in the [README](/examples/gke-a4/README.md).
+
+[gke-a4]: ../examples/gke-a4
+
+### [gke-a4x] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found [here](https://cloud.google.com/blog/products/compute/new-a4x-vms-powered-by-nvidia-gb200-gpus). The deployment instructions can be found in the [README](/examples/gke-a4x/README.md).
+
+[gke-a4x]: ../examples/gke-a4x
+
+### [gke-a4x-max-bm] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found [here](https://cloud.google.com/blog/products/compute/now-shipping-a4x-max-vertex-ai-training-and-more). The deployment instructions can be found in the [README](/examples/gke-a4x-max-bm/README.md).
+
+[gke-a4x-max-bm]: ../examples/gke-a4x-max-bm
 
 ### [netapp-volumes.yaml] ![core-badge]
 
