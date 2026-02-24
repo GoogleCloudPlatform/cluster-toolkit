@@ -548,6 +548,13 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		c.Check(err, IsNil)
 		c.Check(s, Matches, `^\./modules/y-\w\w\w\w$`)
 	}
+	{ // equivalent paths produce same hash after cleaning
+		m1 := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}
+		m2 := config.Module{Kind: config.TerraformKind, Source: "./modules/x/z/../y"}
+		s1, _ := DeploymentSource(m1)
+		s2, _ := DeploymentSource(m2)
+		c.Check(s1, Equals, s2)
+	}
 }
 
 func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
