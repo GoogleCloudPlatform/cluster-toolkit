@@ -855,10 +855,10 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 	}
 
 	// Valid slurm_cluster_name examples
-	c.Check(h(cty.StringVal("a")), IsNil)          // single lowercase letter
-	c.Check(h(cty.StringVal("abc123")), IsNil)     // letters and numbers
-	c.Check(h(cty.StringVal("slurm1")), IsNil)     // typical name
-	c.Check(h(cty.StringVal("a123456789")), IsNil) // max length (10 chars)
+	c.Check(h(cty.StringVal("a")), IsNil)                    // single lowercase letter
+	c.Check(h(cty.StringVal("abc123")), IsNil)               // letters and numbers
+	c.Check(h(cty.StringVal("slurm-cluster")), IsNil)        // hyphens
+	c.Check(h(cty.StringVal("a-123456789012345678")), IsNil) // 20 chars
 
 	{ // Is slurm_cluster_name an empty string?
 		err := h(cty.StringVal(""))
@@ -872,10 +872,10 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 		c.Check(err, ErrorMatches, ".*not.*string.*")
 	}
 
-	{ // Is slurm_cluster_name longer than 10 characters?
-		err := h(cty.StringVal("slurm12345678"))
+	{ // Is slurm_cluster_name longer than 20 characters? (Updated from 10)
+		err := h(cty.StringVal("slurm-12345678901234567890"))
 		c.Check(errors.As(err, &e), Equals, true)
-		c.Check(err, ErrorMatches, ".*between 1 and 10 characters.*")
+		c.Check(err, ErrorMatches, ".*between 1 and 20 characters.*")
 	}
 
 	{ // Does slurm_cluster_name contain uppercase letters?
@@ -890,35 +890,36 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 		c.Check(err, ErrorMatches, ".*start with a lowercase letter.*")
 	}
 
-	{ // Does slurm_cluster_name contain special characters (dash)?
-		err := h(cty.StringVal("slurm-gke"))
+	{ // Does slurm_cluster_name start with a hyphen? (Invalid based on ^[a-z])
+		err := h(cty.StringVal("-slurm"))
 		c.Check(errors.As(err, &e), Equals, true)
-		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+		c.Check(err, ErrorMatches, ".*start with a lowercase letter.*")
 	}
 
 	{ // Does slurm_cluster_name contain special characters (underscore)?
 		err := h(cty.StringVal("slurm_gke"))
 		c.Check(errors.As(err, &e), Equals, true)
-		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+		// Updated message to include "hyphens"
+		c.Check(err, ErrorMatches, ".*lowercase letters, numbers and hyphens.*")
 	}
 
 	{ // Does slurm_cluster_name contain special characters (period)?
 		err := h(cty.StringVal("slurm.gke"))
 		c.Check(errors.As(err, &e), Equals, true)
-		c.Check(err, ErrorMatches, ".*lowercase letters and numbers.*")
+		c.Check(err, ErrorMatches, ".*lowercase letters, numbers and hyphens.*")
 	}
 
-	{ // Is slurm_cluster_name not set?  (should pass - it's optional)
+	{ // Is slurm_cluster_name not set? (should pass - it's optional)
 		err := validateSlurmClusterName(Blueprint{})
 		c.Check(err, IsNil)
 	}
 
 	{ // Expression (should pass if it evaluates correctly)
-		c.Check(h(MustParseExpression(`"slurm${1}"`).AsValue()), IsNil)
+		c.Check(h(MustParseExpression(`"slurm-${1}"`).AsValue()), IsNil)
 	}
 
 	{ // Expression that results in invalid value
-		err := h(MustParseExpression(`"Slurm${1}"`).AsValue())
+		err := h(MustParseExpression(`"Slurm-${1}"`).AsValue())
 		c.Check(errors.As(err, &e), Equals, true)
 		c.Check(err, ErrorMatches, ".*lowercase letter.*")
 	}

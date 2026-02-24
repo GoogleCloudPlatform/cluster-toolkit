@@ -148,6 +148,23 @@ ghpc:
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
 ```
 
+### Allowed Enum Validator
+The `allowed_enum` validator ensures that user-provided settings conform to a predefined list of allowed values (enums). Supports optional `case_sensitive` (defaults to true) and `allow_null` (defaults to false) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [network_routing_mode]
+      allowed: [GLOBAL, REGIONAL]
+      case_sensitive: false
+      allow_null: false
+    error_message: "'network_routing_mode' must be GLOBAL or REGIONAL."
+```
+
 ### Range Validator
 The `range` validator ensures input variables either their values or lengths fall within specified numerical minimum and/or maximum bounds. It supports validating individual numeric values, lists of numeric values, and the number of elements in a list. The optional length_check field (defaulting to false) determines whether to validate the values themselves or the length of the variable.
 

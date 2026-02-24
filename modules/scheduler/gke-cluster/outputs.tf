@@ -20,7 +20,7 @@ output "cluster_id" {
 }
 
 output "gke_cluster_exists" {
-  description = "A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations."
+  description = "A static flag that signals to downstream modules that a cluster has been created."
   value       = true
   depends_on = [
     google_container_cluster.gke_cluster

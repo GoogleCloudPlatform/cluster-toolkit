@@ -62,8 +62,8 @@ variable "slurm_cluster_name" {
   description = "The cluster name, used for resource naming and slurm accounting."
 
   validation {
-    condition     = can(regex("^[a-z]([-a-z0-9]{0,20})$", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,20})$'."
+    condition     = can(regex("^[a-z]([-a-z0-9]{0,19})$", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,19})$'."
   }
 }
 
