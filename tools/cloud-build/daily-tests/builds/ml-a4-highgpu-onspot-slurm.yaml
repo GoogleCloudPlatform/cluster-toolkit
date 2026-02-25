@@ -86,9 +86,8 @@ steps:
       echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
     fi
 
-    # Calculate Time-To-Live label (Current UTC time + 4 hours)
-    TTL_LABEL=$(date -u -d '+4 hours' +'%Y-%m-%d_%H-%M')
-    sed -i "/^vars:/a \  labels:\n    time-to-live: \"$$TTL_LABEL\"" $${BLUEPRINT}
+
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
