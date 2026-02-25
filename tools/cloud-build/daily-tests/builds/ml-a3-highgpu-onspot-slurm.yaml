@@ -72,6 +72,8 @@ steps:
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
 
+    BLUEPRINT="/workspace/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
+
     ENABLE_SPOT="true"
     SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-a3-highgpu-onspot-slurm.yml"
     if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
@@ -81,6 +83,10 @@ steps:
     else
       echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
     fi
+
+    # Calculate Time-To-Live label (Current UTC time + 4 hours)
+    TTL_LABEL=$(date -u -d '+4 hours' +'%Y-%m-%d_%H-%M')
+    sed -i "/^vars:/a \  labels:\n    time-to-live: \"$$TTL_LABEL\"" $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \

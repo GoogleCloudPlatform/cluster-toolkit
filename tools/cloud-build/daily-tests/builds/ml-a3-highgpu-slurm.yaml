@@ -59,6 +59,13 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     REGION=us-west1
     ZONE=us-west1-a
+
+    BLUEPRINT="/workspace/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
+
+    # Calculate Time-To-Live label (Current UTC time + 4 hours)
+    TTL_LABEL=$(date -u -d '+4 hours' +'%Y-%m-%d_%H-%M')
+    sed -i "/^vars:/a \  labels:\n    time-to-live: \"$$TTL_LABEL\"" $${BLUEPRINT}\
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
