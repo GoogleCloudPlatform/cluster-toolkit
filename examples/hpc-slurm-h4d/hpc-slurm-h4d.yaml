@@ -14,8 +14,8 @@
 ---
 blueprint_name: slurm-h4d
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm-h4d
+  project_id: hpc-toolkit-dev ## Set GCP Project ID Here ##
+  deployment_name: quicktest8
   region: us-central1
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
@@ -32,16 +32,61 @@ vars:
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 deployment_groups:
+- group: net
+  modules:
+  
+  - id: h4dnt2
+    source: modules/network/vpc
+    settings:
+      network_name: h4d-fs-net
+      subnetworks:
+      - subnet_name: h4dnt2-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 10.10.0.0/24
+      firewall_rules:
+      - name: h4dnt2-internal-0
+        ranges: [0.0.0.0/0]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: filestore_firewall
+    source: modules/network/firewall-rules
+    use: [h4dnt2]
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-allow-slurm-nfs
+        description: Allow Slurm VPC to reach Filestore in h4dnt2
+        # The target range in h4dnt2 (where Filestore lives)
+        destination_ranges: ["0.0.0.0/0"] 
+        # The source range of your Slurm VPC (quicktest-net)
+        # Using 10.0.0.0/8 covers most default Slurm setups, 
+        # but you can narrow this to Slurm's specific subnet IP.
+        source_ranges: ["0.0.0.0/0"] 
+        allow:
+        - protocol: tcp
+          ports: ["111", "2049", "20048", "4045", "53244"]
+        - protocol: udp
+          ports: ["111", "2049","20048"]
+
 - group: primary
   modules:
 
-  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
-  # as a prefix. To refer to a local module, prefix with ./, ../ or /
-
-  - id: h4d-slurm-net-0
+  - id: h4d-slurm-net-3
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net
+
+  - id: vpc_peering_h4d
+    source: modules/network/vpc-peering
+    settings:
+        local_network_self_link: $(h4dnt2.network_self_link)
+        remote_network_self_link: $(h4d-slurm-net-3.network_self_link)
+        create_remote_peering: true
+        # These MUST be true to allow the Filestore route to pass through
+        export_custom_routes: true
+        import_custom_routes: true
 
   - id: h4d-rdma-net
     source: modules/network/vpc
@@ -61,12 +106,16 @@ deployment_groups:
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [h4d-slurm-net-0]
+    use: [h4dnt2]
     settings:
       filestore_tier: BASIC_SSD
       size_gb: 2560
       filestore_share_name: homeshare
       local_mount: /home
+      nfs_export_options:
+        - ip_ranges: ["0.0.0.0/0"] # Matches your controller's 10.0.0.3 IP
+          access_mode: READ_WRITE
+          squash_mode: NO_ROOT_SQUASH
 
   - id: h4d_startup
     source: modules/scripts/startup-script
@@ -79,7 +128,7 @@ deployment_groups:
 
   - id: h4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [h4d_startup, h4d-slurm-net-0]
+    use: [h4d_startup, h4d-slurm-net-3]
     settings:
       # Unattended upgrades are disabled to prevent automatic daily updates which may lead to potential instability.
       # For more details, see https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
@@ -111,7 +160,8 @@ deployment_groups:
             access_config=null,
             ipv6_access_config=[],
             alias_ip_range=[]
-          }]
+          }
+          ]
         ))
 
   - id: h4d_partition
@@ -128,7 +178,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [h4d-slurm-net-0]
+    use: [h4d-slurm-net-3]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
@@ -166,7 +216,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs]
+    use: [h4d-slurm-net-3, h4d_partition, slurm_login, homefs]
     settings:
       enable_controller_public_ips: true
       controller_startup_script: $(controller_startup.startup_script)
