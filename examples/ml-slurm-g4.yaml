@@ -74,7 +74,7 @@ deployment_groups:
               nvidia_packages:
               # 1. Open Kernel Driver: Installs the open-source kernel components.
               - nvidia-driver-590-open
-              # 2. Driver Metapackage: Pulls in the 580.xx driver version.
+              # 2. Driver Metapackage: Pulls in the 590.xx driver version.
               - cuda-drivers-590
               # 3. CUDA Toolkit: Installs the 12.8 toolkit (stable for 590).
               - cuda-toolkit-12-8
