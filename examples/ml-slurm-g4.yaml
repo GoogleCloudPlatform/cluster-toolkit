@@ -102,9 +102,8 @@ deployment_groups:
             # with the NVIDIA repository version.
             - name: Remove conflicting Ubuntu NVIDIA firmware
               ansible.builtin.apt:
-                name: nvidia-firmware-590-590.48.01
+                name: nvidia-firmware-590
                 state: absent
-              ignore_errors: true
 
             # Install the package with force-overwrite to handle any remaining file conflicts
             - name: Install NVIDIA fabric and CUDA
