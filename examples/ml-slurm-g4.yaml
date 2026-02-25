@@ -73,11 +73,11 @@ deployment_groups:
               enable_nvidia_dcgm: false
               nvidia_packages:
               # 1. Open Kernel Driver: Installs the open-source kernel components.
-              - nvidia-kernel-open-575
+              - nvidia-driver-590-open
               # 2. Driver Metapackage: Pulls in the 580.xx driver version.
-              - cuda-drivers-575
-              # 3. CUDA Toolkit: Installs the 12.9.1 toolkit.
-              - cuda-toolkit-12-9
+              - cuda-drivers-590
+              # 3. CUDA Toolkit: Installs the 12.8 toolkit (stable for 590).
+              - cuda-toolkit-12-8
               - datacenter-gpu-manager
 
             tasks:
@@ -98,10 +98,19 @@ deployment_groups:
               ansible.builtin.apt:
                 update_cache: true
 
-            # Install the package
+            # Latest Ubuntu images pre-install a firmware package that conflicts
+            # with the NVIDIA repository version.
+            - name: Remove conflicting Ubuntu NVIDIA firmware
+              ansible.builtin.apt:
+                name: nvidia-firmware-590-590.48.01
+                state: absent
+              ignore_errors: true
+
+            # Install the package with force-overwrite to handle any remaining file conflicts
             - name: Install NVIDIA fabric and CUDA
               ansible.builtin.apt:
                 name: "{{ item }}"
+                dpkg_options: 'force-overwrite'
               loop: "{{ nvidia_packages }}"
 
             # This section will optionally freeze the packages with
