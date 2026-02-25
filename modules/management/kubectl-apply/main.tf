@@ -41,23 +41,28 @@ locals {
     if try(manifest.source, null) != null && (startswith(manifest.source, "http://") || startswith(manifest.source, "https://"))
   }
 
-  # 3. Rebuild the map by populating the 'content' field for URLs based manifest
+  # 3. Rebuild the map by populating the 'content' field for all manifests
   processed_apply_manifests_map = tomap({
     for index, manifest in local.enabled_manifests : tostring(index) => {
-      # If this manifest was a URL, its content is the body from the HTTP call.
-      content = contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body : manifest.content
-
-      # If this was a URL, its source path is now null. Otherwise, use original.
-      source = contains(keys(local.url_manifests), tostring(index)) ? null : manifest.source
-
-      # Pass other vars
-      template_vars     = manifest.template_vars
-      server_side_apply = manifest.server_side_apply
-      wait_for_rollout  = manifest.wait_for_rollout
+      content = (
+        contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
+        try(manifest.source, "") != "" ? (
+          endswith(manifest.source, "/") ? (
+            join("\n---\n", [
+              for f in fileset(manifest.source, "*") : (
+                endswith(f, ".tftpl") ? templatefile("${manifest.source}${f}", try(manifest.template_vars, {})) : file("${manifest.source}${f}")
+              )
+            ])
+            ) : (
+            endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
+            templatefile(manifest.source, try(manifest.template_vars, {})) :
+            file(manifest.source)
+          )
+        ) : coalesce(manifest.content, "")
+      )
+      wait_for_rollout = manifest.wait_for_rollout
     }
-    }
-
-  )
+  })
 
   install_kueue             = try(var.kueue.install, false)
   install_jobset            = try(var.jobset.install, false)
@@ -80,20 +85,30 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
+resource "random_id" "release_suffix" {
+  byte_length = 4
+}
+
 module "kubectl_apply_manifests" {
   for_each   = local.processed_apply_manifests_map
-  source     = "./kubectl"
+  source     = "./helm_install"
   depends_on = [var.gke_cluster_exists]
 
-  content           = each.value.content
-  source_path       = each.value.source
-  template_vars     = each.value.template_vars
-  server_side_apply = each.value.server_side_apply
-  wait_for_rollout  = each.value.wait_for_rollout
+  release_name  = "manifest-apply-${random_id.release_suffix.hex}-${each.key}"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  namespace     = "default"
+  atomic        = true
+  wait          = each.value.wait_for_rollout
 
-  providers = {
-    kubectl = kubectl
-  }
+  values_yaml = [
+    yamlencode({
+      manifests = [
+        for doc in split("\n---", each.value.content) : trimspace(doc)
+        if length(trimspace(doc)) > 0
+      ]
+    })
+  ]
 }
 
 module "install_kueue" {
