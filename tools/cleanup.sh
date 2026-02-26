@@ -502,6 +502,32 @@ populate_protected_resources() {
 			fi
 		done <<<"$templates_data"
 	fi
+
+  # Part 8: Protect Networks used by EXCLUDED Managed Lustre instances.
+  log "INFO" "Checking for Managed Lustre instances to protect networks for..."
+  local lustre_data
+  if ! lustre_data=$(gcloud lustre instances list --project="$PROJECT_ID" --location - \
+    --format="value(name, location, network, labels.map())"); then
+    log "WARNING" "Failed to list Managed Lustre instances for network protection. Networks used by protected Lustre instances may not be protected."
+  else
+    while IFS=$'\t' read -r full_name location network_uri labels_str; do
+      if [[ -z "$full_name" ]]; then continue; fi
+      local name
+      name=$(basename "$full_name")
+
+      if is_excluded "$name" "$labels_str"; then # Returns 0 if excluded
+        log "INFO" "Managed Lustre instance ${name} in ${location} is PROTECTED."
+        if [[ -n "$network_uri" && "$network_uri" != "None" ]]; then
+          # Lustre network format is projects/PROJECT/global/networks/NET_NAME
+          # _protect_network_resources handles this format.
+          _protect_network_resources "Managed Lustre" "$name" "$network_uri" ""
+        else
+          log "WARNING" "Protected Managed Lustre instance ${name} has no network URI, cannot protect its network."
+        fi
+      fi
+    done <<<"$lustre_data"
+  fi
+
 	log "INFO" "Finished identifying resources to protect."
 }
 
@@ -830,6 +856,61 @@ process_filestore() {
 	log "INFO" "Finished processing Filestore Instances. $count instances actioned."
 }
 
+process_lustre_instances() {
+	log "INFO" "--- Processing: Managed Lustre Instances ---"
+	local lustre_data
+	# Get Lustre instance name, location, labels, and network URI
+	if ! lustre_data=$(gcloud lustre instances list --project="$PROJECT_ID" --location - --filter="createTime < '$CUTOFF_TIME'" \
+		--format="value(name, location, network, labels.map())"); then
+		log "ERROR" "Failed to list Managed Lustre instances."
+		((ERROR_COUNT++)) || true
+		return 0
+	fi
+	if [[ -z "$lustre_data" ]]; then
+		log "INFO" "No Managed Lustre instances found matching criteria (older than $CUTOFF_TIME)."
+		return 0
+	fi
+
+	local count=0
+	while IFS=$'\t' read -r full_name location network_uri labels_str; do
+		full_name=$(echo "$full_name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		location=$(echo "$location" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		network_uri=$(echo "$network_uri" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+		if [[ -z "$full_name" || "$full_name" == "None" || -z "$location" || "$location" == "None" ]]; then
+			log "WARNING" "Could not extract valid name or location for a Lustre instance from list output."
+			continue
+		fi
+
+		local name
+		name=$(basename "$full_name")
+    local full_network_uri="https://www.googleapis.com/compute/v1/${network_uri}"
+
+		log "DEBUG" "Lustre $name ($location): Checking network URI: '$network_uri'"
+		# Protect Lustre if its network is used by any protected VM
+		if [[ -n "${network_uri}" && "${network_uri}" != "None" ]]; then
+			if [[ -n "${PROTECTED_NETWORK_URIS[${full_network_uri}]:-}" ]]; then
+				if [[ -z "${EXCLUSION_MAP[${name}]:-}" ]]; then
+					log "SKIP" "Lustre $name ($location) on ALREADY PROTECTED network $(basename "$network_uri") (URI: $full_network_uri)"
+					EXCLUSION_MAP["${name}"]=1
+				fi
+				continue
+			else
+				log "DEBUG" "Lustre $name: Network URI '$full_network_uri' not found in PROTECTED_NETWORK_URIS."
+			fi
+		else
+			log "DEBUG" "Lustre $name: Network URI is empty."
+		fi
+
+		if ! is_excluded "$name" "${labels_str:-}"; then
+			execute_delete "Managed Lustre" "$name" "($location)" \
+				gcloud lustre instances delete "$name" --project="$PROJECT_ID" --location="$location" --quiet
+		fi
+		((count++)) || true
+	done <<<"$lustre_data"
+	log "INFO" "Finished processing Managed Lustre Instances. $count instances actioned."
+}
+
 process_subnetworks() {
 	log "INFO" "--- Processing: Subnetworks ---"
 	local subnets
@@ -967,6 +1048,7 @@ main() {
 		"zone" \
 		"gcloud" "compute" "instances" "delete" "--project=$PROJECT_ID" "--delete-disks=all"
 	process_filestore
+	process_lustre_instances
 
 	# --- Phase 2: Images & Artifacts (VM Images, Docker Images, Instance Templates) ---
 	log "INFO" "--- PHASE 2: Deleting Images and Artifacts ---"
