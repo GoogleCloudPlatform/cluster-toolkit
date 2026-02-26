@@ -430,3 +430,9 @@ variable "internal_startup_script" {
   type        = string
   default     = null
 }
+
+variable "confidential_instance_type" {
+  type        = string
+  description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
+  default     = null
+}

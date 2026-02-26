@@ -30,7 +30,7 @@ vars:
   a3mega_maintenance_interval: ""
   enable_placement: false
   local_mount_homefs: /home
-  build_slurm_from_git_ref: 6.10.6
+  build_slurm_from_git_ref: 6.10.10
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)

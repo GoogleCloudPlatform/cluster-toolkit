@@ -34,7 +34,9 @@ resource "google_cloudbuild_trigger" "daily_test" {
   # Specify it explicitly to reduce discreppancy.
   ignored_files  = []
   included_files = []
-  substitutions  = {}
+  substitutions = {
+    _TEST_PREFIX = "daily-"
+  }
 }
 
 module "daily_test_schedule" {

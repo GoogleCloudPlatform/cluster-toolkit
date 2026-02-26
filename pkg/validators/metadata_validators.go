@@ -295,3 +295,30 @@ func (r *RangeValidator) Validate(
 		return r.validateTarget(t.Values, t.Path, min, max, checkListLength, rule.ErrorMessage)
 	})
 }
+
+// ExclusiveValidator implements the RuleValidator interface for the 'exclusive' validation type.
+type ExclusiveValidator struct{}
+
+// Validate returns an error if more than one of the variables specified in the rule are "set" within the module configuration.
+func (e *ExclusiveValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+	var setVarNames []string
+	handler := func(t Target) error {
+		if isVarSet(t.Values) {
+			setVarNames = append(setVarNames, t.Name)
+		}
+		return nil
+	}
+	if err := IterateRuleTargets(bp, mod, rule, group, modIdx, handler); err != nil {
+		return err
+	}
+	if len(setVarNames) > 1 {
+		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+		return config.BpError{Err: fmt.Errorf("%s: the following are set: %s", rule.ErrorMessage, strings.Join(setVarNames, ", ")), Path: modPath}
+	}
+	return nil
+}

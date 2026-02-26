@@ -18,11 +18,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 7.2"
+      version = ">= 7.13"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">= 7.2"
+      version = ">= 7.13"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -30,10 +30,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.81.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.82.0"
   }
 
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.81.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.82.0"
   }
 }

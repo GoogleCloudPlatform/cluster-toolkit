@@ -17,3 +17,10 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  has_to_be_used: true
+  validators:
+  - validator: exclusive
+    inputs:
+      vars: [secondary_ranges, secondary_ranges_list]
+    error_message: "Only one of 'secondary_ranges' or 'secondary_ranges_list' should be specified"
