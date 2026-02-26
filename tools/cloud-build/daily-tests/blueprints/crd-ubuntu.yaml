@@ -16,6 +16,9 @@
 
 blueprint_name: crd-ubuntu
 
+vars:
+  deployment_name: crd-ubuntu
+
 deployment_groups:
 - group: primary
   modules:
