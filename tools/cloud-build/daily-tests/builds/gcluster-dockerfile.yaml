@@ -39,12 +39,6 @@ steps:
     echo "--- Modifying Blueprint with add_ttl_label.sh ---"
     bash tools/add_ttl_label.sh "${BLUEPRINT}"
 
-    # Print the blueprint content after modification
-    echo "--- Blueprint content after add_ttl_label.sh ---"
-    # Use single $ for shell variable expansion
-    cat "${BLUEPRINT}"
-    echo "--- End of Blueprint content ---"
-
 - id: create-deployment-folder
   name: 'gcluster'
   args:
