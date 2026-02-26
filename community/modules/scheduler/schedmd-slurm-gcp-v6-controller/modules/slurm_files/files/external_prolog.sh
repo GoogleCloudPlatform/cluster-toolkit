@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Set context for the slurm_mux script to correctly identify and run prolog scripts.
 export SLURM_SCRIPT_CONTEXT="prolog_slurmd"
 if [[ -x /opt/apps/adm/slurm/slurm_prolog ]]; then
 	exec /opt/apps/adm/slurm/slurm_prolog

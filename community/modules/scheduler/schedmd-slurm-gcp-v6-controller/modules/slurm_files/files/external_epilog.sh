@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Set context for the slurm_mux script to correctly identify and run epilog scripts.
 export SLURM_SCRIPT_CONTEXT="epilog_slurmd"
 if [[ -x /opt/apps/adm/slurm/slurm_epilog ]]; then
 	exec /opt/apps/adm/slurm/slurm_epilog
