@@ -77,7 +77,7 @@ steps:
     # IMPORTANT: Ensure auto_repair is FALSE for Flex, and remove conflicting spot/reservation settings if any
     # The base blueprint might have defaults we want to override via sed if CLI vars aren't enough or to be safe
     # But cli_deployment_vars in the test definition should handle most overrides.
-
+    bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     # Run the test
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
