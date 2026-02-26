@@ -46,6 +46,8 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    BLUEPRINT="examples/netapp-volumes.yaml"
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
 
     git init . # ofe deploymemt requires some git repo to figure out top level directory
 
