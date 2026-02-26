@@ -3,7 +3,7 @@
 The following requirements apply to an AI-optimized A4X-Max Bare Metal GKE cluster:
 
 1. Your project must be allowlisted to use A4X-Max machine type. Please work with your account team to get your project allowlisted.
-2. The recommended GKE version for A4X-Max support is 1.34.1-gke.3849001. The GB300 GPUs in A4X-Max require a minimum of the 580.95.05 GPU driver version. GKE, by default, automatically installs this driver version on all A4X-Max nodes that run the required minimum version for A4X-Max, which is 1.34.1-gke.3849001
+2. The recommended GKE version for A4X-Max support is 1.34.3-gke.1318000. The GB300 GPUs in A4X-Max require a minimum of the 580.95.05 GPU driver version. GKE, by default, automatically installs this driver version on all A4X-Max nodes that run the required minimum version for A4X-Max, which is 1.34.3-gke.1318000
 
 ### Creation of cluster
 
