@@ -107,6 +107,7 @@ variable "apply_manifests" {
     source           = optional(string, null)
     template_vars    = optional(map(any), null)
     wait_for_rollout = optional(bool, true)
+    namespace        = optional(string, null)
   }))
   default = []
 }

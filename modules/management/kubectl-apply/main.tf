@@ -97,7 +97,7 @@ module "kubectl_apply_manifests" {
   release_name  = "manifest-apply-${random_id.release_suffix.hex}-${each.key}"
   chart_name    = "${path.module}/raw-config-chart"
   chart_version = "0.1.0"
-  namespace     = "default"
+  namespace     = each.value.namespace
   atomic        = true
   wait          = each.value.wait_for_rollout
 
