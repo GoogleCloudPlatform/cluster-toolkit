@@ -2,7 +2,7 @@
 
 This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc).
 
-> **_NOTE:_** The required GKE version for H4D support is >= 1.32.3-gke.1170000.
+> **_NOTE:_** The required GKE version for H4D support is >= 1.32.11-gke.1174000.
 
 ## Steps to deploy the H4D blueprint
 Refer to [Run high performance computing (HPC) workloads with H4D](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/run-hpc-workloads#cluster-toolkit) for instructions on creating the GKE-H4D cluster.
