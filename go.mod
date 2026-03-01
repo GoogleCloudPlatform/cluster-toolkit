@@ -1,10 +1,10 @@
 module hpc-toolkit
 
-go 1.24.6
+go 1.25
 
 require (
 	cloud.google.com/go/storage v1.58.0 // indirect
-	github.com/go-git/go-git/v5 v5.16.5
+	github.com/go-git/go-git/v5 v5.17.0
 	github.com/hashicorp/go-getter v1.8.4
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -13,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
-	github.com/zclconf/go-cty v1.17.0
+	github.com/zclconf/go-cty v1.18.0
 	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50
 	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -22,9 +22,9 @@ require (
 
 require (
 	github.com/fatih/color v1.18.0
-	github.com/go-git/go-billy/v5 v5.7.0
+	github.com/go-git/go-billy/v5 v5.8.0
 	github.com/google/go-cmp v0.7.0
-	github.com/hashicorp/terraform-exec v0.24.0
+	github.com/hashicorp/terraform-exec v0.25.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
 	google.golang.org/api v0.256.0
@@ -70,7 +70,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/hashicorp/aws-sdk-go-base/v2 v2.0.0-beta.70 // indirect
-	github.com/hashicorp/terraform-json v0.27.1 // indirect
+	github.com/hashicorp/terraform-json v0.27.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
@@ -86,10 +86,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
-	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	golang.org/x/tools v0.39.0 // indirect
+	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251111163417-95abcf5c77ba // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251111163417-95abcf5c77ba // indirect
 )
@@ -125,11 +125,11 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.34.0
-	golang.org/x/sys v0.40.0
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/oauth2 v0.35.0
+	golang.org/x/sys v0.41.0
+	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/grpc v1.76.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
