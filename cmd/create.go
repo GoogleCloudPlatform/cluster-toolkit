@@ -70,7 +70,7 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	deplDir := doCreate(args[0])
+	deplDir := DoCreate(args[0])
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
@@ -78,7 +78,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	printAdvancedInstructionsMessage(deplDir)
 }
 
-func doCreate(path string) string {
+func DoCreate(path string) string {
 	bp, ctx := expandOrDie(path)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)

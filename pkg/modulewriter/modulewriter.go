@@ -116,6 +116,12 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 			return fmt.Errorf("error trying to restore terraform state: %w", err)
 		}
 	}
+
+	if err := UploadArtifactsToBackend(expanded, deploymentDir); err != nil {
+		logging.Error("Failed to upload artifacts to GCS backend: %v", err)
+		// We don't want to fail the whole deployment if upload fails, just warn
+	}
+
 	return nil
 }
 
