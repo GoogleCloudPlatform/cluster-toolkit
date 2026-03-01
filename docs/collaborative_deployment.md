@@ -4,12 +4,12 @@ These commands will help you verify the new "Collaborative Deployment" feature.
 
 ## Prerequisites
 
-1.  **GCS Bucket**: You need a GCS bucket where artifacts will be stored.
-    *   Example: `gs://my-cluster-state-bucket`
-    *   *If you don't have one, create it:* `gcloud storage buckets create gs://my-cluster-state-bucket`
+1. **GCS Bucket**: You need a GCS bucket where artifacts will be stored.
+   * Example: `gs://my-cluster-state-bucket`
+   * *If you don't have one, create it:* `gcloud storage buckets create gs://my-cluster-state-bucket`
 
-2.  **Authentication**: Ensure you are authenticated with Google Cloud.
-    *   `gcloud auth application-default login`
+2. **Authentication**: Ensure you are authenticated with Google Cloud.
+   * `gcloud auth application-default login`
 
 ## Step 1: Create a Blueprint with GCS Backend
 
@@ -78,15 +78,15 @@ Run `gcluster pull` using the GCS URI of the deployment root (bucket + deploymen
 ```
 
 *Expected Output:*
-*   `INFO: Downloading blueprint from ...`
-*   `INFO: Successfully pulled deployment to collab-test-v1`
+* `INFO: Downloading blueprint from ...`
+* `INFO: Successfully pulled deployment to collab-test-v1`
 
 ## Step 6: Deploy (User B) - Reusing Existing State
 
 Run `gcluster deploy` again. This step is necessary to:
-1.  Initialize Terraform locally (`terraform init`).
-2.  Download the state from your GCS bucket.
-3.  Generate any local outputs needed to connect to the cluster.
+1. Initialize Terraform locally (`terraform init`).
+2. Download the state from your GCS bucket.
+3. Generate any local outputs needed to connect to the cluster.
 
 Since the resources were already created by User A, this command will **not create new resources**. It will simply sync your local environment with the existing cluster.
 
