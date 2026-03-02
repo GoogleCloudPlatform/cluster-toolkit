@@ -24,10 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cloud.google.com/go/storage"
-	"github.com/spf13/cobra"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
+	"hpc-toolkit/pkg/shell"
+
+	"cloud.google.com/go/storage"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -92,9 +95,29 @@ func runPullCmd(cmd *cobra.Command, args []string) {
 	deplDir := DoCreate(tmpFile.Name())
 
 	logging.Info("\nSuccessfully pulled deployment to %s", deplDir)
-	logging.Info("To deploy your infrastructure (and connect to the existing cluster) please run:")
-	logging.Info("")
-	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
+	logging.Info("Initializing Terraform modules...")
+
+	bpPath := filepath.Join(modulewriter.ArtifactsDir(deplDir), modulewriter.ExpandedBlueprintName)
+	bp, _, err := config.NewBlueprint(bpPath)
+	if err != nil {
+		logging.Fatal("Failed to reload blueprint for initialization: %v", err)
+	}
+
+	for _, group := range bp.Groups {
+		if group.Kind() != config.TerraformKind {
+			continue
+		}
+		groupDir := filepath.Join(deplDir, string(group.Name))
+		logging.Info("Initializing group: %s", group.Name)
+		
+		if err := shell.Init(groupDir); err != nil {
+			logging.Error("Failed to initialize group %s: %v. You may need to run 'gcluster deploy' manually.", group.Name, err)
+		}
+	}
+
+	logging.Info("\nDeployment initialized successfully!")
+	logging.Info("Your local environment is now connected to the existing cluster.")
+	logging.Info("You can proceed with using the deployment.")
 	logging.Info("")
 	printAdvancedInstructionsMessage(deplDir)
 }
