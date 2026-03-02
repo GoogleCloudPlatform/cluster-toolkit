@@ -14,6 +14,7 @@
 
 package validators
 
+
 import (
 	"context"
 	"hpc-toolkit/pkg/config"
@@ -25,9 +26,10 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 	. "gopkg.in/check.v1"
-
 )
 
+
+// Setup GoCheck
 type MySuite struct{}
 
 var _ = Suite(&MySuite{})
