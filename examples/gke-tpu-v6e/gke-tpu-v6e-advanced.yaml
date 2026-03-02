@@ -53,7 +53,7 @@ vars:
   v6e_node_pool_disk_size_gb: 100
   version_prefix: "1.33."
 
- # Kueue configuration
+  # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.

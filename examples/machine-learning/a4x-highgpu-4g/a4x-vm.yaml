@@ -23,8 +23,9 @@ vars:
   reservation_name: # supply reservation name
   machine_type: 'a4x-highgpu-4g'
   hostname_prefix: $(vars.deployment_name)
-  source_image_project_id: ubuntu-os-accelerator-images
-  source_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
+  base_image:
+    project: ubuntu-os-accelerator-images
+    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
   instance_image:
     project: $(vars.project_id)
     family: jbvm-ubuntu2404-accelerator-arm64
@@ -263,8 +264,8 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       state_timeout: 45m  # Give the build plenty of time to finish
       # Start from this source image
-      source_image_family: $(vars.source_image_family)
-      source_image_project_id: [$(vars.source_image_project_id)]
+      source_image: $(vars.base_image.image)
+      source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
       metadata:
@@ -314,6 +315,7 @@ deployment_groups:
       name_prefix: $(vars.deployment_name)
       placement_policy:
         collocation: COLLOCATED
+        gpu_topology: "1x72"
       disk_type: hyperdisk-balanced
       disk_size_gb: $(vars.disk_size_gb)
       automatic_restart: true

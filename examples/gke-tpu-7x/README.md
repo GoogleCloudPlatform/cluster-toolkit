@@ -38,7 +38,7 @@ Before you start, make sure you have performed the following tasks:
    - `roles/container.clusterAdmin`
    - `roles/iam.serviceAccountAdmin`
 5. **Note the GKE Version Requirement**: Be aware that Cloud TPU 7x requires a specific minimum GKE version to function correctly.
-   - **Minimum Version**: `1.34.0-gke.1662000` or later.
+   - **Minimum Version**: `1.34.3-gke.1318000` or later.
    - **Blueprint Configuration**: The provided `gke-tpu-7x.yaml` blueprint is already configured to use a compatible version from the `RAPID` release channel. If you customize the blueprint, ensure you do not select a version older than this minimum requirement.
 
 ## Create a cluster using Cluster Toolkit
@@ -281,6 +281,10 @@ Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https
 For a pre-configured example and detailed documentation on using Flex Start with TPU 7x, please refer to:
 - [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
 - [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
+
+Additionally, for **Queued Provisioning (QP)** support with DWS Flex Start:
+- [GKE TPU 7x DWS Flex with QP Blueprint](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex with QP README.md](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/README.md)
 
 ### Understanding Managed Lustre integration
 

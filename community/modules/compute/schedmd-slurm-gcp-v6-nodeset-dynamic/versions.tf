@@ -15,7 +15,7 @@
 */
 
 terraform {
-  required_version = ">= 1.3"
+  required_version = "= 1.12.2"
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-dynamic/v1.82.0"
   }

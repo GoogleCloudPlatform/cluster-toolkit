@@ -38,3 +38,11 @@ output "tpu_taint" {
   description = "A list containing the standard TPU taint object if the node pool is for TPUs."
   value       = local.tpu_taint
 }
+
+output "kubernetes_label" {
+  description = "A map of Kubernetes labels to apply to the node pool for TPU discovery."
+  value = local.is_tpu ? {
+    "cloud.google.com/gke-tpu-accelerator" = local.tpu_accelerator_type
+    "cloud.google.com/gke-tpu-topology"    = var.placement_policy.tpu_topology
+  } : {}
+}

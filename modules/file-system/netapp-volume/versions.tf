@@ -28,5 +28,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.82.0"
   }
 
-  required_version = ">= 1.5.7"
+  required_version = "= 1.12.2"
 }

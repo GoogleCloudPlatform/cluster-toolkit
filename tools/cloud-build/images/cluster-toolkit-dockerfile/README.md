@@ -13,7 +13,7 @@ To build and use this Dockerfile, you'll need:
 ## Build Arguments
 The following build arguments can be used to customize the build process:
 * **`BASE_IMAGE`**: The base image to use for the build. Defaults to `gcr.io/google.com/cloudsdktool/google-cloud-cli:stable`.
-* **`TERRAFORM_VERSION`**: The version of Terraform to install. Defaults to `1.5.2`.
+* **`TERRAFORM_VERSION`**: The version of Terraform to install. Defaults to `1.12.2`.
 * **`PACKER_VERSION`**: The version of Packer to install. Defaults to `1.8.6`.
 * **`GO_VERSION`**: The version of Go to install. Defaults to `1.23.0`.
 * **`CLUSTER_TOOLKIT_REF`**: The [Cluster Toolkit repository's](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) branch or tag from which to build Cluster Toolkit.  Defaults to the `main` branch, which is the latest official release.

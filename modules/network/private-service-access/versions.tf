@@ -33,5 +33,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.82.0"
   }
 
-  required_version = ">= 1.2"
+  required_version = "= 1.12.2"
 }

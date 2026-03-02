@@ -37,4 +37,8 @@ resource "google_cloudbuild_trigger" "pr_test" {
     }
   }
 
+  substitutions = {
+    _TEST_PREFIX = "pr-"
+  }
+
 }

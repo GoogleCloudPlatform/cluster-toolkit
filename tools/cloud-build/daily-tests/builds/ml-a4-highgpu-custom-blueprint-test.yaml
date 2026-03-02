@@ -45,6 +45,7 @@ steps:
   - "INSTANCE_PREFIX=a4hsp"
   - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a4hoptions.txt"
+  - "ENABLE_SPOT_FALLBACK=true"
   args:
   - -c
   - |
@@ -62,13 +63,25 @@ steps:
     BLUEPRINT="/workspace/tools/cloud-build/daily-tests/blueprints/a4high-custom-image-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
+
+    ENABLE_SPOT="true"
+    VARS_FILE="tools/cloud-build/daily-tests/tests/ml-a4-highgpu-custom-blueprint-test.yml"
+    if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
+      ENABLE_SPOT="false"
+      sed -i '/instance_labels:/,+1d' "$${VARS_FILE}"
+      sed -i '/enable_spot: true/d' "$${VARS_FILE}"
+    else
+      echo "INFO: Using $${VARS_FILE} as it is for SPOT provisioning."
+    fi
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
+      --extra-vars="enable_spot=$${ENABLE_SPOT}" \
       --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
       --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4-highgpu-custom-blueprint-test.yml"
+      --extra-vars="@$${VARS_FILE}"
   secretEnv: ['CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY']
 availableSecrets:
   secretManager:

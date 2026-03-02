@@ -29,5 +29,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:htcondor-central-manager/v1.82.0"
   }
 
-  required_version = ">= 1.1.0"
+  required_version = "= 1.12.2"
 }
