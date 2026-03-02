@@ -106,11 +106,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	myResExists := config.Validator{
 		Validator: testReservationExistsName, Inputs: myResInp}
 
-	// Quota validator Inputs vary based on vars present
-	quotaProjectOnly := config.Validator{
-		Validator: testQuotaAvailabilityName, Inputs: prjInp}
-	quotaRegion := config.Validator{
-		Validator: testQuotaAvailabilityName, Inputs: regInp}
 
 	{
 		bp := config.Blueprint{}
@@ -140,7 +135,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, quotaProjectOnly, machineTypeInZone, diskTypeInZone})
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone})
 	}
 
 	{
