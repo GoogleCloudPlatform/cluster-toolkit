@@ -15,14 +15,19 @@
 package validators
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
+	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/option"
 	. "gopkg.in/check.v1"
+
 )
 
-// Setup GoCheck
 type MySuite struct{}
 
 var _ = Suite(&MySuite{})

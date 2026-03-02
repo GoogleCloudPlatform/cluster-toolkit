@@ -62,6 +62,9 @@ func TestCollectRequirements(t *testing.T) {
 			"test-project/us-central1-a/n1-standard-4": {
 				GuestCpus: 4,
 			},
+			"test-project/us-central1-b/n1-standard-4": {
+				GuestCpus: 4,
+			},
 			"test-project/us-central1-a/a2-highgpu-1g": {
 				GuestCpus: 12,
 				Accelerators: []*compute.MachineTypeAccelerators{
@@ -297,6 +300,28 @@ func TestCollectRequirements(t *testing.T) {
 			},
 			expected: []QuotaRequirement{
 				{ProjectID: "test-project", Region: "global", Metric: "SUBNETWORKS", Needed: 1},
+			},
+		},
+		{
+			name: "Mixed Zones in Same Region",
+			modules: []config.Module{
+				{
+					ID: "vm-zone-a",
+					Settings: config.NewDict(map[string]cty.Value{
+						"machine_type": cty.StringVal("n1-standard-4"),
+						"zone":         cty.StringVal("us-central1-a"),
+					}),
+				},
+				{
+					ID: "vm-zone-b",
+					Settings: config.NewDict(map[string]cty.Value{
+						"machine_type": cty.StringVal("n1-standard-4"),
+						"zone":         cty.StringVal("us-central1-b"),
+					}),
+				},
+			},
+			expected: []QuotaRequirement{
+				{ProjectID: "test-project", Region: "us-central1", Metric: "CPUS", Needed: 8},
 			},
 		},
 	}
