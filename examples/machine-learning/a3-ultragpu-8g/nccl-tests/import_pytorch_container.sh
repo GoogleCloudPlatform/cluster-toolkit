@@ -16,4 +16,13 @@
 # This creates a file named "nvidia+pytorch+24.09-py3.sqsh", which
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
-enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3
+
+#!/bin/bash
+
+#SBATCH --exclusive
+#SBATCH -N 1
+#SBATCH --partition=a3ultra
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=8
+
+srun enroot import docker://nvcr.io#nvidia/pytorch:23.10-py3

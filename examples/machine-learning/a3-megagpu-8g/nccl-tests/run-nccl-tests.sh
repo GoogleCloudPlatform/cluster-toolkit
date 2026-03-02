@@ -23,7 +23,7 @@
 
 set -x
 # This should be set to the squashfs file that you created for your application
-CONTAINER_IMAGE=./nvidia+pytorch+24.04-py3.sqsh
+CONTAINER_IMAGE=./nvidia+pytorch+23.10-py3.sqsh
 
 # Set up NCCL Environment variables
 # The following two can be useful for debugging

@@ -23,7 +23,7 @@
 
 set -x
 
-CONTAINER_IMAGE=./nvidia+pytorch+24.09-py3.sqsh
+CONTAINER_IMAGE=./nvidia+pytorch+23.10-py3.sqsh
 
 # Import the pytorch container to enroot if not already present.
 if [ ! -f ${CONTAINER_IMAGE} ]; then
