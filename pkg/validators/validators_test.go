@@ -106,7 +106,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	myResExists := config.Validator{
 		Validator: testReservationExistsName, Inputs: myResInp}
 
-
 	{
 		bp := config.Blueprint{}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
