@@ -109,7 +109,6 @@ func runPullCmd(cmd *cobra.Command, args []string) {
 		}
 		groupDir := filepath.Join(deplDir, string(group.Name))
 		logging.Info("Initializing group: %s", group.Name)
-		
 		if err := shell.Init(groupDir); err != nil {
 			logging.Error("Failed to initialize group %s: %v. You may need to run 'gcluster deploy' manually.", group.Name, err)
 		}
