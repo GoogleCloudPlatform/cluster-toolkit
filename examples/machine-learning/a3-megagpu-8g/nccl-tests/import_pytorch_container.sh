@@ -13,15 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This creates a file named "nvidia+pytorch+21.10-py3.sqsh", which
+# This creates a file named "nvidia+pytorch+23.10-py3.sqsh", which
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
 
-#!/bin/bash
-
 #SBATCH --exclusive
 #SBATCH -N 1
-#SBATCH --partition=a3ultra
+#SBATCH --partition=a3mega
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
 
