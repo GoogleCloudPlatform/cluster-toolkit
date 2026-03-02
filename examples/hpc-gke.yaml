@@ -92,4 +92,4 @@ deployment_groups:
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: vkiranbkt
+    bucket: # YOUR_BUCKET_NAME

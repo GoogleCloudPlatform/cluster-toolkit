@@ -1,17 +1,17 @@
-/**
-* Copyright 2026 Google LLC
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
+/*
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 // Package modulewriter writes modules to a deployment directory
@@ -26,9 +26,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cloud.google.com/go/storage"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+
+	"cloud.google.com/go/storage"
 )
 
 // UploadArtifactsToBackend uploads the expanded blueprint to the GCS backend if configured.
@@ -86,16 +87,13 @@ func uploadFile(ctx context.Context, client *storage.Client, bucket, src, dst st
 	}
 	defer f.Close()
 
-	// Clean destination path to avoid double slashes if prefix is empty
 	dst = strings.TrimPrefix(dst, "/")
 
 	wc := client.Bucket(bucket).Object(dst).NewWriter(ctx)
-	if _, err = io.Copy(wc, f); err != nil {
-		wc.Close()
-		return err
+	_, copyErr := io.Copy(wc, f)
+	closeErr := wc.Close()
+	if copyErr != nil {
+		return copyErr
 	}
-	if err := wc.Close(); err != nil {
-		return err
-	}
-	return nil
+	return closeErr
 }

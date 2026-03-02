@@ -124,8 +124,8 @@ func runPullCmd(cmd *cobra.Command, args []string) {
 
 func parseGCSURI(uri string) (bucket, key string, err error) {
 	parts := strings.SplitN(strings.TrimPrefix(uri, "gs://"), "/", 2)
-	if len(parts) < 1 {
-		return "", "", fmt.Errorf("invalid URI format")
+	if len(parts) == 0 || parts[0] == "" {
+		return "", "", fmt.Errorf("invalid GCS URI: missing bucket name")
 	}
 	bucket = parts[0]
 	if len(parts) > 1 {
