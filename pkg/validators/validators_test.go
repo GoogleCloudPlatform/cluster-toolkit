@@ -14,7 +14,6 @@
 
 package validators
 
-
 import (
 	"context"
 	"hpc-toolkit/pkg/config"
@@ -27,7 +26,6 @@ import (
 	"google.golang.org/api/option"
 	. "gopkg.in/check.v1"
 )
-
 
 // Setup GoCheck
 type MySuite struct{}
