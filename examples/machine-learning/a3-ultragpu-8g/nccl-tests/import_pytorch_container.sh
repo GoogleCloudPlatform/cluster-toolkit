@@ -23,4 +23,12 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
 
+if [ -d /run/enroot ]; then
+    echo "Enroot directory /run/enroot already exists"
+else
+    echo "Creating enroot directory /run/enroot"
+    mkdir -p /run/enroot
+    chmod 700 /run/enroot
+fi
+
 srun enroot import docker://nvcr.io#nvidia/pytorch:23.10-py3
