@@ -17,12 +17,21 @@
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
 
-if [ -d /run/enroot ]; then
-	echo "Enroot directory /run/enroot already exists"
-else
-	echo "Creating enroot directory /run/enroot"
-	sudo mkdir -p /run/enroot
-	sudo chmod a+rw /run/enroot
+# Fix for non-interactive shells where XDG_RUNTIME_DIR is not set
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+	# Try creating a user-specific directory in /run (often fails for non-root)
+	XDG_RUNTIME_DIR="/run/user/$(id -u)"
+	export XDG_RUNTIME_DIR
+
+	# Check if we can actually use it
+	if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+		# Fallback to a guaranteed writable location in /tmp
+		XDG_RUNTIME_DIR="/tmp/enroot-runtime-$(id -u)"
+		export XDG_RUNTIME_DIR
+		sudo mkdir -p "$XDG_RUNTIME_DIR"
+		sudo chmod a+rw "$XDG_RUNTIME_DIR"
+	fi
 fi
 
-enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3
+# Import the pytorch container
+enroot import "docker://nvcr.io#nvidia/pytorch:24.09-py3"
