@@ -32,7 +32,7 @@ that the correct subnetwork has private service access.
     source: modules/network/private-service-access
     use: [network]
     settings:
-      prefix_length: 24
+      prefix_length: 22
 
   - id: lustre
     source: modules/file-system/managed-lustre
