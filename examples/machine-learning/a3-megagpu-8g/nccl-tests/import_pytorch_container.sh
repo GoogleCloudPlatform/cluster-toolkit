@@ -16,4 +16,13 @@
 # This creates a file named "nvidia+pytorch+21.10-py3.sqsh", which
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
+
+if [ -d /run/enroot ]; then
+	echo "Enroot directory /run/enroot already exists"
+else
+	echo "Creating enroot directory /run/enroot"
+	mkdir -p /run/enroot
+	chmod 700 /run/enroot
+fi
+
 enroot import docker://nvcr.io#nvidia/pytorch:24.04-py3
