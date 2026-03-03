@@ -19,12 +19,11 @@ the following:
 
 ## TLDR
 
-For an end-to-end example, copy the `build-nccl-tests.sh` and
-`run-nccl-tests.sh` to your login node.
+For an end-to-end example, copy the `import_pytorch_container.sh`, `build-nccl-tests.sh`, and `run-nccl-tests.sh` to your login node.
 
 And run the following:
 
-	enroot import docker://nvcr.io#nvidia/pytorch:24.04-py3 # takes ~10 minutes
+	sbatch import_pytorch_container.sh # takes ~10 minutes
 	sbatch build-nccl-tests.sh # takes ~4 minutes
 	sbatch run-nccl-tests.sh # takes ~3 minutes
 

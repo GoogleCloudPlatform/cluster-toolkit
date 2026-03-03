@@ -20,12 +20,12 @@ the following:
 
 ## TLDR
 
-For an end-to-end example, copy the `build-nccl-tests.sh` and
-`run-nccl-tests.sh` to your login node.
+For an end-to-end example, copy the `import_pytorch_container.sh`, `build-nccl-tests.sh`, and `run-nccl-tests.sh` to your login node.
 
 And run the following:
 
 ```text
+sbatch import_pytorch_container.sh # takes ~10 minutes
 BUILD_JOB=$(sbatch --parsable build-nccl-tests.sh) # takes ~4 minutes
 sbatch -d afterok:${BUILD_JOB} run-nccl-tests.sh # takes ~3 minutes
 ```
