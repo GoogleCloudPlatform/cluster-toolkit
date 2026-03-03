@@ -21,8 +21,8 @@ if [ -d /run/enroot ]; then
 	echo "Enroot directory /run/enroot already exists"
 else
 	echo "Creating enroot directory /run/enroot"
-	mkdir -p /run/enroot
-	chmod 700 /run/enroot
+	sudo mkdir -p /run/enroot
+	sudo chmod a+rw /run/enroot
 fi
 
 enroot import docker://nvcr.io#nvidia/pytorch:24.04-py3
