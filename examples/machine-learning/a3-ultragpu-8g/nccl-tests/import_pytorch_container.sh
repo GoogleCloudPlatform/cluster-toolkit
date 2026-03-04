@@ -16,4 +16,22 @@
 # This creates a file named "nvidia+pytorch+24.09-py3.sqsh", which
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
-enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3
+
+# Fix for non-interactive shells where XDG_RUNTIME_DIR is not set
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+	# Try creating a user-specific directory in /run (often fails for non-root)
+	XDG_RUNTIME_DIR="/run/user/$(id -u)"
+	export XDG_RUNTIME_DIR
+
+	# Check if we can actually use it
+	if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+		# Fallback to a guaranteed writable location in /tmp
+		XDG_RUNTIME_DIR="/tmp/enroot-runtime-$(id -u)"
+		export XDG_RUNTIME_DIR
+		mkdir -p "$XDG_RUNTIME_DIR"
+		chmod 700 "$XDG_RUNTIME_DIR"
+	fi
+fi
+
+# Import the pytorch container
+enroot import "docker://nvcr.io#nvidia/pytorch:24.09-py3"
