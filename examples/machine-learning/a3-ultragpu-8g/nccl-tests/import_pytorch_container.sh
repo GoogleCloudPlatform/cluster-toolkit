@@ -34,4 +34,4 @@ if [ -z "$XDG_RUNTIME_DIR" ]; then
 fi
 
 # Import the pytorch container
-enroot import "docker://nvcr.io#nvidia/pytorch:26.02-py3"
+enroot import "docker://nvcr.io#nvidia/pytorch:24.09-py3"
