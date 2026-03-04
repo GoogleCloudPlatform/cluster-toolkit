@@ -30,7 +30,7 @@ echo "Running NCCL Tests on ${SLURM_JOB_NUM_NODES} nodes."
 set -x
 
 # This should be set to the squashfs file that you created for your application
-CONTAINER_IMAGE=./nvidia+pytorch+23.10-py3.sqsh
+CONTAINER_IMAGE=./nvidia+pytorch+26.02-py3.sqsh
 
 # Important TCPX environment variables
 UDS_PATH="/run/tcpx-${SLURM_JOB_ID}"
