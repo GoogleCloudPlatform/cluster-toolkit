@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This creates a file named "nvidia+pytorch+24.09-py3.sqsh", which
+# This creates a file named "nvidia+pytorch+26.02-py3.sqsh", which
 # uses ~18 GB of disk space. This should be run on a filesystem that
 # can be seen by all worker nodes
 
@@ -34,4 +34,4 @@ if [ -z "$XDG_RUNTIME_DIR" ]; then
 fi
 
 # Import the pytorch container
-enroot import "docker://nvcr.io#nvidia/pytorch:24.09-py3"
+enroot import "docker://nvcr.io#nvidia/pytorch:26.02-py3"
