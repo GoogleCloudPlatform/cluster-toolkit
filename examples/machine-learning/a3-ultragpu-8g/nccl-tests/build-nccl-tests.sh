@@ -27,7 +27,7 @@ CONTAINER_IMAGE=./nvidia+pytorch+24.09-py3.sqsh
 
 # Import the pytorch container to enroot if not already present.
 if [ ! -f ${CONTAINER_IMAGE} ]; then
-	# This creates a file named "nvidia+pytorch+26.02-py3.sqsh", which
+	# This creates a file named "nvidia+pytorch+24.09-py3.sqsh", which
 	# uses ~18 GB of disk space. This should be run on a filesystem that
 	# can be seen by all worker nodes
 	enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3

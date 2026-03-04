@@ -18,9 +18,8 @@
     set -x -e
     cd {{ ansible_user_dir }}
     rm -rf cluster-toolkit
-    git clone https://github.com/agrawalkhushi18/cluster-toolkit.git
+    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
     cd cluster-toolkit/{{ nccl_test_path }}
-    git checkout rc-enrootfix
     bash import_pytorch_container.sh
     sbatch --wait build-nccl-tests.sh
   args:
