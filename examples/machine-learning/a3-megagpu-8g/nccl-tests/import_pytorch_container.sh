@@ -28,8 +28,8 @@ if [ -z "$XDG_RUNTIME_DIR" ]; then
 		# Fallback to a guaranteed writable location in /tmp
 		XDG_RUNTIME_DIR="/tmp/enroot-runtime-$(id -u)"
 		export XDG_RUNTIME_DIR
-		sudo mkdir -p "$XDG_RUNTIME_DIR"
-		sudo chmod a+rw "$XDG_RUNTIME_DIR"
+		mkdir -p "$XDG_RUNTIME_DIR"
+		chmod 700 "$XDG_RUNTIME_DIR"
 	fi
 fi
 
