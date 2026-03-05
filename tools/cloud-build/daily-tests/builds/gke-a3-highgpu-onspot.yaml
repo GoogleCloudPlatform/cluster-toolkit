@@ -33,7 +33,7 @@ steps:
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-a3-highgpu-onspot.yaml"
 
 - id: gke-a3-highgpu-onspot
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: us-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/test-runner@sha256:75cbf60d447c9ec283be6333852b54fed33fc656b0ab4fdeaa9d2308f9ca22d4
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
