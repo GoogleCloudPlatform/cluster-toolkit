@@ -19,3 +19,20 @@ spec:
     - batch.googleapis.com
     - compute.googleapis.com
     - storage.googleapis.com
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [job_template_contents]
+      deprecated: true
+    error_message: "Unsupported variable: 'job_template_contents'. Please use 'job_data' instead."
+  - validator: required
+    inputs:
+      vars: [job_filename]
+      deprecated: true
+    error_message: "Unsupported variable: 'job_filename'. Please use 'job_data' instead."
+  - validator: required
+    inputs:
+      vars: [job_id]
+      deprecated: true
+    error_message: "Unsupported variable: 'job_id'. Please use 'job_data' instead."
