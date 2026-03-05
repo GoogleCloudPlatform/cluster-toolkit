@@ -44,7 +44,7 @@ steps:
 
 # Test Batch MPI
 - id: batch-mpi
-  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"

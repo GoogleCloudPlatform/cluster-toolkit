@@ -32,7 +32,7 @@ steps:
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/slurm-gcp-v6-simple-job-completion.yaml"
 
 - id: slurm-job-completion
-  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   args:
   - -c

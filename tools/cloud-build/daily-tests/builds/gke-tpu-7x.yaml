@@ -34,7 +34,7 @@ steps:
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-tpu-7x.yaml"
 
 - id: gke-tpu-7x
-  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"

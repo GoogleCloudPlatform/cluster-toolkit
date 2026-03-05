@@ -34,7 +34,7 @@ steps:
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/slurm-gcp-v6-ubuntu.yaml"
 
 - id: slurm-gcp-v6-ubuntu
-  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
