@@ -36,7 +36,7 @@ steps:
 
 ## Test GKE
 - id: gke-storage
-  name: uus-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/test-runner
+  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"

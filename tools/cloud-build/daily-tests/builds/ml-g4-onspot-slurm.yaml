@@ -35,7 +35,7 @@ steps:
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-g4-onspot-slurm.yaml"
 
 - id: ml-g4-onspot-slurm
-  name: uus-central1-docker.pkg.dev/hpc-toolkit-dev/hpc-toolkit-repo/test-runner
+  name: uus-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
