@@ -1,0 +1,72 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: tpu-v6e-qp-test
+  labels:
+    kueue.x-k8s.io/queue-name: dws-local-queue
+  annotations:
+    # Required for DWS Flex / Queued Provisioning.
+    provreq.kueue.x-k8s.io/maxRunDurationSeconds: "3600"
+spec:
+  replicatedJobs:
+  - name: tpu-slice
+    replicas: 1
+    template:
+      spec:
+        parallelism: 4 # Total nodes (16 chips / 4 per node)
+        completions: 4
+        backoffLimit: 0
+        template:
+          spec:
+            containers:
+            - name: tpu-job
+              image: python:3.9-slim
+              command:
+              - "/bin/bash"
+              - "-c"
+              - |
+                echo "Starting TPU v6e Test Job..."
+                sleep 120
+                echo "Job complete!"
+              resources:
+                requests:
+                  google.com/tpu: 4
+                limits:
+                  google.com/tpu: 4
+            nodeSelector:
+              cloud.google.com/gke-tpu-topology: "4x4"
+              cloud.google.com/gke-queued: "true"
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: cloud.google.com/gke-nodepool
+                      operator: In
+                      values:
+                      - gke-tpu-v6e-pool
+            tolerations:
+            - key: "google.com/tpu"
+              operator: "Equal"
+              value: "present"
+              effect: "NoSchedule"
+            # Mandatory for Queued Provisioning
+            - key: "cloud.google.com/gke-queued"
+              operator: "Equal"
+              value: "true"
+              effect: "NoSchedule"
+            restartPolicy: Never

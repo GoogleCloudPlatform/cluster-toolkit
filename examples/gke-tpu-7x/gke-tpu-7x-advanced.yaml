@@ -49,7 +49,7 @@ vars:
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
 
-# Kueue configuration
+  # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
@@ -249,7 +249,7 @@ deployment_groups:
   #   source: modules/network/private-service-access
   #   use: [gke-tpu-7x-net-0]
   #   settings:
-  #     prefix_length: 24
+  #     prefix_length: 22
 
   # # Firewall to allow Managed Lustre connection
   # - id: lustre_firewall_rule

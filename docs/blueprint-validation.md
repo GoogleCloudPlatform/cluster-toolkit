@@ -148,6 +148,23 @@ ghpc:
       error_message: "partition_name must be lowercase alphanumeric and max 10 characters."
 ```
 
+### Allowed Enum Validator
+The `allowed_enum` validator ensures that user-provided settings conform to a predefined list of allowed values (enums). Supports optional `case_sensitive` (defaults to true) and `allow_null` (defaults to false) flags.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: allowed_enum
+    inputs:
+      vars: [network_routing_mode]
+      allowed: [GLOBAL, REGIONAL]
+      case_sensitive: false
+      allow_null: false
+    error_message: "'network_routing_mode' must be GLOBAL or REGIONAL."
+```
+
 ### Range Validator
 The `range` validator ensures input variables either their values or lengths fall within specified numerical minimum and/or maximum bounds. It supports validating individual numeric values, lists of numeric values, and the number of elements in a list. The optional length_check field (defaulting to false) determines whether to validate the values themselves or the length of the variable.
 
@@ -177,6 +194,54 @@ validators:
     inputs:
       vars: [preemptible, reserved]
     error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
+```
+
+### Required Validator
+The `required` validator ensures that a specific set of variables are either present or absent depending on the deprecated flag. It is used to enforce mandatory inputs or to block restricted and deprecated configurations.
+
+vars (list of strings): The list of variable names to check.
+deprecated (boolean, optional): If true, the validator checks that the specified variables are not set. Defaults to false (checks that variables are set).
+
+**Example: Enforcing required variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [vpc_network_name, subnetwork_name]
+    error_message: "Network details must be provided."
+```
+
+**Example: Deprecated variables definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+  - validator: required
+    inputs:
+      vars: [legacy_option]
+      deprecated: true
+    error_message: "The 'legacy_option' is no longer supported."
+```
+
+### Conditional Validator
+The `conditional` validator enforces that a dependent variable is set or matches a specific value only when a trigger variable condition is met. This is useful for cross-variable dependencies (e.g., if feature X is enabled, setting Y is required).
+
+If trigger_value or dependent_value is omitted, the validator checks if the variable is simply "set" (non-null, true bool, positive integer, and non-empty list/tuple/map).
+If a value is provided, it must match exactly. This also supports matching against null to check if a variable is explicitly omitted.
+
+**Example definition in `metadata.yaml`:**
+
+```yaml
+ghpc:
+  validators:
+    - validator: conditional
+      inputs:
+        trigger: enable_hybrid
+        trigger_value: true
+        dependent: slurm_control_host
+      error_message: "slurm_control_host is required when enable_hybrid is true."
 ```
 
 Unlike blueprint-level validators, these are intrinsic to the module and ensure that the module receives data in the exact format required for its internal logic to function.

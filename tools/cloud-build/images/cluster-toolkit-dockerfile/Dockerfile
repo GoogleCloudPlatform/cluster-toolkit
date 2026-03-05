@@ -32,7 +32,7 @@ RUN apt-get update && \
         python3-pip
 
 # Install Terraform
-ARG TERRAFORM_VERSION=1.5.2
+ARG TERRAFORM_VERSION=1.12.2
 RUN wget -q "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -O terraform.zip && \
     unzip terraform.zip && \
     mv terraform /usr/local/bin/ && \

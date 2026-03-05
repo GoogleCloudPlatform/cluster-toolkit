@@ -210,3 +210,9 @@ variable "postrender" {
   })
   default = null # Disabled by default
 }
+
+variable "dependencies" {
+  description = "A list of resource IDs (e.g., node pool IDs) that this release depends on. Used to force Terraform dependencies."
+  type        = list(string)
+  default     = []
+}

@@ -8,6 +8,7 @@ yaml-files:
 ignore:
 - modules/management/kubectl-apply/manifests/*
 - examples/gke-a4x/nvidia-dra-driver.yaml
+- modules/management/kubectl-apply/raw-config-chart/templates/
 
 rules:
   # Defaults

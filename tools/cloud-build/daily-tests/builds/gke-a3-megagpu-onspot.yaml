@@ -44,6 +44,7 @@ steps:
   - "PROJECT_ID=$PROJECT_ID"
   - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3moptions.txt"
+  - "ENABLE_SPOT_FALLBACK=true"
   args:
   - -c
   - |
@@ -87,13 +88,25 @@ steps:
     echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
-    sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: true' $${EXAMPLE_BP}
+    ENABLE_SPOT="true"
+    GKE_VARS_FILE="tools/cloud-build/daily-tests/tests/gke-a3-megagpu-onspot.yml"
+    if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
+      ENABLE_SPOT="false"
+      sed -i '/instance_labels:/,+1d' "$${GKE_VARS_FILE}"
+      sed -i '/enable_spot: true/d' "$${GKE_VARS_FILE}"
+    else
+      echo "INFO: Using $${GKE_VARS_FILE} as it is for SPOT provisioning."
+    fi
+
+    sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"$$ENABLE_SPOT"'' $${EXAMPLE_BP}
     sed -i '/reservation/d' $${EXAMPLE_BP}
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-megagpu-onspot.yml"
+      --extra-vars="enable_spot=$${ENABLE_SPOT}" \
+      --extra-vars="@$${GKE_VARS_FILE}"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
   secretManager:

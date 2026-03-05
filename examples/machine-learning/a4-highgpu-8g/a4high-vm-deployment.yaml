@@ -25,3 +25,4 @@ vars:
   zone: # supply zone with a4-highgpu-8g capacity in reservation
   a4h_reservation_name: # supply a4-highgpu-8g reservation name
   number_of_vms: # supply number of vms desired
+ #a4h_provisioning_model: SPOT

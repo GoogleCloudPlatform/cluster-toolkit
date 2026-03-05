@@ -99,30 +99,39 @@ is_excluded() {
 		return 0 # Excluded
 	fi
 
-	# Check for cleanup-exemption-date label
 	if [[ -n "$labels_str" ]]; then
 		IFS=';' read -ra LABEL_PAIRS <<<"$labels_str"
 		for PAIR in "${LABEL_PAIRS[@]}"; do
 			local KEY VAL
 			KEY="${PAIR%%=*}"
 			VAL="${PAIR#*=}"
-			if [[ "$KEY" == "cleanup-exemption-date" ]]; then
+
+			if [[ "$KEY" == "time-to-live" ]]; then
 				local exp_seconds
-				if [[ "$VAL" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] &&
-					exp_seconds=$(date -d "$VAL + 1 day" -u +%s 2>/dev/null); then
-					# Format is valid AND date parsing succeeded
-					local current_seconds
-					current_seconds=$(date -u +%s)
-					if [[ "$exp_seconds" -gt "$current_seconds" ]]; then
-						log "SKIP" "$resource_name: Exempted by active label: cleanup-exemption-date=$VAL"
-						return 0 # Excluded
+				# Regex for YYYY-MM-DD_HH-MM format (GCP Label compliant)
+				if [[ "$VAL" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(_[0-9]{2}-[0-9]{2})?$ ]]; then
+
+					# Transform "YYYY-MM-DD_HH-MM" to "YYYY-MM-DD HH:MM" for the date command
+					local VAL_FOR_DATE
+					VAL_FOR_DATE=$(echo "$VAL" | sed 's/_/ /; s/-/:/3')
+
+					if exp_seconds=$(date -d "$VAL_FOR_DATE" -u +%s 2>/dev/null); then
+						local current_seconds
+						current_seconds=$(date -u +%s)
+
+						if [[ "$exp_seconds" -gt "$current_seconds" ]]; then
+							log "SKIP" "$resource_name: Exempted by active label: time-to-live=$VAL"
+							return 0 # Excluded
+						else
+							log "INFO" "$resource_name: Exemption label time-to-live=$VAL has expired."
+							return 1 # Not excluded
+						fi
 					else
-						log "INFO" "$resource_name: Exemption label cleanup-exemption-date=$VAL has expired."
-						return 1 # Not excluded because exemption expired
+						log "WARNING" "$resource_name: Date parsing failed for value: $VAL_FOR_DATE"
+						return 1
 					fi
 				else
-					# Either format is invalid OR date parsing failed
-					log "WARNING" "$resource_name: Invalid format or value for label cleanup-exemption-date: $VAL. Expected YYYY-MM-DD."
+					log "WARNING" "$resource_name: Invalid format for label time-to-live: $VAL. Expected YYYY-MM-DD[_HH-MM]."
 					return 1 # Not excluded
 				fi
 			fi
