@@ -79,11 +79,12 @@
   failed_when: avg_bus_bandwidth.stdout | float < 100
 
 - name: Run CHS Tests
-  ansible.builtin.include_tasks: "tasks/run-chs-tests.yml"
-  vars:
-    scheduler: gke
-    machine_type: a3-ultra
   delegate_to: localhost
+  block:
+    - ansible.builtin.include_tasks: "tasks/run-chs-tests.yml"
+      vars:
+        scheduler: gke
+        machine_type: a3-ultra
 
 - name: Clean up
   delegate_to: localhost
