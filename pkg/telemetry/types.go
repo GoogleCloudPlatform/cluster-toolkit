@@ -19,6 +19,7 @@ import "time"
 var (
 	ClearcutProdURL   = "https://play.googleapis.com/log"
 	HttpServerTimeout = 10 * time.Second
+	metadata          = make(map[string]string)
 )
 
 type ClientInfo struct {

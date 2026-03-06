@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -27,7 +28,7 @@ import (
 func Flush(payload LogRequest) {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		fmt.Printf("Error marshalling JSON: %v\n", err)
+		logging.Error("Error marshalling telemetry JSON: %v", err)
 		return
 	}
 
@@ -37,7 +38,7 @@ func Flush(payload LogRequest) {
 
 	u, err := url.Parse(ClearcutProdURL)
 	if err != nil {
-		fmt.Printf("Error parsing URL: %v\n", err)
+		logging.Error("Error parsing URL: %v", err)
 		return
 	}
 	params := url.Values{}
@@ -46,17 +47,21 @@ func Flush(payload LogRequest) {
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Printf("Error creating request: %v\n", err)
+		logging.Error("Error creating HTTP request: %v", err)
 		return
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("CLUSTER_TOOLKIT/%v", config.GetToolkitVersion()))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
-
 	if err != nil {
-		logging.Error("Error sending request: %v\n", err)
+		logging.Error("Error sending request: %v", err)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		logging.Error("Telemetry request failed with status %d: %s", resp.StatusCode, string(body))
+	}
 }

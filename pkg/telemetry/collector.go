@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	metadata       = make(map[string]string)
 	eventStartTime time.Time
 )
 

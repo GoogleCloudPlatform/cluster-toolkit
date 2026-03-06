@@ -25,10 +25,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	eventMetadata []map[string]string = make([]map[string]string, 0)
-)
-
 func Initialize(cmd *cobra.Command, args []string) {
 	CollectPreMetrics(cmd, args)
 }
@@ -66,6 +62,7 @@ func ConstructPayload() LogRequest {
 }
 
 func getEventMetadataKVPairs() []map[string]string {
+	eventMetadata := make([]map[string]string, 0)
 	for k, v := range metadata {
 		eventMetadata = append(eventMetadata, map[string]string{
 			"key":   k,
