@@ -36,7 +36,8 @@ import (
 )
 
 const (
-	maxHintDist int = 3 // Maximum Levenshtein distance where we suggest a hint
+	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
+	latestToolkitVersion     = "v1.83.0"
 )
 
 // map[moved module path]replacing module path
@@ -501,6 +502,10 @@ func (bp Blueprint) Export(outputFilename string) error {
 		return fmt.Errorf("failed to write the expanded yaml %s: %w", outputFilename, err)
 	}
 	return nil
+}
+
+func GetToolkitVersion() string {
+	return latestToolkitVersion
 }
 
 // addKindToModules sets the kind to 'terraform' when empty.
