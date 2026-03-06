@@ -18,12 +18,12 @@ deployment_name: "enter-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "enter{{ build[0:5] }}"
-zone: europe-west4-c
+zone: us-central1-a
 cli_deployment_vars:
   network_name: "{{ network }}"
-  region: europe-west4
+  region: us-central1
   zone: "{{ zone }}"
-  gpu_zones: "[europe-west4-a,europe-west4-b,europe-west4-c]"
+  gpu_zones: "[us-central1-a, us-central1-b, us-central1-c, us-central1-f]"
   lustre_instance_id: "lustre-instance-{{build}}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
