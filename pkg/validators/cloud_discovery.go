@@ -219,22 +219,33 @@ func validateSettingsInModules(blueprint config.Blueprint, globalZone, projectID
 	return validationErrors.OrNil()
 }
 
-// validateMachineTypeInZone calls the Compute Engine API to verify if a specific
-// machine type is available in the given zone and project.
-func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string, validatorName string) error {
-	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
-
-	// Case 1: Success - The machine type exists
+// handleResourceInZoneValidationError handles the common logic for processing API errors,
+// printing soft warnings for permission issues, or returning formatted hard failures.
+func handleResourceInZoneValidationError(err error, validatorName, projectID, apiName, permission, resourceLabel, resourceName, zone string) error {
 	if err == nil {
 		return nil
 	}
 
-	// Case 2: Environmental Issue - API disabled or permissions missing (Soft Warning)
-	if msg, isSoft := getSoftWarningMessage(err, validatorName, projectID, "Compute Engine API", "compute.machineTypes.get"); isSoft {
+	// Check for environmental issues (Soft Warning)
+	if msg, isSoft := getSoftWarningMessage(err, validatorName, projectID, apiName, permission); isSoft {
 		fmt.Println(msg)
 		return errSoftWarning
 	}
 
-	// Case 3: Validation Failure - The machine type is genuinely invalid or unavailable
-	return fmt.Errorf(config.ErrMsgResourceInZone, "machine type", machineType, zone, projectID)
+	// Validation Failure (Hard Failure)
+	return fmt.Errorf(config.ErrMsgResourceInZone, resourceLabel, resourceName, zone, projectID)
+}
+
+// validateMachineTypeInZone calls the Compute Engine API to verify if a specific
+// machine type is available in the given zone and project.
+func validateMachineTypeInZone(s *compute.Service, projectID, zone, machineType string, validatorName string) error {
+	_, err := s.MachineTypes.Get(projectID, zone, machineType).Do()
+	return handleResourceInZoneValidationError(err, validatorName, projectID, "Compute Engine API", "compute.machineTypes.get", "machine type", machineType, zone)
+}
+
+// validateDiskTypeInZone calls the Compute Engine API to verify if a specific
+// disk type is available in the given zone and project.
+func validateDiskTypeInZone(s *compute.Service, projectID, zone, diskType string, validatorName string) error {
+	_, err := s.DiskTypes.Get(projectID, zone, diskType).Do()
+	return handleResourceInZoneValidationError(err, validatorName, projectID, "Compute Engine API", "compute.diskTypes.get", "disk type", diskType, zone)
 }

@@ -112,7 +112,7 @@ When using the TPU Flex Start model, the cluster begins with **0 nodes** in the 
 
     ```text
     NAME                    STATUS   ROLES    AGE   VERSION
-    gke-tpu-7f1325ce-8hwg   Ready    <none>   10s   v1.34.1-gke.3971000
+    gke-tpu-7f1325ce-8hwg   Ready    <none>   10s   v1.34.3-gke.1318000
     ```
 
    * **Running:** Once nodes are ready, pods will transition to `Running`.
@@ -128,7 +128,7 @@ When using the TPU Flex Start model, the cluster begins with **0 nodes** in the 
    * **Automatic Removal:** After a short idle period (typically 1-10 minutes), the Cluster Autoscaler will delete the nodes.
 
      ```text
-     gke-tpu-7f1325ce-8hwg   NotReady,SchedulingDisabled   <none>   6m   v1.34.1-gke.3971000
+     gke-tpu-7f1325ce-8hwg   NotReady,SchedulingDisabled   <none>   6m   v1.34.3-gke.1318000
      ```
 
    * **Final State:** The node pool will return to **0 nodes**.

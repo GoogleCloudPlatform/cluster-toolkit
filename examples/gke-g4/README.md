@@ -5,7 +5,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 * [Blog post](https://cloud.google.com/blog/products/compute/g4-vms-powered-by-nvidia-rtx-6000-blackwell-gpus-are-ga)
 * [Documentation](https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus)
 
-> **_NOTE:_** The required GKE version for G4 support is >= 1.32.4-gke.1698000.
+> **_NOTE:_** The required GKE version for G4 support is >= 1.32.11-gke.1174000.
 
 ## Steps to deploy the G4 blueprint
 
