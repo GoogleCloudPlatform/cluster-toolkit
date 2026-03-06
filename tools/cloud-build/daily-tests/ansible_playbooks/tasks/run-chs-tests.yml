@@ -1,0 +1,114 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: "Install CHS Dependencies"
+  ansible.builtin.package:
+    name:
+      - python3
+      - python3-pip
+      - git
+    state: present
+
+- name: "Clone CHS Repository"
+  ansible.builtin.git:
+    repo: 'https://cluster-toolkit.googlesource.com/cluster-health-scanner'
+    dest: /tmp/cluster-health-scanner
+
+- name: "Install CHS"
+  ansible.builtin.pip:
+    name: /tmp/cluster-health-scanner
+    executable: pip3
+
+- name: "Run CHS NCCL and DCGM Tests"
+  ansible.builtin.command: "chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm"
+  register: chs_run
+  changed_when: false
+
+- name: "Print CHS run output"
+  ansible.builtin.debug:
+    msg: "{{ chs_run.stdout }}"
+
+- name: "Find the CHS workspace directory"
+  ansible.builtin.find:
+    paths: "~/.local/share/cluster-health-scanner/workspaces/"
+    file_type: directory
+  register: chs_workspaces
+
+- name: "Set the Bill of Health path"
+  ansible.builtin.set_fact:
+    boh_path: "{{ chs_workspaces.files[0].path }}/chs-results/bill_of_health.json"
+
+- name: "Read the Bill of Health"
+  ansible.builtin.slurp:
+    src: "{{ boh_path }}"
+  register: boh_file
+
+- name: "Print Bill of Health path"
+  ansible.builtin.debug:
+    msg: "Reading Bill of Health from: {{ boh_path }}"
+
+- name: "Parse the Bill of Health"
+  ansible.builtin.set_fact:
+    boh: "{{ boh_file['content'] | b64decode | from_json }}"
+
+- name: "Print Parsed Bill of Health"
+  ansible.builtin.debug:
+    var: boh
+    verbosity: 1
+
+- name: "Print DCGM validation header"
+  ansible.builtin.debug:
+    msg: "--- Validating DCGM Metrics ---"
+
+- name: "Print DCGM metric being validated"
+  ansible.builtin.debug:
+    msg: "Validating DCGM metric '{{ item.1.key }}' with value '{{ item.1.value }}' for resource '{{ item.0.target_resource_ids | first }}'."
+  loop: "{{ boh.test_results | subelements('metrics') }}"
+  when:
+    - item.0.test_name == 'dcgm'
+
+- name: "Validate DCGM diag metrics"
+  ansible.builtin.assert:
+    that:
+      - item.1.value == 'Pass'
+    fail_msg: "DCGM metric '{{ item.1.key }}' failed for resource '{{ item.0.target_resource_ids | first }}'."
+    success_msg: "DCGM metric '{{ item.1.key }}' passed for resource '{{ item.0.target_resource_ids | first }}'."
+  loop: "{{ boh.test_results | subelements('metrics') }}"
+  when:
+    - item.0.test_name == 'dcgm'
+
+- name: "Print NCCL validation header"
+  ansible.builtin.debug:
+    msg: "--- Validating NCCL Metrics ---"
+
+- name: "Print NCCL metric being validated"
+  ansible.builtin.debug:
+    msg: "Validating NCCL metric '{{ item.1.key }}' with value '{{ item.1.value }}'."
+  loop: "{{ boh.test_results | subelements('metrics') }}"
+  when:
+    - item.0.test_name == 'nccl-cluster'
+    - item.1.key == 'Avg. Bus Bandwidth'
+
+- name: "Validate NCCL average bus bandwidth"
+  ansible.builtin.assert:
+    that:
+      - item.1.value | float >= 25.0
+    fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
+    success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
+  loop: "{{ boh.test_results | subelements('metrics') }}"
+  when:
+    - item.0.test_name == 'nccl-cluster'
+    - item.1.key == 'Avg. Bus Bandwidth'
