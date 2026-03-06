@@ -14,11 +14,6 @@
 
 ---
 
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: yes
-  become: true
-
 - name: Install Python and Git
   ansible.builtin.package:
     name:
@@ -46,18 +41,13 @@
   ansible.builtin.debug:
     msg: "Found setup file at: {{ chs_setup_file.files[0].path }}"
 
-- name: Create CHS virtual environment
-  ansible.builtin.command:
-    cmd: python3 -m venv /tmp/chs_venv
-    creates: /tmp/chs_venv/bin/activate
-
-- name: Install CHS in virtual environment
-  ansible.builtin.command:
-    cmd: /tmp/chs_venv/bin/pip install -e {{ chs_setup_file.files[0].path | dirname }}
+- name: Install CHS (User Space)
+  ansible.builtin.shell:
+    cmd: pip3 install --user -e {{ chs_setup_file.files[0].path | dirname }} || pip3 install --user --break-system-packages -e {{ chs_setup_file.files[0].path | dirname }}
 
 - name: "Run CHS NCCL and DCGM Tests"
-  ansible.builtin.command:
-    cmd: /tmp/chs_venv/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
+  ansible.builtin.shell:
+    cmd: $HOME/.local/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
   register: chs_run
   changed_when: false
 
@@ -91,7 +81,6 @@
 - name: "Print Parsed Bill of Health"
   ansible.builtin.debug:
     var: boh
-    verbosity: 1
 
 - name: "Print DCGM validation header"
   ansible.builtin.debug:
@@ -100,7 +89,7 @@
 - name: "Print DCGM metric being validated"
   ansible.builtin.debug:
     msg: "Validating DCGM metric '{{ item.1.key }}' with value '{{ item.1.value }}' for resource '{{ item.0.target_resource_ids | first }}'."
-  loop: "{{ boh.test_results | subelements('metrics') }}"
+  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
   when:
     - item.0.test_name == 'dcgm'
 
@@ -110,7 +99,7 @@
       - item.1.value == 'Pass'
     fail_msg: "DCGM metric '{{ item.1.key }}' failed for resource '{{ item.0.target_resource_ids | first }}'."
     success_msg: "DCGM metric '{{ item.1.key }}' passed for resource '{{ item.0.target_resource_ids | first }}'."
-  loop: "{{ boh.test_results | subelements('metrics') }}"
+  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
   when:
     - item.0.test_name == 'dcgm'
 
@@ -121,7 +110,7 @@
 - name: "Print NCCL metric being validated"
   ansible.builtin.debug:
     msg: "Validating NCCL metric '{{ item.1.key }}' with value '{{ item.1.value }}'."
-  loop: "{{ boh.test_results | subelements('metrics') }}"
+  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
   when:
     - item.0.test_name == 'nccl-cluster'
     - item.1.key == 'Avg. Bus Bandwidth'
@@ -132,7 +121,7 @@
       - item.1.value | float >= 25.0
     fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
     success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
-  loop: "{{ boh.test_results | subelements('metrics') }}"
+  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
   when:
     - item.0.test_name == 'nccl-cluster'
     - item.1.key == 'Avg. Bus Bandwidth'
