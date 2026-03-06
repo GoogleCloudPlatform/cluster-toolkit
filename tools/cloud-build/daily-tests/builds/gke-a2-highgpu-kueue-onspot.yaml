@@ -41,6 +41,8 @@ steps:
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=12"
   - "MIN_NODES=6"
+  - "ZONE=us-central1-b"
+  - "PROVISIONING_MODEL=SPOT"
   - "MACHINE_TYPE=a2-highgpu-2g"
   - "INSTANCE_PREFIX=a2hspgke"
   - "BUILD_ID=$BUILD_ID"
@@ -50,12 +52,13 @@ steps:
   - -c
   - |
     set -e -u -o pipefail
-    echo "Sourcing find_available_zone.sh to determine zone."
-    source /workspace/tools/cloud-build/find_available_zone.sh
-    if [ -z "$${ZONE:-}" ]; then
-      echo "ERROR: ZONE not found" >&2
-      exit 1
-    fi
+    # Commenting out dynamically setting zone due to test failures.
+    # echo "Sourcing find_available_zone.sh to determine zone."
+    # source /workspace/tools/cloud-build/find_available_zone.sh
+    # if [ -z "$${ZONE:-}" ]; then
+    #   echo "ERROR: ZONE not found" >&2
+    #   exit 1
+    # fi
     REGION="$${ZONE%-*}"
     echo "Using ZONE=$${ZONE} and REGION=$${REGION}"
 

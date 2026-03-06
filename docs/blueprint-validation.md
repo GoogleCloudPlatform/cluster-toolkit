@@ -112,6 +112,11 @@ validators:
       project_id: $(vars.project_id)
       zone: $(vars.zone)
       machine_type: c2-standard-60  # any machine type to verify in the zone
+  - validator: test_disk_type_in_zone
+    inputs:
+      project_id: $(vars.project_id)
+      zone: $(vars.zone)
+      disk_type: pd-ssd  # any disk type to verify in the zone
 ```
 
 ## Module-level (Metadata) Validators
