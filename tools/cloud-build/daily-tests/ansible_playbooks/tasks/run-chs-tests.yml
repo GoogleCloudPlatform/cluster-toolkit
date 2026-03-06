@@ -14,14 +14,19 @@
 
 ---
 
-- name: Install Python, Git, and venv
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+  become: true
+
+- name: Install Python and Git
   ansible.builtin.package:
     name:
       - python3
       - python3-pip
       - git
-      - python3-venv
     state: present
+  become: true
 
 - name: Clone CHS develop branch
   ansible.builtin.git:
