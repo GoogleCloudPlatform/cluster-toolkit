@@ -41,13 +41,29 @@
   ansible.builtin.debug:
     msg: "Found setup file at: {{ chs_setup_file.files[0].path }}"
 
-- name: Install CHS (User Space)
+- name: Download Miniconda
+  ansible.builtin.get_url:
+    url: https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    dest: /tmp/miniconda.sh
+    mode: '0755'
+
+- name: Install Miniconda
+  ansible.builtin.shell: /tmp/miniconda.sh -b -u -p $HOME/miniconda3
+  args:
+    creates: $HOME/miniconda3/bin/conda
+
+- name: Create Conda environment for CHS
+  ansible.builtin.shell: $HOME/miniconda3/bin/conda create -y -n chs python=3.10
+  args:
+    creates: $HOME/miniconda3/envs/chs/bin/python
+
+- name: Install CHS (Conda Env)
   ansible.builtin.shell:
-    cmd: pip3 install --user -e {{ chs_setup_file.files[0].path | dirname }} || pip3 install --user --break-system-packages -e {{ chs_setup_file.files[0].path | dirname }}
+    cmd: $HOME/miniconda3/envs/chs/bin/pip install -e {{ chs_setup_file.files[0].path | dirname }}
 
 - name: "Run CHS NCCL and DCGM Tests"
   ansible.builtin.shell:
-    cmd: $HOME/.local/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
+    cmd: $HOME/miniconda3/envs/chs/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
   register: chs_run
   changed_when: false
 
