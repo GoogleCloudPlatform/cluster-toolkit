@@ -75,7 +75,7 @@
 
 - name: "Run CHS NCCL and DCGM Tests"
   ansible.builtin.shell:
-    cmd: $HOME/miniconda3/envs/chs/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
+    cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
   register: chs_run
   changed_when: false
   ignore_errors: true
