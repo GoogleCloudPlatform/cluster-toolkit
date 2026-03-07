@@ -41,6 +41,17 @@
   ansible.builtin.debug:
     msg: "Found setup file at: {{ chs_setup_file.files[0].path }}"
 
+- name: Check if .netrc exists
+  ansible.builtin.stat:
+    path: ~/.netrc
+  register: netrc_stat
+
+- name: Fix .netrc permissions if it exists
+  ansible.builtin.file:
+    path: ~/.netrc
+    mode: '0600'
+  when: netrc_stat.stat.exists
+
 - name: Download Miniconda
   ansible.builtin.get_url:
     url: https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
