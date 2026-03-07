@@ -70,7 +70,8 @@
 
 - name: Install CHS (Conda Env)
   ansible.builtin.shell:
-    cmd: $HOME/miniconda3/envs/chs/bin/pip install -e {{ chs_setup_file.files[0].path | dirname }}
+    cmd: $HOME/miniconda3/envs/chs/bin/pip install .
+    chdir: "{{ chs_setup_file.files[0].path | dirname }}"
 
 - name: "Run CHS NCCL and DCGM Tests"
   ansible.builtin.shell:
