@@ -77,10 +77,43 @@
     cmd: $HOME/miniconda3/envs/chs/bin/chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }} --tests nccl,dcgm
   register: chs_run
   changed_when: false
+  ignore_errors: true
 
 - name: "Print CHS run output"
   ansible.builtin.debug:
     msg: "{{ chs_run.stdout }}"
+
+- name: "Handle CHS run failure"
+  when: chs_run.failed
+  block:
+    - name: "Print CHS run stderr"
+      ansible.builtin.debug:
+        msg: "{{ chs_run.stderr }}"
+
+    - name: "Find the newest CHS workspace directory"
+      ansible.builtin.find:
+        paths: "~/.local/share/cluster-health-scanner/workspaces/"
+        file_type: directory
+      register: failed_chs_workspaces
+
+    - name: "Read internal.log from newest workspace"
+      ansible.builtin.slurp:
+        src: "{{ (failed_chs_workspaces.files | sort(attribute='ctime', reverse=True) | first).path }}/internal.log"
+      register: internal_log_content
+      when: failed_chs_workspaces.matched > 0
+      ignore_errors: true
+
+    - name: "Print internal.log"
+      ansible.builtin.debug:
+        msg: "internal.log contents:\n{{ internal_log_content['content'] | b64decode }}"
+      when:
+        - failed_chs_workspaces.matched > 0
+        - internal_log_content is not failed
+        - "'content' in internal_log_content"
+
+    - name: "Fail the playbook as CHS run failed"
+      ansible.builtin.fail:
+        msg: "CHS run failed. See above logs for details."
 
 - name: "Find the CHS workspace directory"
   ansible.builtin.find:
