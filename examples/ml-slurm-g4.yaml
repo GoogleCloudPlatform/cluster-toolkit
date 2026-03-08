@@ -73,7 +73,7 @@ deployment_groups:
               enable_nvidia_dcgm: false
               nvidia_packages:
               # 1. Open Kernel Driver: Installs the open-source kernel components.
-              - nvidia-kernel-open-575
+              - nvidia-driver-575-open
               # 2. Driver Metapackage: Pulls in the 580.xx driver version.
               - cuda-drivers-575
               # 3. CUDA Toolkit: Installs the 12.9.1 toolkit.
@@ -101,8 +101,9 @@ deployment_groups:
             # Install the package
             - name: Install NVIDIA fabric and CUDA
               ansible.builtin.apt:
-                name: "{{ item }}"
-              loop: "{{ nvidia_packages }}"
+                name: "{{ nvidia_packages }}"
+                state: present
+                update_cache: yes
 
             # This section will optionally freeze the packages with
             # an apt-mark hold.
