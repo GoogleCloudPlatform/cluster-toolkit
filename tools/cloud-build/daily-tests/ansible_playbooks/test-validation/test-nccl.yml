@@ -13,13 +13,23 @@
 # limitations under the License.
 
 ---
+- name: Show repository and branch used for NCCL test
+  debug:
+    msg:
+    - "Repository: https://github.com/GoogleCloudPlatform/cluster-toolkit.git"
+    - "Branch: {{ lookup('env','HEAD_BRANCH') | default('develop', true) }}"
+
+- name: Clone cluster-toolkit repository
+  ansible.builtin.git:
+    repo: "https://github.com/GoogleCloudPlatform/cluster-toolkit.git"
+    dest: "{{ ansible_user_dir }}/cluster-toolkit"
+    version: "{{ lookup('env','HEAD_BRANCH') | default('develop', true) }}"
+    update: yes
+
 - name: Run prerequisite NCCL scripts
   shell: |
     set -x -e
-    cd {{ ansible_user_dir }}
-    rm -rf cluster-toolkit
-    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-    cd cluster-toolkit/{{ nccl_test_path }}
+    cd {{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}
     bash import_pytorch_container.sh
     sbatch --wait build-nccl-tests.sh
   args:
