@@ -68,11 +68,19 @@
     cmd: $HOME/miniconda3/envs/chs/bin/pip install .
     chdir: "{{ chs_setup_file.files[0].path | dirname }}"
 
+- name: Configure bucket for CHS
+  ansible.builtin.shell:
+    cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs configure bucket
+
 - name: "Run CHS lite suite"
   ansible.builtin.shell:
     cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
   register: chs_run
   changed_when: false
+
+- name: CHS run output
+  ansible.builtin.debug:
+    var: chs_run.stdout_lines
 
 - name: "Find the CHS workspace directory"
   ansible.builtin.find:
