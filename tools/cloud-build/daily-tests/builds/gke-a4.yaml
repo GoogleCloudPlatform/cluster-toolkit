@@ -80,10 +80,12 @@ steps:
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} chs_repo=${CHS_REPO}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a4.yml"
-  secretEnv: ['GCLUSTER_GCS_PATH']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CHS_REPO']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/508417052821/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'
