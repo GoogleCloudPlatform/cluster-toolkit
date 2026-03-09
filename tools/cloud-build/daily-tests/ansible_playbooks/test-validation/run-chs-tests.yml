@@ -23,10 +23,16 @@
     state: present
   become: true
 
-- name: Create Virtual Environment
+- name: Create Virtual Environment (without pip to avoid ensurepip error)
   ansible.builtin.command:
-    cmd: python3 -m venv /opt/chs_venv
+    cmd: python3 -m venv --without-pip /opt/chs_venv
     creates: /opt/chs_venv/bin/python
+  become: true
+
+- name: Manually install pip into the venv
+  ansible.builtin.shell:
+    cmd: curl https://bootstrap.pypa.io/get-pip.py | /opt/chs_venv/bin/python3
+    creates: /opt/chs_venv/bin/pip
   become: true
 
 - name: Install CHS into venv
