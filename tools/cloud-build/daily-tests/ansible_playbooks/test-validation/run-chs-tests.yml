@@ -14,67 +14,38 @@
 
 ---
 
-- name: Install Python and Git
+- name: Install Python, Git, and venv
   ansible.builtin.package:
     name:
       - python3
-      - python3-pip
+      - python3-venv
       - git
     state: present
   become: true
 
-- name: Clone CHS repository
-  ansible.builtin.git:
-    repo: "{{ chs_repo }}"
-    dest: /tmp/cluster-health-scanner
+- name: Create Virtual Environment
+  ansible.builtin.command:
+    cmd: python3 -m venv /opt/chs_venv
+    creates: /opt/chs_venv/bin/python
+  become: true
 
-- name: Find CHS package directory
-  ansible.builtin.find:
-    paths: /tmp/cluster-health-scanner
-    file_type: file
-    patterns: 'pyproject.toml'
-    recurse: yes
-  register: chs_setup_file
-
-- name: Check if .netrc exists
-  ansible.builtin.stat:
-    path: ~/.netrc
-  register: netrc_stat
-
-- name: Fix .netrc permissions if it exists
-  ansible.builtin.file:
-    path: ~/.netrc
-    mode: '0600'
-  when: netrc_stat.stat.exists
-
-- name: Download Miniconda
-  ansible.builtin.get_url:
-    url: https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-    dest: /tmp/miniconda.sh
-    mode: '0755'
-
-- name: Install Miniconda
-  ansible.builtin.shell: /tmp/miniconda.sh -b -u -p $HOME/miniconda3
-  args:
-    creates: $HOME/miniconda3/bin/conda
-
-- name: Create Conda environment for CHS
-  ansible.builtin.shell: $HOME/miniconda3/bin/conda create -y -n chs python=3.10
-  args:
-    creates: $HOME/miniconda3/envs/chs/bin/python
-
-- name: Install CHS (Conda Env)
-  ansible.builtin.shell:
-    cmd: $HOME/miniconda3/envs/chs/bin/pip install .
+- name: Install CHS into venv
+  ansible.builtin.pip:
+    name: "."
     chdir: "{{ chs_setup_file.files[0].path | dirname }}"
+    virtualenv: /opt/chs_venv
 
 - name: Configure bucket for CHS
   ansible.builtin.shell:
-    cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs configure bucket
+    cmd: chs configure bucket
+  environment:
+    PATH: "/opt/chs_venv/bin:{{ ansible_env.PATH }}"
 
 - name: "Run CHS lite suite"
   ansible.builtin.shell:
-    cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
+    cmd: chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
+  environment:
+    PATH: "/opt/chs_venv/bin:{{ ansible_env.PATH }}"
   register: chs_run
   changed_when: false
 
