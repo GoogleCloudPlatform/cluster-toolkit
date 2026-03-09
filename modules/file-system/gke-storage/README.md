@@ -7,11 +7,11 @@
 ## Description
 
 This module creates Kubernetes Storage Class (SC) that can be used by a Persistent Volume Claim (PVC)
-to dynamically provision GCP storage resources like Parallelstore.
+to dynamically provision GCP storage resources like Hyperdisk-balanced.
 
 ### Example
 
-The following example uses the `gke-storage` module to creates a Parallelstore Storage Class and Persistent Volume Claim,
+The following example uses the `gke-storage` module to create a Hyperdisk-balanced Storage Class and Persistent Volume Claim,
 then use them in a `gke-job-template` to dynamically provision the resource.
 
 ```yaml
@@ -19,29 +19,19 @@ then use them in a `gke-job-template` to dynamically provision the resource.
     source: modules/scheduler/gke-cluster
     use: [network]
     settings:
-      enable_parallelstore_csi: true
-
-  # Private Service Access (PSA) requires the compute.networkAdmin role which is
-  # included in the Owner role, but not Editor.
-  # PSA is required for all Parallelstore functionality.
-  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-    settings:
-      prefix_length: 24
+      enable_persistent_disk_csi: true
 
   - id: gke_storage
     source: modules/file-system/gke-storage
-    use: [ gke_cluster, private_service_access ]
+    use: [ gke_cluster ]
     settings:
-      storage_type: Parallelstore
-      access_mode: ReadWriteMany
+      storage_type: Hyperdisk-balanced
+      access_mode: ReadWriteOnce
       sc_volume_binding_mode: Immediate
       sc_reclaim_policy: Delete
       sc_topology_zones: [$(vars.zone)]
-      pvc_count: 2
-      capacity_gb: 12000
+      pvc_count: 1
+      capacity_gb: 500
 
   - id: job_template
     source: modules/compute/gke-job-template
@@ -49,7 +39,7 @@ then use them in a `gke-job-template` to dynamically provision the resource.
 ```
 
 See example
-[gke-managed-parallelstore.yaml](../../../examples/README.md#gke-managed-parallelstoreyaml--) blueprint
+[gke-managed-hyperdisk.yaml](../../../examples/README.md#gke-managed-hyperdiskyaml--) blueprint
 for a complete example.
 
 ### Authorized Network
