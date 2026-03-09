@@ -84,7 +84,7 @@
 
 - name: "Find the CHS workspace directory"
   ansible.builtin.find:
-    paths: "~/.local/share/cluster-health-scanner/workspaces/"
+    paths: "~/.local/share/chs/workspaces/"
     file_type: directory
   register: chs_workspaces
 
