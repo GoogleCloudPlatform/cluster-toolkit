@@ -23,11 +23,10 @@
     state: present
   become: true
 
-- name: Clone CHS develop branch
+- name: Clone CHS repository
   ansible.builtin.git:
-    repo: 'https://cluster-toolkit.googlesource.com/cluster-health-scanner'
+    repo: "{{ chs_repo }}"
     dest: /tmp/cluster-health-scanner
-    version: develop
 
 - name: Find CHS package directory
   ansible.builtin.find:
@@ -36,10 +35,6 @@
     patterns: 'pyproject.toml'
     recurse: yes
   register: chs_setup_file
-
-- name: Print found setup file
-  ansible.builtin.debug:
-    msg: "Found setup file at: {{ chs_setup_file.files[0].path }}"
 
 - name: Check if .netrc exists
   ansible.builtin.stat:
@@ -73,48 +68,11 @@
     cmd: $HOME/miniconda3/envs/chs/bin/pip install .
     chdir: "{{ chs_setup_file.files[0].path | dirname }}"
 
-- name: "Run CHS NCCL and DCGM Tests"
+- name: "Run CHS lite suite"
   ansible.builtin.shell:
     cmd: PATH=$HOME/miniconda3/envs/chs/bin:$PATH chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
   register: chs_run
   changed_when: false
-  ignore_errors: true
-
-- name: "Print CHS run output"
-  ansible.builtin.debug:
-    msg: "{{ chs_run.stdout }}"
-
-- name: "Handle CHS run failure"
-  when: chs_run.failed
-  block:
-    - name: "Print CHS run stderr"
-      ansible.builtin.debug:
-        msg: "{{ chs_run.stderr }}"
-
-    - name: "Find the newest CHS workspace directory"
-      ansible.builtin.find:
-        paths: "~/.local/share/cluster-health-scanner/workspaces/"
-        file_type: directory
-      register: failed_chs_workspaces
-
-    - name: "Read internal.log from newest workspace"
-      ansible.builtin.slurp:
-        src: "{{ (failed_chs_workspaces.files | sort(attribute='ctime', reverse=True) | first).path }}/internal.log"
-      register: internal_log_content
-      when: failed_chs_workspaces.matched > 0
-      ignore_errors: true
-
-    - name: "Print internal.log"
-      ansible.builtin.debug:
-        msg: "internal.log contents:\n{{ internal_log_content['content'] | b64decode }}"
-      when:
-        - failed_chs_workspaces.matched > 0
-        - internal_log_content is not failed
-        - "'content' in internal_log_content"
-
-    - name: "Fail the playbook as CHS run failed"
-      ansible.builtin.fail:
-        msg: "CHS run failed. See above logs for details."
 
 - name: "Find the CHS workspace directory"
   ansible.builtin.find:
@@ -124,35 +82,16 @@
 
 - name: "Set the Bill of Health path"
   ansible.builtin.set_fact:
-    boh_path: "{{ chs_workspaces.files[0].path }}/chs-results/bill_of_health.json"
+    boh_path: "{{ chs_workspaces.files[0].path }}/bill_of_health.json"
 
 - name: "Read the Bill of Health"
   ansible.builtin.slurp:
     src: "{{ boh_path }}"
   register: boh_file
 
-- name: "Print Bill of Health path"
-  ansible.builtin.debug:
-    msg: "Reading Bill of Health from: {{ boh_path }}"
-
 - name: "Parse the Bill of Health"
   ansible.builtin.set_fact:
     boh: "{{ boh_file['content'] | b64decode | from_json }}"
-
-- name: "Print Parsed Bill of Health"
-  ansible.builtin.debug:
-    var: boh
-
-- name: "Print DCGM validation header"
-  ansible.builtin.debug:
-    msg: "--- Validating DCGM Metrics ---"
-
-- name: "Print DCGM metric being validated"
-  ansible.builtin.debug:
-    msg: "Validating DCGM metric '{{ item.1.key }}' with value '{{ item.1.value }}' for resource '{{ item.0.target_resource_ids | first }}'."
-  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
-  when:
-    - item.0.test_name == 'dcgm'
 
 - name: "Validate DCGM diag metrics"
   ansible.builtin.assert:
@@ -163,18 +102,6 @@
   loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
   when:
     - item.0.test_name == 'dcgm'
-
-- name: "Print NCCL validation header"
-  ansible.builtin.debug:
-    msg: "--- Validating NCCL Metrics ---"
-
-- name: "Print NCCL metric being validated"
-  ansible.builtin.debug:
-    msg: "Validating NCCL metric '{{ item.1.key }}' with value '{{ item.1.value }}'."
-  loop: "{{ boh.test_results | subelements('metrics', skip_missing=True) }}"
-  when:
-    - item.0.test_name == 'nccl-cluster'
-    - item.1.key == 'Avg. Bus Bandwidth'
 
 - name: "Validate NCCL average bus bandwidth"
   ansible.builtin.assert:
