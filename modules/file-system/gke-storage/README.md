@@ -1,5 +1,5 @@
 > [!WARNING]
-> The `Parallelstore` `storage_type` is deprecated and will be removed on October 31, 2026. For a
+> The `Parallelstore` `storage_type` is deprecated and will be removed on June 30, 2026. For a
 > replacement on GKE, we recommend using the
 > [GCP Managed Lustre module](../managed-lustre/README.md)
 > See the [gke-managed-lustre.yaml](../../../examples/gke-managed-lustre.yaml) blueprint for a complete example.
