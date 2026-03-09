@@ -14,11 +14,11 @@
 
 ---
 
-- name: Install Python, Git, and venv
+- name: Install Python, Git, and Pip
   ansible.builtin.package:
     name:
       - python3
-      - python3-venv
+      - python3-pip
       - git
     state: present
   become: true
