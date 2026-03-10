@@ -53,7 +53,8 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-
+    BLUEPRINT="community/examples/hpc-build-slurm-image.yaml"
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-build-slurm-image.yml"
