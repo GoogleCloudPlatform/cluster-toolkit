@@ -17,18 +17,10 @@
 - name: Install pyenv dependencies
   ansible.builtin.shell: |
     export DEBIAN_FRONTEND=noninteractive
-    if command -v apt-get >/dev/null; then
-      apt-get update
-      apt-get install -y git make build-essential libssl-dev zlib1g-dev libbz2-dev \
-        libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
-        xz-utils tk-dev libffi-dev liblzma-dev python3-openssl
-    elif command -v dnf >/dev/null; then
-      dnf install -y git gcc make patch zlib-devel bzip2 bzip2-devel readline-devel sqlite \
-        sqlite-devel openssl-devel tk-devel libffi-devel xz-devel wget curl
-    elif command -v yum >/dev/null; then
-      yum install -y git gcc make patch zlib-devel bzip2 bzip2-devel readline-devel sqlite \
-        sqlite-devel openssl-devel tk-devel libffi-devel xz-devel wget curl
-    fi
+    apt-get update
+    apt-get install -y git make build-essential libssl-dev zlib1g-dev libbz2-dev \
+      libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
+      xz-utils tk-dev libffi-dev liblzma-dev python3-openssl
   become: true
 
 - name: Clone pyenv
