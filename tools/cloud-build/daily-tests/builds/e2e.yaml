@@ -41,7 +41,9 @@ steps:
 
     cd /workspace
     make
-    ./gcluster deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" --auto-approve
+    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+    bash tools/add_ttl_label.sh "${BLUEPRINT}"
+    ./gcluster deploy "${BLUEPRINT}" --vars="$vars" --auto-approve
 
     # check instance was created
     gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
