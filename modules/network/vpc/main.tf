@@ -64,14 +64,21 @@ locals {
   # after we complete deprecation, local.all_subnetworks can be replaced with
   # var.subnetworks (or local.default_primary_subnetwork if that is null)
   input_subnetworks = concat([local.input_primary_subnetwork], local.input_additional_subnetworks)
+
+  # Filter out disabled subnetworks (enabled key defaults to true if missing)
+  enabled_subnetworks = [
+    for s in local.input_subnetworks : s
+    if tobool(lookup(s, "enabled", true))
+  ]
+
   subnetworks_cidr_blocks = try(
-    local.input_subnetworks[*]["subnet_ip"],
-    cidrsubnets(var.network_address_range, local.input_subnetworks[*]["new_bits"]...)
+    local.enabled_subnetworks[*]["subnet_ip"],
+    cidrsubnets(var.network_address_range, local.enabled_subnetworks[*]["new_bits"]...)
   )
 
-  # merge in the CIDR blocks (even when already there) and remove new_bits
-  subnetworks = [for i, subnet in local.input_subnetworks :
-    merge({ for k, v in subnet : k => v if k != "new_bits" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
+  # merge in the CIDR blocks (even when already there) and remove internal flags new_bits and enabled
+  subnetworks = [for i, subnet in local.enabled_subnetworks :
+    merge({ for k, v in subnet : k => v if k != "new_bits" && k != "enabled" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
   ]
 
   # gather the unique regions for purposes of creating Router/NAT
