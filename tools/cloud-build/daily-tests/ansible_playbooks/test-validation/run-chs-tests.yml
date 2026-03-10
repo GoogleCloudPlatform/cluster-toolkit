@@ -62,14 +62,23 @@
     virtualenv: /opt/chs_venv
   become: true
 
-- name: Configure and Run CHS
-  ansible.builtin.shell: |
-    export PATH="/opt/chs_venv/bin:$PATH"
-    echo "PATH inside task: $PATH"
-    chs configure bucket
-    chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
-  register: chs_run
-  changed_when: false
+- name: Perform CHS Operations
+  environment:
+    PATH: "/opt/chs_venv/bin:{{ lookup('env', 'PATH') }}"
+  block:
+    - name: Debug PATH before task
+      ansible.builtin.shell: |
+        echo "PATH before task: $PATH"
+      register: path_before
+      changed_when: false
+    - name: Configure bucket for CHS
+      ansible.builtin.shell: chs configure bucket
+
+    - name: "Run CHS lite suite"
+      ansible.builtin.shell: chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
+      register: chs_run
+      changed_when: false
+
 
 - name: Debug PATH after task
   ansible.builtin.shell: |
@@ -80,7 +89,7 @@
 - name: Show PATH debugging
   ansible.builtin.debug:
     msg:
-      - "{{ chs_run.stdout_lines | select('match', '^PATH inside task:.*') | list }}"
+      - "{{ path_before.stdout_lines | select('match', '^PATH before task:.*') | list }}"
       - "{{ path_after.stdout_lines | select('match', '^PATH after task:.*') | list }}"
 
 - name: CHS run output
