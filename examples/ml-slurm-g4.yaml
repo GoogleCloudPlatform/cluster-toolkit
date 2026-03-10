@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-b
   cluster_size: 2 #supply cluster size
-  g4_machine_type: g4-standard-192
+  g4_machine_type: g4-standard-48
   # To enable Dual NIC, you MUST use g4-standard-384
   # g4_machine_type: g4-standard-384
   # Image settings
