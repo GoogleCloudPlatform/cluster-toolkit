@@ -35,7 +35,7 @@ vars:
   # Cluster env settings
   net0_range: 192.168.0.0/24
   # net1_range: 192.168.2.0/24 # Uncomment for Dual NIC on g4-standard-384
-  #filestore_ip_range: 192.168.1.0/29
+  filestore_ip_range: 192.168.1.0/29
 
   # Cluster Settings
   disk_size_gb: 100
@@ -198,15 +198,15 @@ deployment_groups:
   #       - protocol: udp
   #       - protocol: icmp
 
-  # - id: homefs
-  #   source: modules/file-system/filestore
-  #   use:
-  #   - net0 # Filestore attached to net0
-  #   settings:
-  #     filestore_tier: BASIC_SSD
-  #     size_gb: 2560
-  #     local_mount: /home
-  #     reserved_ip_range: $(vars.filestore_ip_range)
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - net0 # Filestore attached to net0
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
 
 - group: cluster
   modules:
@@ -324,7 +324,7 @@ deployment_groups:
     use:
     - g4_partition
     - net0
-    #- homefs
+    - homefs
     - slurm_login
     settings:
       machine_type: n2-standard-4
