@@ -35,9 +35,22 @@
     creates: /opt/chs_venv/bin/pip
   become: true
 
+- name: Clone CHS repository
+  ansible.builtin.git:
+    repo: "{{ chs_repo }}"
+    dest: /tmp/cluster-health-scanner
+
+- name: Find CHS package directory
+  ansible.builtin.find:
+    paths: /tmp/cluster-health-scanner
+    file_type: file
+    patterns: 'pyproject.toml'
+    recurse: yes
+  register: chs_setup_file
+
 - name: Install CHS into venv
   ansible.builtin.pip:
-    name: "/tmp/cluster-health-scanner"
+    name: "{{ chs_setup_file.files[0].path | dirname }}"
     virtualenv: /opt/chs_venv
   become: true
 
