@@ -14,25 +14,41 @@
 
 ---
 
-- name: Install Python, Git, and Pip
-  ansible.builtin.package:
-    name:
-      - python3
-      - python3-pip
-      - git
-    state: present
+- name: Install pyenv dependencies
+  ansible.builtin.shell: |
+    export DEBIAN_FRONTEND=noninteractive
+    if command -v apt-get >/dev/null; then
+      apt-get update
+      apt-get install -y git make build-essential libssl-dev zlib1g-dev libbz2-dev \
+        libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
+        xz-utils tk-dev libffi-dev liblzma-dev python3-openssl
+    elif command -v dnf >/dev/null; then
+      dnf install -y git gcc make patch zlib-devel bzip2 bzip2-devel readline-devel sqlite \
+        sqlite-devel openssl-devel tk-devel libffi-devel xz-devel wget curl
+    elif command -v yum >/dev/null; then
+      yum install -y git gcc make patch zlib-devel bzip2 bzip2-devel readline-devel sqlite \
+        sqlite-devel openssl-devel tk-devel libffi-devel xz-devel wget curl
+    fi
   become: true
 
-- name: Create Virtual Environment (without pip to avoid ensurepip error)
+- name: Clone pyenv
+  ansible.builtin.git:
+    repo: https://github.com/pyenv/pyenv.git
+    dest: /opt/pyenv
+    version: master
+  become: true
+
+- name: Install Python 3.10.13 using pyenv
   ansible.builtin.command:
-    cmd: python3 -m venv --without-pip /opt/chs_venv
-    creates: /opt/chs_venv/bin/python
+    cmd: /opt/pyenv/bin/pyenv install -s 3.10.13
+  environment:
+    PYENV_ROOT: /opt/pyenv
   become: true
-
-- name: Manually install pip into the venv
-  ansible.builtin.shell:
-    cmd: curl https://bootstrap.pypa.io/get-pip.py | /opt/chs_venv/bin/python3
-    creates: /opt/chs_venv/bin/pip
+  
+- name: Create Virtual Environment with pyenv Python
+  ansible.builtin.command:
+    cmd: /opt/pyenv/versions/3.10.13/bin/python3 -m venv /opt/chs_venv
+    creates: /opt/chs_venv/bin/python
   become: true
 
 - name: Clone CHS repository
