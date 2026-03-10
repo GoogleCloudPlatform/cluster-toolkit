@@ -16,11 +16,11 @@
 blueprint_name: ml-slurm-g4
 
 vars:
-  deployment_name: # supply deployment name
-  project_id: # supply project ID
-  region: # supply region
-  zone: # supply zone
-  cluster_size: # supply cluster size
+  deployment_name: g4-ml-example #supply deployment name
+  project_id: #supply project ID
+  region: us-central1
+  zone: us-central1-b
+  cluster_size: 2 #supply cluster size
   g4_machine_type: g4-standard-192
   # To enable Dual NIC, you MUST use g4-standard-384
   # g4_machine_type: g4-standard-384
