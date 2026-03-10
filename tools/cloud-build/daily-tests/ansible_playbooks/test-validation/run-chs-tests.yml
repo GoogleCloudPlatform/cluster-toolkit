@@ -37,9 +37,9 @@
 
 - name: Install CHS into venv
   ansible.builtin.pip:
-    name: "."
-    chdir: "{{ chs_setup_file.files[0].path | dirname }}"
+    name: "/tmp/cluster-health-scanner"
     virtualenv: /opt/chs_venv
+  become: true
 
 - name: Configure bucket for CHS
   ansible.builtin.shell:
