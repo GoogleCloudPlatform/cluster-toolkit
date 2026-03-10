@@ -106,6 +106,8 @@ steps:
       echo "INFO: Using $${GKE_VARS_FILE} as it is for SPOT provisioning."
     fi
 
+    bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
+
     # Setting spot variable.
     sed -i '
     /id: a2_highgpu_pool/,/outputs: \[instructions\]/ {

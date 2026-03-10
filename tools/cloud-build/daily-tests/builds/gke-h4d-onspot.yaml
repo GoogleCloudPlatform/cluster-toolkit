@@ -94,6 +94,7 @@ steps:
     sed -i -e '/reservation_affinity:/,+3c\      spot: '"$$ENABLE_SPOT"'' $${EXAMPLE_BP}
     sed -i '/reservation/d' $${EXAMPLE_BP}
     sed -i '/placement_policy:/,+1d' $${EXAMPLE_BP}
+    bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     cat $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

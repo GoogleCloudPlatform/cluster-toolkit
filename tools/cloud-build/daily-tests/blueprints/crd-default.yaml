@@ -16,6 +16,9 @@
 
 blueprint_name: crd-default
 
+vars:
+  deployment_name: crd-default
+
 deployment_groups:
 - group: primary
   modules:
