@@ -80,7 +80,7 @@ steps:
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} chs_repo=${CHS_REPO}" \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} chs_repo=$${CHS_REPO}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-ultragpu.yml"
   secretEnv: ['GCLUSTER_GCS_PATH', 'CHS_REPO']
 availableSecrets:
