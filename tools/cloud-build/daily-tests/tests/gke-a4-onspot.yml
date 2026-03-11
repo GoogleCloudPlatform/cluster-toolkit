@@ -43,3 +43,4 @@ post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a4.yml
 - test-validation/test-gke-kueue-config.yml
+- test-validation/test-chs.yml

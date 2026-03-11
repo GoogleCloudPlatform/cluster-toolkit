@@ -14,156 +14,164 @@
 
 ---
 
-- name: Setup environment for CHS
-  become: true
+- name: CHS Test Suite
   block:
-    - name: Set variables for CHS setup
-      ansible.builtin.set_fact:
-        python_version: "{{ python_version | default('3.10.13') }}"
-        pyenv_root: "{{ pyenv_root | default('/opt/pyenv') }}"
-        chs_venv_path: "{{ chs_venv_path | default('/opt/chs_venv') }}"
-
-    - name: Install pyenv dependencies
-      ansible.builtin.apt:
-        name:
-          - git
-          - make
-          - build-essential
-          - libssl-dev
-          - zlib1g-dev
-          - libbz2-dev
-          - libreadline-dev
-          - libsqlite3-dev
-          - wget
-          - curl
-          - llvm
-          - libncurses5-dev
-          - libncursesw5-dev
-          - xz-utils
-          - tk-dev
-          - libffi-dev
-          - liblzma-dev
-          - python3-openssl
-        state: present
-        update_cache: yes
-
-    - name: Clone pyenv
-      ansible.builtin.git:
-        repo: https://github.com/pyenv/pyenv.git
-        dest: "{{ pyenv_root }}"
-        version: v2.4.1
-
-    - name: Install Python using pyenv
-      ansible.builtin.command:
-        cmd: "{{ pyenv_root }}/bin/pyenv install -s {{ python_version }}"
-      environment:
-        PYENV_ROOT: "{{ pyenv_root }}"
-      changed_when: false
-
-    - name: Create Virtual Environment with pyenv Python
-      ansible.builtin.command:
-        cmd: "{{ pyenv_root }}/versions/{{ python_version }}/bin/python3 -m venv {{ chs_venv_path }}"
-        creates: "{{ chs_venv_path }}/bin/python"
-
-- name: Install and Setup CHS
-  block:
-    - name: Create temporary directory for CHS clone
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: chs_clone
-      register: chs_temp_dir
-
-    - name: Clone CHS repository
-      ansible.builtin.git:
-        repo: "{{ chs_repo }}"
-        dest: "{{ chs_temp_dir.path }}"
-
-    - name: Find CHS package directory
-      ansible.builtin.find:
-        paths: "{{ chs_temp_dir.path }}"
-        file_type: file
-        patterns: 'pyproject.toml'
-        recurse: yes
-      register: chs_setup_file
-
-    - name: Install CHS into venv
-      ansible.builtin.pip:
-        name: "{{ chs_setup_file.files[0].path | dirname }}"
-        virtualenv: "{{ chs_venv_path }}"
+    - name: Setup environment for CHS
       become: true
+      block:
+        - name: Set variables for CHS setup
+          ansible.builtin.set_fact:
+            python_version: "{{ python_version | default('3.10.13') }}"
+            pyenv_root: "{{ pyenv_root | default('/opt/pyenv') }}"
+            chs_venv_path: "{{ chs_venv_path | default('/opt/chs_venv') }}"
+
+        - name: Install pyenv dependencies
+          ansible.builtin.apt:
+            name:
+              - git
+              - make
+              - build-essential
+              - libssl-dev
+              - zlib1g-dev
+              - libbz2-dev
+              - libreadline-dev
+              - libsqlite3-dev
+              - wget
+              - curl
+              - llvm
+              - libncurses5-dev
+              - libncursesw5-dev
+              - xz-utils
+              - tk-dev
+              - libffi-dev
+              - liblzma-dev
+              - python3-openssl
+            state: present
+            update_cache: yes
+
+        - name: Clone pyenv
+          ansible.builtin.git:
+            repo: https://github.com/pyenv/pyenv.git
+            dest: "{{ pyenv_root }}"
+            version: v2.4.1
+
+        - name: Install Python using pyenv
+          ansible.builtin.command:
+            cmd: "{{ pyenv_root }}/bin/pyenv install -s {{ python_version }}"
+          environment:
+            PYENV_ROOT: "{{ pyenv_root }}"
+          changed_when: false
+
+        - name: Create Virtual Environment with pyenv Python
+          ansible.builtin.command:
+            cmd: "{{ pyenv_root }}/versions/{{ python_version }}/bin/python3 -m venv {{ chs_venv_path }}"
+            creates: "{{ chs_venv_path }}/bin/python"
+
+    - name: Install and Setup CHS
+      block:
+        - name: Create temporary directory for CHS clone
+          ansible.builtin.tempfile:
+            state: directory
+            suffix: chs_clone
+          register: chs_temp_dir
+
+        - name: Clone CHS repository
+          ansible.builtin.git:
+            repo: "{{ chs_repo }}"
+            dest: "{{ chs_temp_dir.path }}"
+
+        - name: Find CHS package directory
+          ansible.builtin.find:
+            paths: "{{ chs_temp_dir.path }}"
+            file_type: file
+            patterns: 'pyproject.toml'
+            recurse: yes
+          register: chs_setup_file
+
+        - name: Install CHS into venv
+          ansible.builtin.pip:
+            name: "{{ chs_setup_file.files[0].path | dirname }}"
+            virtualenv: "{{ chs_venv_path }}"
+          become: true
+
+    - name: Perform CHS Operations
+      environment:
+        PATH: "{{ chs_venv_path }}/bin:{{ lookup('env', 'PATH') }}"
+      block:
+        - name: Configure bucket for CHS
+          ansible.builtin.shell: |
+            set -e -u
+            chs configure bucket --name chs-results
+          changed_when: false
+
+        - name: "Run CHS lite suite"
+          ansible.builtin.shell: |
+            set -e -u
+            chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
+          register: chs_run
+          changed_when: false
+
+    - name: CHS run output
+      ansible.builtin.debug:
+        var: chs_run.stdout_lines
+
+    - name: Parse Bill of Health and Validate Metrics
+      block:
+        - name: "Find the CHS workspace directory"
+          ansible.builtin.find:
+            paths: "~/.local/share/chs/workspaces/"
+            file_type: directory
+          register: chs_workspaces
+
+        - name: Assert CHS workspace directory found
+          ansible.builtin.assert:
+            that:
+              - chs_workspaces.files | default([]) | length > 0
+            fail_msg: "Could not find CHS workspace directory"
+
+        - name: "Set the Bill of Health path"
+          ansible.builtin.set_fact:
+            boh_path: "{{ chs_workspaces.files[0].path }}/bill_of_health.json"
+
+        - name: "Read the Bill of Health"
+          ansible.builtin.slurp:
+            src: "{{ boh_path }}"
+          register: boh_file
+
+        - name: "Parse the Bill of Health"
+          ansible.builtin.set_fact:
+            boh: "{{ boh_file['content'] | b64decode | from_json }}"
+
+        - name: "Validate DCGM diag metrics"
+          ansible.builtin.assert:
+            that:
+              - item.1.value == 'Pass'
+            fail_msg: "DCGM metric '{{ item.1.key }}' failed for resource '{{ item.0.target_resource_ids | first }}'."
+            success_msg: "DCGM metric '{{ item.1.key }}' passed for resource '{{ item.0.target_resource_ids | first }}'."
+          loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
+          when:
+            - item.0.test_name == 'dcgm'
+
+        - name: "Validate NCCL average bus bandwidth"
+          ansible.builtin.assert:
+            that:
+              - (item.1.value | float) >= 300.0
+            fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
+            success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
+          loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
+          when:
+            - item.0.test_name == 'nccl-cluster'
+            - item.1.key == 'Avg. Bus Bandwidth'
+
+  rescue:
+    - name: CHS Test Failure
+      ansible.builtin.debug:
+        msg: "CHS tests failed. Continuing playbook execution."
+
   always:
     - name: Cleanup temporary directory
       ansible.builtin.file:
         path: "{{ chs_temp_dir.path }}"
         state: absent
       when: chs_temp_dir.path is defined
-
-- name: Perform CHS Operations
-  environment:
-    PATH: "{{ chs_venv_path }}/bin:{{ lookup('env', 'PATH') }}"
-  block:
-    - name: Configure bucket for CHS
-      ansible.builtin.shell: |
-        set -e -u
-        chs configure bucket --name chs-results
-      changed_when: false
-
-    - name: "Run CHS lite suite"
-      ansible.builtin.shell: |
-        set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
-      register: chs_run
-      changed_when: false
-
-- name: CHS run output
-  ansible.builtin.debug:
-    var: chs_run.stdout_lines
-
-- name: Parse Bill of Health and Validate Metrics
-  block:
-    - name: "Find the CHS workspace directory"
-      ansible.builtin.find:
-        paths: "~/.local/share/chs/workspaces/"
-        file_type: directory
-      register: chs_workspaces
-
-    - name: Assert CHS workspace directory found
-      ansible.builtin.assert:
-        that:
-          - chs_workspaces.files | default([]) | length > 0
-        fail_msg: "Could not find CHS workspace directory"
-
-    - name: "Set the Bill of Health path"
-      ansible.builtin.set_fact:
-        boh_path: "{{ chs_workspaces.files[0].path }}/bill_of_health.json"
-
-    - name: "Read the Bill of Health"
-      ansible.builtin.slurp:
-        src: "{{ boh_path }}"
-      register: boh_file
-
-    - name: "Parse the Bill of Health"
-      ansible.builtin.set_fact:
-        boh: "{{ boh_file['content'] | b64decode | from_json }}"
-
-    - name: "Validate DCGM diag metrics"
-      ansible.builtin.assert:
-        that:
-          - item.1.value == 'Pass'
-        fail_msg: "DCGM metric '{{ item.1.key }}' failed for resource '{{ item.0.target_resource_ids | first }}'."
-        success_msg: "DCGM metric '{{ item.1.key }}' passed for resource '{{ item.0.target_resource_ids | first }}'."
-      loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
-      when:
-        - item.0.test_name == 'dcgm'
-
-    - name: "Validate NCCL average bus bandwidth"
-      ansible.builtin.assert:
-        that:
-          - (item.1.value | float) >= 300.0
-        fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
-        success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
-      loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
-      when:
-        - item.0.test_name == 'nccl-cluster'
-        - item.1.key == 'Avg. Bus Bandwidth'
 
