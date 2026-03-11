@@ -51,7 +51,7 @@
       ansible.builtin.git:
         repo: https://github.com/pyenv/pyenv.git
         dest: "{{ pyenv_root }}"
-        version: master
+        version: v2.4.1
 
     - name: Install Python using pyenv
       ansible.builtin.command:
