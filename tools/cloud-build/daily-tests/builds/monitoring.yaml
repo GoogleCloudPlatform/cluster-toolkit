@@ -31,7 +31,9 @@ steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "BUILD_ID=$BUILD_ID tools/cloud-build/check_running_build.sh ${_TRIGGER_BUILD_CONFIG_PATH}"
+  env:
+  - "BUILD_ID=$BUILD_ID"
+  script: "tools/cloud-build/check_running_build.sh ${_TRIGGER_BUILD_CONFIG_PATH}"
 
 # Test monitoring dashboard and install script
 - id: monitoring

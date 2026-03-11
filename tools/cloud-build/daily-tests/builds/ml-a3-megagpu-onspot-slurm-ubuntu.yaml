@@ -34,7 +34,9 @@ timeout: 14400s  # 4hr
 steps:
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "BUILD_ID=$BUILD_ID tools/cloud-build/check_running_build.sh ${_TRIGGER_BUILD_CONFIG_PATH}"
+  env:
+  - "BUILD_ID=$BUILD_ID"
+  script: "tools/cloud-build/check_running_build.sh ${_TRIGGER_BUILD_CONFIG_PATH}"
 
 - id: ml-a3-megagpu-onspot-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
