@@ -47,10 +47,13 @@ locals {
       content = (
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
         try(manifest.source, "") != "" ? (
-          endswith(manifest.source, "/") ? (
+          # If fileset works, it's a directory. Otherwise treat as a single file.
+          try(fileset(manifest.source, "{*.yaml,*.yml,*.tftpl}"), null) != null ? (
             join("\n---\n", [
-              for f in fileset(manifest.source, "*") : (
-                endswith(f, ".tftpl") ? templatefile("${manifest.source}${f}", try(manifest.template_vars, {})) : file("${manifest.source}${f}")
+              for f in fileset(manifest.source, "{*.yaml,*.yml,*.tftpl}") : (
+                endswith(f, ".tftpl") ?
+                templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
+                file("${trimsuffix(manifest.source, "/")}/${f}")
               )
             ])
             ) : (
@@ -61,6 +64,7 @@ locals {
         ) : coalesce(manifest.content, "")
       )
       wait_for_rollout = manifest.wait_for_rollout
+      namespace        = manifest.namespace
     }
   })
 
