@@ -208,7 +208,6 @@
       loop_control:
         loop_var: test
 
-
     rescue:
     - name: Conditionally check for spot preemptions after a failure
       when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
