@@ -29,6 +29,7 @@ tags:
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
+  _PR_NUMBER: ""
 
 timeout: 14400s  # 4hr
 steps:
@@ -48,6 +49,8 @@ steps:
   - "INSTANCE_PREFIX=a3msp"
   - "PROJECT_ID=$PROJECT_ID"
   - "BUILD_ID=$BUILD_ID"
+  - "PR_NUMBER=$_PR_NUMBER"
+  - "BRANCH_NAME=$BRANCH_NAME"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3moptions.txt"
   - "ENABLE_SPOT_FALLBACK=true"
   args:

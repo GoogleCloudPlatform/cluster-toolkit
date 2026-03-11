@@ -13,25 +13,77 @@
 # limitations under the License.
 
 ---
-- name: Show repository and branch used for NCCL test
-  debug:
-    msg:
-    - "Repository: https://github.com/GoogleCloudPlatform/cluster-toolkit.git"
-    - "Branch: {{ lookup('env','HEAD_BRANCH') | default('develop', true) }}"
+# Detect PR number from Cloud Build
+- name: Get PR number
+  ansible.builtin.set_fact:
+    pr_number: "{{ lookup('env','_PR_NUMBER') | default('', true) }}"
 
+# Detect branch name (manual run or Cloud Build trigger)
+- name: Get branch name
+  ansible.builtin.set_fact:
+    branch_name: "{{ lookup('env','BRANCH_NAME') | default('', true) }}"
+
+# Determine which branch should run
+- name: Decide branch to run
+  ansible.builtin.set_fact:
+    target_branch: >-
+      {% if pr_number != '' %}
+      PR
+      {% elif branch_name != '' %}
+      {{ branch_name }}
+      {% else %}
+      develop
+      {% endif %}
+
+# Show trigger information
+- name: Show build info
+  ansible.builtin.debug:
+    msg:
+    - "PR Number      : {{ pr_number }}"
+    - "Branch Name    : {{ branch_name }}"
+    - "Target Branch  : {{ target_branch }}"
+
+# Remove old repo if exists
+- name: Remove existing cluster-toolkit repo
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/cluster-toolkit"
+    state: absent
+
+# Clone repo (default develop)
 - name: Clone cluster-toolkit repository
   ansible.builtin.git:
-    repo: "https://github.com/GoogleCloudPlatform/cluster-toolkit.git"
+    repo: https://github.com/GoogleCloudPlatform/cluster-toolkit.git
     dest: "{{ ansible_user_dir }}/cluster-toolkit"
-    version: "{{ lookup('env','HEAD_BRANCH') | default('develop', true) }}"
-    update: yes
+    version: develop
+    force: yes
 
+# Fetch and checkout PR branch
+- name: Checkout PR branch safely
+  ansible.builtin.shell: |
+    git fetch origin pull/{{ pr_number }}/head:pr-{{ pr_number }}
+    git checkout pr-{{ pr_number }}
+  args:
+    chdir: "{{ ansible_user_dir }}/cluster-toolkit"
+  when: pr_number != ''
+
+# Checkout normal branch
+- name: Checkout specified branch
+  ansible.builtin.shell: |
+    git checkout {{ branch_name }}
+  args:
+    chdir: "{{ ansible_user_dir }}/cluster-toolkit"
+  when:
+  - pr_number == ''
+  - branch_name != ''
+
+# Run NCCL tests
 - name: Run prerequisite NCCL scripts
-  shell: |
+  ansible.builtin.shell: |
     set -x -e
     cd {{ ansible_user_dir }}/cluster-toolkit/{{ nccl_test_path }}
     bash import_pytorch_container.sh
     sbatch --wait build-nccl-tests.sh
+
   args:
     chdir: "{{ ansible_user_dir }}"
     executable: /bin/bash
