@@ -208,6 +208,18 @@
       loop_control:
         loop_var: test
 
+    - name: Run CHS Tests
+      delegate_to: localhost
+      block:
+        - ansible.builtin.include_tasks: "test-validation/test-chs.yml"
+          vars:
+            scheduler: gke
+            machine_type: "{{ instance_type }}"
+      rescue:
+        - name: Ignore CHS test failure
+          ansible.builtin.debug:
+            msg: "CHS tests failed but continuing playbook execution."
+
     rescue:
     - name: Conditionally check for spot preemptions after a failure
       when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
