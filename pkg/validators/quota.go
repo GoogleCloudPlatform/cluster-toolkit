@@ -314,21 +314,6 @@ func evalToFloat64(bp config.Blueprint, v cty.Value) (float64, error) {
 	return float64FromVal(val)
 }
 
-func evalToFloat64OrString(bp config.Blueprint, v cty.Value) (interface{}, error) {
-	val, err := bp.Eval(v)
-	if err != nil {
-		return nil, err
-	}
-	if !val.IsKnown() {
-		return nil, ErrUnknownValue
-	}
-	if val.Type() == cty.String {
-		return val.AsString(), nil
-	}
-	f, err := float64FromVal(val)
-	return f, err
-}
-
 func float64FromVal(v cty.Value) (float64, error) {
 	if v.Type() == cty.Number {
 		f, _ := v.AsBigFloat().Float64()
