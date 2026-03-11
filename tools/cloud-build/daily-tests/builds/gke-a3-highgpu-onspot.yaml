@@ -88,6 +88,7 @@ steps:
     echo '      node_count: 1'                                 >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
+    bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     ENABLE_SPOT="true"
     GKE_VARS_FILE="tools/cloud-build/daily-tests/tests/gke-a3-highgpu-onspot.yml"
     if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then

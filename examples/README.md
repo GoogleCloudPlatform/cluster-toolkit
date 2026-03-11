@@ -1275,6 +1275,25 @@ cleaned up when the job is deleted.
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
+#### Requirements
+
+1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
+    1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
+
+#### Deployment Instructions
+
+1. Update the `vars` block of the blueprint file (`examples/storage-gke.yaml`) with your specific configurations.
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    2. `deployment_name`: Name of the deployment.
+    3. `region` / `zone`: Ensure these map to your intended location.
+    4. `authorized_cidr`: Update to your IP address in `<your-ip-address>/32` format.
+2. Deploy the blueprint using the following command:
+
+   ```shell
+   ./gcluster deploy examples/storage-gke.yaml
+   ```
+
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
 ### [gke-managed-hyperdisk.yaml] ![core-badge] ![experimental-badge]
