@@ -108,7 +108,7 @@
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ machine_type }}
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }}
       register: chs_run
       changed_when: false
 
