@@ -67,14 +67,20 @@
 
 - name: Install and Setup CHS
   block:
+    - name: Create temporary directory for CHS clone
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: chs_clone
+      register: chs_temp_dir
+
     - name: Clone CHS repository
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
-        dest: /tmp/cluster-health-scanner
+        dest: "{{ chs_temp_dir.path }}"
 
     - name: Find CHS package directory
       ansible.builtin.find:
-        paths: /tmp/cluster-health-scanner
+        paths: "{{ chs_temp_dir.path }}"
         file_type: file
         patterns: 'pyproject.toml'
         recurse: yes
@@ -85,6 +91,12 @@
         name: "{{ chs_setup_file.files[0].path | dirname }}"
         virtualenv: "{{ chs_venv_path }}"
       become: true
+  always:
+    - name: Cleanup temporary directory
+      ansible.builtin.file:
+        path: "{{ chs_temp_dir.path }}"
+        state: absent
+      when: chs_temp_dir.path is defined
 
 - name: Perform CHS Operations
   environment:
