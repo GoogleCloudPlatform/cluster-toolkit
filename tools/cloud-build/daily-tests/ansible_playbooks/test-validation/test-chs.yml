@@ -105,7 +105,7 @@
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
         set -e -u
-        chs configure bucket --bucket-name chs-results
+        chs configure bucket --name chs-results
       changed_when: false
 
     - name: "Run CHS lite suite"
