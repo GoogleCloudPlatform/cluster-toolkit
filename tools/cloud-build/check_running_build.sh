@@ -30,16 +30,19 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 if [ -z "$TRIGGER_BUILD_CONFIG_PATH" ]; then
-    echo "Error: <trigger_build_config_path> is not provided."
-    echo "--- DEBUG: Available Substitutions ---"
+    echo "No config path provided as argument. Attempting to fetch from build substitutions..."
     if [ -n "$BUILD_ID" ]; then
-         gcloud builds describe "$BUILD_ID" --format='value(substitutions)' || echo "gcloud describe failed"
+         TRIGGER_BUILD_CONFIG_PATH=$(gcloud builds describe "$BUILD_ID" --format='value(substitutions.TRIGGER_BUILD_CONFIG_PATH)' 2>/dev/null || true)
+         if [ -n "$TRIGGER_BUILD_CONFIG_PATH" ]; then
+              echo "Discovered config path from build: $TRIGGER_BUILD_CONFIG_PATH"
+         else
+              echo "Failed to retrieve TRIGGER_BUILD_CONFIG_PATH from substitutions."
+              exit 1
+         fi
     else
-         echo "BUILD_ID env var is missing. Cannot describe build."
+         echo "BUILD_ID is missing. Cannot fetch substitution."
+         exit 1
     fi
-    echo "---------------------------------------"
-    echo "Usage: $0 [--config <config_path>] <trigger_build_config_path>"
-    exit 1
 fi
 
 echo "Trigger Build Config Path: $TRIGGER_BUILD_CONFIG_PATH"
