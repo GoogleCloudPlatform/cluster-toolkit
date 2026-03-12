@@ -28,6 +28,8 @@ from util import dirs, slurmdirs
 import tpu
 from addict import Dict as NSDict # type: ignore
 import yaml
+import socket
+import time
 
 
 FILE_PREAMBLE = """
@@ -327,6 +329,59 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
         "auth_key": "slurm" if lkp.cfg.enable_slurm_auth else "munge",
     }
 
+    # Resolve IPs for SlurmctldHost to ensure correct HA configuration (requires name(IP) format)
+    # and use multiple lines for Slurm 23.02+ syntax compliance if HA is enabled.
+    control_host = lkp.control_host
+    try:
+        control_ip = socket.gethostbyname(control_host)
+    except Exception as e:
+        log.warning(f"Failed to resolve control_host {control_host}: {e}")
+        control_ip = lkp.control_addr if lkp.control_addr else control_host
+
+    slurmctld_hosts_str = f"SlurmctldHost={control_host}({control_ip})"
+
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    if backup_name:
+        backup_ip = None
+        timeout = lkp.cfg.get("controller_startup_scripts_timeout", 300)
+        snooze = 10 # seconds
+        retries = int(timeout / snooze)
+        for i in range(retries):
+            try:
+                backup_ip = socket.gethostbyname(backup_name)
+                log.info(f"Successfully resolved backup_controller hostname '{backup_name}' to {backup_ip}")
+                break
+            except Exception as e:
+                if i < retries - 1:
+                    log.warning(f"Failed to resolve backup_controller hostname '{backup_name}' (Attempt {i + 1}/{retries}): {e}. Retrying in {snooze} seconds...")
+                    time.sleep(snooze)
+                else:
+                    log.error(f"Failed to resolve backup_controller hostname '{backup_name}' after {retries} attempts: {e}")
+                    raise
+
+        slurmctld_hosts_str += f"\nSlurmctldHost={backup_name}({backup_ip})"
+
+    conf_options["slurmctld_hosts"] = slurmctld_hosts_str
+
+    # Append backup controller to AccountingStorageHost
+    if lkp.cfg.accounting_storage_backup_host:
+        conf_options["accounting_storage_backup_host"] = f"AccountingStorageBackupHost={lkp.cfg.accounting_storage_backup_host}"
+    elif backup_name:
+        # For AccountingStorageHost, we might need just the name or name(ip) depending on version?
+        # Usually it is a comma separated list of hosts.
+        # But for SlurmDBD, we usually just list the hosts.
+        # Wait, AccountingStorageHost in slurm.conf points to where slurmdbd is running.
+        # If DbdBackupHost is used, then slurmdbd runs on both.
+        # So we should list both here.
+
+        # NOTE: conf_options["accounting_storage_hosts"] is already set above to primary.
+        # We need to append backup.
+        backup_storage_host = backup_ip if lkp.cfg.controller_network_attachment else backup_name
+        conf_options["accounting_storage_backup_host"] = f"AccountingStorageBackupHost={backup_storage_host}"
+    else:
+        conf_options["accounting_storage_backup_host"] = ""
+
+
     conf = lkp.cfg.slurm_conf_tpl.format(**conf_options)
 
     conf_file = lkp.etc_dir / "slurm.conf"
@@ -337,7 +392,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 def install_slurmdbd_conf(lkp: util.Lookup) -> None:
     """install slurmdbd.conf"""
     conf_options = {
-        "control_host": lkp.control_host,
+        "dbd_host_str": f"DbdHost={lkp.control_host}",
         "slurmlog": dirs.log,
         "state_save": slurmdirs.state,
         "db_name": "slurm_acct_db",
@@ -347,6 +402,14 @@ def install_slurmdbd_conf(lkp: util.Lookup) -> None:
         "db_port": "3306",
         "auth_key": "slurm" if lkp.cfg.enable_slurm_auth else "munge",
     }
+
+    # Configure DbdHost and DbdBackupHost
+    dbd_host_str = f"DbdHost={lkp.control_host}"
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    if backup_name:
+        dbd_host_str += f"\nDbdBackupHost={backup_name}"
+
+    conf_options["dbd_host_str"] = dbd_host_str
 
     if lkp.cfg.cloudsql_secret:
         secret_name = f"{lkp.cfg.slurm_cluster_name}-slurm-secret-cloudsql"

@@ -54,13 +54,34 @@ locals {
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
+  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+
+  # HA Locals
+  backup_machine_type          = coalesce(var.backup_machine_type, var.machine_type)
+  backup_zone                  = coalesce(var.backup_zone, var.zone)
+  slurm_backup_controller_name = var.enable_backup_controller ? "${local.slurm_cluster_name}-backup-controller" : ""
+
+  # Merge HA metadata
   metadata = merge(
     local.disable_automatic_updates_metadata,
     var.metadata,
-    local.universe_domain
+    local.universe_domain,
+    {
+      slurm_ha_role                = "primary"
+      slurm_backup_controller_name = local.slurm_backup_controller_name
+    }
   )
 
-  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+  backup_metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata,
+    local.universe_domain,
+    {
+      slurm_ha_role       = "backup"
+      slurm_cluster_name  = local.slurm_cluster_name
+      slurm_instance_role = "controller"
+    }
+  )
 }
 
 data "google_project" "controller_project" {
@@ -160,6 +181,87 @@ resource "google_compute_instance_from_template" "controller" {
       }
     }
     network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
+    subnetwork = var.subnetwork_self_link
+    stack_type = var.subnetwork_stack_type
+  }
+
+  dynamic "network_interface" {
+    for_each = var.controller_network_attachment != null ? [1] : []
+    content {
+      network_attachment = var.controller_network_attachment
+    }
+  }
+}
+
+# BACKUP CONTROLLER TEMPLATE
+module "slurm_backup_controller_template" {
+  source = "../../internal/slurm-gcp/instance_template"
+  count  = var.enable_backup_controller ? 1 : 0
+
+  project_id          = local.controller_project_id
+  region              = var.region
+  slurm_instance_role = "controller"
+  slurm_cluster_name  = local.slurm_cluster_name
+  labels              = local.labels
+
+  disk_auto_delete           = var.disk_auto_delete
+  disk_labels                = merge(var.disk_labels, local.labels)
+  disk_size_gb               = var.disk_size_gb
+  disk_type                  = var.disk_type
+  disk_resource_manager_tags = var.disk_resource_manager_tags
+  additional_disks           = local.additional_disks
+  bandwidth_tier             = var.bandwidth_tier
+  slurm_bucket_path          = module.slurm_files.slurm_bucket_path
+  can_ip_forward             = var.can_ip_forward
+  advanced_machine_features  = var.advanced_machine_features
+  resource_manager_tags      = var.resource_manager_tags
+
+  enable_confidential_vm   = var.enable_confidential_vm
+  enable_oslogin           = var.enable_oslogin
+  enable_shielded_vm       = var.enable_shielded_vm
+  shielded_instance_config = var.shielded_instance_config
+
+  gpu = one(module.gpu.guest_accelerator)
+
+  machine_type     = local.backup_machine_type
+  metadata         = local.backup_metadata
+  min_cpu_platform = var.min_cpu_platform
+
+  on_host_maintenance = var.on_host_maintenance
+  preemptible         = var.preemptible
+  service_account     = local.service_account
+
+  source_image_family  = local.source_image_family
+  source_image_project = local.source_image_project_normalized
+  source_image         = local.source_image
+
+  subnetwork = var.subnetwork_self_link
+
+  tags = concat([local.slurm_cluster_name], var.tags)
+}
+
+# BACKUP INSTANCE
+resource "google_compute_instance_from_template" "backup_controller" {
+  provider = google-beta
+  count    = var.enable_backup_controller ? 1 : 0
+
+  name                     = local.slurm_backup_controller_name
+  project                  = local.controller_project_id
+  zone                     = local.backup_zone
+  source_instance_template = module.slurm_backup_controller_template[0].self_link
+  labels                   = module.slurm_backup_controller_template[0].labels
+
+  allow_stopping_for_update = true
+
+  network_interface {
+    dynamic "access_config" {
+      for_each = var.enable_controller_public_ips ? ["unit"] : []
+      content {
+        nat_ip       = null
+        network_tier = null
+      }
+    }
+    network_ip = length(var.static_ips) >= 2 ? var.static_ips[1] : ""
     subnetwork = var.subnetwork_self_link
     stack_type = var.subnetwork_stack_type
   }
