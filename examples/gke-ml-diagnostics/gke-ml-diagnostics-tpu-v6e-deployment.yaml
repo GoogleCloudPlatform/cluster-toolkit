@@ -23,7 +23,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-tpu-v6e
+  deployment_name: gke-ml-diagnostics-tpu-v6e
 
   # The GCP Region used for this deployment.
   # example: us-east5
