@@ -48,4 +48,4 @@ steps:
     # check instance was created
     gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
 
-    ./gcluster destroy "$depl_name" --auto-approve
+    ./gcluster destroy "$depl_name" --auto-approve --robust
