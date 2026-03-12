@@ -38,7 +38,7 @@ Before you start, make sure you have performed the following tasks:
    - `roles/container.clusterAdmin`
    - `roles/iam.serviceAccountAdmin`
 5. **Note the GKE Version Requirement**: Be aware that Cloud TPU 7x requires a specific minimum GKE version to function correctly.
-   - **Minimum Version**: `1.34.0-gke.1662000` or later.
+   - **Minimum Version**: `1.34.3-gke.1318000` or later.
    - **Blueprint Configuration**: The provided `gke-tpu-7x.yaml` blueprint is already configured to use a compatible version from the `RAPID` release channel. If you customize the blueprint, ensure you do not select a version older than this minimum requirement.
 
 ## Create a cluster using Cluster Toolkit
