@@ -164,7 +164,7 @@ variable "cloud_dns_config" {
     error_message = "For 'additive_vpc_scope_dns_domain' to work cluster_dns = 'CLOUD_DNS' and cluster_dns_scope = 'CLUSTER_SCOPE' must be set."
   }
   validation {
-    condition     = (var.cloud_dns_config.cluster_dns == "PROVIDER_UNSPECIFIED") || (var.cloud_dns_config.cluster_dns == "PLATFORM_DEFAULT") || (var.cloud_dns_config.cluster_dns == "CLOUD_DNS") || (var.cloud_dns_config.cluster_dns == "KUBE_DNS")
+    condition     = contains(["PROVIDER_UNSPECIFIED", "PLATFORM_DEFAULT", "CLOUD_DNS", "KUBE_DNS"], var.cloud_dns_config.cluster_dns)
     error_message = "cluster_dns can only be PROVIDER_UNSPECIFIED, PLATFORM_DEFAULT, CLOUD_DNS, or KUBE_DNS"
   }
   validation {
@@ -546,7 +546,7 @@ variable "enable_external_dns_endpoint" {
   Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details.
   EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_inference_gateway" {
