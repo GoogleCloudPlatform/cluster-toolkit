@@ -30,7 +30,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
+	"github.com/hashicorp/go-version"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -74,12 +76,36 @@ func tfExecPath() (string, error) {
 	return path, nil
 }
 
+const minTfVersion = "1.12.2"
+
+var tfVersionOnce sync.Once
+
+func checkTfVersion() {
+	tfVersionOnce.Do(func() {
+		v, err := TfVersion()
+		if err != nil {
+			return // Ignore error, maybe terraform version --json is not supported or something else
+		}
+
+		tfVer, err := version.NewVersion(v)
+		if err != nil {
+			return
+		}
+
+		minVer, _ := version.NewVersion(minTfVersion)
+		if tfVer.LessThan(minVer) {
+			logging.Warn("Terraform version %s is older than the recommended minimum version %s. Please consider upgrading.", v, minTfVersion)
+		}
+	})
+}
+
 // ConfigureTerraform returns a Terraform object used to execute commands
 func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
 	path, err := tfExecPath()
 	if err != nil {
 		return nil, err
 	}
+	checkTfVersion()
 	return tfexec.NewTerraform(workingDir, path)
 }
 
