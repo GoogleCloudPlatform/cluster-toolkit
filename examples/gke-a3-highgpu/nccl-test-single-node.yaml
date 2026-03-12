@@ -119,10 +119,17 @@ spec:
       export NCCL_NET_GDR_LEVEL=PIX
       export NCCL_P2P_PXN_LEVEL=0
 
-      # Run the benchmark
-      taskset -c 0-7,104-111,52-59,156-163 /third_party/nccl-tests-mpi/build/all_reduce_perf -b 1G -e 8G -f 2 -g 8 -w 5 --iters 100 -c 0 2>&1 | tee /tmp/nccl_results.txt
+      # Run the benchmarks
+      > /tmp/nccl_results.txt
+      for PERF in all_reduce_perf all_gather_perf reduce_scatter_perf; do
+        echo "Running local 8-GPU $PERF..."
+        echo "=================================================" >> /tmp/nccl_results.txt
+        echo "TEST: $PERF" >> /tmp/nccl_results.txt
+        echo "=================================================" >> /tmp/nccl_results.txt
+        taskset -c 0-7,104-111,52-59,156-163 /third_party/nccl-tests-mpi/build/$PERF -b 1G -e 8G -f 2 -g 8 -w 5 --iters 100 -c 0 2>&1 | tee -a /tmp/nccl_results.txt
+      done
 
-      echo "Test complete. Sleeping infinity for log review."
+      echo "All tests complete. Sleeping infinity for log review."
       sleep infinity
     env:
     - name: LD_LIBRARY_PATH

@@ -455,6 +455,12 @@ variable "enable_queued_provisioning" {
   default     = false
 }
 
+variable "enable_fast_socket" {
+  description = "Enable NCCL Fast Socket plugin on the nodes. Only compatible with GKE 1.25.2-gke.1700+ and images containing the Fast Socket plugin (or requires a daemonset)."
+  type        = bool
+  default     = false
+}
+
 variable "enable_flex_start" {
   description = <<-EOT
   If true, start the node pool with Flex Start provisioning model.
