@@ -59,7 +59,7 @@ The automation includes:
     ```yaml
     terraform_backend_defaults:
       type: gcs
-      gcs:
+      configuration:
         bucket: "YOUR_STATE_BUCKET_NAME" # Replace
 
     vars:

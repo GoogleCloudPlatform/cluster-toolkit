@@ -15,8 +15,7 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    # The GCS bucket used for storing terraform state
-    bucket:
+    bucket: # The GCS bucket used for storing terraform state
 
 vars:
   # Your GCP Project ID
