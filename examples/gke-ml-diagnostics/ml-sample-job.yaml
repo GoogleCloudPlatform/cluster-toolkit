@@ -54,7 +54,7 @@ spec:
             restartPolicy: Never
             nodeSelector:
               cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice
-              cloud.google.com/gke-tpu-topology: 2x2 ## topolgy
+              cloud.google.com/gke-tpu-topology: 2x2 ## topology
             containers:
             - name: jax-job
               image: us-central1-docker.pkg.dev/hpc-toolkit-demo/mld-test/mlloadtest:latest ## image
