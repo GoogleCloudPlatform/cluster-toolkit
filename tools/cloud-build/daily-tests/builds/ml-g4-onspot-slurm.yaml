@@ -32,7 +32,14 @@ steps:
 # While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-g4-onspot-slurm.yaml"
+  entrypoint: 'bash'
+  args:
+  - -c
+  - |
+    set -e -u -o pipefail
+    echo "Using _TRIGGER_BUILD_CONFIG_PATH: ${_TRIGGER_BUILD_CONFIG_PATH}"
+    tools/cloud-build/check_running_build.sh \
+      "${_TRIGGER_BUILD_CONFIG_PATH}"
 
 - id: ml-g4-onspot-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
