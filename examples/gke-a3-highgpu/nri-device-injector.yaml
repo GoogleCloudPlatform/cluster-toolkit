@@ -1,4 +1,4 @@
-# Copyright 2026 Google Inc. All rights reserved.
+# Copyright 2024 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This DaemonSet installs the NRI Device Injector required for GPUDirect TCPX.
-# It enables the NRI (Node Resource Interface) in containerd and deploys the
-# plugin that injects high-speed network interfaces into GPU pods.
+# This daemonset installs nvidia driver 450.80.02 and invokes the
+# partition_gpu tool to enable MIG mode and create GPU instances as specified
+# in the GPU config.
 
 apiVersion: apps/v1
 kind: DaemonSet
@@ -40,59 +40,36 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-            - matchExpressions:
-              - key: cloud.google.com/gke-accelerator
-                operator: In
-                values:
-                - nvidia-h100-80gb
-                - nvidia-h100-mega-80gb
+              - matchExpressions:
+                  - key: cloud.google.com/gke-accelerator
+                    operator: In
+                    values:
+                      - nvidia-h100-80gb
+                      - nvidia-h100-mega-80gb
       tolerations:
-      - operator: "Exists"
+        - operator: "Exists"
       hostNetwork: true
       hostPID: true
-      initContainers:
-      - image: "ubuntu:22.04"
-        name: enable-nri
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - name: root
-          mountPath: /host
-        command:
-        - '/bin/bash'
-        - '-c'
-        - |
-          if ! grep -q nri /host/etc/containerd/config.toml; then
-            echo "[plugins.\"io.containerd.nri.v1.nri\"]
-             disable = false
-             disable_connections = false
-             plugin_config_path = \"/etc/nri/conf.d\"
-             plugin_path = \"/home/kubernetes/nri/plugins\"
-             plugin_registration_timeout = \"5s\"
-             plugin_request_timeout = \"5s\"
-             socket_path = \"/var/run/nri/nri.sock\"">> /host/etc/containerd/config.toml
-            nsenter --target 1 --mount --uts --ipc --net -- systemctl restart containerd
-          fi
       containers:
-      - image: "gcr.io/gke-release/nri-device-injector@sha256:7704e2bd74b8edbb76b6913c7904cc2362f1fa887c4d4aba7b19778ea353537c"
-        name: device-injector
-        resources:
-          requests:
-            cpu: 150m
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - name: dev
-          mountPath: /dev
-        - name: nri
-          mountPath: /var/run/nri
+        - image: "gcr.io/gke-release/nri-device-injector@sha256:7704e2bd74b8edbb76b6913c7904cc2362f1fa887c4d4aba7b19778ea353537c"
+          name: device-injector
+          resources:
+            requests:
+              cpu: 150m
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+            - name: nri
+              mountPath: /var/run/nri
       volumes:
-      - name: root
-        hostPath:
-          path: /
-      - name: nri
-        hostPath:
-          path: /var/run/nri
-      - name: dev
-        hostPath:
-          path: /dev
+        - name: root
+          hostPath:
+            path: /
+        - name: nri
+          hostPath:
+            path: /var/run/nri
+        - name: dev
+          hostPath:
+            path: /dev

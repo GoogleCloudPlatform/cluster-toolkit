@@ -93,7 +93,7 @@ spec:
       done
 
       echo "Running local 8-GPU NCCL test..."
-      export LD_LIBRARY_PATH=/usr/local/nvidia/lib64
+      export LD_LIBRARY_PATH=/nccl-plugin-gpudirecttcpx/build:/third_party/nccl-netsupport/build/lib:/usr/local/nvidia/lib64
       export NCCL_GPUDIRECTTCPX_FORCE_ACK=0
       export NCCL_GPUDIRECTTCPX_TX_COMPLETION_NANOSLEEP=1000
       export NCCL_SOCKET_IFNAME=eth0
@@ -133,7 +133,7 @@ spec:
       sleep infinity
     env:
     - name: LD_LIBRARY_PATH
-      value: /usr/local/nvidia/lib64
+      value: /nccl-plugin-gpudirecttcpx/build:/third_party/nccl-netsupport/build/lib:/usr/local/nvidia/lib64
     securityContext:
       privileged: true
     volumeMounts:
