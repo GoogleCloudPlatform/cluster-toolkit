@@ -31,7 +31,7 @@ The automation includes:
 
     ```bash
     cd ~
-    git clone [https://github.com/GoogleCloudPlatform/cluster-toolkit.git](https://github.com/GoogleCloudPlatform/cluster-toolkit.git)
+    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
     ```
 
 2. **Install the Cluster Toolkit:**
