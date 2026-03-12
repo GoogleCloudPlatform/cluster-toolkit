@@ -54,7 +54,7 @@ locals {
   allowlist_your_ip_message = var.enable_private_endpoint ? local.private_endpoint_message : local.public_endpoint_message
   kubernetes_service_account_message = local.k8s_service_account_name == null ? "" : trimspace(
     <<-EOT
-      Use the following Kubernetes Service Account in the default namespace to run your workloads:
+      Use the following Kubernetes Service Account in the ${var.k8s_service_account_namespace} namespace to run your workloads:
         ${local.k8s_service_account_name}
       The GCP Service Account mapped to this Kubernetes Service Account is:
         ${local.sa_email}

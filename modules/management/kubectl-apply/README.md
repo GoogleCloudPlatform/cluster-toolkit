@@ -275,5 +275,7 @@ limitations under the License.
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_wait"></a> [wait](#output\_wait) | An output to use when establishing explicit dependencies |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
