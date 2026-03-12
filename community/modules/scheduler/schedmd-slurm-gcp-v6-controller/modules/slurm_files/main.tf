@@ -41,16 +41,18 @@ resource "random_uuid" "cluster_id" {
 
 locals {
   config = {
-    enable_bigquery_load  = var.enable_bigquery_load
-    cloudsql_secret       = var.cloudsql_secret
-    cluster_id            = random_uuid.cluster_id.result
-    project               = var.project_id
-    slurm_cluster_name    = var.slurm_cluster_name
-    enable_slurm_auth     = var.enable_slurm_auth
-    bucket_path           = local.bucket_path
-    enable_debug_logging  = var.enable_debug_logging
-    extra_logging_flags   = var.extra_logging_flags
-    controller_state_disk = var.controller_state_disk
+    enable_bigquery_load           = var.enable_bigquery_load
+    cloudsql_secret                = var.cloudsql_secret
+    cluster_id                     = random_uuid.cluster_id.result
+    project                        = var.project_id
+    slurm_cluster_name             = var.slurm_cluster_name
+    slurm_backup_controller_name   = var.slurm_backup_controller_name
+    accounting_storage_backup_host = var.accounting_storage_backup_host
+    enable_slurm_auth              = var.enable_slurm_auth
+    bucket_path                    = local.bucket_path
+    enable_debug_logging           = var.enable_debug_logging
+    extra_logging_flags            = var.extra_logging_flags
+    controller_state_disk          = var.controller_state_disk
 
     # storage
     disable_default_mounts = var.disable_default_mounts
@@ -59,6 +61,7 @@ locals {
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
+    backup_controller_key_timeout      = var.backup_controller_key_timeout
 
     munge_mount     = local.munge_mount
     slurm_key_mount = var.slurm_key_mount
