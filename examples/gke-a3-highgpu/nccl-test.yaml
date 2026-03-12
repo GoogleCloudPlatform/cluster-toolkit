@@ -27,8 +27,8 @@ spec:
     replicas: 1
     template:
       spec:
-        parallelism: 1
-        completions: 1
+        parallelism: 2
+        completions: 2
         backoffLimit: 0
         template:
           metadata:
@@ -114,14 +114,20 @@ spec:
                 # JobSet provides predictable DNS names: ${JOBSET_NAME}-${REPLICATED_JOB_NAME}-${JOB_INDEX}-${POD_INDEX}
                 # nccl-test-worker-0-0 and nccl-test-worker-0-1
                 if [[ $REPLICATED_JOB_NAME == "worker" && $JOB_COMPLETION_INDEX == 0 ]]; then
+                  until getent hosts nccl-test-worker-0-0.nccl-test; do sleep 2; done
                   until getent hosts nccl-test-worker-0-1.nccl-test; do sleep 2; done
-                  /configs/allgather.sh nccl-test-worker-0-0.nccl-test nccl-test-worker-0-1.nccl-test
+                  /configs/allreduce.sh nccl-test-worker-0-0.nccl-test nccl-test-worker-0-1.nccl-test
+                  sleep infinity
                 else
+                  until getent hosts nccl-test-worker-0-0.nccl-test; do sleep 2; done
+                  until getent hosts nccl-test-worker-0-1.nccl-test; do sleep 2; done
                   sleep infinity
                 fi
               env:
               - name: LD_LIBRARY_PATH
                 value: /usr/local/nvidia/lib64
+              - name: REPLICATED_JOB_NAME
+                value: "worker"
               securityContext:
                 privileged: true
               volumeMounts:
@@ -131,6 +137,8 @@ spec:
                 mountPath: /usr/local/nvidia/lib64
               - name: config-volume
                 mountPath: /configs
+              - name: shmem
+                mountPath: /dev/shm
               resources:
                 limits:
                   nvidia.com/gpu: 8
@@ -142,6 +150,10 @@ spec:
             - name: libraries
               hostPath:
                 path: /home/kubernetes/bin/nvidia/lib64
+            - name: shmem
+              emptyDir:
+                medium: Memory
+                sizeLimit: 200Gi
             - name: tcpx-socket
               hostPath:
                 path: /run/tcpx

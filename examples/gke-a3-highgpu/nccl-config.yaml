@@ -18,7 +18,7 @@ metadata:
   name: nccl-configmap
   namespace: default
 data:
-  allgather.sh: |-
+  allreduce.sh: |-
     #!/bin/bash
     for script in /configs/*; do
       name=$(basename $script)
@@ -29,7 +29,7 @@ data:
     pushd /scripts;
     /scripts/gen_hostfiles.sh ${@};
     popd;
-    /scripts/run-allgather.sh 8 eth1,eth2,eth3,eth4 1M 512M ${#};
+    /scripts/run-nccl.sh all_reduce_perf "${LD_LIBRARY_PATH}:/third_party/nccl-netsupport/build/lib:/nccl-plugin-gpudirecttcpx/build" 8 eth1,eth2,eth3,eth4 1M 8G 2;
   run-nccl.sh: |-
     #!/bin/bash
     SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
@@ -46,6 +46,7 @@ data:
     mpirun --mca btl tcp,self --mca btl_tcp_if_include eth0 --allow-run-as-root \
     --mca orte_base_help_aggregate 0 \
     --mca pcompress_base_silence_warning 1 \
+    --mca orte_keep_fqdn_hostnames 1 \
     -np $(( gpu_per_node * "${nhosts}" )) \
     --hostfile "${SCRIPT_DIR}/hostfiles${nhosts}/hostfile${gpu_per_node}" \
     -x LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
@@ -72,7 +73,7 @@ data:
     -x NCCL_PROTO=Simple \
     -x NCCL_NET_GDR_LEVEL=PIX \
     -x NCCL_P2P_PXN_LEVEL=0 \
-    taskset -c 0-7,104-111,52-59,156-163 \
+    \
     /third_party/nccl-tests-mpi/build/"${benchmark}" \
     -b "${data_b}" -e "${data_e}" -f 2 -g 1 -w 5 --iters 100 -c 0 2>&1 \
     | tee "a_${nhosts}_${gpu_per_node}_${socket_ifnames}.txt"
