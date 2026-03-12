@@ -1,0 +1,233 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-ml-diagnostics-tpu
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id: hpc-toolkit-demo
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: gkemldiagon2
+
+  # The GCP Region used for this deployment.
+  region: us-central1
+
+  # The GCP Zone used for this deployment.
+  zone: us-central1-b
+
+  # The number of TPU slices to create
+  num_slices: 1
+
+  # Machine type
+  machine_type: ct6e-standard-4t
+
+  # The TPU placement topology for pod slice node pool.
+  tpu_topology: 2x2
+
+  # The number of nodes to be created in each nodepool
+  static_node_count: 1
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr: 0.0.0.0/0
+
+  # The name of the compute engine reservation of TPU v6e nodes
+  #reservation:
+
+  system_node_pool_disk_size_gb: 200
+  v6e_node_pool_disk_size_gb: 100
+
+  # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
+  namespace: diagon
+  KSA: workload-identity-k8s-sa
+
+
+validators:
+- validator: test_module_not_used
+  skip: true
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-tpu-v6e-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-tpu-v6e-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - artifactregistry.reader
+      - hypercomputecluster.editor
+      - storage.admin
+      # - storage.objectUser
+
+
+  - id: gke-tpu-v6e-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-tpu-v6e-net-0, workload_service_account]
+    settings:
+      k8s_service_account_name: $(vars.KSA)
+      k8s_service_account_namespace: $(vars.namespace)
+      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_private_endpoint: false
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: "1.33.gke"
+      release_channel: REGULAR
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2025-12-01T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+    outputs: [instructions]
+
+  - id: gke-tpu-v6e-pool
+    source: modules/compute/gke-node-pool
+    use: [gke-tpu-v6e-cluster, node_pool_service_account]
+    settings:
+      num_slices: $(vars.num_slices)
+      name: gke-tpu-v6e-pool
+      disk_type: hyperdisk-balanced
+      machine_type: $(vars.machine_type)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
+      static_node_count: $(vars.static_node_count)
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6e-net-1.network_name,
+            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+      spot: true
+      placement_policy:
+        type: COMPACT
+        tpu_topology: $(vars.tpu_topology)
+    outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke-tpu-v6e-cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
+      jobset:
+        install: true
+
+  - id: gke-ml-diagnostics
+    source: modules/management/mldiagnostics
+    use: [gke-tpu-v6e-cluster, workload-manager-install]
+    settings:
+      workload_manager_wait: $(workload-manager-install.wait)
+      namespace: $(vars.namespace)
+      cert_manager:
+        install: true
+      mldiagnostics_webhook:
+        install: true
+      mldiagnostics_connection_operator:
+        install: true
+    outputs: [instructions]
