@@ -554,3 +554,13 @@ variable "enable_inference_gateway" {
   type        = bool
   default     = false
 }
+
+variable "auto_monitoring_scope" {
+  description = "Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'."
+  type        = string
+  default     = "NONE"
+  validation {
+    condition     = contains(["ALL", "NONE"], var.auto_monitoring_scope)
+    error_message = "auto_monitoring_scope can only be ALL or NONE."
+  }
+}
