@@ -1,5 +1,5 @@
 /**
-  * Copyright 2023 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -52,6 +52,16 @@ locals {
   initial_node_set = try(var.initial_node_count > 0, false)
 
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
+
+  # Merge all Kubernetes labels
+  # Note: cloud.google.com/gke-queued is added manually because while GKE 
+  # automatically applies the taint, the label is required for workloads 
+  # using nodeSelectors to correctly target these provisioned nodes.
+  kubernetes_labels = merge(
+    var.kubernetes_labels,
+    module.tpu.kubernetes_label,
+    var.enable_queued_provisioning ? { "cloud.google.com/gke-queued" = "true" } : {}
+  )
 }
 
 
@@ -84,11 +94,15 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
 
   node_count = var.static_node_count
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a 
+  # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
     for_each = local.static_node_set ? [] : [1]
     content {
-      total_min_node_count = var.autoscaling_total_min_nodes
-      total_max_node_count = var.autoscaling_total_max_nodes
+      min_node_count       = var.autoscaling_min_node_count
+      max_node_count       = var.autoscaling_max_node_count
+      total_min_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_min_nodes
+      total_max_node_count = (var.autoscaling_min_node_count != null || var.autoscaling_max_node_count != null) ? null : var.autoscaling_total_max_nodes
       location_policy      = "ANY"
     }
   }
@@ -128,7 +142,7 @@ resource "google_container_node_pool" "node_pool" {
     disk_size_gb     = var.disk_size_gb
     disk_type        = var.disk_type
     resource_labels  = local.labels
-    labels           = var.kubernetes_labels
+    labels           = local.kubernetes_labels
     service_account  = var.service_account_email
     oauth_scopes     = var.service_account_scopes
     machine_type     = var.machine_type
@@ -222,9 +236,10 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     linux_node_config {
-      sysctls = {
-        "net.ipv4.tcp_rmem" = "4096 87380 16777216"
-        "net.ipv4.tcp_wmem" = "4096 16384 16777216"
+      sysctls = var.linux_node_config.sysctls
+      hugepages_config {
+        hugepage_size_2m = try(var.linux_node_config.hugepages_config.hugepage_size_2m, null)
+        hugepage_size_1g = try(var.linux_node_config.hugepages_config.hugepage_size_1g, null)
       }
     }
 
@@ -331,14 +346,6 @@ resource "google_container_node_pool" "node_pool" {
       EOT
     }
     precondition {
-      condition = (
-        (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
-      )
-      error_message = "Shared extended reservations are not supported by GKE."
-    }
-    precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)
       error_message = "Only SURGE strategy is supported"
     }
@@ -363,8 +370,8 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Compact placement is not supported with blue-green upgrades."
     }
     precondition {
-      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT")
-      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT" && !module.tpu.is_tpu)
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true, unless using TPUs."
     }
     precondition {
       condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
@@ -396,11 +403,19 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
-      error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+      error_message = "enable_flex_start requires reservation_affinity.consume_reservation_type to be 'NO_RESERVATION'."
     }
     precondition {
-      condition     = var.enable_flex_start == true ? (var.spot == false) : true
+      condition     = !(var.enable_flex_start && var.spot)
       error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning && var.spot)
+      error_message = "Both enable_queued_provisioning and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
   }
 }

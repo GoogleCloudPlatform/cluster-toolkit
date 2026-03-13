@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ locals {
   }
 }
 
-resource "google_storage_bucket_object" "parition_config" {
+resource "google_storage_bucket_object" "partition_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${var.slurm_bucket_dir}/partition_configs/${var.partition_name}.yaml"
   content = yamlencode(local.partition)

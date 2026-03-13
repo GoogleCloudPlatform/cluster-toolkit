@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ locals {
   bucket               = replace(var.gcs_bucket_path, "gs://", "")
   post_script_filename = "mount-${local.suffix}.sh"
 
-  # mount_runner_args is defined here: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/3abddcfbd245b0e6747917a4e55b30658414ffd7/community/modules/file-system/cloud-storage-bucket/outputs.tf#L40
+  # mount_runner_args is defined in the file: cluster-toolkit/modules/file-system/cloud-storage-bucket/outputs.tf
   mount_args = split(" ", var.mount_runner.args)
 
   unused       = local.mount_args[0]

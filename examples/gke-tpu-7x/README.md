@@ -10,7 +10,7 @@ The blueprint follows Google Cloud best practices, including:
 
 > NOTE: This guide provides examples for deploying a small, single-node slice (2x2x1), but the parameters in the deployment file can be easily changed to provision larger, multi-node slices.
 
-This guide also includes a `tpu-7x-job.yaml` that creates a Kubernetes Pod and runs a simple command to check for available TPU chips.
+This guide also includes a `gke-tpu-7x-job.yaml` that creates a Kubernetes Pod and runs a simple command to check for available TPU chips.
 
 ## Key parameters when working with TPUs
 
@@ -38,7 +38,7 @@ Before you start, make sure you have performed the following tasks:
    - `roles/container.clusterAdmin`
    - `roles/iam.serviceAccountAdmin`
 5. **Note the GKE Version Requirement**: Be aware that Cloud TPU 7x requires a specific minimum GKE version to function correctly.
-   - **Minimum Version**: `1.34.0-gke.1662000` or later.
+   - **Minimum Version**: `1.34.3-gke.1318000` or later.
    - **Blueprint Configuration**: The provided `gke-tpu-7x.yaml` blueprint is already configured to use a compatible version from the `RAPID` release channel. If you customize the blueprint, ensure you do not select a version older than this minimum requirement.
 
 ## Create a cluster using Cluster Toolkit
@@ -114,6 +114,7 @@ This repository also includes an advanced blueprint, `gke-tpu-7x-advanced.yaml`,
 - Performance-tuned GCS FUSE mounts pre-configured in the cluster as Persistent Volumes.
 - **Optional** High-Performance Storage: [Hyperdisk Balanced](https://docs.cloud.google.com/compute/docs/disks/hyperdisks) support for highly available and consistent performance across GKE nodes. For details of configuring Hyperdisk Balanced, please refer to the [appendix](#understanding-hyperdisk-balanced-integration).
 - **Optional** High-Performance Storage: [Managed Lustre](https://cloud.google.com/managed-lustre/docs/overview) for high-performance, fully managed parallel file system optimized for heavy AI and HPC workloads. For details of configuring Managed Lustre, please refer to the [appendix](#understanding-managed-lustre-integration).
+- **Optional** Shared File Storage: [Filestore](https://docs.cloud.google.com/filestore/docs/overview) for managed NFS capabilities allowing multiple TPU hosts to share logs, code, or datasets. For details, refer to the [appendix](#understanding-filestore-integration).
 
 ### Deploying the Advanced Blueprint
 
@@ -125,15 +126,34 @@ The process is nearly identical to the basic deployment.
     ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    community/examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
-    community/examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
+    examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml \
+    examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml
     ```
 
 3. After deployment, the blueprint will output instructions for running a fio benchmark job. This job serves as a validation test to confirm that the GCS mounts are working correctly for both reading and writing. Follow the printed instructions to run the test.
 
+### Advanced Scheduling with Kueue
+
+This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native system for managing quotas and job queuing. This is enabled by default in the advanced blueprint (`gke-tpu-7x-advanced.yaml`).
+
+1. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue` matching the total static TPU capacity of your cluster (slices x nodes x chips).
+2. **Submit a Job:** To submit a job to the queue, add the label `kueue.x-k8s.io/queue-name: user-queue` to your Job or JobSet manifest.
+
+    A sample job file is provided: `kueue-job-sample.yaml`.
+
+    ```sh
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/kueue-job-sample.yaml
+    ```
+
+3. **Validation:** Check the status of your workload.
+
+    ```sh
+    kubectl get workloads
+    ```
+
 ## Run the sample job
 
-The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload installs JAX and a specific `libtpu` library, and then returns the number of TPU chips it can detect.
+The `gke-tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload installs JAX and a specific `libtpu` library, and then returns the number of TPU chips it can detect.
 
 1. Connect to your cluster:
 
@@ -145,7 +165,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
 
    Replace `DEPLOYMENT_NAME`, `REGION`, and `PROJECT_ID` with the ones used in your `gke-tpu-7x-deployment.yaml` file.
 2. Update the `nodeSelector` in the job file.
-   Open the `examples/gke-tpu-7x/tpu-7x-job.yaml` file. Ensure the `nodeSelector` values match the accelerator label and topology used in your deployment file.
+   Open the `examples/gke-tpu-7x/gke-tpu-7x-job.yaml` file. Ensure the `nodeSelector` values match the accelerator label and topology used in your deployment file.
    > *You can find the correct labels for your cluster by running `kubectl get nodes --show-labels`*
 
    For the example deployment, the values are:
@@ -159,7 +179,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
 3. Update Resource Request:
 
     ```yaml
-    # In tpu-7x-job.yaml, inside the spec container
+    # In gke-tpu-7x-job.yaml, inside the spec container
     resources:
       requests:
         google.com/tpu: <CHIPS_PER_NODE> # e.g., 4 for tpu7x-standard-4t
@@ -171,7 +191,7 @@ The `tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workload in
    The sample job file already contains the correct node selectors for the example deployment.
 
     ```bash
-    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/tpu-7x-job.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-tpu-7x/gke-tpu-7x-job.yaml
     ```
 
    This command returns a Pod name.
@@ -254,6 +274,18 @@ The blueprint provisions several key technologies to create a robust data pipeli
 - [Access GCS Buckets with the GCS FUSE CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver): This is the core technical guide explaining how GKE mounts GCS buckets into your pods, which this blueprint automates.
 - [Configure Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity): Read this to understand the secure, recommended method for GKE applications to access Google Cloud services like GCS, which this blueprint configures for you.
 
+### Understanding DWS Flex Start Integration
+
+Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training), which allows you to request TPU resources using a flexible "Flex Start" model. This is ideal for training jobs that can wait for capacity and require lower costs.
+
+For a pre-configured example and detailed documentation on using Flex Start with TPU 7x, please refer to:
+- [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
+
+Additionally, for **Queued Provisioning (QP)** support with DWS Flex Start:
+- [GKE TPU 7x DWS Flex with QP Blueprint](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml)
+- [DWS Flex with QP README.md](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/README.md)
+
 ### Understanding Managed Lustre integration
 
 The advanced blueprint `gke-tpu-7x-advanced.yaml` can also be configured to deploy a Managed Lustre filesystem. Google Cloud **Managed Lustre** delivers a high-performance, fully managed parallel file system optimized for AI and HPC applications. With multi-petabyte-scale capacity and up to 1 TBps throughput, [Managed Lustre](https://cloud.google.com/architecture/optimize-ai-ml-workloads-managed-lustre) facilitates the migration of demanding workloads to the cloud.
@@ -276,7 +308,7 @@ Once deployed, the `Lustre` filesystem is available to the cluster as a `Persist
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
@@ -347,7 +379,7 @@ After making these changes, run the `gcluster deploy` command as usual.
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project_id=PROJECT_ID
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
     ```
 
    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
@@ -372,3 +404,42 @@ After making these changes, run the `gcluster deploy` command as usual.
     ```
 
    The logs of the pod verifies the disk is mounted successfully and performs a mixed I/O test to validate the disk's provisioned performance.
+
+### Understanding Filestore integration
+
+To enable Filestore integration, perform the following steps before deploying:
+
+1. In the `gke-tpu-7x-cluster` module settings, ensure `enable_filestore_csi: true` is set.
+2. Find the section commented `--- FILESTORE ADDITIONS ---`. Uncomment the following modules:
+   - `filestore`: Provisions the Filestore instance and specifies the `local_mount` point.
+   - `shared-filestore-pv`: Creates the Kubernetes Persistent Volume and Claim.
+   - `shared-fs-job`: (Optional) A test job template to verify multi-node shared writing.
+
+#### Testing the Shared Filestore Mount
+The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two different pods can write to and read from the same file simultaneously.
+
+1. Connect to your cluster:
+
+    ```sh
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
+    ```
+
+    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
+
+2. Apply the Filestore test manifest,whose path is provided in the final deployment instructions:
+
+    ```sh
+    kubectl apply -f <path/to/shared-fs-job.yaml>
+    ```
+
+3. Verify the Shared Output: Once the pods are running, check the logs of the first pod to see it reading data written by the second pod:
+
+    ```sh
+    # Get pod names
+    kubectl get pods
+    
+    # Check logs for the first pod
+    kubectl logs <pod-name-0>
+    ```
+
+The logs will display content from `shared_output.txt`, showing timestamps and hostnames from both pods, confirming that the filesystem is truly shared.

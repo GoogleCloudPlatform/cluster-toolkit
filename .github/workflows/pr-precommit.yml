@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,12 +26,21 @@ on:
     - main
     - develop
     - release-candidate
+    - hotfix-*
 
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
     - uses: actions/setup-python@v5
       with:
         # internal Python tests require Python 3.12
@@ -44,7 +53,7 @@ jobs:
         check-latest: true
     - uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: "1.5.7"
+        terraform_version: "1.12.2"
         terraform_wrapper: false
     - run: make install-dev-deps
     - uses: terraform-linters/setup-tflint@v4
@@ -61,6 +70,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
     - uses: actions/setup-python@v5
       with:
         # the slurm-files Python requirements.txt requires updating
@@ -74,7 +91,7 @@ jobs:
         check-latest: true
     - uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: latest
+        terraform_version: "1.12.2"
         terraform_wrapper: false
     - run: make install-dev-deps
     - uses: terraform-linters/setup-tflint@v4

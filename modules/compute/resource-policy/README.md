@@ -24,7 +24,7 @@ The following example creates a group placement resource policy and applies it t
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2024 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.29.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 

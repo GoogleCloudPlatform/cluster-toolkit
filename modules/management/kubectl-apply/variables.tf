@@ -1,5 +1,5 @@
 /**
-  * Copyright 2024 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -18,13 +18,16 @@ locals {
   # This list defines the Kueue Helm chart versions that are officially tested and supported by this toolkit, based on the official changelog.
   # The list should be updated as new versions are tested and approved.
   # Refer https://github.com/kubernetes-sigs/kueue/tree/main/CHANGELOG
-  kueue_supported_versions = ["0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+
+  # Note: The apiVersion associated with the Topology kind should be
+  # kueue.x-k8s.io/v1beta1 when using v0.14.0 or higher. Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.14.md#api-change
+  kueue_supported_versions = ["0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
   jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
   gib_supported_versions_x86   = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
-  gib_supported_versions_arm64 = ["v1.0.7"]
+  gib_supported_versions_arm64 = ["v1.1.1", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
     local.gib_supported_versions_arm64
     ) : (
@@ -122,7 +125,7 @@ variable "kueue" {
 }
 
 variable "gke_cluster_exists" {
-  description = "A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations."
+  description = "A static flag that signals to downstream modules that a cluster has been created."
   type        = bool
   default     = false
 }
@@ -149,8 +152,9 @@ variable "gpu_operator" {
 variable "nvidia_dra_driver" {
   description = "Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes"
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "v25.3.0")
+    install          = optional(bool, false)
+    version          = optional(string, "v25.3.0")
+    accelerator_type = optional(string, "nvidia-gb200")
   })
   default = {}
 }
@@ -185,5 +189,23 @@ variable "gib" {
       version           = ""
       accelerator_count = 0
     }
+  }
+}
+
+variable "system_node_pool_id" {
+  description = "The ID of the system node pool. Used to ensure the node pool remains active during Kueue uninstallation."
+  type        = string
+  default     = null
+}
+
+variable "asapd_lite" {
+  description = "Install the asapd-lite daemonset for A4X-Max Bare Metal."
+  type = object({
+    install     = bool
+    config_path = string
+  })
+  default = {
+    install     = false
+    config_path = ""
   }
 }

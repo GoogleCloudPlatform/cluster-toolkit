@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.73.1"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.83.0"
   }
 
-  required_version = ">= 1.1"
+  required_version = "= 1.12.2"
 }

@@ -1,0 +1,49 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# region, zone must be defined in build file with --extra-vars flag!
+test_name: g4-onspot-slurm
+deployment_name: g4-onspot-slurm-{{ build }}
+slurm_cluster_name: "g4osp{{ build[0:5] }}"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/ml-slurm-g4.yaml"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+network: "{{ deployment_name }}-net-0"
+post_deploy_tests:
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
+- test-validation/test-default-partition.yml
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
+custom_vars:
+  gpu_count: 1
+  gpu_partition: g4
+  test_persistenced: true
+  partitions:
+  - g4
+  mounts:
+  - /home
+  instance_labels:
+    g4_onspot: true
+  enable_spot: true
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  disk_size_gb: 100
+  cluster_size: 2
+  g4_enable_spot_vm: true

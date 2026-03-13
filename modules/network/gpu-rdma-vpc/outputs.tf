@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,5 +55,6 @@ output "subnetwork_interfaces_gke" {
 
 output "subnetwork_name_prefix" {
   description = "Prefix of the RDMA subnetwork names"
-  value       = var.subnetworks_template.name_prefix
+  # This uses a conditional: if the variable is null, return null; otherwise, return the prefix.
+  value = var.subnetworks_template != null ? var.subnetworks_template.name_prefix : null
 }

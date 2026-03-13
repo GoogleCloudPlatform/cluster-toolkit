@@ -23,7 +23,7 @@ You will need to enable the relevant APIs and create a Service Account for your 
         - cloudbuild.googleapis.com
         - artifactregistry.googleapis.com
 
-  - source: community/modules/project/service-account
+  - source: modules/project/service-account
     kind: terraform
     id: hpc_service_account
     settings:
@@ -103,7 +103,7 @@ Note: only Docker registries have been tested so far. Placeholders do exist for 
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 

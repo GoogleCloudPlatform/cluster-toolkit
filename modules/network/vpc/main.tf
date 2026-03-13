@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,11 +40,13 @@ locals {
     subnet_name           = local.subnetwork_name
     subnet_ip             = local.default_primary_subnetwork_cidr_block
     subnet_region         = var.region
-    subnet_private_access = true
+    subnet_private_access = var.subnetwork_private_access
     subnet_flow_logs      = false
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
     role                  = null
+    stack_type            = var.subnetwork_stack_type
+    ipv6_access_type      = var.subnetwork_ipv6_access_type
   }
 
   # Identify user-supplied primary subnetwork
@@ -81,6 +83,8 @@ locals {
   output_primary_subnetwork_name          = local.output_primary_subnetwork.name
   output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
   output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
+  output_primary_subnetwork_stack_type    = local.output_primary_subnetwork.stack_type
+
 
   iap_ports = distinct(concat(compact([
     var.enable_iap_rdp_ingress ? "3389" : "",
@@ -180,7 +184,7 @@ resource "terraform_data" "network_profile_firewall_validation" {
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 12.0"
+  version = "~> 13.0"
 
   depends_on = [terraform_data.network_profile_firewall_validation]
 
@@ -191,6 +195,8 @@ module "vpc" {
   secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
+  enable_ipv6_ula                        = var.enable_ipv6_ula
+  internal_ipv6_range                    = var.internal_ipv6_range
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes

@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,21 +34,6 @@ deployment_groups:
 
   - id: startup-script
     source: modules/scripts/startup-script
-    settings:
-      install_ansible: true
-      runners:
-      - type: shell
-        destination: startup.sh
-        content: |
-          #!/bin/bash
-          set -ex
-          echo \$(ansible --version)
-
-  - id: startup-script-u20
-    # this source line is deliberate; it is the last to support Ubuntu 20.04
-    # Ubuntu 20.04 coverage may be removed when the a3-highgpu-8g solution is
-    # refactored to use Ubuntu 22.04 or later
-    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
       install_ansible: true
       runners:

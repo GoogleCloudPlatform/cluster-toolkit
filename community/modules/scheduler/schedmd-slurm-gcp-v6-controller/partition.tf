@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ module "slurm_nodeset_template" {
   disk_size_gb               = each.value.disk_size_gb
   disk_type                  = each.value.disk_type
   enable_confidential_vm     = each.value.enable_confidential_vm
+  confidential_instance_type = each.value.confidential_instance_type
   enable_oslogin             = each.value.enable_oslogin
   enable_shielded_vm         = each.value.enable_shielded_vm
   gpu                        = each.value.gpu

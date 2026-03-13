@@ -10,7 +10,7 @@ Toolkit, see the extended [Network Storage documentation](../../../docs/network_
 ### Supported Operating Systems
 
 A Managed Lustre instance can be used with Slurm cluster or compute
-VM running Ubuntu 20.04, 22.04 or Rocky Linux 8 (including the HPC flavor).
+VM running Ubuntu 22.04 or Rocky Linux 8 (including the HPC flavor).
 
 ### Managed Lustre Access
 
@@ -29,10 +29,10 @@ that the correct subnetwork has private service access.
     source: modules/network/vpc
 
   - id: private_service_access
-    source: community/modules/network/private-service-access
+    source: modules/network/private-service-access
     use: [network]
     settings:
-      prefix_length: 24
+      prefix_length: 22
 
   - id: lustre
     source: modules/file-system/managed-lustre
@@ -215,7 +215,7 @@ have occurred. See more at
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2025 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -233,7 +233,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.27.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -272,7 +272,7 @@ No modules.
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
 | <a name="input_per_unit_storage_throughput"></a> [per\_unit\_storage\_throughput](#input\_per\_unit\_storage\_throughput) | Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. | `number` | `500` | no |
-| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
+| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Lustre instance will be created. | `string` | n/a | yes |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote mount point of the Managed Lustre instance | `string` | n/a | yes |
 | <a name="input_size_gib"></a> [size\_gib](#input\_size\_gib) | Storage size of the Managed Lustre instance in GB. See https://cloud.google.com/managed-lustre/docs/create-instance for limitations | `number` | `36000` | no |

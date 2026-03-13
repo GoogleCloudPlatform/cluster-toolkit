@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,14 +104,31 @@ variable "maintenance_start_time" {
 }
 
 variable "maintenance_exclusions" {
-  description = "List of maintenance exclusions. A cluster can have up to three."
+  description = "List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`."
   type = list(object({
-    name            = string
-    start_time      = string
-    end_time        = string
-    exclusion_scope = string
+    name                        = string
+    start_time                  = string
+    end_time                    = optional(string)
+    exclusion_scope             = string
+    exclusion_end_time_behavior = optional(string)
   }))
   default = []
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions : (
+        ((x.end_time != null) != (x.exclusion_end_time_behavior != null)) &&
+        try(length(trimspace(x.end_time)) > 0, true)
+      )
+    ])
+    error_message = "For each maintenance exclusion, exactly one of 'end_time' or 'exclusion_end_time_behavior' must be specified. If 'end_time' is provided, it cannot be an empty string."
+  }
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions :
+      x.exclusion_end_time_behavior == null || x.exclusion_end_time_behavior == "UNTIL_END_OF_SUPPORT"
+    ])
+    error_message = "If specified, 'exclusion_end_time_behavior' must be 'UNTIL_END_OF_SUPPORT'."
+  }
   validation {
     condition = alltrue([
       for x in var.maintenance_exclusions :
@@ -202,6 +219,12 @@ variable "enable_node_local_dns_cache" {
   description = "Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency"
   type        = bool
   default     = false
+}
+
+variable "enable_shielded_nodes" {
+  description = "Enable Shielded Nodes features on all nodes in this cluster."
+  type        = bool
+  default     = true
 }
 
 variable "system_node_pool_enabled" {
@@ -405,7 +428,7 @@ variable "enable_multi_networking" {
 }
 
 variable "additional_networks" {
-  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster."
+  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster."
   default     = []
   type = list(object({
     network            = string

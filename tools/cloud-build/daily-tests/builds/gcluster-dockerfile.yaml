@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,9 @@
 ---
 tags: [dockerfile, m.pre-existing-vpc, m.vm-instance, vm]
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 3600s  # 1hr
 steps:
 - id: check_for_running_build
@@ -25,6 +28,16 @@ steps:
 - id: build-docker-image
   name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcluster', 'tools/cloud-build/images/cluster-toolkit-dockerfile/']
+
+- id: modify-blueprint
+  name: 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner' # Using an image with bash
+  script: |
+    #!/usr/bin/env bash
+    set -ex
+    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+
+    echo "--- Modifying Blueprint with add_ttl_label.sh ---"
+    bash tools/add_ttl_label.sh "${BLUEPRINT}"
 
 - id: create-deployment-folder
   name: 'gcluster'
@@ -55,4 +68,4 @@ steps:
 
 - id: destroy-resources
   name: 'gcluster'
-  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve']
+  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve', '--robust']

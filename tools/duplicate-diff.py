@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ duplicates = [
         "modules/file-system/pre-existing-network-storage/scripts/mount.sh",
         "modules/file-system/filestore/scripts/mount.sh",
         "modules/file-system/managed-lustre/scripts/mount.sh",
-        "community/modules/file-system/cloud-storage-bucket/scripts/mount.sh",
+        "modules/file-system/cloud-storage-bucket/scripts/mount.sh",
         "community/modules/file-system/nfs-server/scripts/mount.sh",
     ],
     [
@@ -30,7 +30,7 @@ duplicates = [
     ],
     [
         "modules/file-system/pre-existing-network-storage/scripts/install-gcs-fuse.sh",
-        "community/modules/file-system/cloud-storage-bucket/scripts/install-gcs-fuse.sh",
+        "modules/file-system/cloud-storage-bucket/scripts/install-gcs-fuse.sh",
     ],
     [
         "modules/scheduler/batch-job-template/startup_from_network_storage.tf",

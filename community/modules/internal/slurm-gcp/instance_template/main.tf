@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,6 +126,7 @@ module "instance_template" {
   shielded_instance_config    = var.shielded_instance_config
   advanced_machine_features   = var.advanced_machine_features
   enable_confidential_vm      = var.enable_confidential_vm
+  confidential_instance_type  = var.confidential_instance_type
   enable_shielded_vm          = var.enable_shielded_vm
   preemptible                 = var.preemptible
   spot                        = var.spot

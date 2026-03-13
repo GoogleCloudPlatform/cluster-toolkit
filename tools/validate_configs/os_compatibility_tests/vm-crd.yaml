@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ vars:
   region: us-central1
   zone: us-central1-a
   instance_image:
-    family: ubuntu-2004-lts
+    family: ubuntu-2204-lts
     project: ubuntu-os-cloud
   # instance_image:
   #   family: debian-11

@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,9 +42,14 @@ def get_pr(pr_num: int) -> dict:
     return resp.json()
 
 def get_pr_files(pr_num: int) -> list[str]:
-    resp = requests.get(f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}/files")
-    resp.raise_for_status()
-    return [f['filename'] for f in resp.json()]
+    files = []
+    url = f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}/files?per_page=100"
+    while url:
+        resp = requests.get(url)
+        resp.raise_for_status()
+        files.extend(resp.json())
+        url = resp.links.get("next", {}).get("url")
+    return [f['filename'] for f in files]
 
 def get_changed_files_tags(files: Collection[str]) -> set[str]:
     tags = set()

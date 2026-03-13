@@ -1,5 +1,10 @@
 # Hybrid Slurm Cluster Demonstration With GCP Static Cluster
 
+> [!NOTE]
+> The `schedmd-slurm-gcp-v5` module has been officially deprecated since v1.45.0. This blueprint,
+> and relevant doces however, still refer to the `schedmd-slurm-gcp-v5` modules.
+> There is no current hybrid solution for slurm-gcp-v6 however one is being developed.
+
 ## Description
 These instructions step through the setup and execution of a demo of the Cluster
 Toolkit hybrid module. In this process you will:
@@ -16,11 +21,6 @@ Toolkit hybrid module. In this process you will:
 These instructions are provided for demonstration purposes only. This process
 may serve as a first step in evaluating the Cluster Toolkit's hybrid slurm module
 for use with an on-premise slurm-cluster.
-
-> **Warning:** The [hybrid module][hybridmodule] is in active development and
-> the interface is not guaranteed to be static. As the module matures and
-> further testing is done, documentation on applying the hybrid module to
-> on-premise slurm clusters will be added and expanded.
 
 [slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
 
@@ -40,7 +40,7 @@ well as metadata in the cloud bursting project.
 configuration files and scripts needed to convert a static cluster to a cloud
 hybrid cluster.
 
-[hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
+[hybridmodule]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
 **cloud bursting:** Cloud bursting refers to creating new compute VM instances
 in the cloud elastically that can be used to complete slurm jobs.

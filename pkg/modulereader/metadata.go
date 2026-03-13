@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,21 @@ type MetadataGhpc struct {
 	InjectModuleId string `yaml:"inject_module_id"`
 	// If set to true, the creation will fail if the module is not used.
 	HasToBeUsed bool `yaml:"has_to_be_used"`
+	// NEW: Add a slice to hold validation rules
+	Validators []ValidationRule `yaml:"validators"`
+	// The date a deprecated module will be removed, in YYYY-MM-DD format.
+	DeprecationDate string `yaml:"deprecation_date,omitempty"`
+	// The recommended replacement for a deprecated module.
+	AlternativeModule string `yaml:"alternative_module,omitempty"`
+}
+
+// NEW: Define the struct for a single validation rule
+type ValidationRule struct {
+	Validator string                 `yaml:"validator"` // e.g., "regex", "onlyOneOf", "min", "max"
+	Inputs    map[string]interface{} `yaml:"inputs"`    // Flexible parameters for the rule (e.g., pattern, vars)
+
+	ErrorMessage string `yaml:"error_message"`
+	Level        string `yaml:"level"`
 }
 
 // GetMetadata reads and parses `metadata.yaml` from module root.

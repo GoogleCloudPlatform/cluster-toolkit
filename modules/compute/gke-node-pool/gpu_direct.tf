@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,27 +34,26 @@ locals {
       rxdm_version            = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
       min_additional_networks = 4
       major_minor_version_acceptable_map = {
-        "1.27" = "1.27.7-gke.1121000"
-        "1.28" = "1.28.8-gke.1095000"
-        "1.29" = "1.29.3-gke.1093000"
-        "1.30" = "1.30.2-gke.1023000"
+        "1.27" = "1.27.16-gke.2874000"
+        "1.28" = "1.28.15-gke.3163000"
+        "1.29" = "1.29.15-gke.2467000"
       }
     }
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
       gpu_direct_manifests = [
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/bd4a7491672b48dfec28f3679b679a614f6cbbc7/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.14 for tcpxo
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/bd4a7491672b48dfec28f3679b679a614f6cbbc7/nri_device_injector/nri-device-injector.yaml", # nri_plugin
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/a32cd5152c6ac430ed0651199484853baa14f2d0/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.14 for tcpxo
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/a32cd5152c6ac430ed0651199484853baa14f2d0/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
       updated_workload_path   = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
       rxdm_version            = "v1.0.20" # matching nccl-tcpxo-installer version v1.0.14
       min_additional_networks = 8
       major_minor_version_acceptable_map = {
-        "1.28" = "1.28.9-gke.1250000"
-        "1.29" = "1.29.4-gke.1542000"
-        "1.30" = "1.30.4-gke.1129000"
-        "1.31" = "1.31.1-gke.2008000"
-        "1.32" = "1.32.2-gke.1489001"
+        "1.28" = "1.28.15-gke.3163000"
+        "1.29" = "1.29.15-gke.2467000"
+        "1.30" = "1.30.14-gke.1922000"
+        "1.31" = "1.31.14-gke.1243000"
+        "1.32" = "1.32.11-gke.1174000"
       }
     }
   }

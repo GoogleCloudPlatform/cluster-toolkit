@@ -1,7 +1,7 @@
 #!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ from util import (
     install_custom_scripts,
 )
 import conf
+import conf_v2411
 import slurmsync
 
 from setup_network_storage import (
@@ -420,7 +421,11 @@ def setup_controller():
     lkp = util.lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
-    conf.gen_controller_configs(lkp)
+    if util.slurm_version_gte(lkp.slurm_version, "25.05"):
+        conf.generate_configs_slurm_v2505(lkp)
+    else:
+        conf_v2411.generate_configs_slurm_v2411(lkp)
+
 
     if lkp.cfg.controller_state_disk.device_name != None:
         mount_save_state_disk()

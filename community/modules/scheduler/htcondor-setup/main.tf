@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ module "health_check_firewall_rule" {
 }
 
 module "htcondor_bucket" {
-  source = "../../../../community/modules/file-system/cloud-storage-bucket"
+  source = "../../../../modules/file-system/cloud-storage-bucket"
 
   project_id      = var.project_id
   deployment_name = var.deployment_name

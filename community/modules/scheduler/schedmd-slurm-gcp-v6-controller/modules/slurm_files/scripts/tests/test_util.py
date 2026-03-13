@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ from common import TstNodeset, TstCfg # needed to import util
 import util
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
+from googleapiclient.errors import HttpError # type: ignore
 from addict import Dict as NSDict # type: ignore
 
 # Note: need to install pytest-mock
@@ -666,3 +667,94 @@ def test_future_reservation_inactive(_):
     
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
     lkp._get_reservation.assert_not_called()
+
+@pytest.mark.parametrize(
+    "v1, v2, expected",
+    [
+        ("22.05", "21.08", True),
+        ("21.08", "22.05", False),
+        ("22.05", "22.05", True),
+        ("22.05", "22.04", True),
+        ("22.04", "22.05", False),
+        ("22.05.1", "22.05", True),
+        ("22.05", "22.05.1", True),
+        ("22.05.1", "22.05.2", True),
+        ("invalid", "22.05", False),
+        ("22.05", "invalid", False),
+        ("21.08.1", "22.05.3", False),
+    ],
+)
+def test_slurm_version_gte(v1, v2, expected):
+    assert util.slurm_version_gte(v1, v2) == expected
+
+@pytest.mark.parametrize(
+    "stdout_data, exception_to_raise, expected_version",
+    [
+        ("slurm 23.02.6", None, "23.02"),
+        ("slurm version 24.11.0-pre1", None, "24.11"),
+        ("Some other output", None, "unknown"),
+        ("", None, "unknown"),
+        (None, FileNotFoundError("slurmctld not found"), "unknown"),
+        (None, Exception("simulated command failure"), "unknown"),
+    ],
+)
+def test_slurm_version(stdout_data, exception_to_raise, expected_version, mocker):
+    mock_run = mocker.patch("util.run")
+
+    if exception_to_raise:
+        mock_run.side_effect = exception_to_raise
+    else:
+        mock_run.return_value = mocker.Mock(stdout=stdout_data)
+
+    lkp = util.Lookup(TstCfg())
+    version = lkp.slurm_version
+    
+    assert version == expected_version
+    mock_run.assert_called_once()
+
+
+def test_get_reservation_details_403(mocker):
+    lkp = util.Lookup(TstCfg())
+    
+    # Mock HttpError 403
+    mock_resp = Mock()
+    mock_resp.status = 403
+    error = HttpError(mock_resp, b'Forbidden')
+    
+    lkp._get_reservation = Mock(side_effect=error)
+    
+    details = lkp.get_reservation_details(
+        project="my-project",
+        zone="us-central1-a",
+        name="my-reservation",
+        bulk_insert_name="projects/my-project/reservations/my-reservation"
+    )
+    
+    assert details.policies == []
+    assert details.deployment_type is None
+    assert details.reservation_mode is None
+    assert details.assured_count == 0
+    assert details.bulk_insert_name == "projects/my-project/reservations/my-reservation"
+    
+    lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")
+
+
+def test_get_reservation_details_error(mocker):
+    lkp = util.Lookup(TstCfg())
+    
+    # Mock HttpError 500
+    mock_resp = Mock()
+    mock_resp.status = 500
+    error = HttpError(mock_resp, b'Internal Server Error')
+    
+    lkp._get_reservation = Mock(side_effect=error)
+    
+    with pytest.raises(HttpError):
+        lkp.get_reservation_details(
+            project="my-project",
+            zone="us-central1-a",
+            name="my-reservation",
+            bulk_insert_name="projects/my-project/reservations/my-reservation"
+        )
+    
+    lkp._get_reservation.assert_called_once_with("my-project", "us-central1-a", "my-reservation")

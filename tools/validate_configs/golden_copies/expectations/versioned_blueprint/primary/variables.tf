@@ -1,5 +1,5 @@
 /**
-  * Copyright 2023 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -32,6 +32,11 @@ variable "instance_image_custom" {
 variable "labels" {
   description = "Toolkit deployment variable: labels"
   type        = any
+}
+
+variable "lustre_instance_id" {
+  description = "Toolkit deployment variable: lustre_instance_id"
+  type        = string
 }
 
 variable "project_id" {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,7 +89,8 @@ func validateVars(bp Blueprint) error {
 
 	errs := (&Errors{}).
 		Add(validateDeploymentName(bp)).
-		Add(validateGlobalLabels(bp))
+		Add(validateGlobalLabels(bp)).
+		Add(validateSlurmClusterName(bp))
 	// Check for any nil values
 	// Iterator over non evaluated variables, it's Ok if evaluated value is null
 	for key, val := range bp.Vars.Items() {
@@ -128,6 +129,7 @@ func validateModule(p ModulePath, m Module, bp Blueprint) error {
 		Add(validateOutputs(p, m, info)).
 		Add(validateModuleUseReferences(p, m, bp)).
 		Add(validateModuleSettingReferences(p, m, bp)).
+		Add(validateDeprecation(m.ID, info)).
 		OrNil()
 }
 

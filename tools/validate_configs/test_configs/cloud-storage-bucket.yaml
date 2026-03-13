@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,12 +28,12 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - id: bucket-w-suffix
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       random_suffix: true
 
   - id: bucket-wo-suffix
-    source: community/modules/file-system/cloud-storage-bucket
+    source: modules/file-system/cloud-storage-bucket
     settings:
       name_prefix: simulation-results
       use_deployment_name_in_bucket_name: false

@@ -1,5 +1,5 @@
 /**
-  * Copyright 2023 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ locals {
     }
   ]
 
-  suffix = var.random_name_sufix ? "-${random_id.resource_name_suffix.hex}" : ""
+  suffix = var.random_name_suffix ? "-${random_id.resource_name_suffix.hex}" : ""
   machine_family_node_selector = var.machine_family != null ? [{
     key   = "cloud.google.com/machine-family"
     value = var.machine_family

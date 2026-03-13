@@ -1,0 +1,329 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-tpu-v6e-flex
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: gke-tpu-v6e-flex
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # The number of TPU slices to create
+  num_slices:
+
+  # Machine type
+  machine_type: ct6e-standard-4t
+
+  # The TPU placement topology for pod slice node pool.
+  tpu_topology:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  system_node_pool_disk_size_gb: 200
+  v6e_node_pool_disk_size_gb: 100
+  version_prefix: "1.33."
+
+  # --- FLEX START SETTINGS ---
+  enable_flex_start: true
+  autoscaling_min_node_count:
+  autoscaling_max_node_count:
+
+ # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-tpu-v6-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-tpu-v6-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+      - container.admin
+
+  - id: training_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training-data
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint-data
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: gke-tpu-v6-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-tpu-v6-net-0, workload_service_account]
+    settings:
+      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
+      enable_gcsfuse_csi: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6-net-1.network_name,
+            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2025-12-01T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+    outputs: [instructions]
+
+  - id: gke-tpu-v6-pool
+    source: modules/compute/gke-node-pool
+    use: [gke-tpu-v6-cluster, node_pool_service_account]
+    settings:
+      num_slices: $(vars.num_slices)
+      name: gke-tpu-v6-pool
+      disk_type: hyperdisk-balanced
+      machine_type: $(vars.machine_type)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
+      enable_flex_start: $(vars.enable_flex_start)
+      auto_repair: false # flex-start dependency
+      autoscaling_min_node_count: $(vars.autoscaling_min_node_count)
+      autoscaling_max_node_count: $(vars.autoscaling_max_node_count)
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-tpu-v6-net-1.network_name,
+            subnetwork=gke-tpu-v6-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+      placement_policy:
+        type: COMPACT
+        tpu_topology: $(vars.tpu_topology)
+    outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke-tpu-v6-cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.autoscaling_max_node_count * gke-tpu-v6-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6-pool.tpu_accelerator_type)
+      jobset:
+        install: true
+
+  - id: gcs-training
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(training_bucket.gcs_bucket_name)
+      local_mount: /training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
+
+  - id: gcs-checkpointing
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
+      local_mount: /checkpoint-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
+
+  # Persistent Volume for training data
+  - id: training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-training, gke-tpu-v6-cluster]
+    settings:
+      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
+      capacity_gib: 1000000
+
+  # Persistent Volume for checkpoint data
+  - id: checkpointing-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-checkpointing, gke-tpu-v6-cluster]
+    settings:
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+      capacity_gib: 1000000
+
+  # This is an example job that will install and run an `fio`
+  # benchmark against the training and checkpointing buckets.
+  - id: fio-bench-job-template
+    source: modules/compute/gke-job-template
+    use: [checkpointing-pv, training-pv, gke-tpu-v6-pool]
+    settings:
+      node_count: $(vars.autoscaling_max_node_count)
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
+
+      k8s_service_account_name: workload-identity-k8s-sa
+      requested_cpu_per_pod: 8
+      image: ubuntu:22.04
+
+      command:
+      - bash
+      - -c
+      - |
+
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+
+        # Install fio
+        apt update -y && apt install -y fio
+
+        # Use a tag to create a unique path for tests
+        TAG=`date +%s`
+
+        # Verify mountpoints
+        df -h
+        mountpoint /checkpoint-data
+        mountpoint /training-data
+
+        # Create temporary directory for fio benchmarks
+        mkdir -p /{training,checkpoint}-data/fio-benchmarks-${TAG}
+
+        # The following will take roughly 5 minutes to complete
+
+        # Test reading from the training bucket
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=30s \
+          --numjobs=8 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/training-data/fio-benchmarks-${TAG} \
+          --name=training-read --blocksize=1m --iodepth=16 --readwrite=randread
+
+        # Test writing to the checkpointing bucket
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=30s \
+          --numjobs=8 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint-write --blocksize=10m --iodepth=16 --readwrite=write
+
+        # Perform checkpoint data reading performance test
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=30s \
+          --numjobs=8 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint-read --blocksize=10m --iodepth=16 --readwrite=read
+
+        rm -rf /{training,checkpoint}-data/fio-benchmarks-${TAG}
+
+    outputs: [instructions]

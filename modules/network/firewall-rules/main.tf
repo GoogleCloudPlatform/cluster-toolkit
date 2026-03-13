@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ resource "terraform_data" "pga_check" {
 
 module "firewall_rule" {
   source       = "terraform-google-modules/network/google//modules/firewall-rules"
-  version      = "~> 12.0"
+  version      = "~> 13.0"
   project_id   = local.effective_project_id
   network_name = local.effective_network_name
 

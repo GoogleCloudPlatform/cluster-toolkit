@@ -1,4 +1,4 @@
-// Copyright 2022 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/modulereader"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
@@ -54,6 +56,9 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testMachineTypeInZone             = "test_machine_type_in_zone"
+	testReservationExistsName         = "test_reservation_exists"
+	testDiskTypeInZone                = "test_disk_type_in_zone"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -65,6 +70,9 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
+		testReservationExistsName:         testReservationExists,
+		testDiskTypeInZone:                testDiskTypeInZoneAvailability,
 	}
 }
 
@@ -115,7 +123,48 @@ func Execute(bp config.Blueprint) error {
 			}
 		}
 	}
+
+	// Run module-metadata-based validators
+	if err := validateBlueprintWithMetadata(bp); err != nil {
+		errs.Add(err)
+	}
+
 	return errs.OrNil()
+}
+
+// validateBlueprintWithMetadata runs metadata-based validations.
+func validateBlueprintWithMetadata(bp config.Blueprint) error {
+	for _, group := range bp.Groups {
+		for j, mod := range group.Modules {
+			if mod.Kind != config.TerraformKind {
+				continue
+			}
+
+			mtd := mod.InfoOrDie().Metadata
+			if len(mtd.Ghpc.Validators) == 0 {
+				continue
+			}
+
+			for _, rule := range mtd.Ghpc.Validators {
+				validator, found := Registry[rule.Validator]
+				if !found {
+					// This could be a warning in the future if we want to allow for
+					// optional validators or validators from different versions.
+					continue
+				}
+
+				if err := validator.Validate(bp, mod, rule, group, j); err != nil {
+					// The validator is responsible for creating a BpError with the correct path.
+					if rule.Level == "warning" {
+						logging.Error("WARNING: validation failed for module %q: %v", mod.ID, err)
+						continue
+					}
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func checkInputs(inputs config.Dict, required []string) error {
@@ -199,7 +248,34 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"project_id": projectRef,
 				"zone":       zoneRef,
 			}),
+		}, config.Validator{
+			Validator: testMachineTypeInZone,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
+		}, config.Validator{
+			Validator: testDiskTypeInZone,
+			Inputs: config.NewDict(map[string]cty.Value{
+				"project_id": projectRef,
+				"zone":       zoneRef,
+			}),
 		})
+		for _, varName := range bp.Vars.Keys() {
+			if resKeyRegex.MatchString(varName) {
+				resRef := config.GlobalRef(varName).AsValue()
+
+				// Automatically add a reservation check for every detected reservation variable
+				defaults = append(defaults, config.Validator{
+					Validator: testReservationExistsName,
+					Inputs: config.NewDict(map[string]cty.Value{
+						"project_id":       projectRef,
+						"zone":             zoneRef,
+						"reservation_name": resRef,
+					}),
+				})
+			}
+		}
 	}
 
 	if projectIDExists && regionExists && zoneExists {
@@ -228,4 +304,9 @@ func validators(bp config.Blueprint) []config.Validator {
 		}
 	}
 	return vs
+}
+
+// Validator is the interface that all validation patterns must implement.
+type RuleValidator interface {
+	Validate(bp config.Blueprint, mod config.Module, rule modulereader.ValidationRule, group config.Group, modIdx int) error
 }

@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,9 @@ tags:
 - m.schedmd-slurm-gcp-v6-partition
 - slurm6
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -37,5 +40,12 @@ steps:
     set -x -e
     cd /workspace && make
     export BUILD_ID="${BUILD_ID}"
+
+    BP_BEFORE="tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"
+    BP_AFTER="tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
+
+    # 2. Run the TTL script on both files
+    bash tools/add_ttl_label.sh $$BP_BEFORE
+    bash tools/add_ttl_label.sh $$BP_AFTER
 
     python3 tools/python-integration-tests/slurm_reconfig_size.py

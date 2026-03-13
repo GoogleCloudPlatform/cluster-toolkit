@@ -37,8 +37,8 @@ variable "slurm_cluster_name" {
   default     = null
 
   validation {
-    condition     = var.slurm_cluster_name == null || can(regex("^[a-z](?:[a-z0-9]{0,9})$", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z](?:[a-z0-9]{0,9})$'."
+    condition     = var.slurm_cluster_name == null || can(regex("^[a-z]([-a-z0-9]{0,19})$", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,19})$'."
   }
 }
 
@@ -215,6 +215,7 @@ variable "nodeset" {
     disk_size_gb                     = optional(number)
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
+    confidential_instance_type       = optional(string)
     enable_placement                 = optional(bool, false)
     placement_max_distance           = optional(number, null)
     enable_oslogin                   = optional(bool, true)

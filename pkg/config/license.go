@@ -1,7 +1,7 @@
 package config
 
 // YamlLicense is the license header for generated YAML files.
-const YamlLicense string = `# Copyright 2023 Google LLC
+const YamlLicense string = `# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

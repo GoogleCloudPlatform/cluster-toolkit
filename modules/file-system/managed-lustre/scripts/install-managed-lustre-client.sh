@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # Install Managed Lustre client modules
 # Based on these instructions: https://cloud.google.com/managed-lustre/docs/connect-from-compute-engine
 
-# The client modules currently only support Rocky 8, and Ubuntu 20.04/22.04
+# The client modules currently only support Rocky 8, and Ubuntu 22.04
 
 set -e
 
@@ -40,7 +40,7 @@ fi
 . /etc/os-release
 DIST="NA"
 if [[ $NAME == *"Ubuntu"* ]]; then
-	if [[ $VERSION_ID == "20.04" || $VERSION_ID == "22.04" ]]; then
+	if [[ $VERSION_ID == "22.04" ]]; then
 		DIST="Ubuntu"
 	fi
 elif [[ $NAME == *"Rocky"* ]]; then

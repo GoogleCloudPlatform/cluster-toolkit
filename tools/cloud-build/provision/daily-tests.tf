@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,9 @@ resource "google_cloudbuild_trigger" "daily_test" {
   # Specify it explicitly to reduce discreppancy.
   ignored_files  = []
   included_files = []
-  substitutions  = {}
+  substitutions = {
+    _TEST_PREFIX = "daily-"
+  }
 }
 
 module "daily_test_schedule" {

@@ -1,5 +1,5 @@
 /**
-  * Copyright 2022 Google LLC
+  * Copyright 2026 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -124,7 +124,7 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  enable_shielded_nodes = true
+  enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
     # Controls auto provisioning of node-pools
@@ -198,7 +198,8 @@ resource "google_container_cluster" "gke_cluster" {
         start_time     = maintenance_exclusion.value.start_time
         end_time       = maintenance_exclusion.value.end_time
         exclusion_options {
-          scope = maintenance_exclusion.value.exclusion_scope
+          scope             = maintenance_exclusion.value.exclusion_scope
+          end_time_behavior = maintenance_exclusion.value.exclusion_end_time_behavior
         }
       }
     }

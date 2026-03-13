@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -163,7 +163,10 @@ var UnexpectedRefFormat = errors.New("Expected reference formats: $(vars.var_nam
 const (
 	errMsgIntergroupOrder = string("references to outputs from other groups must be to earlier groups")
 
-	errMsgValueNotString   = string("value was not of type string")
-	errMsgValueEmptyString = string("value is an empty string")
-	errMsgLabelValueReqs   = string("value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long")
+	errMsgValueNotString       = string("value was not of type string")
+	errMsgValueEmptyString     = string("value is an empty string")
+	errMsgLabelValueReqs       = string("value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long")
+	errMsgSlurmClusterNameReqs = string("must start with a lowercase letter, contain only lowercase letters, numbers and hyphens, and be between 1 and 20 characters long")
+	ErrMsgResourceInZone       = "%s %q is not available in zone %q in project %q"
+	ErrMsgResourceInAnyZone    = "%s %q is not available in any requested zones [%s] in project %q"
 )

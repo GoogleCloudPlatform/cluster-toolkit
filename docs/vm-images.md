@@ -6,7 +6,7 @@
 * [Cluster Toolkit Supported Images](#cluster-toolkit-supported-images)
   * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
   * [Debian 11](#debian-11)
-  * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
+  * [Ubuntu 22.04 LTS](#ubuntu-2204-lts)
   * [Windows](#windows)
   * [Other Images](#other-images)
   * [Slurm on GCP](#slurm-on-gcp)
@@ -36,9 +36,9 @@ either the specific module definition or the global variables. The
 
 ```yaml
 instance_image:
-  project: centos-cloud
-  family: centos-v7        # If family is defined, omit name
-  name: centos-7-v20230809 # If name is defined, omit family
+ family: hpc-rocky-linux-8
+ project: cloud-hpc-image-public    # If family is defined, omit name
+ name: hpc-rocky-linux-8-v20251117  # If name is defined, omit family
 ```
 
 The `project` setting defines the space where the image will be found. Either
@@ -75,7 +75,7 @@ blueprint:
         project: debian-cloud
 
       instance_image:
-        family: ubuntu-2004-lts
+        family: ubuntu-2204-lts
         project: ubuntu-os-cloud
 ```
 
@@ -114,9 +114,9 @@ HPC Rocky Linux 8 is the primary supported VM image for HPC workloads on Google 
 The Cluster Toolkit officially supports Debian 11 based VM images in the majority of
 our modules, with a couple of exceptions.
 
-### Ubuntu 20.04 LTS
+### Ubuntu 22.04 LTS
 
-The Cluster Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
+The Cluster Toolkit officially supports Ubuntu 22.04 LTS based VM images in the
 majority of our modules, with a couple of exceptions.
 
 ### Windows
@@ -131,7 +131,7 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 22.04</th>
 </tr>
 <tr>
   <td></td><td></td><td></td><td></td><td></td><td></td>
@@ -173,7 +173,7 @@ description of our support for Windows images.
   <td></td>
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../community/examples/hpc-slurm-ubuntu2004.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ubuntu2204.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -190,7 +190,7 @@ description of our support for Windows images.
   <th></th>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
   <td></td>
-  <td><sup><b>*</b></sup></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Lustre</th>
@@ -222,8 +222,6 @@ description of our support for Windows images.
   <td></td>
 </tr>
 </table>
-
-<sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
 
 ### Other Images
 
@@ -284,7 +282,7 @@ These instructions apply to the following modules:
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup
-[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+[hpc-slurm-ubuntu2204.yaml]: ../community/examples/hpc-slurm-ubuntu2204.yaml
 
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [vm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-startup.yaml

@@ -62,7 +62,7 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2022 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -80,7 +80,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
 
@@ -91,7 +91,7 @@ No providers.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_health_check_firewall_rule"></a> [health\_check\_firewall\_rule](#module\_health\_check\_firewall\_rule) | ../../../../modules/network/firewall-rules | n/a |
-| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | ../../../../community/modules/file-system/cloud-storage-bucket | n/a |
+| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | ../../../../modules/file-system/cloud-storage-bucket | n/a |
 
 ## Resources
 

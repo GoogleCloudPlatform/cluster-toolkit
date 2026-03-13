@@ -1,0 +1,35 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Inactive PR Processor
+
+on:
+  schedule:
+  - cron: "0 0 * * *" # Runs daily
+
+jobs:
+  pr-inactivity-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read # Needed to checkout the repository
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Run inactivity script
+      env:
+        # The GITHUB_TOKEN is required by the gh CLI
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./tools/github/inactive-pr-reminder.sh

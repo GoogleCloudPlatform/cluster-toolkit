@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"github.com/fatih/color"
 )
 
 var (
-	infolog  *log.Logger
-	errorlog *log.Logger
-	fatallog *log.Logger
+	infolog      *log.Logger
+	errorlog     *log.Logger
+	fatallog     *log.Logger
+	Exit         = os.Exit
+	TsColor      = color.New(color.FgMagenta)
+	WarningColor = color.New(color.FgYellow)
 )
 
 func init() {
@@ -32,21 +38,33 @@ func init() {
 	fatallog = log.New(os.Stderr, "", 0)
 }
 
+// formatTs returns a timestamp
+func formatTs() string {
+	ts := time.Now().UTC().Format(time.RFC3339)
+	return TsColor.Sprint(ts)
+}
+
 // Info prints info to stdout
 func Info(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	infolog.Println(msg)
+	infolog.Printf("%s: %s", formatTs(), msg)
 }
 
-// Error prints info to stderr but does not end the program
+// Warn prints message to stderr but does not end the program
+func Warn(f string, a ...any) {
+	msg := fmt.Sprintf(f, a...)
+	errorlog.Printf("%s: %s", formatTs(), WarningColor.Sprint("WARNING: "+msg))
+}
+
+// Error prints message to stderr but does not end the program
 func Error(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	errorlog.Println(msg)
+	errorlog.Printf("%s: %s", formatTs(), msg)
 }
 
-// Fatal prints info to stderr and ends the program
+// Fatal prints message to stderr and ends the program
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
-	fatallog.Println(msg)
-	os.Exit(1)
+	fatallog.Printf("%s: %s", formatTs(), msg)
+	Exit(1)
 }

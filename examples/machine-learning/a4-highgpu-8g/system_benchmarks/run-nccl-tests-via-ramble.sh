@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,7 +58,8 @@ EOF
 fi
 
 # Install ramble and make world read/writeable.
-sudo git clone --depth 1 -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble || true
+sudo git clone -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble || true
+sudo git -C "${SOFTWARE_INSTALL}"/ramble checkout 2a020babedd68be15448f3893d2a245fcaa8bd73
 sudo chmod -R a+w "${SOFTWARE_INSTALL}"/ramble
 
 # Create python environment for ramble, and install requirements
@@ -76,6 +77,8 @@ ramble workspace create -a -d "${TEST_DIR}"
 cat <<EOF >"${TEST_DIR}"/configs/ramble.yaml
 # Ramble Configuration for NCCL Tests
 ramble:
+  config:
+    overwrite_inventories: true
   modifiers:
   - name: pyxis-enroot
   - name: nccl-gib

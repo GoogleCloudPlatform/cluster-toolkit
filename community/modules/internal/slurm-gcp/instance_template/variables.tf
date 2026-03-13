@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -128,6 +128,7 @@ variable "additional_networks" {
     subnetwork_project = string
     network_ip         = string
     nic_type           = string
+    stack_type         = optional(string)
     access_config = list(object({
       nat_ip       = string
       network_tier = string
@@ -382,8 +383,8 @@ variable "slurm_cluster_name" {
   description = "Cluster name, used for resource naming."
 
   validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]{0,9})$", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z](?:[a-z0-9]{0,9})$'."
+    condition     = can(regex("^[a-z]([-a-z0-9]{0,19})$", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,19})$'."
   }
 }
 
@@ -427,5 +428,11 @@ variable "reservation_affinity" {
 variable "internal_startup_script" {
   description = "FOR INTERNAL TOOLKIT USAGE ONLY."
   type        = string
+  default     = null
+}
+
+variable "confidential_instance_type" {
+  type        = string
+  description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
   default     = null
 }

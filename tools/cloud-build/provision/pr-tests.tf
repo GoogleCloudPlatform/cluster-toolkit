@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,8 @@
 # limitations under the License.
 
 locals {
-  auto_approved_pr_tests = [
-    "slurm-gcp-v6-simple-job-completion"
-  ]
+  auto_approved_pr_tests = []
+
 }
 
 
@@ -36,6 +35,10 @@ resource "google_cloudbuild_trigger" "pr_test" {
       branch          = ".*"
       comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
+  }
+
+  substitutions = {
+    _TEST_PREFIX = "pr-"
   }
 
 }

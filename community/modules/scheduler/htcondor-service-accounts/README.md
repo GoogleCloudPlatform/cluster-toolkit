@@ -72,7 +72,7 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2024 Google LLC
+Copyright 2026 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -90,7 +90,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
 
@@ -100,9 +100,9 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | ../../../../community/modules/project/service-account | n/a |
-| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | ../../../../community/modules/project/service-account | n/a |
-| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | ../../../../community/modules/project/service-account | n/a |
+| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | ../../../../modules/project/service-account | n/a |
+| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | ../../../../modules/project/service-account | n/a |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | ../../../../modules/project/service-account | n/a |
 
 ## Resources
 
