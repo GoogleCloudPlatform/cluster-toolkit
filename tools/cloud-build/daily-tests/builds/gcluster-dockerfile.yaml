@@ -22,7 +22,14 @@ timeout: 3600s  # 1hr
 steps:
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml"
+  entrypoint: 'bash'
+  args:
+  - -c
+  - |
+    set -e -u -o pipefail
+    echo "Using _TRIGGER_BUILD_CONFIG_PATH: ${_TRIGGER_BUILD_CONFIG_PATH}"
+    tools/cloud-build/check_running_build.sh \
+      "${_TRIGGER_BUILD_CONFIG_PATH}"
 
 # uses a pre-built Google Cloud image containing Docker CLI tool.
 - id: build-docker-image

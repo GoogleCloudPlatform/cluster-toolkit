@@ -46,23 +46,40 @@ def validate_build_file(file_path: Path) -> bool:
 
     for step in steps:
         if isinstance(step, dict) and step.get("id") == "check_for_running_build":
-            script = step.get("script")
-            if not script:
+            entrypoint = step.get("entrypoint")
+            args = step.get("args")
+
+            if entrypoint != 'bash':
                 print(
-                    f"Error: 'script' not found in 'check_for_running_build' step in {file_path}",
+                    f"Error: 'entrypoint' not 'bash' in 'check_for_running_build' step in {file_path}",
                     file=sys.stderr,
                 )
                 return False
-            expected_script = f"tools/cloud-build/check_running_build.sh {file_path}"
-            if script != expected_script:
+
+            if not isinstance(args, list) or len(args) != 2 or args[0] != '-c':
                 print(
-                    f"Error: Invalid 'script' in 'check_for_running_build' step in {file_path}",
+                    f"Error: Invalid 'args' in 'check_for_running_build' step in {file_path}",
                     file=sys.stderr,
                 )
-                print(f"  Expected: {expected_script}", file=sys.stderr)
-                print(f"  Got:      {script}", file=sys.stderr)
                 return False
+
+            script_content = args[1]
+            if "tools/cloud-build/check_running_build.sh" not in script_content:
+                print(
+                    f"Error: Missing check_running_build.sh call in {file_path}",
+                    file=sys.stderr,
+                )
+                return False
+
+            if "_TRIGGER_BUILD_CONFIG_PATH" not in script_content:
+                print(
+                    f"Error: Missing _TRIGGER_BUILD_CONFIG_PATH in {file_path}",
+                    file=sys.stderr,
+                )
+                return False
+
             return True
+
 
     print(
         f"Error: 'check_for_running_build' step not found in {file_path}",
