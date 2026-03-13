@@ -45,6 +45,7 @@ steps:
   - "PROJECT_ID=$PROJECT_ID"
   - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/h4doptions.txt"
+  - "ENABLE_SPOT_FALLBACK=true"
   args:
   - -c
   - |
@@ -68,11 +69,23 @@ steps:
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml"
+
+    ENABLE_SPOT="true"
+    SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-h4d-onspot-slurm.yml"
+    if [[ "$$PROVISIONING_MODEL" == "STANDARD" ]]; then
+      ENABLE_SPOT="false"
+      sed -i '/instance_labels:/,+1d' "$${SLURM_VARS_FILE}"
+      sed -i '/enable_spot: true/d' "$${SLURM_VARS_FILE}"
+    else
+      echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
+    fi
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-h4d-onspot-slurm.yml"
+      --extra-vars="enable_spot=$${ENABLE_SPOT}" \
+      --extra-vars="@$${SLURM_VARS_FILE}"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
   secretManager:

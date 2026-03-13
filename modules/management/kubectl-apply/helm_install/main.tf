@@ -38,6 +38,12 @@ resource "helm_release" "apply_chart" {
     }
   }
 
+  # Implicit dependency anchor
+  set {
+    name  = "tf_dependency_anchor"
+    value = join(",", var.dependencies)
+  }
+
   # Installation/Upgrade Behavior
   description                = var.description
   atomic                     = var.atomic

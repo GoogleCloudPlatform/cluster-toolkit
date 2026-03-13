@@ -20,7 +20,7 @@ trap "printf '\nCaught Ctrl+c. Exiting...\n'; exit" INT
 # for jobs submitted
 TAG=$(date +%s)
 TEST_DIR=${PWD}/nccl-tests-"${TAG}"
-SOFTWARE_INSTALL=/opt/apps
+SOFTWARE_INSTALL=${1:-/opt/apps}
 
 cat <<EOF
 This script will install the following packages using on this VM:
@@ -48,6 +48,7 @@ sudo apt-get install -y python3-venv jq
 
 # Create enroot credentials set up for artifact registry
 mkdir -p "${HOME}"/.enroot/
+export ENROOT_CONFIG_PATH=${HOME}/.enroot
 ENROOT_CONFIG_CREDENTIALS="${HOME}"/.enroot/.credentials
 
 if ! grep -q "us-docker.pkg.dev" "${ENROOT_CONFIG_CREDENTIALS}"; then
@@ -66,7 +67,7 @@ source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate
 pip install -q -r "${SOFTWARE_INSTALL}"/ramble/requirements.txt
 
 # Activate ramble
-. ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh
+. "${SOFTWARE_INSTALL}"/ramble/share/ramble/setup-env.sh
 
 # Create a new workspace for this work
 ramble workspace create -a -d "${TEST_DIR}"
@@ -84,6 +85,7 @@ ramble:
     srun_args: >-
       --mpi=pmix
       --container-workdir /third_party/nccl-tests/build/
+      --container-env LD_LIBRARY_PATH
       --container-image {container_path}
       --container-mounts "/usr/local/gib,/var/tmp"
       --container-writable
@@ -94,21 +96,28 @@ ramble:
 
     hostlist: \${SLURM_JOB_NODELIST}
 
-    container_dir: "/opt/apps/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic
-    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
-    processes_per_node: 8
+    container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
+    container_name: nccl-plugin-gib-diagnostic-arm64:v1.0.6
+    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.0.6
+    # processes_per_node: 4
     processes_per_node: '{gpus_per_node}'
-    gpus_per_node: '8'
+    gpus_per_node: '4'
     nccl-tests_path: null
 
   env_vars:
     set:
-      OMPI_MCA_btl_tcp_if_include: enp0s19
+      OMPI_MCA_btl_tcp_if_include: eth0,eth1
       PMIX_MCA_gds: ^ds12
+      UCX_NET_DEVICES: gpu0rdma0,gpu1rdma0,gpu2rdma0,gpu3rdma0,gpu0rdma1,gpu1rdma1,gpu2rdma1,gpu3rdma1
+      PMIX_MCA_psec: native
+      UCX_IB_FORK_INIT: n
       NCCL_NET: gIB
-      NCCL_SOCKET_IFNAME: enp0s19,enp192s20
-      LD_LIBRARY_PATH: /usr/local/gib/lib64:/usr/lib/x86_64-linux-gnu
+      NCCL_SOCKET_IFNAME: eth0,eth1
+      NCCL_IB_HCA: "=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
+      LD_LIBRARY_PATH: /usr/local/gib/lib64:usr/local/nvidia/lib
+      NCCL_IB_GID_INDEX: 3
+      NCCL_DEBUG: DEBUG
+      NCCL_DEBUG_SUBSYS: INIT,ENV,NET,GRAPH
 
   applications:
     nccl-tests:
@@ -130,9 +139,11 @@ cat <<EOF >"${TEST_DIR}"/configs/execute_experiment.tpl
 #SBATCH -J {experiment_name}-"${TAG}"
 #SBATCH --output={experiment_run_dir}/slurm-%j.out
 #SBATCH -N {n_nodes}
-#SBATCH --gpus-per-node=8
+#SBATCH --gpus-per-node=4
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node={processes_per_node}
+
+ulimit -s 8192
 
 cd "{experiment_run_dir}"
 {command}
@@ -203,7 +214,7 @@ jq -r '["workload","n_nodes","msg_size","busbw"], (.experiments[] as $exp | $exp
 ($context.foms | from_entries )
 | select(.Size | tonumber  > 1000000000)
 | [.workload, .n_nodes, .Size, ."Out of Place Bus Bandwidth"])
-| @tsv' results.latest.json
+| @tsv' results.latest.json | column -t
 printf "\nFor full results, see %s\n" "${TEST_DIR}"/summary.tsv
 
 printf "\n-------- Benchmarking Complete -------\n"

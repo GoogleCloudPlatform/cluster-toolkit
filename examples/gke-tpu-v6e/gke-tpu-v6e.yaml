@@ -52,6 +52,9 @@ vars:
   system_node_pool_disk_size_gb: 200
   v6e_node_pool_disk_size_gb: 100
 
+  # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
 
 deployment_groups:
 - group: primary
@@ -202,5 +205,11 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-v6e-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
       jobset:
         install: true

@@ -27,8 +27,8 @@ variable "slurm_cluster_name" {
   description = "Cluster name, used in slurm controller"
 
   validation {
-    condition     = var.slurm_cluster_name != null && can(regex("^[a-z]([-a-z0-9]{0,20})$", var.slurm_cluster_name))
-    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,20})$'."
+    condition     = var.slurm_cluster_name != null && can(regex("^[a-z]([-a-z0-9]{0,19})$", var.slurm_cluster_name))
+    error_message = "Variable 'slurm_cluster_name' must be a match of regex '^[a-z]([-a-z0-9]{0,19})$'."
   }
 }
 

@@ -19,9 +19,10 @@ blueprint_name: a3ultra-vm-instance
 vars:
   project_id: # supply project ID
   deployment_name: a3ultra-vm-instance
-  region: europe-west1
-  zone: europe-west1-b
+  region: # supply region
+  zone: # supply zone
   a3u_reservation_name: # supply reservation name
+  number_of_vms: 2
   a3u_provisioning_model: RESERVATION_BOUND
   instance_image:
     project: ubuntu-os-accelerator-images
@@ -113,7 +114,7 @@ deployment_groups:
     use: [startup-script, homefs]
     settings:
       machine_type: a3-ultragpu-8g
-      instance_count: 2
+      instance_count: $(vars.number_of_vms)
       name_prefix: $(vars.hostname_prefix)
       disk_type: hyperdisk-balanced
       automatic_restart: true

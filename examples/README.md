@@ -29,16 +29,15 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
-  * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml--) ![community-badge]
+  * [hpc-slurm-ubuntu2204.yaml](#hpc-slurm-ubuntu2204yaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![core-badge]
+  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml-) ![core-badge]
   * [hpc-slinky.yaml](#hpc-slinkyyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [af3-slurm.yaml](#af3-slurmyaml--) ![core-badge] ![experimental-badge]
@@ -545,6 +544,19 @@ renders a Google Cloud Batch job template. A login node VM is created with
 instructions on how to SSH to the login node and submit the Google Cloud Batch
 job.
 
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy hello-workload
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./gcluster destroy hello-workload
+```
+
 [serverless-batch.yaml]: ../examples/serverless-batch.yaml
 
 ### [serverless-batch-mpi.yaml] ![core-badge]
@@ -724,7 +736,9 @@ providing a high-performance file system for demanding workloads.
    kubectl get pvc
    ```
 
-   You should see a PVC named $(vars.lustre_instance_id)-pvc with STATUS: Bound
+   You should see a PVC named [LUSTRE_INSTANCE_PVC] with STATUS: Bound
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
 1. Example Pod: Create a file named lustre-client-pod.yaml to deploy a test pod that mounts the Lustre volume
 
@@ -744,8 +758,10 @@ providing a high-performance file system for demanding workloads.
      volumes:
      - name: lustre-volume
        persistentVolumeClaim:
-         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name
+         claimName: [LUSTRE_INSTANCE_PVC] # Matches the PVC name
    ```
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
    Note: This is just an example job using busybox image.
 
@@ -1224,7 +1240,6 @@ Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../examples/ml-gke.yaml
-[`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![core-badge]
 
@@ -1444,9 +1459,17 @@ This blueprint takes care of the initial infrastructure setup (e.g., network cre
 
 ### [gke-consumption-options] ![core-badge]
 
-This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
-* [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
-* [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
+This folder holds multiple GKE blueprint examples that demonstrate different consumption options on GKE, covering hardware such as A3 Ultra (A3U), TPU v6e, and TPU 7x.
+
+* [**DWS Flex Start**](../examples/gke-consumption-options/dws-flex-start/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e)
+
+* [**DWS Flex Start with Queued Provisioning**](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/README.md)
+  * [A3 Ultra](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu.yaml)
+  * [TPU 7x](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x)
+  * [TPU v6e](../examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-v6e)
 
 [gke-consumption-options]: ../examples/gke-consumption-options
 

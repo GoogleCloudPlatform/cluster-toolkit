@@ -32,7 +32,7 @@ that the correct subnetwork has private service access.
     source: modules/network/private-service-access
     use: [network]
     settings:
-      prefix_length: 24
+      prefix_length: 22
 
   - id: lustre
     source: modules/file-system/managed-lustre
@@ -233,7 +233,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.27.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 

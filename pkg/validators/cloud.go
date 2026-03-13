@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"regexp"
 	"strings"
 
 	"golang.org/x/exp/maps"
@@ -27,6 +28,9 @@ import (
 	"google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
 )
+
+var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
+var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`)
 
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
@@ -250,18 +254,146 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+// findReservationInOtherZones searches for a reservation by name across zones
+// in the project.
+func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
+	aggList, err := s.Reservations.AggregatedList(projectID).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	foundInZones := []string{}
+	for _, scopedList := range aggList.Items {
+		for _, res := range scopedList.Reservations {
+			if res.Name == name {
+				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
+				parts := strings.Split(res.Zone, "/")
+				foundInZones = append(foundInZones, parts[len(parts)-1])
+			}
+		}
+	}
+	return foundInZones, nil
+}
+
+// TestReservationExists checks if a reservation exists in a project and zone.
+func TestReservationExists(ctx context.Context, reservationProjectID string, zone string, reservationName string, deploymentProjectID string) error {
+	if reservationName == "" {
+		return nil
+	}
+
+	s, err := compute.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	// 1. Direct check: Try to Get the specific reservation
+	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Do()
+	if err == nil {
+		return nil // Success
+	}
+
+	// 2. Access Check: If we can't even reach the project/API, issue soft warning
+	if msg, isSoft := getSoftWarningMessage(err, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.reservations.get"); isSoft {
+		fmt.Println(msg)
+		return nil // Skip and continue
+	}
+
+	// 3. Diagnostic Search: The reservation was not in the expected zone (404).
+	// We try to find where it actually is.
+	foundInZones, aggErr := findReservationInOtherZones(s, reservationProjectID, reservationName)
+
+	if aggErr != nil {
+		// If Discovery fails (403/400) and it's a SHARED project, we must skip
+		// because we can't prove the user has a typo; we just can't list resources.
+		if reservationProjectID != deploymentProjectID {
+			fmt.Printf("\n[!] WARNING: Shared reservation %q was not found in zone %q.\n", reservationName, zone)
+			fmt.Printf("    Discovery in other zones of project %q failed due to restricted permissions: %v\n", reservationProjectID, aggErr)
+			fmt.Printf("    Skipping this check as consumption may still be possible.\n")
+			return nil
+		}
+
+		// For Local Project: If List fails, we report the original 404 but note the permission issue.
+		var gerr *googleapi.Error
+		if errors.As(aggErr, &gerr) && (gerr.Code == 403 || gerr.Code == 400) {
+			return fmt.Errorf("reservation %q not found in zone %q (Note: identity lacks permission to search other zones)", reservationName, zone)
+		}
+		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, reservationProjectID, zone)
+	}
+
+	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
+	if len(foundInZones) > 0 {
+		zonesList := strings.Join(foundInZones, ", ")
+		return config.HintError{
+			Err: fmt.Errorf("reservation %q exists in project %q, but in zone(s) [%s] instead of %q",
+				reservationName, reservationProjectID, zonesList, zone),
+			Hint: fmt.Sprintf("Change the zone in your blueprint to one of [%s], or use a reservation that is located in zone %q.",
+				zonesList, zone),
+		}
+	}
+
+	// 5. Not Found Anywhere: Hard Failure
+	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
+}
+
+func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id", "zone", "reservation_name"}); err != nil {
+		return err
+	}
+	inputMap, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	// The primary project defined in the blueprint vars
+	deploymentProjectID := inputMap["project_id"]
+	zone := inputMap["zone"]
+	resInput := inputMap["reservation_name"]
+
+	if resInput == "" {
+		return nil
+	}
+
+	// Handle hierarchical formats
+	resInput = strings.Split(resInput, "/reservationBlocks/")[0]
+
+	// Determine if it's a Shared Reservation path or a simple name
+	matches := reservationNameRegex.FindStringSubmatch(resInput)
+	reservationProjectID := deploymentProjectID
+	targetName := resInput
+
+	if len(matches) == 3 {
+		// The input is a full resource path, indicating a shared reservation.
+		// Use the project ID extracted from the path instead of the deployment project.
+		reservationProjectID = matches[1]
+		targetName = matches[2]
+	}
+
+	// Pass both the owner project and the deployment project
+	ctx := context.Background()
+	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
+}
+
+// testResourceInZoneAvailability is a generic helper that validates a resource type
+// (like machine_type or disk_type) across a blueprint's modules or via an explicit validator.
+func testResourceInZoneAvailability(
+	bp config.Blueprint,
+	inputs config.Dict,
+	validatorName string,
+	settingSuffix string,
+	resourceLabel string,
+	validateFn func(s *compute.Service, projectID, zone, name, vName string) error,
+) error {
 	// 1. Determine if the validator was explicitly added to the blueprint YAML
-	const validatorName = "test_machine_type_in_zone"
 	required := []string{"project_id", "zone"}
 	if isValidatorExplicit(bp, validatorName) {
-		required = append(required, "machine_type")
+		required = append(required, settingSuffix)
 	}
 
 	if err := checkInputs(inputs, required); err != nil {
 		return err
 	}
 
+	// Initialize Compute API service
 	s, err := compute.NewService(context.Background())
 	if err != nil {
 		return handleClientError(err)
@@ -271,23 +403,32 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 		return err
 	}
 
-	projectID, globalZone, explicitMachineType := m["project_id"], m["zone"], m["machine_type"]
+	projectID, globalZone, explicitValue := m["project_id"], m["zone"], m[settingSuffix]
 
-	if explicitMachineType != "" {
-		// When explicitly called, we MUST validate the zone provided in the inputs
+	// 2. Handle Explicit case: User manually defined the validator in the YAML
+	if explicitValue != "" {
 		if err := TestZoneExists(projectID, globalZone); err != nil {
 			return err
 		}
-		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType, validatorName)
-
-		// Catch the sentinel and return nil so the deployment proceeds
+		err := validateFn(s, projectID, globalZone, explicitValue, validatorName)
 		if errors.Is(err, errSoftWarning) {
 			return nil
 		}
 		return err
 	}
 
-	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", validatorName, func(z, name string, vName string) error {
-		return validateMachineTypeInZone(s, projectID, z, name, vName)
+	// 3. Case: Implicitly check all modules for this setting
+	return validateSettingsInModules(bp, globalZone, projectID, settingSuffix, resourceLabel, validatorName, func(z, name string, vName string) error {
+		return validateFn(s, projectID, z, name, vName)
 	})
+}
+
+// testMachineTypeInZoneAvailability automatically validates machine types in modules
+func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	return testResourceInZoneAvailability(bp, inputs, "test_machine_type_in_zone", "machine_type", "machine type", validateMachineTypeInZone)
+}
+
+// testDiskTypeInZoneAvailability automatically validates disk types in modules
+func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
 }

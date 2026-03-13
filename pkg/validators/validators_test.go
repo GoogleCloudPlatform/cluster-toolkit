@@ -97,6 +97,15 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 		Validator: testZoneInRegionName, Inputs: regZoneInp}
 	machineTypeInZone := config.Validator{
 		Validator: "test_machine_type_in_zone", Inputs: zoneInp}
+	diskTypeInZone := config.Validator{
+		Validator: testDiskTypeInZone, Inputs: zoneInp}
+	resInp := zoneInp.With("reservation_name", config.GlobalRef("reservation_name").AsValue())
+	resExists := config.Validator{
+		Validator: testReservationExistsName, Inputs: resInp}
+
+	myResInp := zoneInp.With("reservation_name", config.GlobalRef("my_reservation").AsValue())
+	myResExists := config.Validator{
+		Validator: testReservationExistsName, Inputs: myResInp}
 
 	{
 		bp := config.Blueprint{}
@@ -126,7 +135,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone})
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone})
 	}
 
 	{
@@ -136,7 +145,26 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, machineTypeInZone, zoneInRegion})
+			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, machineTypeInZone, diskTypeInZone, zoneInRegion})
+	}
+	{
+		bp := config.Blueprint{Vars: config.Dict{}.
+			With("project_id", cty.StringVal("f00b")).
+			With("zone", cty.StringVal("danger")).
+			With("reservation_name", cty.StringVal("my-res"))}
+
+		c.Check(defaults(bp), DeepEquals, []config.Validator{
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone, resExists})
+	}
+
+	{
+		bp := config.Blueprint{Vars: config.Dict{}.
+			With("project_id", cty.StringVal("f00b")).
+			With("zone", cty.StringVal("danger")).
+			With("my_reservation", cty.StringVal("my-res"))}
+
+		c.Check(defaults(bp), DeepEquals, []config.Validator{
+			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists, machineTypeInZone, diskTypeInZone, myResExists})
 	}
 }
 
@@ -234,5 +262,39 @@ func (s *MySuite) TestResolveZonesAndOverride(c *C) {
 		c.Check(err, NotNil)
 		// Verifies the error message matches the standard toolkit type error
 		c.Check(err.Error(), Matches, ".*must be strings.*")
+	}
+}
+
+func (s *MySuite) TestValidateDiskTypeInZone(c *C) {
+	const validatorName = "test_disk_type_in_zone"
+	// Case 1: Success (200 OK)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"name": "pd-balanced"}`))
+		})
+		err := validateDiskTypeInZone(svc, "proj", "zone", "pd-balanced", validatorName)
+		c.Check(err, IsNil)
+	}
+
+	// Case 2: Soft Warning (403 Forbidden)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error": {"code": 403, "message": "Denied"}}`))
+		})
+		err := validateDiskTypeInZone(svc, "proj", "zone", "pd-balanced", validatorName)
+		c.Check(err == errSoftWarning, Equals, true)
+	}
+
+	// Case 3: Hard Failure (404 Not Found)
+	{
+		svc := mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+		err := validateDiskTypeInZone(svc, "proj", "zone", "invalid-disk", validatorName)
+		c.Check(err, NotNil)
+		c.Check(err == errSoftWarning, Equals, false)
+
+		c.Check(err.Error(), Matches, ".*disk type.*invalid-disk.*not available.*")
 	}
 }

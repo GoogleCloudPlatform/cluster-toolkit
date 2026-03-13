@@ -22,8 +22,8 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-subnetwork/v1.82.0"
+    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-subnetwork/v1.84.0"
   }
 
-  required_version = ">= 1.5"
+  required_version = "= 1.12.2"
 }

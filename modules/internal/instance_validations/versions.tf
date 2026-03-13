@@ -13,5 +13,5 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 0.15.0"
+  required_version = "= 1.12.2"
 }

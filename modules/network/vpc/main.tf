@@ -45,6 +45,8 @@ locals {
     description           = "primary subnetwork in ${local.network_name}"
     purpose               = null
     role                  = null
+    stack_type            = var.subnetwork_stack_type
+    ipv6_access_type      = var.subnetwork_ipv6_access_type
   }
 
   # Identify user-supplied primary subnetwork
@@ -81,6 +83,8 @@ locals {
   output_primary_subnetwork_name          = local.output_primary_subnetwork.name
   output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
   output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
+  output_primary_subnetwork_stack_type    = local.output_primary_subnetwork.stack_type
+
 
   iap_ports = distinct(concat(compact([
     var.enable_iap_rdp_ingress ? "3389" : "",

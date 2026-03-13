@@ -317,3 +317,15 @@ variable "subnetwork_private_access" {
   description = "Enable Private Google Access on the subnetworks"
   default     = true
 }
+
+variable "subnetwork_stack_type" {
+  description = "The stack type for the subnetworks to identify whether the IPv6 feature is enabled or not"
+  type        = string
+  default     = "IPV4_ONLY"
+}
+
+variable "subnetwork_ipv6_access_type" {
+  description = "The access type of IPv6 address the subnetworks"
+  type        = string
+  default     = null
+}

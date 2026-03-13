@@ -2,10 +2,10 @@
 
 This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. More information about G4 machines can be found here:
 
-* [Blog post](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000)
+* [Blog post](https://cloud.google.com/blog/products/compute/g4-vms-powered-by-nvidia-rtx-6000-blackwell-gpus-are-ga)
 * [Documentation](https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus)
 
-> **_NOTE:_** The required GKE version for G4 support is >= 1.32.4-gke.1698000.
+> **_NOTE:_** The required GKE version for G4 support is >= 1.32.11-gke.1174000.
 
 ## Steps to deploy the G4 blueprint
 
@@ -23,6 +23,21 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
    ```sh
    curl ifconfig.me
    ```
+
+1. Create a Cloud Storage bucket to store the state of the Terraform deployment:
+
+    ```sh
+    gcloud storage buckets create gs://BUCKET_NAME \
+    --default-storage-class=STANDARD \
+    --location=COMPUTE_REGION \
+    --uniform-bucket-level-access
+    gcloud storage buckets update gs://BUCKET_NAME --versioning
+    ```
+
+   Replace the following variables:
+
+   * `BUCKET_NAME`: the name of the new Cloud Storage bucket.
+   * `COMPUTE_REGION`: the compute region where you want to store the state of the Terraform deployment.
 
 1. Update the vars block of the `gke-g4-deployment.yaml` file.
     1. `project_id`: ID of the project where you are deploying the cluster.
@@ -88,7 +103,7 @@ As RDMA networking and the Google gIB plugin are not supported for G4 machines, 
    ```bash
    # Find the pod name
    kubectl get pods
-    
+
    # View logs
    kubectl logs <POD_NAME>
    ```
@@ -102,4 +117,4 @@ To destroy all resources associated with creating the GKE cluster, run the follo
 ./gcluster destroy CLUSTER-NAME
 ```
 
-Replace `CLUSTER-NAME` with the `deployment_name` used in the blueprint vars block.
+Replace `CLUSTER-NAME` with the name of your cluster. For the clusters created with Cluster Toolkit, the cluster name is based on the `deployment_name` used in vars in deployment file.

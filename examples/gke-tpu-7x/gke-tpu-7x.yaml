@@ -49,6 +49,9 @@ vars:
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
 
+  # Kueue configuration
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+
 
 deployment_groups:
 - group: primary
@@ -155,5 +158,11 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke-tpu-7x-cluster]
     settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-7x-pool.tpu_chips_per_node)
+          accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true
