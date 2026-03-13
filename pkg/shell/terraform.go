@@ -113,6 +113,16 @@ func initModule(tf *tfexec.Terraform) error {
 	return err
 }
 
+// Init initializes a Terraform module in the given directory.
+// It configures Terraform and runs 'terraform init' if necessary.
+func Init(groupDir string) error {
+	tf, err := ConfigureTerraform(groupDir)
+	if err != nil {
+		return err
+	}
+	return initModule(tf)
+}
+
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	logging.Info("Collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())

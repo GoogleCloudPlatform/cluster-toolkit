@@ -88,3 +88,8 @@ deployment_groups:
       - Hello World
       node_count: 3
     outputs: [instructions]
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: # YOUR_BUCKET_NAME
