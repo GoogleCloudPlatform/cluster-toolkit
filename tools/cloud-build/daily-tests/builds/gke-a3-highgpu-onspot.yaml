@@ -67,7 +67,7 @@ steps:
     fi
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
-    EXAMPLE_BP=examples/gke-a3-highgpu.yaml
+    EXAMPLE_BP=examples/gke-a3-highgpu/gke-a3-highgpu.yaml
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
@@ -106,6 +106,9 @@ steps:
             type: COMPACT
     }' $${EXAMPLE_BP}
 
+    # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable as true.
+    sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: true' $${EXAMPLE_BP}
+    sed -i '/reservation/d' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

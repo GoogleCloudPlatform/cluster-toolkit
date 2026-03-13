@@ -256,6 +256,13 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
+    dynamic "fast_socket" {
+      for_each = var.enable_fast_socket ? [1] : []
+      content {
+        enabled = true
+      }
+    }
+
     kubelet_config {
       cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
       dynamic "topology_manager" {
