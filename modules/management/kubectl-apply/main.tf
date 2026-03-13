@@ -47,10 +47,15 @@ locals {
       content = (
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
         try(manifest.source, "") != "" ? (
-          # If fileset works, it's a directory. Otherwise treat as a single file.
-          try(fileset(manifest.source, "{*.yaml,*.yml,*.tftpl}"), null) != null ? (
+          # Check if it ends in / OR (It's not a file AND can be searched as a directory)
+          endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))) ? (
             join("\n---\n", [
-              for f in fileset(manifest.source, "{*.yaml,*.yml,*.tftpl}") : (
+              # Use union() to combine the results of fileset (which are sets)
+              for f in union(
+                fileset(manifest.source, "*.yaml"),
+                fileset(manifest.source, "*.yml"),
+                fileset(manifest.source, "*.tftpl")
+                ) : (
                 endswith(f, ".tftpl") ?
                 templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
                 file("${trimsuffix(manifest.source, "/")}/${f}")
