@@ -292,7 +292,7 @@ func findReservationInOtherZones(ctx context.Context, s *compute.Service, projec
 	}
 
 	// If both failed and we found nothing, return the last encountered error.
-	if err != nil && fErr != nil {
+	if err != nil || fErr != nil {
 		return nil, fmt.Errorf("failed to list standard reservations: %v; failed to list future reservations: %v", err, fErr)
 	}
 
