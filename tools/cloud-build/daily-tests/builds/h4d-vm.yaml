@@ -22,7 +22,6 @@ tags:
 - m.wait-for-startup
 
 substitutions:
-  _TEST_NAME: "h4d-vm"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

@@ -20,7 +20,6 @@ tags:
 - crd
 
 substitutions:
-  _TEST_NAME: "chrome-remote-desktop"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

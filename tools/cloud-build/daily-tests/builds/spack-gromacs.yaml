@@ -28,7 +28,6 @@ tags:
 - spack
 
 substitutions:
-  _TEST_NAME: "spack-gromacs"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

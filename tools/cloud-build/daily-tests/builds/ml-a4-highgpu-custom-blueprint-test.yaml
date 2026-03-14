@@ -27,7 +27,6 @@ tags:
 - slurm6
 
 substitutions:
-  _TEST_NAME: "ml-a4-highgpu-custom-blueprint-test"
 
 timeout: 14400s  # 4hr
 steps:

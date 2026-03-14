@@ -27,7 +27,6 @@ tags:
 - m.custom-image
 
 substitutions:
-  _TEST_NAME: "ml-a3-highgpu-slurm"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

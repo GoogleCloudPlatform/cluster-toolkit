@@ -23,7 +23,6 @@ tags:
 - gke
 
 substitutions:
-  _TEST_NAME: "gke-a3-megagpu"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

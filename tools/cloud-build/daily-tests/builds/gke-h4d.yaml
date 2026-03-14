@@ -26,7 +26,6 @@ tags:
 - m.gke-persistent-volume
 
 substitutions:
-  _TEST_NAME: "gke-h4d"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

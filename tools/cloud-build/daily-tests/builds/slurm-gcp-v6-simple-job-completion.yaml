@@ -22,7 +22,6 @@ tags:
 - slurm6
 
 substitutions:
-  _TEST_NAME: "slurm-gcp-v6-simple-job-completion"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

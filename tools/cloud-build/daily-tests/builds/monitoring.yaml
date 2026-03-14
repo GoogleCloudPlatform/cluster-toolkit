@@ -24,7 +24,6 @@ tags:
 - monitoring
 
 substitutions:
-  _TEST_NAME: "monitoring"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

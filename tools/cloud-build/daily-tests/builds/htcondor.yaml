@@ -28,7 +28,6 @@ tags:
 - packer
 
 substitutions:
-  _TEST_NAME: "htcondor"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

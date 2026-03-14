@@ -23,7 +23,6 @@ tags:
 - vm
 
 substitutions:
-  _TEST_NAME: "netapp-volumes"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr
