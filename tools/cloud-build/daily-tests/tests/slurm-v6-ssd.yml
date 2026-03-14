@@ -35,4 +35,5 @@ custom_vars:
   - /home
   - /mnt/localssd
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"

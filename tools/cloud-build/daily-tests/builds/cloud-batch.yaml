@@ -21,6 +21,7 @@ tags:
 - batch
 
 substitutions:
+  _TEST_NAME: "cloud-batch"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

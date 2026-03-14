@@ -34,4 +34,5 @@ custom_vars:
   - /home
   - /sw
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"

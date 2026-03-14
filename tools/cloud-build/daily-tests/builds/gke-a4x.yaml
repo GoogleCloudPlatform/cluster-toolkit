@@ -28,6 +28,7 @@ tags:
 - m.pre-existing-network-storage
 
 substitutions:
+  _TEST_NAME: "gke-a4x"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 7200s

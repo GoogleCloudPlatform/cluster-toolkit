@@ -28,6 +28,7 @@ tags:
 - m.private-service-access
 
 substitutions:
+  _TEST_NAME: "ml-a3-megagpu-onspot-slurm-ubuntu"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr
@@ -88,6 +89,7 @@ steps:
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
+    sed -i -e '/- id: sysnet/,/- id: image_build_script/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

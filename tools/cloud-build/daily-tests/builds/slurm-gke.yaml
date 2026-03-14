@@ -31,6 +31,7 @@ tags:
 - slurm6
 
 substitutions:
+  _TEST_NAME: "slurm-gke"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr
@@ -64,6 +65,7 @@ steps:
     BLUEPRINT="community/examples/slurm-gke/slurm-gke.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
+    sed -i -e '/- id: network/a \    settings:\n      network_name: $(vars.base_network_name)' $${BLUEPRINT}
     ansible-playbook -v tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-gke.yml"

@@ -23,6 +23,7 @@ tags:
 - slurm6
 
 substitutions:
+  _TEST_NAME: "hpc-build-slurm-image"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 5400s  # 1.5h

@@ -20,6 +20,7 @@ deployment_name: "enter-{{ build }}"
 slurm_cluster_name: "enter{{ build[0:5] }}"
 zone: us-central1-a
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"
   region: us-central1
   zone: "{{ zone }}"

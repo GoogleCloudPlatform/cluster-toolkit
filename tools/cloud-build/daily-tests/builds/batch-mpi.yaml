@@ -26,6 +26,7 @@ tags:
 - spack
 
 substitutions:
+  _TEST_NAME: "batch-mpi"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

@@ -23,6 +23,7 @@ tags:
 - m.kubectl-apply
 
 substitutions:
+  _TEST_NAME: "gke-g4"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

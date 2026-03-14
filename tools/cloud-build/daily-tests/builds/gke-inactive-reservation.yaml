@@ -22,6 +22,7 @@ tags:
 - gke
 
 substitutions:
+  _TEST_NAME: "gke-inactive-reservation"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 3600s  # 1hr

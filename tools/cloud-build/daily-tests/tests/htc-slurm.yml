@@ -20,6 +20,7 @@ slurm_cluster_name: "htcv6{{ build[0:5] }}"
 zone: us-west4-c
 
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"
   region: us-west4
   zone: us-west4-c

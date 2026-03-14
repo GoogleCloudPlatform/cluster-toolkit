@@ -25,6 +25,7 @@ tags:
 - gke
 
 substitutions:
+  _TEST_NAME: "gke-managed-lustre"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 7200s

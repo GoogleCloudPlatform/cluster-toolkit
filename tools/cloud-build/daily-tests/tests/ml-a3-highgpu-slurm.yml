@@ -43,6 +43,7 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   tcpx_kernel_login: "{{ tcpx_kernel_login }}"

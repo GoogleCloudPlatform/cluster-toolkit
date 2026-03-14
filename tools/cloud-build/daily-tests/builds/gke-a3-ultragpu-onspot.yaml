@@ -27,6 +27,7 @@ tags:
 - m.pre-existing-network-storage
 
 substitutions:
+  _TEST_NAME: "gke-a3-ultragpu-onspot"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr

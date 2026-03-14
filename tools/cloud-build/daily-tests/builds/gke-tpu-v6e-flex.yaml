@@ -26,6 +26,7 @@ tags:
 - gke
 
 substitutions:
+  _TEST_NAME: "gke-tpu-v6e-flex"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 7200s

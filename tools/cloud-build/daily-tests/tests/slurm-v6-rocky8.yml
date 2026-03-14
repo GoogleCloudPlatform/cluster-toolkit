@@ -21,6 +21,7 @@ deployment_name: "rock-8-{{ build }}"
 slurm_cluster_name: "rock8{{ build[0:5] }}"
 
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"
   region: us-central1
   zone: us-central1-a

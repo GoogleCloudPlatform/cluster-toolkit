@@ -23,6 +23,7 @@ tags:
 - gke
 
 substitutions:
+  _TEST_NAME: "gke-tpu-7x"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 7200s

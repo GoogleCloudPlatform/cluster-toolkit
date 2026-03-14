@@ -26,6 +26,7 @@ tags:
 - slurm6
 
 substitutions:
+  _TEST_NAME: "ml-slurm"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 18000s  # 5hr
@@ -61,6 +62,7 @@ steps:
     BLUEPRINT="examples/ml-slurm.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
+    sed -i -e '/- id: network/a \    settings:\n      network_name: $(vars.base_network_name)' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm.yml"

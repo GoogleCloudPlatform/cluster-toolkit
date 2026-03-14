@@ -46,6 +46,7 @@ custom_vars:
     a3high_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   tcpx_kernel_login: "{{ tcpx_kernel_login }}"

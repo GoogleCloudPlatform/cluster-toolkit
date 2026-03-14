@@ -25,6 +25,7 @@ tags:
 - slurm6
 
 substitutions:
+  _TEST_NAME: "ml-g4-onspot-slurm"
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr
@@ -82,6 +83,7 @@ steps:
     fi
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
+    sed -i -e '/- id: net0/,/- id: homefs/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
