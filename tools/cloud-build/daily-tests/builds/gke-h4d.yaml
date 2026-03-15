@@ -79,7 +79,6 @@ steps:
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
-    sed -i -e '/- id: gke-h4d-net/,/- id: gke-h4d-rdma-net/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-h4d.yml"

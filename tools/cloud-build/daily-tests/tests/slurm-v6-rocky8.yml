@@ -21,7 +21,6 @@ deployment_name: "rock-8-{{ build }}"
 slurm_cluster_name: "rock8{{ build[0:5] }}"
 
 cli_deployment_vars:
-  base_network_name: '{{ test_name }}'
   network_name: "{{ network }}"
   region: us-central1
   zone: us-central1-a
@@ -29,7 +28,7 @@ cli_deployment_vars:
 zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
-network: "{{ test_name }}"
+network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

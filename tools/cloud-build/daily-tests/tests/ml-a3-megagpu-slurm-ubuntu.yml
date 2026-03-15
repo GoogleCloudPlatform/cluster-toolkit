@@ -24,7 +24,7 @@ login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 region: us-west4
 zone: us-west4-a
-network: "{{ test_name }}"
+network: "{{ deployment_name }}-net-0"
 nccl_test_path: "examples/machine-learning/a3-megagpu-8g/nccl-tests"
 sub_network: "{{ deployment_name }}-sub-net-0"
 post_deploy_tests:
@@ -46,7 +46,6 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
-  base_network_name: '{{ test_name }}'
   network_name_system: "{{ network }}"
   subnetwork_name_system: "{{ sub_network}}"
   region: "{{ region }}"

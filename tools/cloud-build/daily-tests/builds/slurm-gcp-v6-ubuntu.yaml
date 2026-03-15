@@ -57,7 +57,6 @@ steps:
     BLUEPRINT="community/examples/hpc-slurm-ubuntu2204.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
-    sed -i -e '/- id: network/,/- id: private_service_access/ s/settings:/settings:\n      network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-ubuntu.yml"
