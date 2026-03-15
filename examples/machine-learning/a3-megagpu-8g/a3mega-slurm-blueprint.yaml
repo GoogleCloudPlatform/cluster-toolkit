@@ -153,29 +153,6 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-      - type: ansible-local
-        destination: update-gvnic.yml
-        content: |
-          ---
-          - name: Install updated gVNIC driver from GitHub
-            hosts: all
-            become: true
-            vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-            tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |
@@ -186,9 +163,9 @@ deployment_groups:
           apt install -y \
               cuda-toolkit-12-8 \
               nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.1-1 \
-              datacenter-gpu-manager-4-core=1:4.5.1-1
+              datacenter-gpu-manager-4-cuda12 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
 
           # 2. Hold ALL components
           apt-mark hold \
