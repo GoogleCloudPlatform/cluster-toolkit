@@ -493,14 +493,14 @@ class Switch:
 class Block:
     name: str
     nodes: List[str] = field(default_factory=list)
-    # block_uuid: str = field(default_factory=lambda: uuid.uuid4().hex[:7])
+    block_uuid: str = field(default_factory=lambda: uuid.uuid4().hex[:7])
 
     def render_yaml_block(self) -> Optional[Dict]:
         if not self.nodes:
             return None
         # uuid used in the unlikely event two unrelated NVLDs have the same hash
         return {
-            "block": f"{self.name[:10]}-{uuid.uuid4().hex[:5]}",
+            "block": f"{self.name[:10]}-{self.block_uuid}",
             "nodes": util.to_hostlist(self.nodes)
         }
 
@@ -605,6 +605,7 @@ class TopologyBuilder:
 
     def render_blocks(self) -> list[Any]:
         """Renders the blocks/phantom block in yaml format."""
+
         blocks = []
         for block_group_name, nvld_blocks in self._b.items():
             num_blocks = len(nvld_blocks.values())
@@ -737,12 +738,12 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     """
     Generates slurm topology.yaml.
     Args:
-    lkp: The Lookup object containing cluster configuration.
-        
+        lkp: The Lookup object containing cluster configuration.
+            
     Returns:
-    A tuple containing:
-    - A boolean indicating whether the topology.yaml requires reconfigure.
-    - A TopologySummary object.
+        A tuple containing:
+        - A boolean indicating whether the topology.yaml requires reconfigure.
+        - A TopologySummary object.
     """
 
     topo = gen_topology(lkp).compress()
