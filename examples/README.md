@@ -17,6 +17,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
@@ -212,6 +213,16 @@ For this example the following is needed in the selected region:
   needed for the `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
+
+### [hpc-slurm-ha.yaml] ![community-badge]
+
+Creates a highly available (HA) Slurm cluster. This setup includes a primary controller
+and a backup controller to ensure control plane resilience. If the primary controller
+instance fails, the Slurm services can be failed over to the backup controller, minimizing
+downtime. This blueprint configures the necessary shared storage and network settings to
+support the HA configuration.
+
+[hpc-slurm-ha.yaml]: ./hpc-slurm-ha.yaml
 
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 

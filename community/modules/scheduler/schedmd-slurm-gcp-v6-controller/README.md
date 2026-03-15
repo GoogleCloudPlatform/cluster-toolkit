@@ -3,9 +3,8 @@
 This module creates a slurm controller node via the internal
 [slurm\_instance\_template] module.
 
-More information about Slurm On GCP can be found at the
-[project's GitHub page][slurm-gcp] and in the
-[Slurm on Google Cloud User Guide][slurm-ug].
+More information about Slurm On GCP can be found at the [project's GitHub
+page][slurm-gcp] and in the [Slurm on Google Cloud User Guide][slurm-ug].
 
 The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
@@ -34,9 +33,9 @@ This creates a controller node with the following attributes:
 
 * connected to the primary subnetwork of `network`
 * the filesystem with the ID `homefs` (defined elsewhere in the blueprint)
-  mounted
+   mounted
 * One partition with the ID `compute_partition` (defined elsewhere in the
-  blueprint)
+    blueprint)
 * machine type upgraded from the default `c2-standard-4` to `c2-standard-8`
 
 ### Live Cluster Reconfiguration
@@ -56,8 +55,66 @@ The following are examples of updates that can be made to a running cluster:
 * Resize an existing partition
 * Attach new network storage to an existing partition
 
-> **NOTE**: Changing the VM `machine_type` of a partition may not work.
-> It is better to create a new partition and delete the old one.
+> **NOTE**: Changing the VM `machine_type` of a partition may not work. It is
+> better to create a new partition and delete the old one.
+
+## High Availability (HA)
+
+The `schedmd-slurm-gcp-v6-controller` module supports High Availability (HA) for
+the Slurm controller. This feature deploys a secondary "Backup" controller that
+allows the cluster to continue operating if the primary controller fails.
+
+### Architecture
+
+* **Primary Controller**: The active Slurm controller.
+
+* **Backup Controller**: A passive standby controller that monitors the
+    primary.
+
+* **Shared State**: Both controllers share the Slurm state directory (e.g.,
+    `/var/spool/slurm`) via a network mount (Filestore or NFS) to synchronize
+    keys and runtime state.
+
+### Enabling HA
+
+To enable High Availability:
+
+1. Set `enable_backup_controller` to `true`.
+2. Set `controller_state_disk` to `null` to disable the default local state disk.
+3. Ensure `StateSaveLocation` points to a shared network mount (e.g., Filestore,
+NFS) that is mounted on both controllers at `/var/spool/slurm`.
+
+> **CRITICAL**: The `StateSaveLocation` MUST be a shared network filesystem
+> (like Filestore or NFS) that supports simultaneous read/write access from both
+> controllers. Zonal or Regional Persistent Disks (PD) are **NOT** supported for
+> this purpose as they do not provide the necessary shared access for HA state
+> management.
+
+### Example Configuration
+
+```yaml
+- id: slurm_controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+  use:
+  - network
+  - homefs
+  settings:
+    enable_backup_controller: true
+    backup_machine_type: c2-standard-8
+    controller_state_disk: null
+    network_storage:
+    - server_ip: $(controller_fs.network_storage.server_ip)
+      remote_mount: $(controller_fs.network_storage.remote_mount)
+      local_mount: /var/spool/slurm
+      fs_type: nfs
+      mount_options: _netdev,hard,intr
+```
+
+### Backward Compatibility
+
+The HA feature is **opt-in**. If `enable_backup_controller` is set to `false`
+(the default), the module deploys a standard single-controller cluster,
+preserving existing behavior.
 
 ## Custom Images
 
@@ -69,19 +126,21 @@ page.
 
 ## GPU Support
 
-More information on GPU support in Slurm on GCP and other Cluster Toolkit modules
-can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
+More information on GPU support in Slurm on GCP and other Cluster Toolkit
+modules can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
 ## Reservation for Scheduled Maintenance
 
-A [maintenance event](https://cloud.google.com/compute/docs/instances/host-maintenance-overview#maintenanceevents) is when a compute engine stops a VM to perform a hardware or
-software update which is determined by the host maintenance policy. This can
-also affect the running jobs if the maintenance kicks in. Now, Customers can
-protect jobs from getting terminated due to maintenance using the cluster
-toolkit. You can enable creation of reservation for scheduled maintenance for
-your compute nodeset and Slurm will reserve your node for maintenance during the
-maintenance window. If you try to schedule any jobs which overlap with the
-maintenance reservation, Slurm would not schedule any job.
+A
+[maintenance event](https://cloud.google.com/compute/docs/instances/host-maintenance-overview#maintenanceevents)
+is when a compute engine stops a VM to perform a hardware or software update
+which is determined by the host maintenance policy. This can also affect the
+running jobs if the maintenance kicks in. Now, Customers can protect jobs from
+getting terminated due to maintenance using the cluster toolkit. You can enable
+creation of reservation for scheduled maintenance for your compute nodeset and
+Slurm will reserve your node for maintenance during the maintenance window. If
+you try to schedule any jobs which overlap with the maintenance reservation,
+Slurm would not schedule any job.
 
 You can specify in your blueprint like
 
@@ -146,10 +205,10 @@ together as possible. Capacity constraints at the time of VM creation may still
 force VMs to be spread across multiple racks. Google provides the `max-distance`
 flag which can used to control the maximum spreading allowed. Read more about
 `max-distance` in the
-[official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
-).
+[official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies).
 
-You can use the `placement_max_distance` setting on the nodeset module to control the `max-distance` behavior. See the following example:
+You can use the `placement_max_distance` setting on the nodeset module to
+control the `max-distance` behavior. See the following example:
 
 ```yaml
   - id: nodeset
@@ -174,9 +233,8 @@ gcloud beta compute resource-policies list \
   --format='yaml(name,groupPlacementPolicy.maxDistance)'
 ```
 
-> [!WARNING]
-> If a zone lacks capacity, using a lower `max-distance` value (such as 1) is
-> more likely to cause VMs creation to fail.
+> [!WARNING] If a zone lacks capacity, using a lower `max-distance` value (such
+> as 1) is more likely to cause VMs creation to fail.
 
 ## TreeWidth and Node Communication
 
@@ -233,9 +291,10 @@ Adjust this value based on the capabilities of your shared filesystem and the
 expected scaling behavior of your cluster.
 
 ## Support
-The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
-modules. For support with the underlying modules, see the instructions in the
-[slurm-gcp README][slurm-gcp-readme].
+
+The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp]
+terraform modules. For support with the underlying modules, see the instructions
+in the [slurm-gcp README][slurm-gcp-readme].
 
 [slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
 [slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp#slurm-on-google-cloud-platform
@@ -282,6 +341,7 @@ limitations under the License.
 | <a name="module_login"></a> [login](#module\_login) | ../../internal/slurm-gcp/login | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
+| <a name="module_slurm_backup_controller_template"></a> [slurm\_backup\_controller\_template](#module\_slurm\_backup\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
 | <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp/instance_template | n/a |
@@ -291,6 +351,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google-beta_google_compute_instance_from_template.backup_controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
 | [google-beta_google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
@@ -308,6 +369,8 @@ limitations under the License.
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br/>    disk_name                  = string<br/>    device_name                = string<br/>    disk_type                  = string<br/>    disk_size_gb               = number<br/>    disk_labels                = map(string)<br/>    auto_delete                = bool<br/>    boot                       = bool<br/>    disk_resource_manager_tags = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_advanced_machine_features"></a> [advanced\_machine\_features](#input\_advanced\_machine\_features) | See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features | <pre>object({<br/>    enable_nested_virtualization = optional(bool)<br/>    threads_per_core             = optional(number)<br/>    turbo_mode                   = optional(string)<br/>    visible_core_count           = optional(number)<br/>    performance_monitoring_unit  = optional(string)<br/>    enable_uefi_networking       = optional(bool)<br/>  })</pre> | <pre>{<br/>  "threads_per_core": 1<br/>}</pre> | no |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
+| <a name="input_backup_machine_type"></a> [backup\_machine\_type](#input\_backup\_machine\_type) | Machine type for the backup controller. If null, uses the same as the primary controller. | `string` | `null` | no |
+| <a name="input_backup_zone"></a> [backup\_zone](#input\_backup\_zone) | Zone for the backup controller. If null, it will be placed in the same region, potentially different zone. | `string` | `null` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Configures the network interface card and the maximum egress bandwidth for VMs.<br/>  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.<br/>  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.<br/>  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).<br/>  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.<br/>  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.<br/>  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"platform_default"` | no |
 | <a name="input_bucket_dir"></a> [bucket\_dir](#input\_bucket\_dir) | Bucket directory for cluster files to be put into. If not specified, then one will be chosen based on slurm\_cluster\_name. | `string` | `null` | no |
 | <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | Name of GCS bucket.<br/>Ignored when 'create\_bucket' is true. | `string` | `null` | no |
@@ -332,6 +395,7 @@ limitations under the License.
 | <a name="input_disk_resource_manager_tags"></a> [disk\_resource\_manager\_tags](#input\_disk\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. | `number` | `50` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme. | `string` | `"pd-ssd"` | no |
+| <a name="input_enable_backup_controller"></a> [enable\_backup\_controller](#input\_enable\_backup\_controller) | Enables a secondary backup controller for High Availability. | `bool` | `false` | no |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Enables loading of cluster job usage into big query.<br/><br/>NOTE: Requires Google Bigquery API. | `bool` | `false` | no |
 | <a name="input_enable_chs_gpu_health_check_epilog"></a> [enable\_chs\_gpu\_health\_check\_epilog](#input\_enable\_chs\_gpu\_health\_check\_epilog) | Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.<br/>Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:<br/>https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md | `bool` | `false` | no |
 | <a name="input_enable_chs_gpu_health_check_prolog"></a> [enable\_chs\_gpu\_health\_check\_prolog](#input\_enable\_chs\_gpu\_health\_check\_prolog) | Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:<br/>https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md | `bool` | `false` | no |
