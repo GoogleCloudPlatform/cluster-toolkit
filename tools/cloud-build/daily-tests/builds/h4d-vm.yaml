@@ -83,6 +83,7 @@ steps:
       echo "INFO: Using $${H4D_VARS_FILE} as it is for SPOT provisioning."
     fi
     bash tools/add_ttl_label.sh $${BLUEPRINT}
+    sed -i -e '/- id: cluster-net-0/,/- id: cluster-rdma-net-0/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
