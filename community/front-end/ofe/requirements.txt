@@ -6,7 +6,7 @@ astroid>=4.0.2,<4.1.0
 attrs==25.4.0
 # This should be supported by zoneinfo in Python 3.9+
 backports.zoneinfo==0.2.1;python_version<"3.9"
-cachetools>=2.0,<7.0
+cachetools>=2.0,<8.0
 certifi==2026.2.25
 cffi>=2.0.0
 cfgv==3.5.0
@@ -20,7 +20,7 @@ dill==0.4.1
 distlib==0.4.0
 # django-revproxy==0.11.0 released but not yet in pypi
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
-Django==6.0.2
+Django==6.0.3
 django-allauth==65.14.3
 django-crispy-forms==2.6
 django-extensions==3.2.3
