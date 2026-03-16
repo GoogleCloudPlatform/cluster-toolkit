@@ -15,16 +15,10 @@
 ---
 
 - name: CHS Test Suite
-  delegate_to: localhost
+  delegate_to: "{{ 'localhost' if scheduler == 'gke' else inventory_hostname }}"
   vars:
     ansible_async_dir: "/tmp/.ansible_async"
   block:
-  - name: Ensure async directory exists
-    ansible.builtin.file:
-      path: "{{ ansible_async_dir }}"
-      state: directory
-      mode: '0777'
-    become: true
 
   - name: Setup environment for CHS
     become: true
@@ -204,6 +198,15 @@
       kubectl delete pod --all --ignore-not-found
     async: 600
     poll: 10
+    ignore_errors: true
+    when: scheduler == 'gke'
+
+  - name: Cleanup Slurm resources
+    ansible.builtin.shell: |
+      scancel -u $(whoami)
+    async: 600
+    poll: 10
+    when: scheduler == 'slurm'
     ignore_errors: true
 
   - name: Cleanup temporary directory
