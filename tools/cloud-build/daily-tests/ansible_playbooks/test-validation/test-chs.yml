@@ -16,7 +16,16 @@
 
 - name: CHS Test Suite
   delegate_to: localhost
+  vars:
+    ansible_async_dir: "/tmp/.ansible_async"
   block:
+  - name: Ensure async directory exists
+    ansible.builtin.file:
+      path: "{{ ansible_async_dir }}"
+      state: directory
+      mode: '0777'
+    become: true
+
   - name: Setup environment for CHS
     become: true
     block:
@@ -25,7 +34,6 @@
         python_version: "3.10.13"
         pyenv_root: "/opt/pyenv"
         chs_venv_path: "/opt/chs_venv"
-        ansible_async_dir: "/tmp/.ansible_async"
 
     - name: Install pyenv dependencies
       ansible.builtin.apt:
@@ -124,7 +132,7 @@
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }}
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} 
       register: chs_run
       async: 1200
       poll: 10
