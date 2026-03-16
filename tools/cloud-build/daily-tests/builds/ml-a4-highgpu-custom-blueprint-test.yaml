@@ -26,7 +26,6 @@ tags:
 - m.vpc
 - slurm6
 
-substitutions:
 
 timeout: 14400s  # 4hr
 steps:
