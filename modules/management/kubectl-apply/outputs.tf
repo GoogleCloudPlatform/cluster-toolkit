@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "wait" {
-  description = "An output to use when establishing explicit dependencies"
+output "ready" {
+  description = "True if the module is ready (manifests applied and charts installed)"
   value       = true
   depends_on = [
     module.install_kueue,
+    module.configure_kueue,
     module.install_jobset,
     module.install_gpu_operator,
     module.install_nvidia_dra_driver,

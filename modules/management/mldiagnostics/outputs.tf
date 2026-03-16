@@ -17,6 +17,11 @@ output "instructions" {
   value       = <<-EOT
     ML Diagnostics has been successfully installed in the cluster: ${local.cluster_name}.
     - Cert-manager is installed in the 'cert-manager' namespace.
-    - ML Diagnostics Webhook and Connection Operator are installed in the 'gke-mldiagnostics' namespace.
+    - ML Diagnostics Webhook and Connection Operator are installed in the '${var.mldiagnostics_namespace}' namespace.
+
+    IMPORTANT:
+    - Workloads must be deployed in the '${var.workload_namespace}' namespace.
+    - That namespace has been labeled 'managed-mldiagnostics-gke: "true"' to enable webhook injection.
+    - Ensure your workload pods use the Kubernetes Service Account configured with Workload Identity (default: 'workload-identity-k8s-sa').
   EOT
 }

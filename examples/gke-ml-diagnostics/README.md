@@ -27,20 +27,11 @@ The automation includes:
 
 ## Create a cluster using Cluster Toolkit
 
-1. **Clone the Cluster Toolkit:**
+1. **Prerequisites:**
 
-    ```bash
-    cd ~
-    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-    ```
+    Ensure you have the `gcluster` binary installed. Please refer to the [main README](../../README.md#using-the-pre-built-bundle-recommended) for installation instructions.
 
-2. **Install the Cluster Toolkit:**
-
-    ```bash
-    cd cluster-toolkit && git checkout main && make
-    ```
-
-3. **Create a GCS bucket for Terraform state:**
+2. **Create a GCS bucket for Terraform state:**
 
     ```bash
     gcloud storage buckets create gs://YOUR_STATE_BUCKET_NAME \
@@ -52,9 +43,9 @@ The automation includes:
 
     Replace `YOUR_STATE_BUCKET_NAME` and `COMPUTE_REGION`.
 
-4. **Save the Blueprint:** Save the blueprint content to `~/cluster-toolkit/examples/gke-ml-diagnostics/gke-ml-diagnostics-tpu-v6e.yaml`.
+3. **Save the Blueprint:** Save the blueprint content to `~/cluster-toolkit/examples/gke-ml-diagnostics/gke-ml-diagnostics-tpu-v6e.yaml`.
 
-5. **Create Deployment Configuration:** Create `~/cluster-toolkit/examples/gke-ml-diagnostics/gke-ml-diagnostics-tpu-v6e-deployment.yaml`:
+4. **Create Deployment Configuration:** Create `~/cluster-toolkit/examples/gke-ml-diagnostics/gke-ml-diagnostics-tpu-v6e-deployment.yaml`:
 
     ```yaml
     terraform_backend_defaults:
@@ -70,7 +61,7 @@ The automation includes:
       # namespace: diagon # Default namespace for ML Diagnostics
     ```
 
-6. **Deploy the blueprint:**
+5. **Deploy the blueprint:**
 
     ```bash
     cd ~/cluster-toolkit
@@ -84,14 +75,14 @@ The automation includes:
 1. **Connect to your cluster:**
 
     ```bash
-    gcloud container clusters get-credentials gkemldiagon \
-        --region us-central1 --project YOUR_PROJECT_ID
+    gcloud container clusters get-credentials <cluster-name> \
+        --region <region> --project <project-id>
     ```
 
 2. **Verify Kubernetes resources:**
 
     ```bash
-    kubectl get pods -n diagon
+    kubectl get all -n cert-manager
     ```
 
     Confirm that `cert-manager`, `mldiagnostics-webhook`, and `mldiagnostics-connection-operator` pods are running.

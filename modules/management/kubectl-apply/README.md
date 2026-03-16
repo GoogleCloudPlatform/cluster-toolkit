@@ -277,5 +277,5 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_wait"></a> [wait](#output\_wait) | An output to use when establishing explicit dependencies |
+| <a name="output_ready"></a> [ready](#output\_ready) | True if the module is ready (manifests applied and charts installed) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
