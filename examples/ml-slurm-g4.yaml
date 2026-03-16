@@ -16,21 +16,21 @@
 blueprint_name: ml-slurm-g4
 
 vars:
-  project_id:  ## Set Project ID ##
-  deployment_name: g4-ml-example
+  deployment_name: g4-ml-example #supply deployment name
+  project_id: #supply project ID
   region: us-central1
   zone: us-central1-b
+  cluster_size: 2 #supply cluster size
   g4_machine_type: g4-standard-48
   # To enable Dual NIC, you MUST use g4-standard-384
   # g4_machine_type: g4-standard-384
-  cluster_size: 2 # Number of static compute nodes
   # Image settings
-  source_image_family: ubuntu-2404-lts-amd64
-  source_image_project: ubuntu-os-cloud
+  source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-580
+  source_image_project: ubuntu-os-accelerator-images
   image_build_machine_type: n2-standard-4
   image_disk_size_gb: 50
   built_image_family: slurm-g4-ubuntu2404
-  build_slurm_from_git_ref: 6.10.6 # Or a newer stable tag
+  build_slurm_from_git_ref: 6.10.10
 
   # Cluster env settings
   net0_range: 192.168.0.0/24
@@ -72,13 +72,8 @@ deployment_groups:
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               enable_nvidia_dcgm: false
               nvidia_packages:
-              # 1. Open Kernel Driver: Installs the open-source kernel components.
-              - nvidia-kernel-open-575
-              # 2. Driver Metapackage: Pulls in the 580.xx driver version.
-              - cuda-drivers-575
-              # 3. CUDA Toolkit: Installs the 12.9.1 toolkit.
-              - cuda-toolkit-12-9
               - datacenter-gpu-manager
+              - cuda-toolkit-12-9
 
             tasks:
             # Download the NVIDIA repo

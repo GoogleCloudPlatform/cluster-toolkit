@@ -41,4 +41,11 @@ steps:
     cd /workspace && make
     export BUILD_ID="${BUILD_ID}"
 
+    BP_BEFORE="tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"
+    BP_AFTER="tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
+
+    # 2. Run the TTL script on both files
+    bash tools/add_ttl_label.sh $$BP_BEFORE
+    bash tools/add_ttl_label.sh $$BP_AFTER
+
     python3 tools/python-integration-tests/slurm_reconfig_size.py
