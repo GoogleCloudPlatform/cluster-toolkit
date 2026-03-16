@@ -25,6 +25,7 @@
         python_version: "3.10.13"
         pyenv_root: "/opt/pyenv"
         chs_venv_path: "/opt/chs_venv"
+        ansible_async_dir: "/tmp/.ansible_async"
 
     - name: Install pyenv dependencies
       ansible.builtin.apt:
