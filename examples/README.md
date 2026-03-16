@@ -29,6 +29,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [pfs-managed-lustre-slurm.yaml](#pfs-managed-lustre-slurmyaml-) ![core-badge]
   * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -678,6 +679,29 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
+
+### [pfs-managed-lustre-slurm.yaml] ![core-badge]
+
+This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully managed, POSIX-compliant parallel file system optimized for the massive I/O demands of AI/ML training and scientific simulations.
+
+Creates a Managed Lustre file-system that is mounted on the slurm cluster controller instance.
+
+The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
+file system is designed for high IO performance. For further information, refer the official documentation [Performance tiers and maximum storage capacities](https://docs.cloud.google.com/managed-lustre/docs/create-instance#performance-tiers)
+
+To provision the cluster, run the following command. You will be prompted to approve each deployment group.
+
+```text
+./gcluster deploy examples/pfs-managed-lustre-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
+To destroy the cluster,Run below command:
+
+```text
+./gcluster destroy <deployment_name>
+```
+
+[pfs-managed-lustre-slurm.yaml]: ./pfs-managed-lustre-slurm.yaml
 
 ### [rapid-storage-slurm.yaml] ![core-badge]
 
