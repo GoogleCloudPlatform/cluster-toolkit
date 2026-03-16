@@ -33,12 +33,12 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
-resource "kubectl_manifest" "mldiagnostics_namespace" {
+resource "kubectl_manifest" "workload_namespace" {
   yaml_body = <<YAML
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ${var.namespace}
+  name: ${var.workload_namespace}
   labels:
     diagon-enabled: "true"
     managed-mldiagnostics-gke: "true"
@@ -50,25 +50,25 @@ YAML
 module "install_cert_manager" {
   source           = "../kubectl-apply/helm_install"
   count            = local.install_cert_manager ? 1 : 0
-  wait_for_jobs    = true
+  wait             = true
   timeout          = 1200
   release_name     = "cert-manager"
   chart_repository = "https://charts.jetstack.io"
   chart_name       = "cert-manager"
   namespace        = "cert-manager"
   set_values       = [{ name = "installCRDs", value = "true", type = "auto" }]
-  depends_on       = [var.gke_cluster_exists, var.workload_manager_wait]
+  depends_on       = [var.gke_cluster_exists, var.ready]
 }
 
 module "install_mldiagnostics_webhook" {
   source           = "../kubectl-apply/helm_install"
   count            = local.install_mldiagnostics_webhook ? 1 : 0
-  wait_for_jobs    = true
+  wait             = true
   timeout          = 1200
   release_name     = "mld-webhook"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-injection-webhook"
   chart_repository = ""
-  namespace        = "gke-mldiagnostics"
+  namespace        = var.mldiagnostics_namespace
   create_namespace = true
   depends_on       = [var.gke_cluster_exists, module.install_cert_manager]
 }
@@ -76,12 +76,12 @@ module "install_mldiagnostics_webhook" {
 module "install_mldiagnostics_connection_operator" {
   source           = "../kubectl-apply/helm_install"
   count            = local.install_mldiagnostics_connection_operator ? 1 : 0
-  wait_for_jobs    = true
+  wait             = true
   timeout          = 1200
   release_name     = "mld-op"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-connection-operator"
   chart_repository = ""
-  namespace        = "gke-mldiagnostics"
+  namespace        = var.mldiagnostics_namespace
   create_namespace = false
   set_values       = [{ name = "fullnameOverride", value = "mld-op" }]
   depends_on       = [var.gke_cluster_exists, module.install_cert_manager, module.install_mldiagnostics_webhook]

@@ -55,13 +55,7 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
-  namespace: diagon
-  KSA: workload-identity-k8s-sa
-
-
-validators:
-- validator: test_module_not_used
-  skip: true
+  workload_namespace: diagon
 
 deployment_groups:
 - group: primary
@@ -136,8 +130,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
     settings:
-      k8s_service_account_name: $(vars.KSA)
-      k8s_service_account_namespace: $(vars.namespace)
+      k8s_service_account_namespace: $(vars.workload_namespace)
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
@@ -218,6 +211,7 @@ deployment_groups:
         config_template_vars:
           tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
+          workload_namespace: $(vars.workload_namespace)
       jobset:
         install: true
 
@@ -225,8 +219,7 @@ deployment_groups:
     source: modules/management/mldiagnostics
     use: [gke-tpu-v6e-cluster, workload-manager-install]
     settings:
-      workload_manager_wait: $(workload-manager-install.wait)
-      namespace: $(vars.namespace)
+      workload_namespace: $(vars.workload_namespace)
       cert_manager:
         install: true
       mldiagnostics_webhook:

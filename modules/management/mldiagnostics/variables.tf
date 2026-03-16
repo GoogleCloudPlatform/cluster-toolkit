@@ -22,23 +22,29 @@ variable "cluster_id" {
   type        = string
   nullable    = false
 }
-# Add a variable to enforce dependency ordering in Terraform
+
 variable "gke_cluster_exists" {
   description = "A static flag that signals to downstream modules that a cluster has been created."
   type        = bool
   default     = false
 }
 
-variable "namespace" {
-  description = "Namespace for mldiagnostics"
+variable "workload_namespace" {
+  description = "Namespace where ML workloads will run (it will be labeled)"
+  type        = string
+  default     = "default"
+}
+
+variable "mldiagnostics_namespace" {
+  description = "Namespace for mldiagnostics infrastructure components"
   type        = string
   default     = "gke-mldiagnostics"
 }
 
-variable "workload_manager_wait" {
-  description = "Dependency to wait for workload manager installation"
+variable "ready" {
+  description = "A static flag that signals to downstream modules that upstream dependencies are ready."
   type        = any
-  default     = null
+  default     = false
 }
 
 variable "cert_manager" {
