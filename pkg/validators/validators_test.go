@@ -21,9 +21,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/zclconf/go-cty/cty"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
+
+	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
 
