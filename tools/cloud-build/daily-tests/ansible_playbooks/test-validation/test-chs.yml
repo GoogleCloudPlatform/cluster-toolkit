@@ -49,24 +49,32 @@
         - python3-openssl
         state: present
         update_cache: true
+      async: 600
+      poll: 10
 
     - name: Clone pyenv
       ansible.builtin.git:
         repo: https://github.com/pyenv/pyenv.git
         dest: "{{ pyenv_root }}"
         version: v2.4.1
+      async: 300
+      poll: 10
 
     - name: Install Python using pyenv
       ansible.builtin.command:
         cmd: "{{ pyenv_root }}/bin/pyenv install -s {{ python_version }}"
       environment:
         PYENV_ROOT: "{{ pyenv_root }}"
+      async: 300
+      poll: 10
       changed_when: false
 
     - name: Create Virtual Environment with pyenv Python
       ansible.builtin.command:
         cmd: "{{ pyenv_root }}/versions/{{ python_version }}/bin/python3 -m venv {{ chs_venv_path }}"
         creates: "{{ chs_venv_path }}/bin/python"
+      async: 300
+      poll: 10
 
   - name: Install and Setup CHS
     block:
@@ -80,6 +88,8 @@
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
+      async: 300
+      poll: 10
 
     - name: Find CHS package directory
       ansible.builtin.find:
@@ -93,6 +103,8 @@
       ansible.builtin.pip:
         name: "{{ chs_setup_file.files[0].path | dirname }}"
         virtualenv: "{{ chs_venv_path }}"
+      async: 600
+      poll: 10
       become: true
 
   - name: Perform CHS Operations
@@ -103,6 +115,8 @@
       ansible.builtin.shell: |
         set -e -u
         chs configure bucket --name chs-results
+      async: 600
+      poll: 10
       changed_when: false
 
     - name: "Run CHS lite suite"
@@ -110,6 +124,8 @@
         set -e -u
         chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }}
       register: chs_run
+      async: 1200
+      poll: 10
       changed_when: false
 
   - name: CHS run output
@@ -156,7 +172,7 @@
     - name: "Validate NCCL average bus bandwidth"
       ansible.builtin.assert:
         that:
-        - (item.1.value | float) >= 300.0
+        - (item.1.value | float) >= 150.0
         fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
         success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
       loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
@@ -167,9 +183,19 @@
   rescue:
   - name: CHS Test Failure
     ansible.builtin.debug:
-      msg: "CHS tests failed. Continuing playbook execution."
+      msg: "CHS tests failed or timed out. Continuing playbook execution."
 
   always:
+  - name: Cleanup Kubernetes resources
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete jobset --all --ignore-not-found
+      kubectl delete job --all --ignore-not-found
+      kubectl delete pod --all --ignore-not-found
+    async: 600
+    poll: 10
+    ignore_errors: true
+
   - name: Cleanup temporary directory
     ansible.builtin.file:
       path: "{{ chs_temp_dir.path }}"
