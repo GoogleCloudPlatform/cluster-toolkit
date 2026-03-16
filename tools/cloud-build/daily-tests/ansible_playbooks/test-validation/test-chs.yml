@@ -88,6 +88,7 @@
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
+        version: develop
       async: 300
       poll: 10
 
