@@ -129,6 +129,7 @@ func validateModule(p ModulePath, m Module, bp Blueprint) error {
 		Add(validateOutputs(p, m, info)).
 		Add(validateModuleUseReferences(p, m, bp)).
 		Add(validateModuleSettingReferences(p, m, bp)).
+		Add(validateDeprecation(m.ID, info)).
 		OrNil()
 }
 

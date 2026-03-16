@@ -734,7 +734,9 @@ providing a high-performance file system for demanding workloads.
    kubectl get pvc
    ```
 
-   You should see a PVC named $(vars.lustre_instance_id)-pvc with STATUS: Bound
+   You should see a PVC named [LUSTRE_INSTANCE_PVC] with STATUS: Bound
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
 1. Example Pod: Create a file named lustre-client-pod.yaml to deploy a test pod that mounts the Lustre volume
 
@@ -754,8 +756,10 @@ providing a high-performance file system for demanding workloads.
      volumes:
      - name: lustre-volume
        persistentVolumeClaim:
-         claimName: $(vars.lustre_instance_id)-pvc # Matches the PVC name
+         claimName: [LUSTRE_INSTANCE_PVC] # Matches the PVC name
    ```
+
+   Note : [LUSTRE_INSTANCE_PVC] depicts lustre_instance_id suffixed with -pvc.
 
    Note: This is just an example job using busybox image.
 
@@ -1234,7 +1238,6 @@ Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 [ml-gke.yaml]: ../examples/ml-gke.yaml
-[`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![core-badge]
 
@@ -1271,6 +1274,25 @@ cleaned up when the job is deleted.
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+#### Requirements
+
+1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
+    1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
+
+#### Deployment Instructions
+
+1. Update the `vars` block of the blueprint file (`examples/storage-gke.yaml`) with your specific configurations.
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    2. `deployment_name`: Name of the deployment.
+    3. `region` / `zone`: Ensure these map to your intended location.
+    4. `authorized_cidr`: Update to your IP address in `<your-ip-address>/32` format.
+2. Deploy the blueprint using the following command:
+
+   ```shell
+   ./gcluster deploy examples/storage-gke.yaml
+   ```
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 

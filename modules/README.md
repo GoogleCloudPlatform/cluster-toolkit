@@ -116,6 +116,12 @@ Modules that are still in development and less stable are labeled with the
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 
+### Management
+
+* **[kubectl-apply]** ![core-badge] : Simplifies applying Kubernetes manifests to GKE clusters and deploying common infrastructure like Kueue, Jobset or NCCL gIB plugin.
+
+[kubectl-apply]: management/kubectl-apply/README.md
+
 ### Monitoring
 
 * **[dashboard]** ![core-badge] : Creates a
@@ -240,7 +246,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [startup-script]: scripts/startup-script/README.md
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
-[kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
 [ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md

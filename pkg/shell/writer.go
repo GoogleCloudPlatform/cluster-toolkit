@@ -59,16 +59,29 @@ func (w *timestampWriter) Write(p []byte) (n int, err error) {
 		w.startOfLine = false
 	}
 
-	// Single atomic write to the underlying writer
-	nWritten, err := w.writer.Write(buf.Bytes())
-	return nWritten, err
-}
+	// Perform the actual write
+	_, err = w.writer.Write(buf.Bytes())
 
+	if err != nil {
+		// If an error occurred, we return 0 bytes of 'p' were written.
+		// This satisfies the "n < len(p)" rule for errors.
+		return 0, err
+	}
+
+	return len(p), nil
+}
 func (w *timestampWriter) writeSegment(buf *bytes.Buffer, p []byte) {
 	if w.startOfLine {
-		ts := time.Now().UTC().Format(time.RFC3339)
-		coloredTs := logging.TsColor.Sprint(ts)
-		buf.WriteString(coloredTs + " ")
+		if len(p) > 0 {
+			switch p[0] {
+			case ' ', '\t', '\n':
+				// Do not add timestamp for indented or empty lines.
+			default:
+				ts := time.Now().UTC().Format(time.RFC3339)
+				coloredTs := logging.TsColor.Sprint(ts)
+				buf.WriteString(coloredTs + " ")
+			}
+		}
 	}
 	buf.Write(p)
 }

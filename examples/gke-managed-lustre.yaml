@@ -60,7 +60,7 @@ deployment_groups:
     source: modules/network/private-service-access
     use: [network]
     settings:
-      prefix_length: 24
+      prefix_length: 22
 
   # Firewall to allow Managed Lustre connection
   - id: lustre_firewall_rule

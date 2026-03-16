@@ -26,7 +26,7 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260108
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -183,10 +183,18 @@ deployment_groups:
           set -ex -o pipefail
           add-nvidia-repositories -y
           apt update -y
-          apt install -y cuda-toolkit-12-8
-          apt install -y nvidia-container-toolkit
-          apt install -y datacenter-gpu-manager-4-cuda12
-          apt install -y datacenter-gpu-manager-4-dev
+          apt install -y \
+              cuda-toolkit-12-8 \
+              nvidia-container-toolkit \
+              datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
+              datacenter-gpu-manager-4-dev=1:4.5.1-1 \
+              datacenter-gpu-manager-4-core=1:4.5.1-1
+
+          # 2. Hold ALL components
+          apt-mark hold \
+              datacenter-gpu-manager-4-cuda12 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf

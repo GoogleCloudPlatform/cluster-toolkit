@@ -254,48 +254,6 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
-	// 1. Determine if the validator was explicitly added to the blueprint YAML
-	const validatorName = "test_machine_type_in_zone"
-	required := []string{"project_id", "zone"}
-	if isValidatorExplicit(bp, validatorName) {
-		required = append(required, "machine_type")
-	}
-
-	if err := checkInputs(inputs, required); err != nil {
-		return err
-	}
-
-	s, err := compute.NewService(context.Background())
-	if err != nil {
-		return handleClientError(err)
-	}
-	m, err := inputsAsStrings(inputs)
-	if err != nil {
-		return err
-	}
-
-	projectID, globalZone, explicitMachineType := m["project_id"], m["zone"], m["machine_type"]
-
-	if explicitMachineType != "" {
-		// When explicitly called, we MUST validate the zone provided in the inputs
-		if err := TestZoneExists(projectID, globalZone); err != nil {
-			return err
-		}
-		err := validateMachineTypeInZone(s, projectID, globalZone, explicitMachineType, validatorName)
-
-		// Catch the sentinel and return nil so the deployment proceeds
-		if errors.Is(err, errSoftWarning) {
-			return nil
-		}
-		return err
-	}
-
-	return validateSettingsInModules(bp, globalZone, projectID, "machine_type", "machine type", validatorName, func(z, name string, vName string) error {
-		return validateMachineTypeInZone(s, projectID, z, name, vName)
-	})
-}
-
 // findReservationInOtherZones searches for a reservation by name across zones
 // in the project.
 func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
@@ -413,4 +371,64 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	// Pass both the owner project and the deployment project
 	ctx := context.Background()
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
+}
+
+// testResourceInZoneAvailability is a generic helper that validates a resource type
+// (like machine_type or disk_type) across a blueprint's modules or via an explicit validator.
+func testResourceInZoneAvailability(
+	bp config.Blueprint,
+	inputs config.Dict,
+	validatorName string,
+	settingSuffix string,
+	resourceLabel string,
+	validateFn func(s *compute.Service, projectID, zone, name, vName string) error,
+) error {
+	// 1. Determine if the validator was explicitly added to the blueprint YAML
+	required := []string{"project_id", "zone"}
+	if isValidatorExplicit(bp, validatorName) {
+		required = append(required, settingSuffix)
+	}
+
+	if err := checkInputs(inputs, required); err != nil {
+		return err
+	}
+
+	// Initialize Compute API service
+	s, err := compute.NewService(context.Background())
+	if err != nil {
+		return handleClientError(err)
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+
+	projectID, globalZone, explicitValue := m["project_id"], m["zone"], m[settingSuffix]
+
+	// 2. Handle Explicit case: User manually defined the validator in the YAML
+	if explicitValue != "" {
+		if err := TestZoneExists(projectID, globalZone); err != nil {
+			return err
+		}
+		err := validateFn(s, projectID, globalZone, explicitValue, validatorName)
+		if errors.Is(err, errSoftWarning) {
+			return nil
+		}
+		return err
+	}
+
+	// 3. Case: Implicitly check all modules for this setting
+	return validateSettingsInModules(bp, globalZone, projectID, settingSuffix, resourceLabel, validatorName, func(z, name string, vName string) error {
+		return validateFn(s, projectID, z, name, vName)
+	})
+}
+
+// testMachineTypeInZoneAvailability automatically validates machine types in modules
+func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	return testResourceInZoneAvailability(bp, inputs, "test_machine_type_in_zone", "machine_type", "machine type", validateMachineTypeInZone)
+}
+
+// testDiskTypeInZoneAvailability automatically validates disk types in modules
+func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
+	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
 }
