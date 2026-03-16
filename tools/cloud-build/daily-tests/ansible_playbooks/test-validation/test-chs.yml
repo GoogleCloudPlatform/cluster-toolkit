@@ -23,6 +23,13 @@
   - name: Setup environment for CHS
     become: true
     block:
+    - name: Ensure async directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_async_dir }}"
+        state: directory
+        mode: '0777'
+      become: true
+
     - name: Set variables for CHS setup
       ansible.builtin.set_fact:
         python_version: "3.10.13"
