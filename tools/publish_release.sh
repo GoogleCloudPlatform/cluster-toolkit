@@ -13,12 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# jq is required to generate JSON safely for the release manifest.
+# Ensure jq is installed on your system before running this script.
 # bash tools/publish_release.sh <release_name> <release_tag>
 # bash tools/publish_release.sh
 
 set -euo pipefail
 
 BUCKET_PATH="gs://oss-exit-gate-prod-projects-bucket/cluster-toolkit/githubreleases/manifests/rel.json"
+
+# Check if jq is installed
+if ! command -v jq >/dev/null 2>&1; then
+	echo "ERROR: jq is required but not installed." >&2
+	exit 1
+fi
 
 if [[ $# -eq 2 ]]; then
 	RELEASE_NAME="$1"
@@ -53,17 +61,18 @@ echo "Release Tag  : ${RELEASE_TAG}"
 TMP_FILE="$(mktemp)"
 trap 'rm -f "${TMP_FILE}"' EXIT
 
-cat >"${TMP_FILE}" <<EOF
-{
+jq -n \
+	--arg name "$RELEASE_NAME" \
+	--arg tag "$RELEASE_TAG" \
+	'{
   "publish_all": true,
   "registry_config": {
     "github_releases": {
-      "name": "${RELEASE_NAME}",
-      "tag": "${RELEASE_TAG}"
+      "name": $name,
+      "tag": $tag
     }
   }
-}
-EOF
+}' >"${TMP_FILE}"
 
 echo "Uploading release manifest to GCS..."
 
@@ -72,4 +81,4 @@ if ! gcloud storage cp "${TMP_FILE}" "${BUCKET_PATH}"; then
 	exit 1
 fi
 
-echo "Release publish process finished successfully."
+echo "Release publish process finished successfully for tag ${RELEASE_TAG}"
