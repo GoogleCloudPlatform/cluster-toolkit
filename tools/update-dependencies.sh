@@ -24,7 +24,7 @@ OUTPUT_FILE="pkg/dependencies/checksums_generated.go"
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 # Create or overwrite the generated file
-cat <<EOF > "$OUTPUT_FILE"
+cat <<EOF >"$OUTPUT_FILE"
 /**
  * Copyright 2026 Google LLC
  *
@@ -52,25 +52,27 @@ var (
 EOF
 
 process_dependency() {
-    local name="$1"
-    local version="$2"
-    local output_file="$3"
+	local name="$1"
+	local version="$2"
+	local output_file="$3"
 
-    echo "Fetching ${name} ${version} checksums..."
-    curl -sSL "https://releases.hashicorp.com/${name}/${version}/${name}_${version}_SHA256SUMS" | while read -r sha256 filename; do
-        if [[ $filename =~ ${name}_${version}_([a-zA-Z0-9_]+)\.zip$ ]]; then
-            local os_arch="${BASH_REMATCH[1]}"
-            echo "		\"${name}_${os_arch}\": \"${sha256}\"," >> "${output_file}"
-        fi
-    done
+	echo "Fetching ${name} ${version} checksums..."
+	curl -sSL "https://releases.hashicorp.com/${name}/${version}/${name}_${version}_SHA256SUMS" | while read -r sha256 filename; do
+		if [[ $filename =~ ${name}_${version}_([a-zA-Z0-9_]+)\.zip$ ]]; then
+			local os_arch="${BASH_REMATCH[1]}"
+			echo "		\"${name}_${os_arch}\": \"${sha256}\"," >>"${output_file}"
+		fi
+	done
 }
 
 process_dependency "terraform" "${TERRAFORM_VERSION}" "${OUTPUT_FILE}"
 process_dependency "packer" "${PACKER_VERSION}" "${OUTPUT_FILE}"
 
-cat <<EOF >> "$OUTPUT_FILE"
+cat <<EOF >>"$OUTPUT_FILE"
 	}
 )
 EOF
+
+go fmt $OUTPUT_FILE
 
 echo "Done generating ${OUTPUT_FILE}"

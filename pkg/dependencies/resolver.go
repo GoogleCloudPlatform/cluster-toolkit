@@ -48,7 +48,7 @@ func PatchPath() error {
 	if err != nil {
 		return err
 	}
-	
+
 	packerCacheDir, err := getBinaryCacheDir("packer", PackerVersion)
 	if err != nil {
 		return err
@@ -104,6 +104,6 @@ func confirmDownload(binaryName, version string, decision DownloadDecision) erro
 			return fmt.Errorf("user declined to download %s", binaryName)
 		}
 	}
-	
+
 	return nil
 }
