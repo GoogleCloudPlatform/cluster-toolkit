@@ -17,20 +17,31 @@
 - name: CHS Test Suite
   delegate_to: "{{ 'localhost' if scheduler == 'gke' else inventory_hostname }}"
   vars:
-    ansible_async_dir: "/tmp/.ansible_async"
+    ansible_async_dir: "/tmp/.ansible_async_user"
+    ansible_async_dir_root: "/tmp/.ansible_async_root"
     ansible_python_interpreter: /usr/bin/python3
   block:
 
-  - name: Setup environment for CHS
-    become: true
+  - name: Ensure async directories exist
     block:
-    - name: Ensure async directory exists
+    - name: Ensure user async directory exists
       ansible.builtin.file:
         path: "{{ ansible_async_dir }}"
         state: directory
         mode: '0700'
+
+    - name: Ensure root async directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_async_dir_root }}"
+        state: directory
+        mode: '0700'
       become: true
 
+  - name: Setup environment for CHS
+    become: true
+    vars:
+      ansible_async_dir: "{{ ansible_async_dir_root }}"
+    block:
     - name: Set variables for CHS setup
       ansible.builtin.set_fact:
         python_version: "3.10.13"
@@ -119,6 +130,8 @@
       async: 300
       poll: 10
       become: true
+      vars:
+        ansible_async_dir: "{{ ansible_async_dir_root }}"
 
   - name: Perform CHS Operations
     environment:
