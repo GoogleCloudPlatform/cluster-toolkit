@@ -76,7 +76,7 @@
         cmd: "{{ pyenv_root }}/bin/pyenv install -s {{ python_version }}"
       environment:
         PYENV_ROOT: "{{ pyenv_root }}"
-      async: 120
+      async: 300
       poll: 10
       changed_when: false
 
@@ -123,8 +123,8 @@
   - name: Perform CHS Operations
     environment:
       PATH: "{{ chs_venv_path }}/bin:{{ lookup('env', 'PATH') }}"
-      ENROOT_RUNTIME_PATH: "{{ ansible_user_dir }}/.enroot/run"
-      ENROOT_CACHE_PATH: "{{ ansible_user_dir }}/.enroot/cache"
+      ENROOT_RUNTIME_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/run"
+      ENROOT_CACHE_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/cache"
     block:
 
     - name: Configure bucket for CHS
@@ -148,10 +148,10 @@
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} 
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite lite
       register: chs_run
-      async: 300
-      poll: 10
+      async: 1200
+      poll: 30
       changed_when: false
 
   - name: CHS run output
