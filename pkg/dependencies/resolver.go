@@ -92,7 +92,7 @@ func ensureBinary(binaryName, version string, decision DownloadDecision) error {
 
 func confirmDownload(binaryName, version string, decision DownloadDecision) error {
 	if decision == DownloadDecisionNo {
-		return fmt.Errorf("%s is missing from PATH and cache. Download is explicitly disabled", binaryName)
+		return fmt.Errorf("%s is missing. Download is explicitly disabled. Enable download by specifying --download-dependencies flag.", binaryName)
 	}
 
 	if decision == DownloadDecisionAsk {

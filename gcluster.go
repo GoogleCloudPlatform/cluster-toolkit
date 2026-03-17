@@ -36,7 +36,7 @@ var gitInitialHash string
 
 func main() {
 	if err := dependencies.PatchPath(); err != nil {
-		logging.Fatal("Failed to patch PATH: %v", err)
+		logging.Fatal("Failed to patch PATH with custom binaries directories: %v", err)
 	}
 
 	sourcereader.ModuleFS = moduleFS

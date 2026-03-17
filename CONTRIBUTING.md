@@ -24,19 +24,6 @@ You generally only need to submit a CLA once, so if you've already submitted one
 (even if it was for a different project), you probably don't need to do it
 again.
 
-## Updating Dependencies
-
-When updating the versions of Terraform or Packer used by the project, you must update the checksums to ensure secure downloads.
-
-1. Update the `TERRAFORM_VERSION` and/or `PACKER_VERSION` variables in `tools/update-dependencies.sh`.
-2. Run the `tools/update-dependencies.sh` script to fetch the latest SHA256 sums and generate `pkg/dependencies/checksums_generated.go`:
-
-```shell
-./tools/update-dependencies.sh
-```
-
-Ensure you commit both the modified script and the generated `pkg/dependencies/checksums_generated.go` file along with your pull request.
-
 ## Code Reviews
 
 All submissions, including submissions by project members, require review. We

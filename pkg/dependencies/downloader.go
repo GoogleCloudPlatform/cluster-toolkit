@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 var urlFormat = "https://releases.hashicorp.com/%s/%s/%s_%s_%s.zip"
@@ -37,14 +38,14 @@ func downloadAndExtract(binaryName, version, targetDir string) error {
 
 	expectedChecksum, ok := ExpectedChecksums[expectedChecksumKey]
 	if !ok {
-		return fmt.Errorf("unsupported OS/architecture: %s", osArch)
+		return fmt.Errorf("unsupported OS/architecture for %s: %s", binaryName, osArch)
 	}
 
 	url := fmt.Sprintf(urlFormat, binaryName, version, binaryName, version, osArch)
 
 	fmt.Printf("Downloading %s v%s...\n", binaryName, version)
 
-	body, err := downloadReleaseBody(url, binaryName)
+	body, err := downloadRelease(url, binaryName)
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func downloadAndExtract(binaryName, version, targetDir string) error {
 	return nil
 }
 
-func downloadReleaseBody(url string, binaryName string) ([]byte, error) {
+func downloadRelease(url string, binaryName string) ([]byte, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download %s: %w", binaryName, err)
@@ -111,16 +112,19 @@ func extractBinary(body []byte, binaryName string, targetDir string) error {
 	var extractedFileName string
 
 	for _, file := range zipReader.File {
-		if file.Name != binaryName && file.Name != binaryName+".exe" {
+		if strings.TrimSuffix(file.Name, ".exe") != binaryName {
 			continue // we only want the main executable
 		}
 
-		extractedTempPath = filepath.Join(tempDir, file.Name)
+		cleanFileName := filepath.Base(file.Name)
+		extractedTempPath = filepath.Join(tempDir, cleanFileName)
 		extractedFileName = file.Name
 
 		if err := extractFileFromZip(file, extractedTempPath); err != nil {
 			return err
 		}
+
+		break
 	}
 
 	if extractedTempPath == "" {

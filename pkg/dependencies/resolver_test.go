@@ -61,7 +61,7 @@ func TestEnsureBinary_MissingAndDecisionNo(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error when binary is missing and decision is No")
 	}
-	expectedErrMsg := fmt.Sprintf("%s is missing from PATH and cache. Download is explicitly disabled", binaryName)
+	expectedErrMsg := fmt.Sprintf("%s is missing. Download is explicitly disabled. Enable download by specifying --download-dependencies flag.", binaryName)
 	if err.Error() != expectedErrMsg {
 		t.Errorf("Expected error %q, got %q", expectedErrMsg, err.Error())
 	}
