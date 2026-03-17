@@ -258,9 +258,11 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 // in the project, checking both standard and future reservation pools.
 func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
 	foundInZones := []string{}
+	var err, fErr error
 
 	// 1. Search Standard Zonal Reservations
-	aggList, err := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
+	aggList, e := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
+	err = e
 	if err == nil {
 		for _, scopedList := range aggList.Items {
 			for _, res := range scopedList.Reservations {
@@ -272,21 +274,23 @@ func findReservationInOtherZones(ctx context.Context, s *compute.Service, projec
 		}
 	}
 
-	// 2. Search Future Reservations (Common for A4/B200/GB200)
-	fAggList, fErr := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
-	if fErr == nil {
-		for _, scopedList := range fAggList.Items {
-			for _, res := range scopedList.FutureReservations {
-				if res.Name == name {
-					parts := strings.Split(res.Zone, "/")
-					foundInZones = append(foundInZones, parts[len(parts)-1])
+	// 2. Search Future Reservations ONLY if nothing was found in the Standard Pool
+	if len(foundInZones) == 0 {
+		fAggList, fe := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
+		fErr = fe
+		if fErr == nil {
+			for _, scopedList := range fAggList.Items {
+				for _, res := range scopedList.FutureReservations {
+					if res.Name == name {
+						parts := strings.Split(res.Zone, "/")
+						foundInZones = append(foundInZones, parts[len(parts)-1])
+					}
 				}
 			}
 		}
 	}
 
-	// If we found results in either pool, we return them and ignore errors from the other
-	// (e.g. if one API is disabled but the other works).
+	// Single exit point for successful findings
 	if len(foundInZones) > 0 {
 		return foundInZones, nil
 	}
