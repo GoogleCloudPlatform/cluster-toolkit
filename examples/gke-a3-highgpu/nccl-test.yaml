@@ -1,4 +1,4 @@
-# Copyright 2024 Google Inc. All rights reserved.
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Upstream source: https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-test.yaml
 apiVersion: v1
 kind: Service
 metadata:

@@ -11,8 +11,11 @@ The blueprint automatically configures the following components to enable optima
 
 ## Prerequisites
 
-1. **Quota**: Ensure you have sufficient quota for `a3-highgpu-8g` machines in your chosen region.
-2. **IP Address**: You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
+1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
+    1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install). 
+2. **Quota**: Ensure you have sufficient quota for `a3-highgpu-8g` machines in your chosen region.
+3. **IP Address**: You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
 
 ## Configuration
 
@@ -52,44 +55,10 @@ Before deploying, fill out the `gke-a3-highgpu-deployment.yaml` file with your p
 
 ## Verify NCCL Performance
 
-After the cluster is deployed, follow these steps to run a NCCL test and verify the GPU networking performance. This test uses a **JobSet** to automate synchronization and execution across nodes.
+Depending on your cluster size, refer to one of the following guides to verify GPU and networking performance using NVIDIA `nccl-tests`:
 
-1. Get credentials:
-
-    ```bash
-    gcloud container clusters get-credentials DEPLOYMENT_NAME --region REGION
-    ```
-
-2. Apply the NCCL test JobSet:
-
-    ```bash
-    # From your deployment folder
-    kubectl apply -f nccl-test.yaml
-    ```
-
-    *Note: This will claim 16 GPUs (8 per node) across 2 nodes.*
-
-3. Monitor the results:
-
-    The JobSet will automatically coordinate the nodes and run the test. You can view the results by checking the logs of the first worker:
-
-    ```bash
-    # Find the pod name
-    pod_name=$(kubectl get pods -l name=nccl-test | awk '{if ($1 ~ "worker-0-0") print $1}')
-
-    # View the logs
-    kubectl logs $pod_name -c nccl-test
-    ```
-
-    *Note: For A3 High, you should expect an average bus bandwidth of **>= 25 GB/s**.*
-
-4. Cleanup:
-
-    Delete the JobSet to free up GPU resources:
-
-    ```bash
-    kubectl delete -f nccl-test.yaml
-    ```
+*   **Single-Node (8 GPUs)**: [Single-Node Test Plan](single-node-test-plan.md)
+*   **Multi-Node (16+ GPUs)**: [Multi-Node Test Plan](multi-node-test-plan.md)
 
 ## Clean Up
 
