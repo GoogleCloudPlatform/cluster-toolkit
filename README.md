@@ -362,8 +362,6 @@ applied at boot-time.
 The following setup is in addition to the [dependencies](#dependencies) needed
 to build and run Cluster-Toolkit.
 
-If you are updating the versions of Terraform or Packer used by the project, please see the [Updating Dependencies](CONTRIBUTING.md#updating-dependencies) section in the Contributing guide.
-
 Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all changes are validated, tested and properly
 documented before pushing code changes. The pre-commits configured
