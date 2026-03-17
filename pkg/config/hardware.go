@@ -1,0 +1,130 @@
+// Copyright 2026 "Google LLC"
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package config
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/zclconf/go-cty/cty"
+)
+
+func evalString(bp Blueprint, val cty.Value) (string, bool) {
+	ev, err := bp.Eval(val)
+	if err == nil && ev.Type() == cty.String && !ev.IsNull() && ev.IsKnown() {
+		return ev.AsString(), true
+	}
+	return "", false
+}
+
+func extractTopology(bp Blueprint, mod *Module) (string, bool) {
+	if mod.Settings.Has("tpu_topology") {
+		if str, ok := evalString(bp, mod.Settings.Get("tpu_topology")); ok {
+			return str, true
+		}
+	}
+	if mod.Settings.Has("placement_policy") {
+		ppVal, err := bp.Eval(mod.Settings.Get("placement_policy"))
+		if err == nil && ppVal.Type().IsObjectType() && ppVal.IsKnown() {
+			if ppVal.Type().HasAttribute("tpu_topology") {
+				topoVal := ppVal.GetAttr("tpu_topology")
+				if topoVal.Type() == cty.String && !topoVal.IsNull() && topoVal.IsKnown() {
+					return topoVal.AsString(), true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+func injectCompactPlacementPolicy(mod *Module, tpuTopologyStr string) {
+	var ppMap map[string]cty.Value
+	if mod.Settings.Has("placement_policy") {
+		ppRaw := mod.Settings.Get("placement_policy")
+		if ppRaw.Type().IsObjectType() {
+			ppMap = ppRaw.AsValueMap()
+		} else {
+			ppMap = make(map[string]cty.Value)
+		}
+	} else {
+		ppMap = make(map[string]cty.Value)
+	}
+	ppMap["type"] = cty.StringVal("COMPACT")
+	if tpuTopologyStr != "" {
+		ppMap["tpu_topology"] = cty.StringVal(tpuTopologyStr)
+	}
+	mod.Settings = mod.Settings.With("placement_policy", cty.ObjectVal(ppMap))
+}
+
+// expandHardwareSettings automatically infers missing hardware settings
+// such as static_node_count for TPUs based on machine_type and tpu_topology.
+func expandHardwareSettings(bp Blueprint, mod *Module) error {
+	// Only auto-calculate if static_node_count is missing.
+	if mod.Settings.Has("static_node_count") {
+		return nil
+	}
+
+	tpuTopologyStr, hasTopology := extractTopology(bp, mod)
+	if !hasTopology || !mod.Settings.Has("machine_type") {
+		return nil
+	}
+
+	mtStr, ok := evalString(bp, mod.Settings.Get("machine_type"))
+	if !ok {
+		return nil
+	}
+
+	nodes, err := calculateTPUNodes(mtStr, tpuTopologyStr)
+	if err != nil {
+		return fmt.Errorf("failed to automatically calculate static_node_count for module %q: %w", mod.ID, err)
+	}
+
+	mod.Settings = mod.Settings.With("static_node_count", cty.NumberIntVal(int64(nodes)))
+
+	if nodes > 1 {
+		injectCompactPlacementPolicy(mod, tpuTopologyStr)
+	}
+
+	return nil
+}
+
+// calculateTPUNodes derives the node count from topology and machine type.
+func calculateTPUNodes(machineType, topology string) (int, error) {
+	// 1. Calculate Total Chips from topology
+	dims := strings.Split(topology, "x")
+	totalChips := 1
+	for _, dim := range dims {
+		val, err := strconv.Atoi(dim)
+		if err != nil {
+			return 0, fmt.Errorf("invalid tpu_topology format %q: %w", topology, err)
+		}
+		totalChips *= val
+	}
+
+	// 2. Identify Chips per VM from machine_type
+	chipsPerVM := 4 // default for v4, v5p
+	if strings.Contains(machineType, "ct5lp") || strings.Contains(machineType, "v5litepod") {
+		chipsPerVM = 8
+	}
+
+	// 3. Calculate Nodes
+	if totalChips%chipsPerVM != 0 {
+		return 0, fmt.Errorf("topology %q (%d chips) is not divisible by machine_type %q capacity (%d chips/VM)",
+			topology, totalChips, machineType, chipsPerVM)
+	}
+
+	return totalChips / chipsPerVM, nil
+}
