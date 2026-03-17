@@ -66,3 +66,93 @@ func TestEnsureBinary_MissingAndDecisionNo(t *testing.T) {
 		t.Errorf("Expected error %q, got %q", expectedErrMsg, err.Error())
 	}
 }
+
+func TestConfirmDownload_Ask_Yes(t *testing.T) {
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	_, _ = w.Write([]byte("yes\n"))
+	w.Close()
+
+	err := confirmDownload("testbin", "1.0.0", DownloadDecisionAsk)
+	if err != nil {
+		t.Fatalf("expected no error for Ask(yes), got %v", err)
+	}
+}
+
+func TestConfirmDownload_Ask_No(t *testing.T) {
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	_, _ = w.Write([]byte("no\n"))
+	w.Close()
+
+	err := confirmDownload("testbin", "1.0.0", DownloadDecisionAsk)
+	if err == nil {
+		t.Fatalf("expected error for Ask(no)")
+	}
+}
+
+func TestConfirmDownload_Yes(t *testing.T) {
+	err := confirmDownload("testbin", "1.0.0", DownloadDecisionYes)
+	if err != nil {
+		t.Fatalf("expected no error for DownloadDecisionYes, got %v", err)
+	}
+}
+
+func TestEnsureBinary_Exists(t *testing.T) {
+	tempDir := t.TempDir()
+	binaryName := "fake-existing-binary"
+
+	f, err := os.Create(filepath.Join(tempDir, binaryName))
+	if err != nil {
+		t.Fatalf("failed to create fake binary: %v", err)
+	}
+	_ = f.Chmod(0755)
+	f.Close()
+
+	oldPath := os.Getenv("PATH")
+	defer os.Setenv("PATH", oldPath)
+	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+
+	err = ensureBinary(binaryName, "1.0.0", DownloadDecisionNo)
+	if err != nil {
+		t.Fatalf("expected no error when binary exists in PATH, got %v", err)
+	}
+}
+
+func TestEnsureDependencies_Exists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tf, _ := os.Create(filepath.Join(tempDir, "terraform"))
+	_ = tf.Chmod(0755)
+	tf.Close()
+
+	packer, _ := os.Create(filepath.Join(tempDir, "packer"))
+	_ = packer.Chmod(0755)
+	packer.Close()
+
+	oldPath := os.Getenv("PATH")
+	defer os.Setenv("PATH", oldPath)
+	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+
+	err := EnsureDependencies(DownloadDecisionNo)
+	if err != nil {
+		t.Fatalf("expected no error when dependencies exist, got %v", err)
+	}
+}
+
+func TestEnsureDependencies_Missing(t *testing.T) {
+	oldPath := os.Getenv("PATH")
+	defer os.Setenv("PATH", oldPath)
+	os.Setenv("PATH", t.TempDir()) // Empty PATH basically
+
+	err := EnsureDependencies(DownloadDecisionNo)
+	if err == nil {
+		t.Fatalf("expected error when dependencies are missing and decision is No")
+	}
+}
