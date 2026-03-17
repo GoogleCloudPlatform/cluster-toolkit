@@ -1,0 +1,145 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Test GKE Inference Gateway deployment
+  hosts: localhost
+  connection: local
+  vars_files:
+  - ../../../vars/default_vars.yml
+  tasks:
+  - name: Get deployment name
+    ansible.builtin.set_fact:
+      deployment_name: "{{ lookup('env', 'DEPLOYMENT_NAME') }}"
+
+  - name: Get kubeconfig for the cluster
+    ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ project }}
+    changed_when: false
+
+  - name: Check for vLLM Deployment
+    community.kubernetes.k8s_info:
+      api_version: apps/v1
+      kind: Deployment
+      name: vllm-llama-deployment
+      namespace: default
+    register: vllm_deployment_info
+    until: vllm_deployment_info.resources | length > 0
+    retries: 30
+    delay: 10
+
+  - name: Assert vLLM Deployment is running
+    ansible.builtin.assert:
+      that:
+      - vllm_deployment_info.resources[0].status.readyReplicas == vllm_deployment_info.resources[0].spec.replicas
+      fail_msg: "vLLM Deployment is not ready."
+
+  - name: Check for vLLM Service
+    community.kubernetes.k8s_info:
+      api_version: v1
+      kind: Service
+      name: vllm-llama-service
+      namespace: default
+    register: vllm_service_info
+    until: vllm_service_info.resources | length > 0
+    retries: 15
+    delay: 10
+
+  - name: Check for InferencePool
+    community.kubernetes.k8s_info:
+      api_version: inference.gke.io/v1
+      kind: InferencePool
+      name: vllm-llama-pool
+      namespace: default
+    register: inference_pool_info
+    until: inference_pool_info.resources | length > 0
+    retries: 15
+    delay: 10
+
+  - name: Check for InferenceObjective
+    community.kubernetes.k8s_info:
+      api_version: inference.gke.io/v1
+      kind: InferenceObjective
+      name: vllm-llama-objective
+      namespace: default
+    register: inference_objective_info
+    until: inference_objective_info.resources | length > 0
+    retries: 15
+    delay: 10
+
+  - name: Check for Gateway
+    community.kubernetes.k8s_info:
+      api_version: gateway.networking.k8s.io/v1beta1
+      kind: Gateway
+      name: inference-gateway
+      namespace: default
+    register: gateway_info
+    until: gateway_info.resources | length > 0
+    retries: 15
+    delay: 10
+
+  - name: Assert Gateway has an address
+    ansible.builtin.assert:
+      that:
+      - gateway_info.resources[0].status.addresses | length > 0
+      fail_msg: "Gateway does not have an assigned address."
+    when: gateway_info.resources | length > 0
+
+  - name: Get Gateway IP address
+    ansible.builtin.set_fact:
+      gateway_ip: "{{ gateway_info.resources[0].status.addresses[0].value }}"
+    when: gateway_info.resources | length > 0
+
+  - name: Check for HTTPRoute
+    community.kubernetes.k8s_info:
+      api_version: gateway.networking.k8s.io/v1beta1
+      kind: HTTPRoute
+      name: vllm-llama-route
+      namespace: default
+    register: http_route_info
+    until: http_route_info.resources | length > 0
+    retries: 15
+    delay: 10
+
+  - name: Wait for Gateway to be ready
+    community.kubernetes.k8s_info:
+      api_version: gateway.networking.k8s.io/v1beta1
+      kind: Gateway
+      name: inference-gateway
+      namespace: default
+    register: gateway_status
+    until:
+    - gateway_status.resources | length > 0
+    - "'Programmed' in gateway_status.resources[0].status.conditions | map(attribute='type') | list"
+    - "gateway_status.resources[0].status.conditions | selectattr('type', 'equalto', 'Programmed') | map(attribute='status') | first == 'True'"
+    retries: 30
+    delay: 10
+
+  - name: Send inference request to vLLM model
+    ansible.builtin.uri:
+      url: "http://{{ gateway_ip }}/generate"
+      method: POST
+      headers:
+        Host: vllm.example.com
+        Content-Type: application/json
+      body_format: json
+      body: '{ "prompt": "Hello, my name is", "max_tokens": 10 }'
+      status_code: 200
+      validate_certs: false # For testing purposes, might need adjustment in production
+    register: inference_response
+    when: gateway_ip is defined
+
+  - name: Print inference response
+    ansible.builtin.debug:
+      var: inference_response
+    when: inference_response is defined
