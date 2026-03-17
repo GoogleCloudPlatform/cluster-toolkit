@@ -33,10 +33,13 @@ deployment_groups:
     settings:
       local_mount: $(vars.gcs_bucket_local_mount)
       random_suffix: true
+      # force_destroy allows the bucket to be destroyed even if it contains objects.
+      # To preserve the bucket please change the below flag to "false".
       force_destroy: true
       storage_class: RAPID
       placement_zones: ["$(vars.zone)"]
       enable_hierarchical_namespace: true
+      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: ["$(vars.zone)"]
         admission_policy: "admit-on-first-miss"

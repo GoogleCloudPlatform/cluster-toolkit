@@ -93,6 +93,7 @@ deployment_groups:
       local_mount: /data
       random_suffix: true
       force_destroy: true
+      # Refer https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache for parameter details
       anywhere_cache:
         zones: [$(vars.zone)]
         ttl: "86400s"
