@@ -20,7 +20,7 @@ deployment_name: a3u-spot-jbvms-{{ build }}
 hostname_prefix: "{{ deployment_name }}-beowulf"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"
-network: "{{ test_name }}-net-0"
+network: "{{ test_name }}"
 remote_node: "{{ hostname_prefix }}-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -32,7 +32,7 @@ custom_vars:
     a3ultra_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   a3u_provisioning_model: SPOT
-  base_network_name: "{{ test_name }}"
