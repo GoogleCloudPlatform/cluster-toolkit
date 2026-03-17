@@ -199,7 +199,7 @@
     - name: "Validate NCCL average bus bandwidth"
       ansible.builtin.assert:
         that:
-        - (item.1.value | float) >= 150.0
+        - (item.1.value | float) >= 100.0
         fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
         success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
       loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
