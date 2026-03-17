@@ -6,13 +6,13 @@ astroid==4.0.3
 attrs==25.4.0
 # This should be supported by zoneinfo in Python 3.9+
 backports.zoneinfo==0.2.1;python_version<"3.9"
-cachetools>=2.0,<7.0
+cachetools>=2.0,<8.0
 certifi==2026.1.4
 cffi>=2.0.0
 cfgv==3.5.0
 charset-normalizer==3.4.4
 click==8.3.1
-crispy-bootstrap5==2025.6
+crispy-bootstrap5==2026.3
 cryptography==46.0.5
 decorator==5.2.1
 defusedxml==0.7.1
@@ -20,12 +20,12 @@ dill==0.4.1
 distlib==0.4.0
 # django-revproxy==0.11.0 released but not yet in pypi
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
-Django==6.0.2
-django-allauth==65.14.0
+Django==6.0.3
+django-allauth==65.14.1
 django-crispy-forms==2.5
 django-extensions==3.2.3
 djangorestframework==3.16.1
-filelock==3.20.3
+filelock>=3.24.2,<4
 google-api-core==2.29.0
 google-api-python-client==2.188.0
 google-auth==2.48.0
@@ -100,7 +100,7 @@ typing_extensions==4.15.0
 uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.40.0
-virtualenv==20.36.1
+virtualenv==21.1.0
 wrapt==2.1.0
 xmltodict==1.0.2
 yq==3.4.3
