@@ -13,7 +13,7 @@ The blueprint automatically configures the following components to enable optima
 
 1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
     1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
-    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install). 
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
 2. **Quota**: Ensure you have sufficient quota for `a3-highgpu-8g` machines in your chosen region.
 3. **IP Address**: You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
 
@@ -57,8 +57,8 @@ Before deploying, fill out the `gke-a3-highgpu-deployment.yaml` file with your p
 
 Depending on your cluster size, refer to one of the following guides to verify GPU and networking performance using NVIDIA `nccl-tests`:
 
-*   **Single-Node (8 GPUs)**: [Single-Node Test Plan](single-node-test-plan.md)
-*   **Multi-Node (16+ GPUs)**: [Multi-Node Test Plan](multi-node-test-plan.md)
+- **Single-Node (8 GPUs)**: [Single-Node Test Plan](single-node-test-plan.md)
+- **Multi-Node (16+ GPUs)**: [Multi-Node Test Plan](multi-node-test-plan.md)
 
 ## Clean Up
 

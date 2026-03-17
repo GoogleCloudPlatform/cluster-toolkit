@@ -5,13 +5,16 @@ This document outlines the step-by-step instructions to validate a multi-node Go
 ## Prerequisites
 
 Connect to your cluster:
+
 ```bash
 gcloud container clusters get-credentials CLUSTER_NAME \
     --location=COMPUTE_REGION
 ```
+
 Replace the following variables:
-*   `CLUSTER_NAME`: the name of your cluster, which, for the clusters created with Cluster Toolkit, is based on the `DEPLOYMENT_NAME`.
-*   `COMPUTE_REGION`: the name of the compute region.
+
+- `CLUSTER_NAME`: the name of your cluster, which, for the clusters created with Cluster Toolkit, is based on the `DEPLOYMENT_NAME`.
+- `COMPUTE_REGION`: the name of the compute region.
 
 Verify that `kueue` components are deployed effectively if using local queues.
 
@@ -26,6 +29,7 @@ kubectl get pods -n kube-system | grep device-injector
 ```
 
 *Example Output:*
+
 ```text
 NAME                  DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
 nccl-tcpx-installer   2         2         2       2            2           <none>          18h
@@ -49,8 +53,10 @@ We use the file `examples/gke-a3-highgpu/nccl-test.yaml` for a multi-node test. 
 > [!NOTE]
 > **Testing > 2 Nodes:**
 > If your cluster has more than 2 nodes and you wish to run the NCCL test across all of them, you must manually update `examples/gke-a3-highgpu/nccl-test.yaml` by duplicating the definitions:
+>
 > 1. Duplicate the `Service` and `Pod` YAML blocks for `nccl-host-2` and `nccl-test-host-2`.
 > 2. Paste them at the end of the file, incrementing the names (e.g., `nccl-host-3` / `nccl-test-host-3`, `nccl-host-4` / `nccl-test-host-4`), up to the number of nodes you want to test.
+
 If you want to test nodes provisioned by Flex Start, you must add the max run duration annotation to the `metadata.annotations` section of **every** `Pod` defined in `examples/gke-a3-highgpu/nccl-test.yaml`:
 
 ```yaml
@@ -64,21 +70,25 @@ metadata:
 ```
 
 Deploy the Test:
+
 ```bash
 kubectl apply -f examples/gke-a3-highgpu/nccl-test.yaml
 ```
 
 Wait for the Pods to start:
+
 ```bash
 kubectl get pods
 ```
 
 *Example Output:*
+
 ```text
 NAME               READY   STATUS    RESTARTS   AGE
 nccl-test-host-1   2/2     Running   0          7m46s
 nccl-test-host-2   2/2     Running   0          7m45s
 ```
+
 You should see all `nccl-test-host-N` pods reach the `Running` state (Wait until `READY` says `2/2`).
 
 ## Step 4: Run the Benchmark and Validate Results
@@ -86,6 +96,7 @@ You should see all `nccl-test-host-N` pods reach the `Running` state (Wait until
 Once both pods are `Running`, you can execute the test suite (which includes `allgather`) by triggering the script on the first host pod.
 
 1. **Execute the test through `nccl-test-host-1`:**
+
     ```bash
     kubectl exec -t nccl-test-host-1 -c nccl-test -- /bin/bash -c "cp /configs/allgather.sh /scripts/allgather.sh"
     kubectl exec -t nccl-test-host-1 -c nccl-test -- /scripts/allgather.sh nccl-host-1 nccl-host-2
@@ -101,6 +112,7 @@ Once both pods are `Running`, you can execute the test suite (which includes `al
     Wait for the benchmark tables to print to your console. Look for the `busbw (GB/s)` column to ensure TCPX networking and the secondary NICs are successfully scaling multi-node traffic.
 
     *Example Output:*
+
     ```text
     nccl-test-host-1:166:207 [0] NCCL INFO NCCL_P2P_PXN_LEVEL set by environment to 0.
     #

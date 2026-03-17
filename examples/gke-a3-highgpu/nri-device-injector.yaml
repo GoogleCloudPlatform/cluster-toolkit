@@ -37,37 +37,37 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-              - matchExpressions:
-                  - key: cloud.google.com/gke-accelerator
-                    operator: In
-                    values:
-                      - nvidia-rtx-pro-6000
-                      - nvidia-h100-80gb
-                      - nvidia-h100-mega-80gb
+            - matchExpressions:
+              - key: cloud.google.com/gke-accelerator
+                operator: In
+                values:
+                - nvidia-rtx-pro-6000
+                - nvidia-h100-80gb
+                - nvidia-h100-mega-80gb
       tolerations:
-        - operator: "Exists"
+      - operator: "Exists"
       hostNetwork: true
       hostPID: true
       containers:
-        - image: "gcr.io/gke-release/nri-device-injector@sha256:6e79483d52abdc28454bf186320b10a56b0f117a10e8d65d5c74dbb821a76970"
-          name: device-injector
-          resources:
-            requests:
-              cpu: 150m
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: dev
-              mountPath: /dev
-            - name: nri
-              mountPath: /var/run/nri
-      volumes:
-        - name: root
-          hostPath:
-            path: /
-        - name: nri
-          hostPath:
-            path: /var/run/nri
+      - image: "gcr.io/gke-release/nri-device-injector@sha256:6e79483d52abdc28454bf186320b10a56b0f117a10e8d65d5c74dbb821a76970"
+        name: device-injector
+        resources:
+          requests:
+            cpu: 150m
+        securityContext:
+          privileged: true
+        volumeMounts:
         - name: dev
-          hostPath:
-            path: /dev
+          mountPath: /dev
+        - name: nri
+          mountPath: /var/run/nri
+      volumes:
+      - name: root
+        hostPath:
+          path: /
+      - name: nri
+        hostPath:
+          path: /var/run/nri
+      - name: dev
+        hostPath:
+          path: /dev
