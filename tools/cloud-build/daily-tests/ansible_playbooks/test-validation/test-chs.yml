@@ -150,8 +150,8 @@
         set -e -u
         chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite lite
       register: chs_run
-      async: 1200
-      poll: 30
+      async: 900
+      poll: 10
       changed_when: false
 
   - name: CHS run output
@@ -208,21 +208,6 @@
       - item.1.key == 'Avg. Bus Bandwidth'
 
   rescue:
-  - name: Find the internal.log for this specific failed run
-    ansible.builtin.shell: |
-      ls -td ~/.local/share/chs/workspaces/*/ | head -n 1
-    register: latest_workspace
-
-  - name: Print the internal.log content
-    ansible.builtin.command: "cat {{ latest_workspace.stdout }}internal.log"
-    register: internal_log_content
-    when: latest_workspace.stdout | length > 0
-
-  - name: Display internal.log
-    ansible.builtin.debug:
-      var: internal_log_content.stdout_lines
-    when: internal_log_content is not skipped
-
   - name: CHS Test Failure
     ansible.builtin.debug:
       msg: "CHS tests failed or timed out. Continuing playbook execution."
@@ -234,7 +219,7 @@
       kubectl delete jobset --all --ignore-not-found
       kubectl delete job --all --ignore-not-found
       kubectl delete pod --all --ignore-not-found
-    async: 600
+    async: 300
     poll: 10
     ignore_errors: true
     when: scheduler == 'gke'
@@ -242,7 +227,7 @@
   - name: Cleanup Slurm resources
     ansible.builtin.shell: |
       scancel -u $(whoami)
-    async: 600
+    async: 300
     poll: 10
     when: scheduler == 'slurm'
     ignore_errors: true
