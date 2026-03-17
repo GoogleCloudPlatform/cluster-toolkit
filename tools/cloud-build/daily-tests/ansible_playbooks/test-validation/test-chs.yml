@@ -141,8 +141,8 @@
         state: directory
         mode: '0700'
       loop:
-        - "{{ ansible_user_dir }}/.enroot/run"
-        - "{{ ansible_user_dir }}/.enroot/cache"
+      - "{{ ansible_user_dir }}/.enroot/run"
+      - "{{ ansible_user_dir }}/.enroot/cache"
       when: scheduler == 'slurm'
 
     - name: "Run CHS lite suite"
