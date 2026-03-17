@@ -28,7 +28,7 @@
       ansible.builtin.file:
         path: "{{ ansible_async_dir }}"
         state: directory
-        mode: '0777'
+        mode: '0700'
       become: true
 
     - name: Set variables for CHS setup
