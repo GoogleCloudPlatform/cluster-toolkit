@@ -353,6 +353,7 @@ variable "cloud_parameters" {
     tree_width              = optional(number)
     prolog_flags            = optional(string)
     switch_type             = optional(string)
+    x11_parameters          = optional(string)
   })
   default  = {}
   nullable = false
