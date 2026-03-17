@@ -70,7 +70,7 @@ locals {
     for index, manifest in local.enabled_manifests : tostring(index) => {
       content = (
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
-        try(manifest.source, "") != "" ? (
+        (manifest.source != null && manifest.source != "") ? (
           # Check if it ends in / OR (It's not a file AND can be searched as a directory)
           endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))) ? (
             join("\n---\n", [
@@ -133,7 +133,7 @@ module "kubectl_apply_manifests" {
   namespace     = each.value.namespace
   atomic        = true
   wait          = each.value.wait_for_rollout
-
+  timeout       = 1200
   values_yaml = [
     yamlencode({
       manifests = [
