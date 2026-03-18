@@ -19,15 +19,19 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = (
-    var.kueue.config_path != null && var.kueue.config_path != "" ?
-    (
+  kueue_config_content = join("\n---\n", compact([
+    try(var.kueue.enable_pathways, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+      pathways_nodepool_name = "cpu-np"
+      pathways_cpu_quota     = 480
+      pathways_memory_quota  = "2000G"
+    }) : "",
+    var.kueue.config_path != null && var.kueue.config_path != "" ? (
       endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
       templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
       file(var.kueue.config_path)
     ) : ""
-  )
-  configure_kueue = local.install_kueue && try(var.kueue.config_path, "") != ""
+  ]))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways, false))
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
