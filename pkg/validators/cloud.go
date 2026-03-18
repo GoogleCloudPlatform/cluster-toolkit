@@ -254,53 +254,74 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// findReservationInOtherZones searches for a reservation by name across all zones
-// in the project, checking both standard and future reservation pools.
-func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
+// Helper interface to treat Standard and Future reservations generically
+type zoneResource interface {
+	GetName() string
+	GetZone() string
+}
+
+// Wrapper for compute.Reservation
+type stdRes struct{ *compute.Reservation }
+
+func (r stdRes) GetName() string { return r.Name }
+func (r stdRes) GetZone() string { return r.Zone }
+
+// Wrapper for compute.FutureReservation
+type futRes struct{ *compute.FutureReservation }
+
+func (r futRes) GetName() string { return r.Name }
+func (r futRes) GetZone() string { return r.Zone }
+
+func extractZonesFromItems[T any](items map[string]T, name string, extractor func(T) []zoneResource) []string {
 	foundInZones := []string{}
-	var err, fErr error
+	for _, scopedList := range items {
+		for _, res := range extractor(scopedList) {
+			if res.GetName() == name {
+				parts := strings.Split(res.GetZone(), "/")
+				foundInZones = append(foundInZones, parts[len(parts)-1])
+			}
+		}
+	}
+	return foundInZones
+}
 
+func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
 	// 1. Search Standard Zonal Reservations
-	aggList, e := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
-	err = e
+	aggList, err := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
 	if err == nil {
-		for _, scopedList := range aggList.Items {
-			for _, res := range scopedList.Reservations {
-				if res.Name == name {
-					parts := strings.Split(res.Zone, "/")
-					foundInZones = append(foundInZones, parts[len(parts)-1])
-				}
+		found := extractZonesFromItems(aggList.Items, name, func(l compute.ReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.Reservations))
+			for i, r := range l.Reservations {
+				res[i] = stdRes{r}
 			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
 		}
 	}
 
-	// 2. Search Future Reservations ONLY if nothing was found in the Standard Pool
-	if len(foundInZones) == 0 {
-		fAggList, fe := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
-		fErr = fe
-		if fErr == nil {
-			for _, scopedList := range fAggList.Items {
-				for _, res := range scopedList.FutureReservations {
-					if res.Name == name {
-						parts := strings.Split(res.Zone, "/")
-						foundInZones = append(foundInZones, parts[len(parts)-1])
-					}
-				}
+	// 2. Search Future Reservations (Early return if Standard found, otherwise search here)
+	fAggList, fErr := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
+	if fErr == nil {
+		found := extractZonesFromItems(fAggList.Items, name, func(l compute.FutureReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.FutureReservations))
+			for i, r := range l.FutureReservations {
+				res[i] = futRes{r}
 			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
 		}
 	}
 
-	// Single exit point for successful findings
-	if len(foundInZones) > 0 {
-		return foundInZones, nil
-	}
-
-	// If both failed and we found nothing, return the last encountered error.
+	// If both failed and we found nothing, return the errors
 	if err != nil || fErr != nil {
 		return nil, fmt.Errorf("failed to list standard reservations: %v; failed to list future reservations: %v", err, fErr)
 	}
 
-	return foundInZones, nil
+	return []string{}, nil
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
