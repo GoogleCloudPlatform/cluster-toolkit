@@ -14,30 +14,24 @@
 
 ---
 tags:
-- m.cloud-storage-bucket
 - gcs-rapid
 - anywhere-cache
-- m.filestore
-- m.gke-cluster
-- m.service-account
-- m.gke-job-template
-- m.gke-node-pool
-- m.gke-persistent-volume
 - m.vpc
-- gke
-
-substitutions:
-  _TEST_PREFIX: "" # Default to no prefix
+- m.cloud-storage-bucket
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
 
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-storage.yaml"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/slurm-rapid-storage.yaml"
 
-## Test GKE
-- id: gke-storage
+## Test SLURM Rapid Storage
+- id: slurm-rapid-storage
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -58,21 +52,8 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/storage-gke.yaml
-
-    # adding vm to act as remote node
-    echo '  - id: remote-node'                     >> $${SG_EXAMPLE}
-    echo '    source: modules/compute/vm-instance' >> $${SG_EXAMPLE}
-    echo '    use: [network1]'                     >> $${SG_EXAMPLE}
-    echo '    settings:'                           >> $${SG_EXAMPLE}
-    echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
-    echo '      zone: us-central1-b'               >> $${SG_EXAMPLE}
-    bash tools/add_ttl_label.sh "$${SG_EXAMPLE}"
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+    BLUEPRINT=examples/rapid-storage-slurm.yaml
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml"
-  secretEnv: ['GCLUSTER_GCS_PATH']
-availableSecrets:
-  secretManager:
-  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
-    env: 'GCLUSTER_GCS_PATH'
+      --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-rapid-storage.yaml"
