@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	blueprintLabel  string = "ghpc_blueprint"
-	deploymentLabel string = "ghpc_deployment"
+	blueprintLabel        = "ghpc_blueprint"
+	deploymentLabel       = "ghpc_deployment"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.23.0"
 )
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
@@ -199,11 +200,11 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 	return map[string]TerraformProvider{
 		"google": {
 			Source:        "hashicorp/google",
-			Version:       ">= 6.9.0, <= 7.21.0",
+			Version:       GoogleProviderVersion,
 			Configuration: gglConf},
 		"google-beta": {
 			Source:        "hashicorp/google-beta",
-			Version:       ">= 6.9.0, <= 7.21.0",
+			Version:       GoogleProviderVersion,
 			Configuration: gglConf}}
 }
 
