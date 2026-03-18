@@ -58,9 +58,11 @@ var (
 )
 
 func init() {
+	addDependenciesFlags(rootCmd.PersistentFlags())
 	addColorFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
+		initDependencies(cmd)
 	}
 }
 

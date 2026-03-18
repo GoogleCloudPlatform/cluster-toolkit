@@ -143,19 +143,19 @@ variable "cloud_dns_config" {
   Configuration for Using Cloud DNS for GKE. 
   
   additive_vpc_scope_dns_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster_dns = "CLOUD_DNS" and cluster_dns_scope = "CLUSTER_SCOPE" must both be set as well.
-  cluster_dns: Which in-cluster DNS provider should be used. PROVIDER_UNSPECIFIED (default) or PLATFORM_DEFAULT or CLOUD_DNS.
+  cluster_dns: Which in-cluster DNS provider should be used. KUBE_DNS (default) or PROVIDER_UNSPECIFIED or PLATFORM_DEFAULT or CLOUD_DNS.
   cluster_dns_scope: The scope of access to cluster DNS records. DNS_SCOPE_UNSPECIFIED (default) or CLUSTER_SCOPE or VPC_SCOPE.
   cluster_dns_domain: The suffix used for all cluster service records.
   EOT
   type = object({
     additive_vpc_scope_dns_domain = optional(string)
-    cluster_dns                   = optional(string, "PROVIDER_UNSPECIFIED")
+    cluster_dns                   = optional(string, "KUBE_DNS")
     cluster_dns_scope             = optional(string, "DNS_SCOPE_UNSPECIFIED")
     cluster_dns_domain            = optional(string)
   })
   default = {
     additive_vpc_scope_dns_domain = null
-    cluster_dns                   = "PROVIDER_UNSPECIFIED"
+    cluster_dns                   = "KUBE_DNS"
     cluster_dns_scope             = "DNS_SCOPE_UNSPECIFIED"
     cluster_dns_domain            = null
   }
@@ -164,8 +164,8 @@ variable "cloud_dns_config" {
     error_message = "For 'additive_vpc_scope_dns_domain' to work cluster_dns = 'CLOUD_DNS' and cluster_dns_scope = 'CLUSTER_SCOPE' must be set."
   }
   validation {
-    condition     = (var.cloud_dns_config.cluster_dns == "PROVIDER_UNSPECIFIED") || (var.cloud_dns_config.cluster_dns == "PLATFORM_DEFAULT") || (var.cloud_dns_config.cluster_dns == "CLOUD_DNS")
-    error_message = "cluster_dns can only be PROVIDER_UNSPECIFIED (default) or PLATFORM_DEFAULT or CLOUD_DNS"
+    condition     = contains(["PROVIDER_UNSPECIFIED", "PLATFORM_DEFAULT", "CLOUD_DNS", "KUBE_DNS"], var.cloud_dns_config.cluster_dns)
+    error_message = "cluster_dns can only be PROVIDER_UNSPECIFIED, PLATFORM_DEFAULT, CLOUD_DNS, or KUBE_DNS"
   }
   validation {
     condition     = (var.cloud_dns_config.cluster_dns_scope == "DNS_SCOPE_UNSPECIFIED") || (var.cloud_dns_config.cluster_dns_scope == "CLUSTER_SCOPE") || (var.cloud_dns_config.cluster_dns_scope == "VPC_SCOPE")
