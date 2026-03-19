@@ -1,7 +1,7 @@
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ResourceFlavor
 metadata:
-  name: cpu-user
+  name: pathways-flavor
 spec:
   nodeLabels:
     cloud.google.com/gke-nodepool: "${pathways_nodepool_name}"
@@ -18,7 +18,7 @@ spec:
   resourceGroups:
   - coveredResources: ["cpu", "memory"]
     flavors:
-    - name: cpu-user
+    - name: pathways-flavor
       resources:
       - name: cpu
         nominalQuota: ${pathways_cpu_quota}
