@@ -421,7 +421,7 @@ resource "google_container_node_pool" "cpu_np" {
     resource_labels = local.labels
     service_account = var.service_account_email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
-    machine_type    = "n2-standard-64"
+    machine_type    = "n4-standard-64"
     image_type      = var.system_node_pool_image_type
 
     shielded_instance_config {
