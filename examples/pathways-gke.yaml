@@ -17,11 +17,15 @@ blueprint_name: pathways-gke
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
+
   deployment_name: pathways-01
-  region: us-central1
+
+  region:
+
   # Cidr block containing the IP of the machine calling terraform.
-  # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
 
 deployment_groups:
 - group: primary
