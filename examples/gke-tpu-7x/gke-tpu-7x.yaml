@@ -167,4 +167,3 @@ deployment_groups:
           accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true
-e
