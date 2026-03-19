@@ -243,6 +243,9 @@ resource "google_container_cluster" "gke_cluster" {
         disabled = false
       }
     }
+    slice_controller_config {
+      enabled = var.enable_slice_controller
+    }
   }
 
   timeouts {
