@@ -40,7 +40,7 @@ locals {
   default_sa_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
   sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
-  # additional VPCs enable multi networking 
+  # additional VPCs enable multi networking
   derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
@@ -401,7 +401,7 @@ resource "google_container_node_pool" "cpu_np" {
   count    = var.enable_pathways ? 1 : 0
 
   project        = var.project_id
-  name           = "cpu-np"
+  name           = "pathways-np"
   cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   node_locations = var.system_node_pool_zones
