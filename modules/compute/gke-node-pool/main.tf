@@ -487,11 +487,11 @@ module "kubectl_apply" {
   cluster_id = var.cluster_id
   project_id = var.project_id
 
-  apply_manifests = flatten([
+  apply_manifests = var.install_gpu_direct_manifests ? flatten([
     for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
       {
         source = manifest
       }
     ]
-  ])
+  ]) : []
 }

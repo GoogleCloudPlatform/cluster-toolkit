@@ -47,7 +47,11 @@ vars:
   static_node_count: 2
 
   # The name of the compute engine reservation in the form of
-  reservation:
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: # add this
+
   accelerator_type: nvidia-h100-80gb
   version_prefix: "1.32."
   nccl_tcpx_version: v3.1.9
@@ -127,6 +131,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
+      install_gpu_direct_manifests: false
       run_workload_script: false
       machine_type: a3-highgpu-8g
       static_node_count: $(vars.static_node_count)
