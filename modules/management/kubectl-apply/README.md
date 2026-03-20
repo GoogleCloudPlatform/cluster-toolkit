@@ -15,9 +15,9 @@ This module simplifies the following functionality:
     * A single URL to a manifest file. Ex.: `https://github.com/.../myrepo/manifest.yaml`.
 
     > **Note:** Applying from a URL has important limitations. Please review the [Considerations & Callouts for Applying from URLs](#applying-manifests-from-urls-considerations--callouts) section below.
-    * A single local YAML manifest file (`.yaml`). Ex.: `./manifest.yaml`.
+    * A single local YAML manifest file (`.yaml` or `.yml`). Ex.: `./manifest.yaml`.
     * A template file (`.tftpl`) to generate a manifest. Ex.: `./template.yaml.tftpl`. You can pass the variables to format the template file in `template_vars`.
-    * A directory containing multiple YAML or template files. Ex: `./manifests/`. You can pass the variables to format the template files in `template_vars`.
+    * A directory containing multiple YAML or template files. Ex: `./manifests/` or `./manifests`. The module correctly identifies directories even if the trailing slash is omitted. For security and stability, the module only processes files with `.yaml`, `.yml`, or `.tftpl` extensions. Other files in the directory (like `README.md` etc. ) are automatically ignored.
 
 #### Manifest Example
 
@@ -165,17 +165,7 @@ To ensure a reliable deployment, you must manually enforce the correct order of 
 
 4. **Run the deployment command again.** Since the CRDs are now guaranteed to exist in the cluster, this second apply will succeed reliably.
 
-#### **2. Large Manifests (CRDs)**
-
-* **Issue:** Applying very large manifests can fail with a `metadata.annotations: Too long` error.
-* **Solution:** Enable Server-Side Apply by setting `server_side_apply: true` for the manifest entry.
-
-#### **3. Conflicts on Re-application**
-
-* **Issue:** Re-running a deployment after a partial failure can cause server-side apply field manager `conflicts`.
-* **Solution:** Forcibly take ownership of the resource fields by setting `force_conflicts: true`.
-
-#### **4. Terraform Template Files (`.tftpl`)**
+#### **2. Terraform Template Files (`.tftpl`)**
 
 * **Limitation:** This module **cannot** render a template file (`.tftpl`) when sourced from a remote URL.
 * **Workaround:** You must render the template into a pure YAML file locally, host that rendered file at a URL, and provide the URL of the rendered file in your blueprint.
