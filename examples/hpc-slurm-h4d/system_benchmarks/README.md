@@ -10,8 +10,7 @@ The workload script automates a three-job Slurm pipeline to verify baseline
 computational performance and interconnect efficiency:
 
 *   **Orchestrator Job:** Isolates the Spack environment and compiles the HPL
-    binary directly on a compute node to ensure OS compatibility (avoiding the
-    Ubuntu/Rocky Linux mismatch).
+    binary directly on a compute node to ensure OS compatibility.
 *   **Workload Job:** Executes the core HPL math benchmark using the underlying
     RDMA hardware for high-bandwidth, low-latency communication.
 *   **Analyzer Job:** Scrapes Slurm logs to extract the final Gflops metric into
@@ -19,12 +18,7 @@ computational performance and interconnect efficiency:
 
 ## Usage
 
-### 1. Install Dependencies (Non-HCS Images Only)
-
-> [!NOTE]
-> All HCS managed HPC images come with these dependencies installed. The
-> installation script is only needed if the cluster is **not** provisioned using
-> HCS managed HPC images.
+### 1. Install Dependencies
 
 The `install-hpl-dependencies.sh` script installs HPL and its dependencies (such
 as Spack, Ramble, GCC 14, and Intel MPI) across all compute nodes in the default
