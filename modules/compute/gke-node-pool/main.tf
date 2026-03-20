@@ -235,17 +235,11 @@ resource "google_container_node_pool" "node_pool" {
       "disable-legacy-endpoints" = "true"
     }
 
-    dynamic "linux_node_config" {
-      for_each = var.linux_node_config != null && (length(try(var.linux_node_config.sysctls, {})) > 0 || try(var.linux_node_config.hugepages_config, null) != null) ? [var.linux_node_config] : []
-      content {
-        sysctls = linux_node_config.value.sysctls
-        dynamic "hugepages_config" {
-          for_each = linux_node_config.value.hugepages_config != null ? [linux_node_config.value.hugepages_config] : []
-          content {
-            hugepage_size_2m = try(hugepages_config.value.hugepage_size_2m, null)
-            hugepage_size_1g = try(hugepages_config.value.hugepage_size_1g, null)
-          }
-        }
+    linux_node_config {
+      sysctls = var.linux_node_config.sysctls
+      hugepages_config {
+        hugepage_size_2m = try(var.linux_node_config.hugepages_config.hugepage_size_2m, null)
+        hugepage_size_1g = try(var.linux_node_config.hugepages_config.hugepage_size_1g, null)
       }
     }
 

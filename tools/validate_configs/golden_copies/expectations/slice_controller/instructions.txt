@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'one' was successfully created in directory golden_copy_deployment/one
+To deploy, run the following commands:
+
+terraform -chdir=golden_copy_deployment/one init
+terraform -chdir=golden_copy_deployment/one validate
+terraform -chdir=golden_copy_deployment/one apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy golden_copy_deployment
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=golden_copy_deployment/one destroy

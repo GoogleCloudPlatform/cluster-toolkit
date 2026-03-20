@@ -522,5 +522,6 @@ variable "linux_node_config" {
       hugepage_size_1g = optional(number)
     }))
   })
-  default = null
+  default  = {}
+  nullable = false
 }
