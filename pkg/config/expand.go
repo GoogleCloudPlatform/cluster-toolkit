@@ -187,7 +187,7 @@ func (bp Blueprint) expandBackend(grp *Group) {
 	}
 }
 
-func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
+func getStandardGoogleConfiguration(bp Blueprint) Dict {
 	gglConf := Dict{}
 	for s, v := range map[string]string{
 		"project": "project_id",
@@ -197,6 +197,11 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 			gglConf = gglConf.With(s, GlobalRef(v).AsValue())
 		}
 	}
+	return gglConf
+}
+
+func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
+	gglConf := getStandardGoogleConfiguration(bp)
 	return map[string]TerraformProvider{
 		"google": {
 			Source:        "hashicorp/google",
@@ -217,6 +222,18 @@ func (bp Blueprint) expandProviders(grp *Group) {
 	pv := &grp.TerraformProviders
 	if defaults == nil {
 		defaults = getDefaultGoogleProviders(bp)
+	} else {
+		// Ensure top-level providers inherit missing blueprint configurations (project, region, zone)
+		// prioritizing user-provided configuration over blueprint defaults.
+		stdConf := getStandardGoogleConfiguration(bp)
+		for name, userProv := range defaults {
+			for _, key := range stdConf.Keys() {
+				if !userProv.Configuration.Has(key) {
+					userProv.Configuration = userProv.Configuration.With(key, stdConf.Get(key))
+				}
+			}
+			defaults[name] = userProv
+		}
 	}
 	if (*pv) == nil {
 		(*pv) = maps.Clone(defaults)
