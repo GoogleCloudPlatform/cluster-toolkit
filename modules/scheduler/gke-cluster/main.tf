@@ -401,7 +401,7 @@ resource "google_container_node_pool" "cpu_np" {
   count    = var.enable_pathways ? 1 : 0
 
   project        = var.project_id
-  name           = "pathways-np"
+  name           = "cpu-np"
   cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   node_locations = var.system_node_pool_zones
