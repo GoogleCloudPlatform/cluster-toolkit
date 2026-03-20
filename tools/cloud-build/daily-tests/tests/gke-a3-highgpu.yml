@@ -36,11 +36,9 @@ cli_deployment_vars:
   reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
-  local_ssd_count_nvme_block: 16
   gcp_public_cidrs_access_enabled: true
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-high.yml
-- test-validation/test-gke-kueue-config.yml

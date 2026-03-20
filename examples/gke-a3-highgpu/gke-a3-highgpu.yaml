@@ -47,11 +47,7 @@ vars:
   static_node_count: 2
 
   # The name of the compute engine reservation in the form of
-  # <reservation-name>
-  # To target a BLOCK_NAME, the name of the extended reservation
-  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
-  # reservation:
-  #placement_policy_name:
+  reservation:
   accelerator_type: nvidia-h100-80gb
   version_prefix: "1.32."
   nccl_tcpx_version: v3.1.9
@@ -110,7 +106,6 @@ deployment_groups:
       network_count: 4
       subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
       mtu: 8244
-      ips_per_nat: 0
 
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
@@ -119,8 +114,6 @@ deployment_groups:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       configure_workload_identity_sa: true
-      enable_gcsfuse_csi: true
-      system_node_pool_zones: [$(vars.zone)]
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
@@ -138,18 +131,13 @@ deployment_groups:
       machine_type: a3-highgpu-8g
       static_node_count: $(vars.static_node_count)
       zones: [$(vars.zone)]
-      # host_maintenance_interval: PERIODIC
-      spot: true
       guest_accelerator:
       - type: $(vars.accelerator_type)
         count: 8
-      # reservation_affinity:
-      #   consume_reservation_type: SPECIFIC_RESERVATION
-      #   specific_reservations:
-      #   - name: $(vars.reservation)
-      # placement_policy:
-      #   type: COMPACT
-      #   name: $(vars.placement_policy_name)
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
     outputs: [instructions]
 
   - id: workload_component_install

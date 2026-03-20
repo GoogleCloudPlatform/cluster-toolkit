@@ -33,37 +33,47 @@
   ansible.builtin.debug:
     msg: "GKE Cluster Version: {{ gke_version_info.stdout }}"
 
-- name: Prepare NCCL test manifest
+- name: Verify TCPX and NRI DaemonSets are fully deployed
   delegate_to: localhost
   ansible.builtin.shell: |
-    cp {{ workspace }}/examples/gke-a3-highgpu/nccl-test.yaml {{ workspace }}/examples/nccl-test.yaml
-    sed -i 's/gke-a3-high/{{ deployment_name }}/g' {{ workspace }}/examples/nccl-test.yaml
-    cat {{ workspace }}/examples/nccl-test.yaml
-  register: nccl_test_file_contents
+    echo "Waiting for nccl-tcpx-installer daemonset..."
+    kubectl rollout status daemonset nccl-tcpx-installer -n kube-system --timeout=1200s
+    echo "Waiting for device-injector daemonset..."
+    kubectl rollout status daemonset device-injector -n kube-system --timeout=1200s
+    kubectl get daemonsets -n kube-system nccl-tcpx-installer device-injector
+  register: daemonset_status
 
-- name: Display NCCL test file
-  debug:
-    msg: "{{ nccl_test_file_contents.stdout }}"
+- name: Print DaemonSet status
+  ansible.builtin.debug:
+    msg: "{{ daemonset_status.stdout }}"
 
-- name: Create NCCL test JobSet
+- name: Verify Kueue Queues are ready
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl apply -f {{ workspace }}/examples/nccl-test.yaml -v=9
+    echo "Checking ClusterQueues and LocalQueues..."
+    kubectl get clusterqueue
+    kubectl get localqueue
+  register: kueue_status
 
-- name: Wait for JobSet to hit 2/2 completions
+- name: Print Kueue Queues status
+  ansible.builtin.debug:
+    msg: "{{ kueue_status.stdout }}"
+
+- name: Deploy NCCL test Pods
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl get jobset nccl-test -o jsonpath='{.status.replicatedJobsStatus[0].succeeded}'
-  register: jobset_status
-  until: jobset_status.stdout == "2"
-  retries: 30
-  delay: 10
+    kubectl apply -f {{ workspace }}/examples/gke-a3-highgpu/nccl-test.yaml -v=9
 
-- name: Fetch logs from the master worker pod
+- name: Wait for NCCL test Pods to be ready
   delegate_to: localhost
   ansible.builtin.shell: |
-    pod_name="$(kubectl get pods --no-headers -o custom-columns="Name:.metadata.name" | awk '{if ($1 ~ "worker-0-0") print $0}')"
-    kubectl logs ${pod_name} -c nccl-test > pod_logs.txt
+    kubectl wait --for=condition=Ready pod/nccl-test-host-1 pod/nccl-test-host-2 --timeout=1200s
+
+- name: Run allgather benchmark on host 1 and fetch logs
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl exec nccl-test-host-1 -c nccl-test -- /bin/bash -c "cp /configs/allgather.sh /scripts/allgather.sh"
+    kubectl exec nccl-test-host-1 -c nccl-test -- /scripts/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
     cat pod_logs.txt
   register: nccl_test_logs
 
@@ -81,4 +91,4 @@
 - name: Clean up
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl delete -f {{ workspace }}/examples/nccl-test.yaml
+    kubectl delete -f {{ workspace }}/examples/gke-a3-highgpu/nccl-test.yaml
