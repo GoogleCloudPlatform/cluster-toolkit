@@ -194,7 +194,8 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
     else:
         api_method = lookup().compute.regionInstances().bulkInsert
         method_args = {"region": lookup().node_region(model)}
-        
+
+        # Implicitly denies zones in zone_deny by excluding them from the allow-list
         body["locationPolicy"] = dict(
             zones = [ { "zone": f"zones/{z}" } for z in zone_allow ],
             targetShape = nodeset.zone_target_shape,
