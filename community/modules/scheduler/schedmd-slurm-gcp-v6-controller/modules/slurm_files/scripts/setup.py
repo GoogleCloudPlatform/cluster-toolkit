@@ -591,10 +591,10 @@ def setup_cloud_ops() -> None:
     # Guard: skip if config is empty or missing the expected slurm receivers structure.
     # This happens when the ops agent is installed with a default empty config (comments only).
     if (
-        not file
-        or not isinstance(file, dict)
-        or not isinstance(file.get("logging"), dict)
-        or "setup" not in file.get("logging", {}).get("receivers", {})
+        not isinstance(file, dict)
+        or not isinstance(logging := file.get("logging"), dict)
+        or not isinstance(receivers := logging.get("receivers"), dict)
+        or "setup" not in receivers
     ):
         log.warning(
             "google-cloud-ops-agent config is missing expected structure, skipping cloud ops customization"
