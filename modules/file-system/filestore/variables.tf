@@ -77,7 +77,7 @@ variable "size_gb" {
 variable "filestore_tier" {
   description = "The service tier of the instance."
   type        = string
-  default     = "BASIC_HDD"
+  default     = "BASIC_SSD"
   validation {
     condition     = var.filestore_tier != "STANDARD"
     error_message = "The preferred name for STANDARD tier is now BASIC_HDD\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
