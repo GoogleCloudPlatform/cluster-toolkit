@@ -67,6 +67,7 @@ steps:
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     BLUEPRINT="/workspace/examples/h4d-vm.yaml"
+    python3 tools/modify_vpc.py "$${BLUEPRINT}"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
     sed -i '/  - id: h4d-vms/,/  - id: wait-for-vms/ { /    settings:/a \
