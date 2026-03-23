@@ -55,6 +55,27 @@ func TestCalculateTPUNodes(t *testing.T) {
 			expectErr:     false,
 		},
 		{
+			name:          "v6e 4 chips per VM",
+			machineType:   "ct6e-standard-4t",
+			topology:      "2x2",
+			expectedNodes: 1, // 4 / 4
+			expectErr:     false,
+		},
+		{
+			name:          "v7x 1 chip per VM test",
+			machineType:   "tpu7x-standard-1t",
+			topology:      "1x1x1",
+			expectedNodes: 1, // 1 / 1
+			expectErr:     false,
+		},
+		{
+			name:          "v7x 4 chip per VM test",
+			machineType:   "tpu7x-standard-4t",
+			topology:      "4x4x4",
+			expectedNodes: 16, // 64 / 4
+			expectErr:     false,
+		},
+		{
 			name:          "not divisible error",
 			machineType:   "ct5p-hightpu-4t",
 			topology:      "2x1x1", // 2 chips

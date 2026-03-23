@@ -115,9 +115,29 @@ func calculateTPUNodes(machineType, topology string) (int, error) {
 	}
 
 	// 2. Identify Chips per VM from machine_type
-	chipsPerVM := 4 // default for v4, v5p
-	if strings.Contains(machineType, "ct5lp") || strings.Contains(machineType, "v5litepod") {
-		chipsPerVM = 8
+	chipsPerVM := 4 // Default for most TPU families (e.g., v4, v5p, v6e)
+
+	// Explicitly check if the machine_type defines chips per VM, e.g., "-1t", "-4t", "-8t"
+	hasExplicitChips := false
+	if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
+		if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil {
+			chipsPerVM = val
+			hasExplicitChips = true
+		}
+	}
+
+	// Fallback to known machine family defaults if no explicit "-Nt" suffix
+	if !hasExplicitChips {
+		familyDefaults := map[string]int{
+			"ct5lp":     8, // Default for TPU v5e when suffix is missing
+			"v5litepod": 8, // Legacy string literal default
+		}
+		for family, defaultChips := range familyDefaults {
+			if strings.Contains(machineType, family) {
+				chipsPerVM = defaultChips
+				break
+			}
+		}
 	}
 
 	// 3. Calculate Nodes
