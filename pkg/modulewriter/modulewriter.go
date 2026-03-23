@@ -241,12 +241,9 @@ func tfDeploymentSource(mod config.Module) (string, error) {
 	case sourcereader.IsEmbeddedPath(mod.Source):
 		return "./modules/" + filepath.Join("embedded", mod.Source), nil
 	case sourcereader.IsLocalPath(mod.Source):
-		abs, err := filepath.Abs(mod.Source)
-		if err != nil {
-			return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
-		}
-		base := filepath.Base(mod.Source)
-		return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+		clean := filepath.Clean(mod.Source)
+		base := filepath.Base(clean)
+		return fmt.Sprintf("./modules/%s-%s", base, shortHash(clean)), nil
 	default:
 		return mod.Source, nil
 	}
