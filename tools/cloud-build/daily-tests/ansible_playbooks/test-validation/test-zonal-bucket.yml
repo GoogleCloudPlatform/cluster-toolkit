@@ -1,0 +1,92 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Get outputs from primary group
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: terraform output -json
+    chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+  register: outputs
+  changed_when: false
+
+- name: Set necessary facts
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    bucket_name: "{{ (outputs.stdout | from_json)['gcs_bucket_name_data-bucket-zonal']['value'] }}"
+    cache_zone: "{{ (lookup('file', blueprint_yaml) | from_yaml)['vars']['zone'] }}"
+    k8s_service_account_name: "{{ (outputs.stdout | from_json)['k8s_service_account_name_gke_cluster']['value'] }}"
+
+- name: Get bucket metadata
+  delegate_to: localhost
+  ansible.builtin.command: gcloud storage buckets describe gs://{{ bucket_name }} --format=json
+  register: bucket_metadata
+  changed_when: false
+
+- name: Assert storage class
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - (bucket_metadata.stdout | from_json)['default_storage_class'] == 'RAPID'
+
+- name: Render FIO Kubernetes Pod manifest
+  ansible.builtin.template:
+    src: fio-test-job.yaml.j2
+    dest: "{{ workspace }}/fio-test-job.yaml"
+  delegate_to: localhost
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+
+- name: Deploy FIO Kubernetes Pod using kubectl apply
+  ansible.builtin.command: kubectl apply -f {{ workspace }}/fio-test-job.yaml
+  delegate_to: localhost
+
+- name: Wait for FIO Pod to complete
+  ansible.builtin.command: kubectl wait --for=condition=Succeeded pod/fio --namespace default --timeout=900s
+  delegate_to: localhost
+  ignore_errors: true # Even if we timeout, continue to next steps
+
+- name: Fetch FIO logs
+  ansible.builtin.command: kubectl logs pod/fio --namespace default
+  register: fio_pod_logs
+  delegate_to: localhost
+
+- name: Delete FIO Pod
+  ansible.builtin.command: kubectl delete pod/fio --namespace default
+  delegate_to: localhost
+  ignore_errors: true
+
+- name: Parse FIO results
+  delegate_to: localhost
+  ansible.builtin.set_fact:
+    fio_results: "{{ fio_pod_logs.stdout | from_json }}"
+
+- name: Print FIO results
+  delegate_to: localhost
+  ansible.builtin.debug:
+    msg:
+    - "fio_results.jobs[0].read.bw_mean: {{ fio_results.jobs[0].read.bw_mean }}"
+    - "Type of bw: {{ fio_results.jobs[0].read.bw_mean | type_debug }}"
+    - "fio_results.jobs[0].read.iops_mean: {{ fio_results.jobs[0].read.iops_mean }}"
+    - "Type of iops: {{ fio_results.jobs[0].read.iops_mean | type_debug }}"
+
+- name: Assert FIO results
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - fio_results.jobs[0].read.bw_mean >= 1000
+    - fio_results.jobs[0].read.iops_mean >= 300
+    fail_msg: "FIO read performance thresholds not met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s (expected >= 1000 KB/s), IOPS: {{ fio_results.jobs[0].read.iops_mean }} (expected >= 300)."
+    success_msg: "FIO read performance thresholds met. Bandwidth: {{ fio_results.jobs[0].read.bw_mean }} KB/s, IOPS: {{ fio_results.jobs[0].read.iops_mean }}."
