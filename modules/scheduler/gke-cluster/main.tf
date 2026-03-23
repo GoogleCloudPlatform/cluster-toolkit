@@ -287,7 +287,7 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition = (
         !var.enable_slice_controller ||
-        try(tonumber(regex("^1\\.([0-9]+)", local.master_version)[0]) >= 35, true)
+        try(tonumber(split(".", local.master_version)[0]) > 1 || (tonumber(split(".", local.master_version)[0]) == 1 && tonumber(split(".", local.master_version)[1]) >= 35), true)
       )
       error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
