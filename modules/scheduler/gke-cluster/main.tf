@@ -284,6 +284,13 @@ resource "google_container_cluster" "gke_cluster" {
       condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
+    precondition {
+      condition = (
+        !var.enable_slice_controller ||
+        try(tonumber(regex("^1\\.([0-9]+)", local.master_version)[0]) >= 35, true)
+      )
+      error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
+    }
   }
 
   monitoring_config {
