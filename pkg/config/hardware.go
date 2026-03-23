@@ -22,6 +22,13 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+const defaultChipsPerVM = 4
+
+var tpuFamilyDefaults = map[string]int{
+	"ct5lp":     8, // Default for TPU v5e when suffix is missing
+	"v5litepod": 8, // Legacy string literal default
+}
+
 func evalString(bp Blueprint, val cty.Value) (string, bool) {
 	ev, err := bp.Eval(val)
 	if err == nil && ev.Type() == cty.String && !ev.IsNull() && ev.IsKnown() {
@@ -115,7 +122,7 @@ func calculateTPUNodes(machineType, topology string) (int, error) {
 	}
 
 	// 2. Identify Chips per VM from machine_type
-	chipsPerVM := 4 // Default for most TPU families (e.g., v4, v5p, v6e)
+	chipsPerVM := defaultChipsPerVM // Default for most TPU families (e.g., v4, v5p, v6e)
 
 	// Explicitly check if the machine_type defines chips per VM, e.g., "-1t", "-4t", "-8t"
 	hasExplicitChips := false
@@ -128,11 +135,7 @@ func calculateTPUNodes(machineType, topology string) (int, error) {
 
 	// Fallback to known machine family defaults if no explicit "-Nt" suffix
 	if !hasExplicitChips {
-		familyDefaults := map[string]int{
-			"ct5lp":     8, // Default for TPU v5e when suffix is missing
-			"v5litepod": 8, // Legacy string literal default
-		}
-		for family, defaultChips := range familyDefaults {
+		for family, defaultChips := range tpuFamilyDefaults {
 			if strings.Contains(machineType, family) {
 				chipsPerVM = defaultChips
 				break
