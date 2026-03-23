@@ -254,25 +254,74 @@ func testZoneInRegion(bp config.Blueprint, inputs config.Dict) error {
 	return TestZoneInRegion(m["project_id"], m["zone"], m["region"])
 }
 
-// findReservationInOtherZones searches for a reservation by name across zones
-// in the project.
-func findReservationInOtherZones(s *compute.Service, projectID string, name string) ([]string, error) {
-	aggList, err := s.Reservations.AggregatedList(projectID).Do()
-	if err != nil {
-		return nil, err
-	}
+// Helper interface to treat Standard and Future reservations generically
+type zoneResource interface {
+	GetName() string
+	GetZone() string
+}
 
+// Wrapper for compute.Reservation
+type stdRes struct{ *compute.Reservation }
+
+func (r stdRes) GetName() string { return r.Name }
+func (r stdRes) GetZone() string { return r.Zone }
+
+// Wrapper for compute.FutureReservation
+type futRes struct{ *compute.FutureReservation }
+
+func (r futRes) GetName() string { return r.Name }
+func (r futRes) GetZone() string { return r.Zone }
+
+func extractZonesFromItems[T any](items map[string]T, name string, extractor func(T) []zoneResource) []string {
 	foundInZones := []string{}
-	for _, scopedList := range aggList.Items {
-		for _, res := range scopedList.Reservations {
-			if res.Name == name {
-				// res.Zone is a full URL, extract just the name (e.g., "us-central1-a")
-				parts := strings.Split(res.Zone, "/")
+	for _, scopedList := range items {
+		for _, res := range extractor(scopedList) {
+			if res.GetName() == name {
+				parts := strings.Split(res.GetZone(), "/")
 				foundInZones = append(foundInZones, parts[len(parts)-1])
 			}
 		}
 	}
-	return foundInZones, nil
+	return foundInZones
+}
+
+func findReservationInOtherZones(ctx context.Context, s *compute.Service, projectID string, name string) ([]string, error) {
+	// 1. Search Standard Zonal Reservations
+	aggList, err := s.Reservations.AggregatedList(projectID).Context(ctx).Do()
+	if err == nil {
+		found := extractZonesFromItems(aggList.Items, name, func(l compute.ReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.Reservations))
+			for i, r := range l.Reservations {
+				res[i] = stdRes{r}
+			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
+		}
+	}
+
+	// 2. Search Future Reservations (Early return if Standard found, otherwise search here)
+	fAggList, fErr := s.FutureReservations.AggregatedList(projectID).Context(ctx).Do()
+	if fErr == nil {
+		found := extractZonesFromItems(fAggList.Items, name, func(l compute.FutureReservationsScopedList) []zoneResource {
+			res := make([]zoneResource, len(l.FutureReservations))
+			for i, r := range l.FutureReservations {
+				res[i] = futRes{r}
+			}
+			return res
+		})
+		if len(found) > 0 {
+			return found, nil
+		}
+	}
+
+	// If both failed and we found nothing, return the errors
+	if err != nil || fErr != nil {
+		return nil, fmt.Errorf("failed to list standard reservations: %v; failed to list future reservations: %v", err, fErr)
+	}
+
+	return []string{}, nil
 }
 
 // TestReservationExists checks if a reservation exists in a project and zone.
@@ -286,21 +335,35 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return handleClientError(err)
 	}
 
-	// 1. Direct check: Try to Get the specific reservation
-	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Do()
+	// 1. Direct check: Try Standard Zonal Reservation
+	_, err = s.Reservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
 	if err == nil {
-		return nil // Success
+		return nil
 	}
 
-	// 2. Access Check: If we can't even reach the project/API, issue soft warning
+	// 2. Fallback: Try Future Reservation (Required for Blackwell/A4 hardware)
+	_, fErr := s.FutureReservations.Get(reservationProjectID, zone, reservationName).Context(ctx).Do()
+	if fErr == nil {
+		return nil
+	}
+
+	// 3. Access Check: If both failed, check for metadata blindness (403/400).
+	// We handle this because users might be allowed to CONSUME but not DESCRIBE a shared reservation.
+	// Case A: Standard API Access Check
 	if msg, isSoft := getSoftWarningMessage(err, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.reservations.get"); isSoft {
 		fmt.Println(msg)
-		return nil // Skip and continue
+		return nil
 	}
 
-	// 3. Diagnostic Search: The reservation was not in the expected zone (404).
+	// Case B: Future API Access Check
+	if msg, isSoft := getSoftWarningMessage(fErr, "test_reservation_exists", reservationProjectID, "Compute Engine API", "compute.futureReservations.get"); isSoft {
+		fmt.Println(msg)
+		return nil
+	}
+
+	// 4. Diagnostic Search: The reservation was not in the expected zone (404).
 	// We try to find where it actually is.
-	foundInZones, aggErr := findReservationInOtherZones(s, reservationProjectID, reservationName)
+	foundInZones, aggErr := findReservationInOtherZones(ctx, s, reservationProjectID, reservationName)
 
 	if aggErr != nil {
 		// If Discovery fails (403/400) and it's a SHARED project, we must skip
@@ -320,7 +383,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return fmt.Errorf("reservation %q not found in project %q and zone %q", reservationName, reservationProjectID, zone)
 	}
 
-	// 4. Resource Found Discovery: If we found it elsewhere, provide a Hard Failure with Hint.
+	// 5. Resource Found Discovery: Provide Hint
 	if len(foundInZones) > 0 {
 		zonesList := strings.Join(foundInZones, ", ")
 		return config.HintError{
@@ -331,7 +394,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		}
 	}
 
-	// 5. Not Found Anywhere: Hard Failure
+	// 6. Not Found Anywhere: Hard Failure
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
 }
 
@@ -368,7 +431,7 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 		targetName = matches[2]
 	}
 
-	// Pass both the owner project and the deployment project
+	// Pass context from the caller to ensure cancellation/timeouts are respected
 	ctx := context.Background()
 	return TestReservationExists(ctx, reservationProjectID, zone, targetName, deploymentProjectID)
 }

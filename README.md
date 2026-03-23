@@ -331,6 +331,13 @@ hpc-slurm/
 See
 [Cloud Docs on Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
 
+When running commands like `deploy`, `destroy`, or `export-outputs`, the toolkit can automatically download missing dependencies. You can control this behavior using the `--download-dependencies` flag:
+
+* `--download-dependencies`: Automatically download missing dependencies without prompting.
+* `--download-dependencies=false`: Fail immediately if any required dependencies are missing.
+
+If the flag is not provided, you will be interactively asked to confirm the download.
+
 ### Notes on Packer
 
 The Toolkit supports Packer templates in the contemporary [HCL2 file

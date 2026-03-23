@@ -48,6 +48,13 @@ resource "google_storage_bucket" "bucket" {
     enabled = var.enable_hierarchical_namespace
   }
 
+  dynamic "custom_placement_config" {
+    for_each = var.placement_zones != null ? [1] : []
+    content {
+      data_locations = var.placement_zones
+    }
+  }
+
   dynamic "autoclass" {
     for_each = var.autoclass.enabled ? [1] : []
     content {
