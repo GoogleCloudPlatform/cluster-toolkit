@@ -212,7 +212,7 @@ variable "enable_ray_operator" {
 variable "enable_dcgm_monitoring" {
   description = "Enable GKE to collect DCGM metrics"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_node_local_dns_cache" {
