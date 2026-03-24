@@ -60,9 +60,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-
-    For versions v1.85.0 and newer (Multi-architecture):
-
+    # For versions v1.85.0 and newer (Multi-architecture):
     # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and Architecture (amd64 or arm64)
@@ -73,9 +71,11 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     unzip gcluster_bundle_${OS}_${ARCH}.zip -d gcluster-bundle/
     cd gcluster-bundle
     chmod +x gcluster
+    ```
 
-    For versions v1.82.0 through v1.84.0:
-
+    ```shell
+    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
+    # For versions v1.82.0 through v1.84.0:
     # Set the desired version TAG (e.g., v1.84.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac)
