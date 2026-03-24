@@ -55,7 +55,8 @@ locals {
     "STORAGE",
     "HPA",
     "CADVISOR",
-    "KUBELET"
+    "KUBELET",
+    "JOBSET"
   ]
 
   default_logging_component = [
@@ -243,6 +244,9 @@ resource "google_container_cluster" "gke_cluster" {
         disabled = false
       }
     }
+    slice_controller_config {
+      enabled = var.enable_slice_controller
+    }
   }
 
   timeouts {
@@ -280,6 +284,13 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
+    }
+    precondition {
+      condition = (
+        !var.enable_slice_controller ||
+        try(tonumber(split(".", local.master_version)[0]) > 1 || (tonumber(split(".", local.master_version)[0]) == 1 && tonumber(split(".", local.master_version)[1]) >= 35), true)
+      )
+      error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
 
