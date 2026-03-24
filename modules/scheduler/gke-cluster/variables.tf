@@ -219,7 +219,7 @@ variable "enable_ray_operator" {
 variable "enable_dcgm_monitoring" {
   description = "Enable GKE to collect DCGM metrics"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_node_local_dns_cache" {
@@ -558,6 +558,12 @@ variable "enable_external_dns_endpoint" {
 
 variable "enable_inference_gateway" {
   description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
+  type        = bool
+  default     = false
+}
+
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
   type        = bool
   default     = false
 }
