@@ -61,6 +61,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
 
     For versions v1.85.0 and newer (Multi-architecture):
+
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
     # Set the desired version TAG (e.g., v1.85.0)
@@ -76,6 +77,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     ```
 
     For versions v1.82.0 through v1.84.0:
+
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
     # Set the desired version TAG (e.g., v1.84.0)
