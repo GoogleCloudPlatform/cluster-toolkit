@@ -555,8 +555,8 @@ variable "enable_inference_gateway" {
   default     = false
 }
 
-variable "enable_pathways" {
-  description = "If true, conditionally deploys a dedicated CPU node pool (pathways-np) using n4-standard-64 instances."
+variable "enable_pathways_for_tpus" {
+  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n2-standard-64 instances."
   type        = bool
   default     = false
 }

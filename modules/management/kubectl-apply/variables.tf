@@ -119,8 +119,8 @@ variable "kueue" {
     install              = optional(bool, false)
     version              = optional(string, "0.13.3")
     config_path          = optional(string, null)
-    config_template_vars = optional(map(any), null)
-    enable_pathways      = optional(bool, false)
+    config_template_vars     = optional(map(any), null)
+    enable_pathways_for_tpus = optional(bool, false)
   })
   default = {}
 }

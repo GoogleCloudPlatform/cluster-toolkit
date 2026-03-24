@@ -399,7 +399,7 @@ resource "google_container_node_pool" "system_node_pools" {
 
 resource "google_container_node_pool" "cpu_np" {
   provider = google-beta
-  count    = var.enable_pathways ? 1 : 0
+  count    = var.enable_pathways_for_tpus ? 1 : 0
 
   project        = var.project_id
   name           = "cpu-np"
