@@ -28,7 +28,7 @@ resource "google_compute_resource_policy" "policy" {
   provider = google-beta
 
   dynamic "workload_policy" {
-    for_each = var.workload_policy.type != null || var.accelerator_topology_mode != null ? [1] : []
+    for_each = var.workload_policy.type != null ? [1] : []
 
     content {
       type                      = var.workload_policy.type
@@ -44,6 +44,13 @@ resource "google_compute_resource_policy" "policy" {
     content {
       collocation  = "COLLOCATED"
       max_distance = var.group_placement_max_distance
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.accelerator_topology_mode == null || var.workload_policy.type != null
+      error_message = "workload_policy.type must be set when accelerator_topology_mode is specified."
     }
   }
 }
