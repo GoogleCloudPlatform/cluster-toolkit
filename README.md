@@ -58,9 +58,11 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 1. Download and extract the bundle:
 
+    > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
+
+    For versions v1.85.0 and newer (Multi-architecture):
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # For versions v1.85.0 and newer (Multi-architecture):
     # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and Architecture (amd64 or arm64)
@@ -73,9 +75,9 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     chmod +x gcluster
     ```
 
+    For versions v1.82.0 through v1.84.0:
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # For versions v1.82.0 through v1.84.0:
     # Set the desired version TAG (e.g., v1.84.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac)
@@ -86,8 +88,6 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     cd gcluster-bundle
     chmod +x gcluster
     ```
-
-    > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
 
 2. Verify the Installation:
 
