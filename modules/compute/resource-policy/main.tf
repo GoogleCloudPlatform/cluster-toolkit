@@ -49,8 +49,8 @@ resource "google_compute_resource_policy" "policy" {
 
   lifecycle {
     precondition {
-      condition     = var.accelerator_topology_mode == null || var.workload_policy.type != null
-      error_message = "workload_policy.type must be set when accelerator_topology_mode is specified."
+      condition     = var.accelerator_topology_mode == null || (var.workload_policy.type != null && var.workload_policy.accelerator_topology != null)
+      error_message = "Both workload_policy.type and workload_policy.accelerator_topology must be set when accelerator_topology_mode is specified."
     }
   }
 }
