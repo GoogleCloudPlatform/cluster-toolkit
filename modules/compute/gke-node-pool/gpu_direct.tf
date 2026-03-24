@@ -90,7 +90,7 @@ locals {
 
 check "gpu_direct_check_multi_vpc" {
   assert {
-    condition     = length(var.additional_networks) >= local.min_additional_networks
+    condition     = local.enable_dranet_actual || length(var.additional_networks) >= local.min_additional_networks
     error_message = "To achieve optimal performance for ${var.machine_type} machine, at least ${local.min_additional_networks} additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as ${local.min_additional_networks}"
   }
 }

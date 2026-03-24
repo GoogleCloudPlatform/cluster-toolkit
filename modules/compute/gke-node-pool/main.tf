@@ -60,7 +60,7 @@ locals {
     contains(local.dranet_supported_machine_types, var.machine_type) ||
     startswith(var.machine_type, "ct6e-")
   )
-  enable_dranet_actual = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible)
+  enable_dranet_actual = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible && length(var.additional_networks) == 0)
 
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
@@ -517,5 +517,12 @@ check "dranet_requirements" {
   assert {
     condition     = var.enable_dranet == true ? (local.is_dranet_compatible && local.is_dranet_supported_machine) : true
     error_message = "DRANET is only supported on GKE version >= 1.34.1-gke.1829001 and specific machine types (e.g. A3/A4/CT6E). Please disable enable_dranet or use a supported version and machine type."
+  }
+}
+
+check "dranet_additional_networks_conflict" {
+  assert {
+    condition     = var.enable_dranet == true ? length(var.additional_networks) == 0 : true
+    error_message = "DRANET automatically configures networks. additional_networks must not be provided when enable_dranet is set to true."
   }
 }
