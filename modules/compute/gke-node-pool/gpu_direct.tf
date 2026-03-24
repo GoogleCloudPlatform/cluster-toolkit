@@ -65,6 +65,23 @@ locals {
   gke_version_parts = regex(local.gke_version_regex, var.gke_version)
   gke_version_major = local.gke_version_parts[0]
 
+  dranet_min_version = "1.34.1-gke.1829001"
+  dranet_min_parts   = regex(local.gke_version_regex, local.dranet_min_version)
+
+  gke_major    = tonumber(split(".", local.gke_version_parts[0])[0])
+  gke_minor    = tonumber(split(".", local.gke_version_parts[0])[1])
+  dranet_major = tonumber(split(".", local.dranet_min_parts[0])[0])
+  dranet_minor = tonumber(split(".", local.dranet_min_parts[0])[1])
+
+  is_dranet_compatible = (
+    local.gke_major > local.dranet_major ||
+    (local.gke_major == local.dranet_major && local.gke_minor > local.dranet_minor) ||
+    (local.gke_major == local.dranet_major && local.gke_minor == local.dranet_minor && (
+      tonumber(local.gke_version_parts[1]) > tonumber(local.dranet_min_parts[1]) ||
+      (local.gke_version_parts[1] == local.dranet_min_parts[1] && tonumber(local.gke_version_parts[2]) >= tonumber(local.dranet_min_parts[2]))
+    ))
+  )
+
   major_minor_version_acceptable_map = try(local.gpu_direct_setting[var.machine_type].major_minor_version_acceptable_map, null)
   minor_version_acceptable           = try(contains(keys(local.major_minor_version_acceptable_map), local.gke_version_major), false) ? local.major_minor_version_acceptable_map[local.gke_version_major] : "1.0.0-gke.0"
   minor_version_acceptable_parts     = regex(local.gke_version_regex, local.minor_version_acceptable)

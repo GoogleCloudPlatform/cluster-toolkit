@@ -496,6 +496,12 @@ variable "enable_numa_aware_scheduling" {
   default     = false
 }
 
+variable "enable_dranet" {
+  type        = bool
+  default     = null
+  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). If null, automatically enabled for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later."
+}
+
 variable "autoscaling_min_node_count" {
   # NOTE: This variable is currently only required for deploying TPU DWS Flex clusters
   description = "Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling_total_min_nodes."

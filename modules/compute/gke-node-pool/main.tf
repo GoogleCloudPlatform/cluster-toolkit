@@ -47,6 +47,21 @@ locals {
     effect = "NO_SCHEDULE"
   }] : []
 
+  is_accelerator = local.has_gpu || module.tpu.is_tpu
+  dranet_supported_machine_types = [
+    "a4x-highgpu-4g",
+    "a4x-highgpu-4g-nolssd",
+    "a4-highgpu-8g",
+    "a3-ultragpu-8g",
+    "a3-highgpu-8g",
+    "a3-megagpu-8g"
+  ]
+  is_dranet_supported_machine = (
+    contains(local.dranet_supported_machine_types, var.machine_type) ||
+    startswith(var.machine_type, "ct6e-")
+  )
+  enable_dranet_actual = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible)
+
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
@@ -60,7 +75,8 @@ locals {
   kubernetes_labels = merge(
     var.kubernetes_labels,
     module.tpu.kubernetes_label,
-    var.enable_queued_provisioning ? { "cloud.google.com/gke-queued" = "true" } : {}
+    var.enable_queued_provisioning ? { "cloud.google.com/gke-queued" = "true" } : {},
+    local.enable_dranet_actual ? { "cloud.google.com/gke-networking-dra-driver" = "true" } : {}
   )
 }
 
@@ -274,6 +290,7 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   network_config {
+    accelerator_network_profile = local.enable_dranet_actual ? "auto" : null
     dynamic "additional_node_network_configs" {
       for_each = var.additional_networks
 
@@ -494,4 +511,11 @@ module "kubectl_apply" {
       }
     ]
   ])
+}
+
+check "dranet_requirements" {
+  assert {
+    condition     = var.enable_dranet == true ? (local.is_dranet_compatible && local.is_dranet_supported_machine) : true
+    error_message = "DRANET is only supported on GKE version >= 1.34.1-gke.1829001 and specific machine types (e.g. A3/A4/CT6E). Please disable enable_dranet or use a supported version and machine type."
+  }
 }
