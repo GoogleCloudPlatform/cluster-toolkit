@@ -51,16 +51,19 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
-| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds. |
+| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
-| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds. |
+| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
 | **Windows** | ❎ | Please [Build from Source](#building-from-source). |
 
 1. Download and extract the bundle:
 
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.82.0)
+
+    For versions v1.85.0 and newer (Multi-architecture):
+
+    # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
     # Set your OS (linux or mac) and Architecture (amd64 or arm64)
     OS="linux"
@@ -70,9 +73,21 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     unzip gcluster_bundle_${OS}_${ARCH}.zip -d gcluster-bundle/
     cd gcluster-bundle
     chmod +x gcluster
+
+    For versions v1.82.0 through v1.84.0:
+
+    # Set the desired version TAG (e.g., v1.84.0)
+    TAG=vX.Y.Z
+    # Set your OS (linux or mac)
+    OS="linux"
+    # Download and extract
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}.zip
+    unzip gcluster_bundle_${OS}.zip -d gcluster-bundle/
+    cd gcluster-bundle
+    chmod +x gcluster
     ```
 
-    > **_NOTE:_** The binary is available starting with version 1.82.0. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
+    > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
 
 2. Verify the Installation:
 
