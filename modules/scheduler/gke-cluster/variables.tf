@@ -554,3 +554,9 @@ variable "enable_inference_gateway" {
   type        = bool
   default     = false
 }
+
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
+  type        = bool
+  default     = false
+}
