@@ -43,14 +43,14 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.29.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.29.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -68,6 +68,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT` and strictly requires both `workload_policy.type` and `accelerator_topology` to be explicitly set. | `string` | `null` | no |
 | <a name="input_group_placement_max_distance"></a> [group\_placement\_max\_distance](#input\_group\_placement\_max\_distance) | The max distance for group placement policy to use for the node pool's nodes. If set it will add a compact group placement policy.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | `number` | `0` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource policy's name. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID for the resource policy. | `string` | n/a | yes |

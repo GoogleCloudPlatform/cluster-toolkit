@@ -63,8 +63,9 @@ variable "workload_policy" {
   nullable = false
 }
 
+
 variable "accelerator_topology_mode" {
-  description = "The accelerator topology mode for the resource policy."
+  description = "The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT` and strictly requires both `workload_policy.type` and `accelerator_topology` to be explicitly set."
   type        = string
   default     = null
 }
