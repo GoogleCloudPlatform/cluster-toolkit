@@ -397,6 +397,18 @@ variable "reservation_affinity" {
   }
 }
 
+variable "reservation_block" {
+  description = "The name of the reservation block."
+  type        = string
+  default     = null
+}
+
+variable "reservation_sub_block" {
+  description = "The name of the reservation sub-block."
+  type        = string
+  default     = null
+}
+
 variable "host_maintenance_interval" {
   description = "Specifies the frequency of planned maintenance events."
   type        = string

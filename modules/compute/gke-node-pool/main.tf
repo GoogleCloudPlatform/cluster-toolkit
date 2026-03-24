@@ -417,6 +417,14 @@ resource "google_container_node_pool" "node_pool" {
       condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
+    precondition {
+      condition     = var.reservation_sub_block == null || var.reservation_sub_block == "" || (data.google_compute_reservation_sub_block.this[0].sub_block_count - data.google_compute_reservation_sub_block.this[0].in_use_count) >= local.requested_nodes
+      error_message = "Insufficient capacity in the specified reservation sub-block."
+    }
+    precondition {
+      condition     = var.reservation_sub_block == null || var.reservation_sub_block == "" || data.google_compute_reservation_sub_block.this[0].health_info[0].health_status == "HEALTHY"
+      error_message = "The targeted reservation sub-block is not HEALTHY."
+    }
   }
 }
 

@@ -49,6 +49,20 @@ data "google_compute_reservation" "specific_reservations" {
   project = each.value.project
 }
 
+data "google_compute_reservation_sub_block" "this" {
+  count = var.reservation_sub_block != null && var.reservation_sub_block != "" ? 1 : 0
+
+  project           = var.project_id
+  zone              = var.zones[0]
+  reservation_name  = local.input_reservation_names[0]
+  reservation_block = var.reservation_block
+  name              = var.reservation_sub_block
+}
+
+locals {
+  requested_nodes = coalesce(var.static_node_count, var.initial_node_count, var.autoscaling_total_max_nodes, 0)
+}
+
 locals {
   generated_guest_accelerator       = module.gpu.machine_type_guest_accelerator
   reservation_resource_api_label    = "compute.googleapis.com/reservation-name"
@@ -96,12 +110,18 @@ locals {
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
     for i, r in local.verified_specific_reservations :
-    length(local.input_reservation_suffixes[i]) > 0 ?
-    format("%s%s", r.name, local.input_reservation_suffixes[i]) :
-    "projects/${r.project}/reservations/${r.name}"
+    var.reservation_sub_block != null && var.reservation_sub_block != "" ?
+    "projects/${r.project}/zones/${r.zone}/reservations/${r.name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
+    (length(local.input_reservation_suffixes[i]) > 0 ?
+      format("%s%s", r.name, local.input_reservation_suffixes[i]) :
+    "projects/${r.project}/reservations/${r.name}")
   ]
 
   # Define a default reservation value if no specific reservations are present
-  specific_reservation_name  = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
-  default_reservation_values = ["projects/${var.project_id}/reservations/${local.specific_reservation_name}"]
+  specific_reservation_name = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
+  default_reservation_values = [
+    var.reservation_sub_block != null && var.reservation_sub_block != "" ?
+    "projects/${var.project_id}/zones/${var.zones[0]}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
+    "projects/${var.project_id}/reservations/${local.specific_reservation_name}"
+  ]
 }
