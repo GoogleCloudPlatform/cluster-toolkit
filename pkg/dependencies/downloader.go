@@ -116,6 +116,11 @@ func extractBinary(body []byte, binaryName string, targetDir string) error {
 			continue // we only want the main executable
 		}
 
+                //Check for directory traversal before joining paths
+                if strings.Contains(file.Name, "..") {
+                    return fmt.Errorf("malicious archive entry: %s", file.Name)
+                }
+
 		cleanFileName := filepath.Base(file.Name)
 		extractedTempPath = filepath.Join(tempDir, cleanFileName)
 		extractedFileName = file.Name
