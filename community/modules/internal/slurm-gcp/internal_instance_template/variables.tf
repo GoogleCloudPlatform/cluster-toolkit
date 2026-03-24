@@ -166,6 +166,36 @@ variable "disk_encryption_key" {
   default     = null
 }
 
+variable "disk_encryption_key_service_account" {
+  description = "The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used."
+  type        = string
+  default     = null
+}
+
+variable "source_image_encryption_key" {
+  description = "The self link of the encryption key that is stored in Google Cloud KMS to use to decrypt the source image"
+  type        = string
+  default     = null
+}
+
+variable "source_image_encryption_key_service_account" {
+  description = "The service account being used for the encryption request for the given KMS key to decrypt the source image. If absent, the Compute Engine default service account is used."
+  type        = string
+  default     = null
+}
+
+variable "source_snapshot_encryption_key" {
+  description = "The self link of the encryption key that is stored in Google Cloud KMS to use to decrypt the source snapshot"
+  type        = string
+  default     = null
+}
+
+variable "source_snapshot_encryption_key_service_account" {
+  description = "The service account being used for the encryption request for the given KMS key to decrypt the source snapshot. If absent, the Compute Engine default service account is used."
+  type        = string
+  default     = null
+}
+
 variable "auto_delete" {
   description = "Whether or not the boot disk should be auto-deleted"
   type        = string
@@ -189,15 +219,21 @@ variable "disk_resource_manager_tags" {
 variable "additional_disks" {
   description = "List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name"
   type = list(object({
-    source                     = optional(string)
-    disk_name                  = optional(string)
-    device_name                = string
-    auto_delete                = bool
-    boot                       = bool
-    disk_size_gb               = optional(number)
-    disk_type                  = optional(string)
-    disk_labels                = map(string)
-    disk_resource_manager_tags = map(string)
+    source                                         = optional(string)
+    disk_name                                      = optional(string)
+    device_name                                    = string
+    auto_delete                                    = bool
+    boot                                           = bool
+    disk_size_gb                                   = optional(number)
+    disk_type                                      = optional(string)
+    disk_labels                                    = map(string)
+    disk_resource_manager_tags                     = map(string)
+    disk_encryption_key                            = optional(string)
+    disk_encryption_key_service_account            = optional(string)
+    source_image_encryption_key                    = optional(string)
+    source_image_encryption_key_service_account    = optional(string)
+    source_snapshot_encryption_key                 = optional(string)
+    source_snapshot_encryption_key_service_account = optional(string)
   }))
   default = []
 }

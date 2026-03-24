@@ -813,3 +813,9 @@ Use `startup_script` of nodeset module instead.
 EOD
   }
 }
+
+variable "slurm_bucket_kms_key" {
+  description = "Customer-managed encryption key self-link to use for the Slurm configuration bucket."
+  type        = string
+  default     = null
+}
