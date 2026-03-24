@@ -16,6 +16,8 @@ package config
 
 import (
 	"testing"
+
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestCalculateTPUNodes(t *testing.T) {
@@ -107,5 +109,108 @@ func TestCalculateTPUNodes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestExtractTopology(t *testing.T) {
+	bp := Blueprint{}
+
+	mod1 := &Module{
+		Settings: Dict{}.With("tpu_topology", cty.StringVal("4x4x4")),
+	}
+	if topo, ok := extractTopology(bp, mod1); !ok || topo != "4x4x4" {
+		t.Errorf("expected 4x4x4, got %v (ok=%v)", topo, ok)
+	}
+
+	pp := cty.ObjectVal(map[string]cty.Value{"tpu_topology": cty.StringVal("2x2x2")})
+	mod2 := &Module{
+		Settings: Dict{}.With("placement_policy", pp),
+	}
+	if topo, ok := extractTopology(bp, mod2); !ok || topo != "2x2x2" {
+		t.Errorf("expected 2x2x2, got %v (ok=%v)", topo, ok)
+	}
+
+	mod3 := &Module{
+		Settings: Dict{},
+	}
+	if topo, ok := extractTopology(bp, mod3); ok {
+		t.Errorf("expected false, got %v", topo)
+	}
+}
+
+func TestInjectCompactPlacementPolicy(t *testing.T) {
+	mod1 := &Module{
+		Settings: Dict{},
+	}
+	injectCompactPlacementPolicy(mod1, "4x4x4")
+	if !mod1.Settings.Has("placement_policy") {
+		t.Fatal("expected placement_policy to be injected")
+	}
+	pp1 := mod1.Settings.Get("placement_policy").AsValueMap()
+	if pp1["type"].AsString() != "COMPACT" {
+		t.Errorf("expected pp type COMPACT, got %v", pp1["type"])
+	}
+	if pp1["tpu_topology"].AsString() != "4x4x4" {
+		t.Errorf("expected pp topology 4x4x4, got %v", pp1["tpu_topology"])
+	}
+
+	ppOrig := cty.ObjectVal(map[string]cty.Value{"foo": cty.StringVal("bar")})
+	mod2 := &Module{
+		Settings: Dict{}.With("placement_policy", ppOrig),
+	}
+	injectCompactPlacementPolicy(mod2, "2x2x2")
+	pp2 := mod2.Settings.Get("placement_policy").AsValueMap()
+	if pp2["type"].AsString() != "COMPACT" || pp2["tpu_topology"].AsString() != "2x2x2" || pp2["foo"].AsString() != "bar" {
+		t.Errorf("mod2 placement policy incorrect: %v", pp2)
+	}
+}
+
+func TestExpandHardwareSettings(t *testing.T) {
+	bp := Blueprint{}
+
+	mod1 := &Module{
+		Settings: Dict{}.
+			With("static_node_count", cty.NumberIntVal(10)).
+			With("machine_type", cty.StringVal("ct6e-standard-4t")).
+			With("tpu_topology", cty.StringVal("2x2")),
+	}
+	err := expandHardwareSettings(bp, mod1)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	count, _ := mod1.Settings.Get("static_node_count").AsBigFloat().Int64()
+	if count != 10 {
+		t.Errorf("expected static_node_count 10, got %d", count)
+	}
+
+	mod2 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("ct6e-standard-4t")).
+			With("tpu_topology", cty.StringVal("2x2")),
+	}
+	err = expandHardwareSettings(bp, mod2)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	count2, _ := mod2.Settings.Get("static_node_count").AsBigFloat().Int64()
+	if count2 != 1 {
+		t.Errorf("expected static_node_count 1, got %d", count2)
+	}
+
+	mod3 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("ct5lp-hightpu-8t")).
+			With("tpu_topology", cty.StringVal("8x16")),
+	}
+	err = expandHardwareSettings(bp, mod3)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	count3, _ := mod3.Settings.Get("static_node_count").AsBigFloat().Int64()
+	if count3 != 16 {
+		t.Errorf("expected static_node_count 16, got %d", count3)
+	}
+	if !mod3.Settings.Has("placement_policy") {
+		t.Errorf("expected placement_policy to be injected for multi-node setups")
 	}
 }
