@@ -250,6 +250,17 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
+  dynamic "node_pool_defaults" {
+    for_each = var.enable_gcfs ? [1] : []
+    content {
+      node_config_defaults {
+        gcfs_config {
+          enabled = true
+        }
+      }
+    }
+  }
+
   node_config {
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot

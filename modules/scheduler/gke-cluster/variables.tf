@@ -185,6 +185,12 @@ variable "enable_gcsfuse_csi" {
   default     = false
 }
 
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level."
+  type        = bool
+  default     = false
+}
+
 variable "enable_persistent_disk_csi" {
   description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
   type        = bool
