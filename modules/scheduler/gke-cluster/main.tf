@@ -55,7 +55,8 @@ locals {
     "STORAGE",
     "HPA",
     "CADVISOR",
-    "KUBELET"
+    "KUBELET",
+    "JOBSET"
   ]
 
   default_logging_component = [
