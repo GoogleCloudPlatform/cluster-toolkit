@@ -57,7 +57,6 @@ Before deploying, fill out the `gke-a3-highgpu-deployment.yaml` file with your p
 
 Depending on your cluster size, refer to one of the following guides to verify GPU and networking performance using NVIDIA `nccl-tests`:
 
-- **Single-Node (8 GPUs)**: [Single-Node Test Plan](single-node-test-plan.md)
 - **Multi-Node (16+ GPUs)**: [Multi-Node Test Plan](multi-node-test-plan.md)
 
 ## Clean Up
