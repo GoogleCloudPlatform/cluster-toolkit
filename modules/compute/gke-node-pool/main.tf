@@ -419,7 +419,7 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
-      error_message = "Super-slicing (PROVISION_ONLY mode) is incompatible with Dynamic Workload Scheduler (queued provisioning). Please disable enable_queued_provisioning."
+      error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
     }
   }
 }

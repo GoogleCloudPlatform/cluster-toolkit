@@ -64,7 +64,7 @@ variable "workload_policy" {
 }
 
 variable "accelerator_topology_mode" {
-  description = "The accelerator topology mode for the resource policy. For Super-slicing, this must be set to 'PROVISION_ONLY'."
+  description = "The accelerator topology mode for the resource policy."
   type        = string
   default     = null
 }
