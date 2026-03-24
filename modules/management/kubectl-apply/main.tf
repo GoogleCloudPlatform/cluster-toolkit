@@ -136,10 +136,8 @@ module "kubectl_apply_manifests" {
   timeout       = 1200
   values_yaml = [
     yamlencode({
-      manifests = [
-        for doc in split("\n---", each.value.content) : trimspace(doc)
-        if length(trimspace(doc)) > 0
-      ]
+      # Pass the entire unbroken string to Helm. Helm will parse inner '---' natively.
+      manifests = length(trimspace(each.value.content)) > 0 ? [each.value.content] : []
     })
   ]
 }
