@@ -30,7 +30,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.23.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.24.0"
 )
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
