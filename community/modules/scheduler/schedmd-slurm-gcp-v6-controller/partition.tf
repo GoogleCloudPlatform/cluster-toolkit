@@ -39,6 +39,12 @@ module "slurm_nodeset_template" {
   additional_disks           = each.value.additional_disks
   bandwidth_tier             = each.value.bandwidth_tier
   can_ip_forward             = each.value.can_ip_forward
+  disk_encryption_key                            = each.value.disk_encryption_key
+  disk_encryption_key_service_account            = each.value.disk_encryption_key_service_account
+  source_image_encryption_key                    = each.value.source_image_encryption_key
+  source_image_encryption_key_service_account    = each.value.source_image_encryption_key_service_account
+  source_snapshot_encryption_key                 = each.value.source_snapshot_encryption_key
+  source_snapshot_encryption_key_service_account = each.value.source_snapshot_encryption_key_service_account
   advanced_machine_features  = each.value.advanced_machine_features
   disk_auto_delete           = each.value.disk_auto_delete
   disk_labels                = each.value.disk_labels

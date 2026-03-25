@@ -24,6 +24,12 @@ module "template" {
   additional_disks           = var.login_nodes.additional_disks
   bandwidth_tier             = var.login_nodes.bandwidth_tier
   can_ip_forward             = var.login_nodes.can_ip_forward
+  disk_encryption_key                            = var.login_nodes.disk_encryption_key
+  disk_encryption_key_service_account            = var.login_nodes.disk_encryption_key_service_account
+  source_image_encryption_key                    = var.login_nodes.source_image_encryption_key
+  source_image_encryption_key_service_account    = var.login_nodes.source_image_encryption_key_service_account
+  source_snapshot_encryption_key                 = var.login_nodes.source_snapshot_encryption_key
+  source_snapshot_encryption_key_service_account = var.login_nodes.source_snapshot_encryption_key_service_account
   advanced_machine_features  = var.login_nodes.advanced_machine_features
   disk_auto_delete           = var.login_nodes.disk_auto_delete
   disk_labels                = var.login_nodes.disk_labels

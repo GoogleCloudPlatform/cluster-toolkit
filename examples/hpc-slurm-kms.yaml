@@ -17,7 +17,7 @@
 blueprint_name: hpc-slurm-kms
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: hpc-toolkit-dev
   deployment_name: hpc-slurm-kms
   region: us-central1
   zone: us-central1-a
@@ -56,8 +56,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       allow_automatic_updates: false
-      disk_encryption_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key"
-      disk_encryption_key_service_account: "my-sa@my-project.iam.gserviceaccount.com"
+      disk_encryption_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -75,7 +74,7 @@ deployment_groups:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
-      disk_encryption_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key"
+      disk_encryption_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -96,7 +95,7 @@ deployment_groups:
       disk_type: pd-balanced
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
-      disk_encryption_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key"
+      disk_encryption_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -111,7 +110,7 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
-      disk_encryption_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key"
+      disk_encryption_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -124,4 +123,5 @@ deployment_groups:
     - slurm_login
     settings:
       enable_controller_public_ips: true
-      slurm_bucket_kms_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-bucket-key"
+      disk_encryption_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"
+      slurm_bucket_kms_key: "projects/hpc-toolkit-dev/locations/global/keyRings/dummy-keyring/cryptoKeys/dummy-key"

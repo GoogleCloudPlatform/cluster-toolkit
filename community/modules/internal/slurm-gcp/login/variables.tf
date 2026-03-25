@@ -54,14 +54,20 @@ variable "login_nodes" {
       network_tier = string
     })))
     additional_disks = optional(list(object({
-      disk_name                  = optional(string)
-      device_name                = optional(string)
-      disk_size_gb               = optional(number)
-      disk_type                  = optional(string)
-      disk_labels                = optional(map(string), {})
-      auto_delete                = optional(bool, true)
-      boot                       = optional(bool, false)
-      disk_resource_manager_tags = optional(map(string), {})
+      disk_name                                      = optional(string)
+      device_name                                    = optional(string)
+      disk_size_gb                                   = optional(number)
+      disk_type                                      = optional(string)
+      disk_labels                                    = optional(map(string), {})
+      auto_delete                                    = optional(bool, true)
+      boot                                           = optional(bool, false)
+      disk_resource_manager_tags                     = optional(map(string), {})
+      disk_encryption_key                            = optional(string)
+      disk_encryption_key_service_account            = optional(string)
+      source_image_encryption_key                    = optional(string)
+      source_image_encryption_key_service_account    = optional(string)
+      source_snapshot_encryption_key                 = optional(string)
+      source_snapshot_encryption_key_service_account = optional(string)
     })), [])
     additional_networks = optional(list(object({
       access_config = optional(list(object({
@@ -132,6 +138,12 @@ variable "login_nodes" {
     tags                 = optional(list(string), [])
     zone                 = optional(string)
     termination_action   = optional(string)
+    disk_encryption_key                            = optional(string)
+    disk_encryption_key_service_account            = optional(string)
+    source_image_encryption_key                    = optional(string)
+    source_image_encryption_key_service_account    = optional(string)
+    source_snapshot_encryption_key                 = optional(string)
+    source_snapshot_encryption_key_service_account = optional(string)
   })
 }
 

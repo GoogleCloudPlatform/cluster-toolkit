@@ -128,6 +128,7 @@ resource "google_compute_instance_from_template" "slurm_instance" {
   }
 
 
+
   lifecycle {
     replace_triggered_by = [null_resource.replace_trigger.id]
   }
