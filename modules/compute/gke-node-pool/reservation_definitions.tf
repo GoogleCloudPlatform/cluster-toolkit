@@ -50,11 +50,27 @@ data "google_compute_reservation" "specific_reservations" {
 }
 
 data "google_compute_reservation_sub_block" "this" {
-  count = var.reservation_sub_block != null && var.reservation_sub_block != "" ? 1 : 0
+  for_each = (
+    (var.enable_slice_controller && var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
+    {
+      for pair in flatten([
+        for zone in try(var.zones, []) : [
+          for i, reservation_name in try(local.input_reservation_names, []) : {
+            key : "${local.input_reservation_projects[i]}/${zone}/${reservation_name}"
+            zone : zone
+            reservation_name : reservation_name
+            project : local.input_reservation_projects[i]
+          }
+        ]
+      ]) :
+      pair.key => pair
+    } :
+    {}
+  )
 
-  project           = var.project_id
-  zone              = var.zones[0]
-  reservation_name  = local.input_reservation_names[0]
+  project           = each.value.project
+  zone              = each.value.zone
+  reservation_name  = each.value.reservation_name
   reservation_block = var.reservation_block
   name              = var.reservation_sub_block
 }
@@ -110,7 +126,7 @@ locals {
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
     for i, r in local.verified_specific_reservations :
-    var.reservation_sub_block != null && var.reservation_sub_block != "" ?
+    (var.enable_slice_controller && var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
     "projects/${r.project}/zones/${r.zone}/reservations/${r.name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
     (length(local.input_reservation_suffixes[i]) > 0 ?
       format("%s%s", r.name, local.input_reservation_suffixes[i]) :
@@ -120,8 +136,9 @@ locals {
   # Define a default reservation value if no specific reservations are present
   specific_reservation_name = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
   default_reservation_values = [
-    var.reservation_sub_block != null && var.reservation_sub_block != "" ?
-    "projects/${var.project_id}/zones/${var.zones[0]}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
+    for zone in try(var.zones, []) :
+    (var.enable_slice_controller && var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
+    "projects/${var.project_id}/zones/${zone}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
     "projects/${var.project_id}/reservations/${local.specific_reservation_name}"
   ]
 }

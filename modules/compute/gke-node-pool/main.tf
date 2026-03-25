@@ -418,12 +418,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
     precondition {
-      condition     = var.reservation_sub_block == null || var.reservation_sub_block == "" || (data.google_compute_reservation_sub_block.this[0].sub_block_count - data.google_compute_reservation_sub_block.this[0].in_use_count) >= local.requested_nodes
-      error_message = "Insufficient capacity in the specified reservation sub-block."
+      condition     = (var.reservation_sub_block == null || var.reservation_sub_block == "") || (var.enable_slice_controller && var.reservation_block != null && var.reservation_block != "")
+      error_message = "reservation_sub_block can only be used when enable_slice_controller is true and reservation_block is set."
     }
     precondition {
-      condition     = var.reservation_sub_block == null || var.reservation_sub_block == "" || data.google_compute_reservation_sub_block.this[0].health_info[0].health_status == "HEALTHY"
-      error_message = "The targeted reservation sub-block is not HEALTHY."
+      condition     = !var.enable_slice_controller || (var.reservation_sub_block == null || var.reservation_sub_block == "") || alltrue([for sb in data.google_compute_reservation_sub_block.this : (sb.sub_block_count - sb.in_use_count) >= local.requested_nodes])
+      error_message = "Insufficient capacity in the specified reservation sub-block(s)."
+    }
+    precondition {
+      condition     = !var.enable_slice_controller || (var.reservation_sub_block == null || var.reservation_sub_block == "") || alltrue([for sb in data.google_compute_reservation_sub_block.this : sb.health_info[0].health_status == "HEALTHY"])
+      error_message = "The targeted reservation sub-block(s) are not HEALTHY."
     }
   }
 }

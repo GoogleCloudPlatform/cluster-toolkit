@@ -409,6 +409,12 @@ variable "reservation_sub_block" {
   default     = null
 }
 
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
+  type        = bool
+  default     = false
+}
+
 variable "host_maintenance_interval" {
   description = "Specifies the frequency of planned maintenance events."
   type        = string
