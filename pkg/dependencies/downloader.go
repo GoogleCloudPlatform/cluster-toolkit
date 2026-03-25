@@ -116,6 +116,13 @@ func extractBinary(body []byte, binaryName string, targetDir string) error {
 			continue // we only want the main executable
 		}
 
+		// Sanitize file name to prevent path traversal (Zip Slip).
+		// See: https://snyk.io/research/zip-slip-vulnerability
+		destPath := filepath.Join(targetDir, file.Name)
+		if !strings.HasPrefix(destPath, filepath.Clean(targetDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("malicious archive entry, path traversal attempt: %s", file.Name)
+		}
+
 		cleanFileName := filepath.Base(file.Name)
 		extractedTempPath = filepath.Join(tempDir, cleanFileName)
 		extractedFileName = file.Name
