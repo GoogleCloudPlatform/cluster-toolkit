@@ -140,7 +140,7 @@ module "instance_template" {
   metadata = merge(
     var.metadata,
     {
-      enable-oslogin      = upper(var.enable_oslogin)
+      enable-oslogin      = var.enable_oslogin ? "TRUE" : "FALSE"
       slurm_bucket_path   = var.slurm_bucket_path
       slurm_cluster_name  = var.slurm_cluster_name
       slurm_instance_role = var.slurm_instance_role

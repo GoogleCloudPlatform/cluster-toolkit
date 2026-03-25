@@ -14,30 +14,24 @@
 
 ---
 tags:
-- m.custom-image
+- gcs-rapid
+- anywhere-cache
+- m.vpc
 - m.cloud-storage-bucket
-- m.pre-existing-network-storage
-- m.filestore
-- m.gpu-rdma-vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.startup-script
-- m.vpc
-- slurm6
-
-substitutions:
-  _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a4-highgpu-slurm.yaml"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/slurm-rapid-storage.yaml"
 
-- id: ml-a4-highgpu-slurm
+## Test SLURM Rapid Storage
+- id: slurm-rapid-storage
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -58,19 +52,8 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=europe-west1
-    ZONE=europe-west1-b
-    BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
-    sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
-    sed -i -e 's/\breservation_name\b/future_reservation/g' $${BLUEPRINT}
-    sed -i -e '/reason:/d' $${BLUEPRINT}
+    BLUEPRINT=examples/rapid-storage-slurm.yaml
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-        --user=sa_106486320838376751393 \
-        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="region=$${REGION} zone=$${ZONE}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4-highgpu-slurm.yml"
-  secretEnv: ['GCLUSTER_GCS_PATH']
-availableSecrets:
-  secretManager:
-  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
-    env: 'GCLUSTER_GCS_PATH'
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-rapid-storage.yaml"
