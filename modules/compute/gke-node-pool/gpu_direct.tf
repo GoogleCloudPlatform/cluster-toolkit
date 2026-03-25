@@ -26,9 +26,9 @@ locals {
     "a3-highgpu-8g" = {
       # Manifest to be installed for enabling TCPX on a3-highgpu-8g machines
       gpu_direct_manifests = [
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-tcpx-installer.yaml",      # nccl_plugin v3.1.9 for tcpx
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
-        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nri_device_injector/nri-device-injector.yaml", # nri_plugin
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/204a57cb807ec5f440811607cead422e3c65d987/gpudirect-tcpx/nccl-tcpx-installer.yaml",      # nccl_plugin v3.1.9 for tcpx
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/204a57cb807ec5f440811607cead422e3c65d987/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
+        "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/204a57cb807ec5f440811607cead422e3c65d987/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
       updated_workload_path   = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
       rxdm_version            = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
