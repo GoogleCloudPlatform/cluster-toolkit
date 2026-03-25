@@ -79,6 +79,13 @@ locals {
   master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
 }
 
+
+module "slice_controller_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = "1.35.0"
+}
+
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
@@ -299,7 +306,7 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition = (
         !var.enable_slice_controller ||
-        try(tonumber(split(".", local.master_version)[0]) > 1 || (tonumber(split(".", local.master_version)[0]) == 1 && tonumber(split(".", local.master_version)[1]) >= 35), true)
+        module.slice_controller_version_check.is_greater_than_or_equal
       )
       error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
