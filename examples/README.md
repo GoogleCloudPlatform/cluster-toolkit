@@ -28,6 +28,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -652,6 +653,18 @@ For this example, the following is needed in the selected region:
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
 
+### [rapid-storage-slurm.yaml] ![core-badge]
+
+This blueprint showcases the integration of several storage solutions:
+
+* **Google Cloud Storage (GCS):**
+  * The `data-bucket-zonal` module defines a GCS bucket configured with the `RAPID` storage class and `enable_hierarchical_namespace: true` for high-performance, zonal storage. More details on the [RAPID Bucket Cloud Docs](https://docs.cloud.google.com/storage/docs/rapid/rapid-bucket).
+  * **Anywhere Cache Support:** This blueprint also highlights support for [Anywhere Cache](https://cloud.google.com/storage/docs/anywhere-cache), a fully managed service that caches Cloud Storage data in Google Cloud. This improves read performance by co-locating cached data with compute resources.
+    * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
+    * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
+
+[rapid-storage-slurm.yaml]: ./rapid-storage-slurm.yaml
+
 ### [gke-managed-lustre.yaml] ![core-badge]
 
 This Cluster Toolkit blueprint deploys a Google Kubernetes Engine (GKE) cluster integrated with Google Cloud Managed Lustre,
@@ -1241,30 +1254,26 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 ### [storage-gke.yaml] ![core-badge]
 
-This blueprint shows how to use different storage options with GKE in the toolkit.
+This blueprint showcases the integration of several storage solutions:
 
-> [!NOTE]
-> This blueprint also demonstrates support for Anywhere Cache. Anywhere Cache is a fully managed service
-> that caches Cloud Storage data in Google Cloud. For each bucket, you can create a maximum of one cache per zone.
-> For example, if a bucket is located in the us-east1 region, you could create a cache in us-east1-b and another cache in us-east1-c.
-> For information on other parameters to enable anywhere cache, see [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache)
-> For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
+* **Google Cloud Storage (GCS):**
+  * The `data-bucket-zonal` module defines a GCS bucket configured with the `RAPID` storage class and `enable_hierarchical_namespace: true` for high-performance, zonal storage. More details on the [RAPID Bucket Cloud Docs](https://docs.cloud.google.com/storage/docs/rapid/rapid-bucket).
+  * **Anywhere Cache Support:** This blueprint also highlights support for [Anywhere Cache](https://cloud.google.com/storage/docs/anywhere-cache), a fully managed service that caches Cloud Storage data in Google Cloud. This improves read performance by co-locating cached data with compute resources.
+    * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
+    * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
 
-The blueprint contains the following:
+* **Filestore:**
+  * A K8s Job utilizes a Filestore instance as another shared filesystem between pods.
+  * The `filestore` module sets up the Filestore instance, and `shared-filestore-pv` configures the Persistent Volume for GKE.
 
-* A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
-* A K8s Job that demonstrates different ephemeral storage options:
-  * memory backed emptyDir
-  * local SSD backed emptyDir
-  * SSD persistent disk backed ephemeral volume
-  * balanced persistent disk backed ephemeral volume
-
-Note that when type `local-ssd` is used, the specified node pool must have
-`local_ssd_count_ephemeral_storage` specified.
-
-When using either `pd-ssd` or `pd-balanced` ephemeral storage, a persistent disk
-will be created when the job is submitted. The disk will be automatically
-cleaned up when the job is deleted.
+* **Ephemeral Storage Options in GKE:**
+  * A dedicated K8s Job (`ephemeral-storage-job`) demonstrates different ephemeral storage types:
+    * **Memory-backed `emptyDir`**: Uses node memory for temporary storage.
+    * **Local SSD-backed `emptyDir`**: Leverages Local SSDs on the node for high-performance ephemeral storage.
+      * **Requirement**: The node pool (`local-ssd-pool`) *must* have `local_ssd_count_ephemeral_storage` specified.
+    * **SSD Persistent Disk (`pd-ssd`) ephemeral volume**: A Persistent Disk is dynamically created and managed for the job's lifecycle.
+    * **Balanced Persistent Disk (`pd-balanced`) ephemeral volume**: Similar to `pd-ssd`, a Persistent Disk is created and cleaned up with the job.
+  * When using `pd-ssd` or `pd-balanced`, a persistent disk is automatically created upon job submission and cleaned up when the job is deleted.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1274,6 +1283,25 @@ cleaned up when the job is deleted.
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+#### Requirements
+
+1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
+    1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
+
+#### Deployment Instructions
+
+1. Update the `vars` block of the blueprint file (`examples/storage-gke.yaml`) with your specific configurations.
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    2. `deployment_name`: Name of the deployment.
+    3. `region` / `zone`: Ensure these map to your intended location.
+    4. `authorized_cidr`: Update to your IP address in `<your-ip-address>/32` format.
+2. Deploy the blueprint using the following command:
+
+   ```shell
+   ./gcluster deploy examples/storage-gke.yaml
+   ```
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 

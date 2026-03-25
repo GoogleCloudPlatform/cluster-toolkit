@@ -30,6 +30,8 @@ CATEGORICAL_TAGS = frozenset([
     "packer", 
     "slurm5", 
     "slurm6", 
+    "gcs-rapid",
+    "anywhere-cache",
     "spack",
     "tpu", 
     "vm",
@@ -76,6 +78,7 @@ def get_blueprint(build_path: str) -> Optional[str]:
         f"{BUILDS_DIR}/slurm-gcp-v6-simple-job-completion.yaml": "tools/python-integration-tests/blueprints/slurm-simple.yaml",
         f"{BUILDS_DIR}/slurm-flex.yaml": "tools/python-integration-tests/blueprints/slurm-flex.yaml",
         f"{BUILDS_DIR}/slurm-gcp-v6-topology.yaml": "tools/python-integration-tests/blueprints/topology-test.yaml",
+        f"{BUILDS_DIR}/slurm-rapid-storage.yaml": "examples/rapid-storage-slurm.yaml",
     }
     if build_path in SPECIAL_CASES:
         return SPECIAL_CASES[build_path]

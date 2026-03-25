@@ -70,7 +70,7 @@ steps:
 
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${SG_EXAMPLE}
-
+    bash tools/add_ttl_label.sh $${SG_EXAMPLE}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-gke-e2e.yml"

@@ -493,13 +493,14 @@ class Switch:
 class Block:
     name: str
     nodes: List[str] = field(default_factory=list)
+    block_uuid: str = field(default_factory=lambda: uuid.uuid4().hex[:7])
 
     def render_yaml_block(self) -> Optional[Dict]:
         if not self.nodes:
             return None
         # uuid used in the unlikely event two unrelated NVLDs have the same hash
         return {
-            "block": f"{self.name[:10]}-{uuid.uuid4().hex[:5]}",
+            "block": f"{self.name[:10]}-{self.block_uuid}",
             "nodes": util.to_hostlist(self.nodes)
         }
 
@@ -556,10 +557,17 @@ class TopologySummary:
         return set(self.physical_host) | self.down_nodes | self.tpu_nodes
 
     def requires_reconfigure(self, prev: "TopologySummary") -> bool:
-        """
+        """Determines if the topology requires a reconfiguration.
+
         Reconfigure IFF one of the following occurs:
         * A node is added
         * A node get a non-empty physicalHost
+
+        Args:
+        prev: The previous TopologySummary to compare against.
+
+        Returns:
+        True if a reconfiguration is required, False otherwise.
         """
         if len(self._nodenames() - prev._nodenames()) > 0:
             return True
@@ -569,6 +577,8 @@ class TopologySummary:
         return False
 
 class TopologyBuilder:
+    """Builds the Slurm topology configuration from node information."""
+
     def __init__(self) -> None:
         self._r = Switch("")  # fake root for switches, not part of the tree
         self._b: defaultdict[str, Dict[str, Block]] = defaultdict(dict)
@@ -594,6 +604,8 @@ class TopologyBuilder:
             b[_SLURM_TOPO_ROOT].setdefault(_SLURM_TOPO_ROOT, Block(_SLURM_TOPO_ROOT)).nodes.extend(nodes)
 
     def render_blocks(self) -> list[Any]:
+        """Renders the blocks/phantom block in yaml format."""
+
         blocks = []
         for block_group_name, nvld_blocks in self._b.items():
             num_blocks = len(nvld_blocks.values())
@@ -632,6 +644,14 @@ class TopologyBuilder:
         return sections
 
     def compress(self) -> "TopologyBuilder":
+        """Compresses the topology tree by renaming switches.
+        This method creates a new TopologyBuilder with a compressed representation
+        of the switch hierarchy, using shorter, generated names for switches
+        in order to prevent hitting a character limit for the topology file.
+
+        Returns:
+            A new TopologyBuilder instance with the compressed topology.
+        """
         compressed = TopologyBuilder()
         compressed.summary = self.summary
         def _walk(
@@ -717,8 +737,15 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
 def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     """
     Generates slurm topology.yaml.
-    Returns whether the topology.yaml got updated.
+    Args:
+        lkp: The Lookup object containing cluster configuration.
+            
+    Returns:
+        A tuple containing:
+        - A boolean indicating whether the topology.yaml requires reconfigure.
+        - A TopologySummary object.
     """
+
     topo = gen_topology(lkp).compress()
     yaml_file = lkp.etc_dir / "cloud_topology.yaml"
     block_is_default = any(lkp.has_block_topology(p) for p in lkp.cfg.partitions.values())
