@@ -25,6 +25,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.85.0"
   }
 }
