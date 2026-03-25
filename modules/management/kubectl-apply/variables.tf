@@ -52,7 +52,7 @@ resource "terraform_data" "kueue_validations" {
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
     }
     precondition {
-      condition     = !try(var.kueue.enable_slice_controller, false) || contains(["0.16.0", "0.15.3", "0.15.2"], var.kueue.version)
+      condition     = !try(var.kueue.enable_slice_controller, false) || try(tonumber(split(".", var.kueue.version)[0]) > 0 || tonumber(split(".", var.kueue.version)[1]) > 15 || (tonumber(split(".", var.kueue.version)[1]) == 15 && tonumber(split(".", var.kueue.version)[2]) >= 2), false)
       error_message = "Kueue version must be >= 0.15.2 to enable the slice controller."
     }
   }

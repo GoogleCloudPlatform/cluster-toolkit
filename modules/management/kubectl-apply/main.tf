@@ -21,7 +21,7 @@ locals {
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   kueue_config_content = join("\n---\n", compact([
     try(var.kueue.enable_slice_controller, false) ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
-      super_slice_topology_name = "default-topology"
+      super_slice_topology_name = "super-slice-topology"
     }) : "",
     var.kueue.config_path != null && var.kueue.config_path != "" ? (
       endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
@@ -140,12 +140,30 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    try(var.kueue.controller_cpu_limit, null) != null || try(var.kueue.controller_memory_limit, null) != null ? yamlencode({
-      controllerManager = {
-        resources = {
-          limits = { for k, v in { cpu = try(var.kueue.controller_cpu_limit, null), memory = try(var.kueue.controller_memory_limit, null) } : k => v if v != null }
+    try(var.kueue.enable_slice_controller, false) || try(var.kueue.controller_cpu_limit, null) != null || try(var.kueue.controller_memory_limit, null) != null ? yamlencode({
+      controllerManager = merge(
+        try(var.kueue.enable_slice_controller, false) ? { replicas = 3 } : {},
+        {
+          manager = {
+            resources = merge(
+              {
+                limits = {
+                  for k, v in {
+                    cpu    = try(var.kueue.enable_slice_controller, false) ? "16" : try(var.kueue.controller_cpu_limit, null)
+                    memory = try(var.kueue.enable_slice_controller, false) ? "64Gi" : try(var.kueue.controller_memory_limit, null)
+                  } : k => v if v != null
+                }
+              },
+              try(var.kueue.enable_slice_controller, false) ? {
+                requests = {
+                  cpu    = "16"
+                  memory = "64Gi"
+                }
+              } : {}
+            )
+          }
         }
-      }
+      )
     }) : ""
   ])
 

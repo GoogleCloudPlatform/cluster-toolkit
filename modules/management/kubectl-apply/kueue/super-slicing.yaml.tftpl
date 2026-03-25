@@ -1,7 +1,7 @@
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: Topology
 metadata:
-  name: ${try(super_slice_topology_name, "default-topology")}
+  name: ${try(super_slice_topology_name, "super-slice-topology")}
 spec:
   levels:
   - nodeLabel: cloud.google.com/gke-nodepool
@@ -10,7 +10,7 @@ spec:
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: AdmissionCheck
 metadata:
-  name: tas-admission-check
+  name: ss-kueue-operator
 spec:
   controllerName: accelerator.gke.io/slice
 ---
@@ -20,4 +20,4 @@ metadata:
   name: cluster-queue
 spec:
   admissionChecks:
-  - tas-admission-check
+  - ss-kueue-operator
