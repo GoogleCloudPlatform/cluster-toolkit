@@ -100,7 +100,7 @@ variable "cluster_id" {
 }
 
 variable "apply_manifests" {
-  description = "A list of manifests to apply to the cluster using helm_install. For more details on the underlying deployment mechanism, see the [helm_install module](helm_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
+  description = "A list of manifests to apply to the GKE cluster using helm_install. For more details on the underlying deployment mechanism, see the [helm_install module](helm_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
   type = list(object({
     enable           = optional(bool, true)
     content          = optional(string, null)
