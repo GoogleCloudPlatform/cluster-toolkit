@@ -21,7 +21,7 @@ locals {
 
   # Note: The apiVersion associated with the Topology kind should be
   # kueue.x-k8s.io/v1beta1 when using v0.14.0 or higher. Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.14.md#api-change
-  kueue_supported_versions = ["0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+  kueue_supported_versions = ["0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0", "0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
@@ -50,6 +50,10 @@ resource "terraform_data" "kueue_validations" {
     precondition {
       condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
+    }
+    precondition {
+      condition     = !try(var.kueue.enable_slice_controller, false) || contains(["0.16.0", "0.15.3", "0.15.2"], var.kueue.version)
+      error_message = "Kueue version must be >= 0.15.2 to enable the slice controller."
     }
   }
 }
@@ -116,10 +120,13 @@ variable "apply_manifests" {
 variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
-    install              = optional(bool, false)
-    version              = optional(string, "0.13.3")
-    config_path          = optional(string, null)
-    config_template_vars = optional(map(any), null)
+    install                 = optional(bool, false)
+    version                 = optional(string, "0.13.3")
+    config_path             = optional(string, null)
+    config_template_vars    = optional(map(any), null)
+    enable_slice_controller = optional(bool, false)
+    controller_cpu_limit    = optional(string, null)
+    controller_memory_limit = optional(string, null)
   })
   default = {}
 }
@@ -133,8 +140,10 @@ variable "gke_cluster_exists" {
 variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "0.10.1")
+    install                 = optional(bool, false)
+    version                 = optional(string, "0.10.1")
+    controller_cpu_limit    = optional(string, null)
+    controller_memory_limit = optional(string, null)
   })
   default = {}
 }

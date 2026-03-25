@@ -19,15 +19,46 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = (
-    var.kueue.config_path != null && var.kueue.config_path != "" ?
-    (
+  kueue_config_content = join("\n---\n", compact([
+    try(var.kueue.enable_slice_controller, false) ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
+      super_slice_topology_name = "default-topology"
+    }) : "",
+    var.kueue.config_path != null && var.kueue.config_path != "" ? (
       endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
       templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
       file(var.kueue.config_path)
     ) : ""
-  )
-  configure_kueue = local.install_kueue && try(var.kueue.config_path, "") != ""
+  ]))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_slice_controller, false))
+
+  kueue_docs        = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+  parsed_kueue_docs = [for doc in [for d in local.kueue_docs : try(yamldecode(d), null)] : doc if doc != null]
+  cluster_queues    = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
+  other_docs        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
+  merged_cluster_queues = {
+    for cq in local.cluster_queues : cq.metadata.name => cq...
+    if try(cq.metadata.name, null) != null
+  }
+  final_cluster_queues = [
+    for name, cqs in local.merged_cluster_queues : {
+      apiVersion = cqs[0].apiVersion
+      kind       = cqs[0].kind
+      metadata   = cqs[0].metadata
+      # Combines multiple specs from identical ClusterQueues.
+      # Utilizes distinct/compact/flatten to safely aggregate admissionChecks natively, while 
+      # unpacking (...) dynamically appends the admissionChecks payload to the parent 
+      # map without destroying unrelated surrounding map keys (e.g. `cohort`).
+      spec = merge(
+        concat(
+          [for cq in cqs : try(cq.spec, {})],
+          [length(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]))) > 0 ? {
+            admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
+          } : {}]
+        )...
+      )
+    }
+  ]
+  final_kueue_manifests = concat([for doc in local.other_docs : yamlencode(doc)], [for doc in local.final_cluster_queues : yamlencode(doc)])
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -107,13 +138,25 @@ module "install_kueue" {
   chart_version    = var.kueue.version
   namespace        = "kueue-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/kueue/kueue-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/kueue/kueue-helm-values.yaml"),
+    try(var.kueue.controller_cpu_limit, null) != null || try(var.kueue.controller_memory_limit, null) != null ? yamlencode({
+      controllerManager = {
+        resources = {
+          limits = { for k, v in { cpu = try(var.kueue.controller_cpu_limit, null), memory = try(var.kueue.controller_memory_limit, null) } : k => v if v != null }
+        }
+      }
+    }) : ""
+  ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
   depends_on = [var.gke_cluster_exists]
+}
+
+resource "time_sleep" "wait_for_kueue_crd" {
+  depends_on      = [module.install_kueue]
+  create_duration = "15s"
 }
 
 module "configure_kueue" {
@@ -128,11 +171,11 @@ module "configure_kueue" {
 
   values_yaml = [
     yamlencode({
-      manifests = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+      manifests = local.final_kueue_manifests
     })
   ]
 
-  depends_on = [module.install_kueue]
+  depends_on = [time_sleep.wait_for_kueue_crd]
 
 }
 
@@ -147,9 +190,16 @@ module "install_jobset" {
   chart_version    = var.jobset.version
   namespace        = "jobset-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/jobset/jobset-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/jobset/jobset-helm-values.yaml"),
+    try(var.jobset.controller_cpu_limit, null) != null || try(var.jobset.controller_memory_limit, null) != null ? yamlencode({
+      controller = {
+        resources = {
+          limits = { for k, v in { cpu = try(var.jobset.controller_cpu_limit, null), memory = try(var.jobset.controller_memory_limit, null) } : k => v if v != null }
+        }
+      }
+    }) : ""
+  ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 

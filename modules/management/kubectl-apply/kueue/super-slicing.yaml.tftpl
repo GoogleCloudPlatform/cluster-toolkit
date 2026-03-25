@@ -1,0 +1,23 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: Topology
+metadata:
+  name: ${try(super_slice_topology_name, "default-topology")}
+spec:
+  levels:
+  - nodeLabel: cloud.google.com/gke-nodepool
+  - nodeLabel: topology.kubernetes.io/zone
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: AdmissionCheck
+metadata:
+  name: tas-admission-check
+spec:
+  controllerName: accelerator.gke.io/slice
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: cluster-queue
+spec:
+  admissionChecks:
+  - tas-admission-check
