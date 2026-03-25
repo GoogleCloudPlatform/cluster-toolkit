@@ -83,7 +83,7 @@ locals {
 module "slice_controller_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
-  minimum_version = "1.35.0"
+  minimum_version = "1.35.0-gke.274500"
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -308,7 +308,7 @@ resource "google_container_cluster" "gke_cluster" {
         !var.enable_slice_controller ||
         module.slice_controller_version_check.is_greater_than_or_equal
       )
-      error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
+      error_message = "The GKE Slice Controller requires a GKE version of 1.35.0-gke.274500 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
 
