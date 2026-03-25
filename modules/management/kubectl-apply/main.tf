@@ -65,32 +65,45 @@ locals {
     if try(manifest.source, null) != null && (startswith(manifest.source, "http://") || startswith(manifest.source, "https://"))
   }
 
-  # 3. Rebuild the map by populating the 'content' field for all manifests
+  # 3. Identify directory-based manifests
+  directory_manifests = {
+    for index, manifest in local.enabled_manifests : index => manifest
+    if try(manifest.source, null) != null &&
+    !contains(keys(local.url_manifests), index) &&
+    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
+  }
+
+  # 4. Rebuild the map by populating the 'content' field for all manifests
   processed_apply_manifests_map = tomap({
     for index, manifest in local.enabled_manifests : tostring(index) => {
       content = (
+        # Step A: Use the fetched body if it's a URL
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
+
+        # Step B: Process directory files 
+        contains(keys(local.directory_manifests), index) ? (
+          join("\n---\n", [
+            # Use union() to combine the results of fileset (which are sets)
+            for f in union(
+              fileset(manifest.source, "*.yaml"),
+              fileset(manifest.source, "*.yml"),
+              fileset(manifest.source, "*.tftpl")
+              ) : (
+              endswith(f, ".tftpl") ?
+              templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
+              file("${trimsuffix(manifest.source, "/")}/${f}")
+            )
+          ])
+        ) :
+        # Step C: Single file logic (implied if source is provided but not a URL or Dir)
         (manifest.source != null && manifest.source != "") ? (
-          # Check if it ends in / OR (It's not a file AND can be searched as a directory)
-          endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))) ? (
-            join("\n---\n", [
-              # Use union() to combine the results of fileset (which are sets)
-              for f in union(
-                fileset(manifest.source, "*.yaml"),
-                fileset(manifest.source, "*.yml"),
-                fileset(manifest.source, "*.tftpl")
-                ) : (
-                endswith(f, ".tftpl") ?
-                templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
-                file("${trimsuffix(manifest.source, "/")}/${f}")
-              )
-            ])
-            ) : (
-            endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
-            templatefile(manifest.source, try(manifest.template_vars, {})) :
-            file(manifest.source)
-          )
-        ) : coalesce(manifest.content, "")
+          endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
+          templatefile(manifest.source, try(manifest.template_vars, {})) :
+          file(manifest.source)
+        )
+        :
+        # Step D: Fallback to the raw 'content' field
+        coalesce(manifest.content, "")
       )
       wait_for_rollout = manifest.wait_for_rollout
       namespace        = manifest.namespace
