@@ -67,7 +67,7 @@ variable "local_mount" {
 variable "size_gb" {
   description = "Storage size of the filestore instance in GB."
   type        = number
-  default     = 1024
+  default     = 2560
   validation {
     condition     = var.size_gb >= 1024
     error_message = "No Filestore tier supports less than 1024GiB.\nSee https://cloud.google.com/filestore/docs/service-tiers."
