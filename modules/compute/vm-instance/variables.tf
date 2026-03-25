@@ -135,6 +135,12 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "location_hint" {
+  description = "A hint to the system to indicate where the resources should be provisioned."
+  type        = string
+  default     = null
+}
+
 variable "labels" {
   description = "Labels to add to the instances. Key-value pairs."
   type        = map(string)
