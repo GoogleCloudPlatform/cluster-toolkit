@@ -179,11 +179,18 @@ variable "enable_filestore_csi" {
   default     = false
 }
 
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level."
+  type        = bool
+  default     = false
+}
+
 variable "enable_gcsfuse_csi" {
   description = "The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes."
   type        = bool
   default     = false
 }
+
 
 variable "enable_persistent_disk_csi" {
   description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
@@ -557,6 +564,8 @@ variable "enable_inference_gateway" {
 
 variable "enable_pathways_for_tpus" {
   description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n2-standard-64 instances."
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
   type        = bool
   default     = false
 }

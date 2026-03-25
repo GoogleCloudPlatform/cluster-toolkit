@@ -110,16 +110,16 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.13 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.13 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.20.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.20.0 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 2.36 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.13 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.13 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
 
 ## Modules
 
@@ -156,6 +156,7 @@ limitations under the License.
 | <a name="input_enable_dcgm_monitoring"></a> [enable\_dcgm\_monitoring](#input\_enable\_dcgm\_monitoring) | Enable GKE to collect DCGM metrics | `bool` | `true` | no |
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
+| <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
@@ -170,6 +171,7 @@ limitations under the License.
 | <a name="input_enable_private_nodes"></a> [enable\_private\_nodes](#input\_enable\_private\_nodes) | (Beta) Whether nodes have internal IP addresses only. | `bool` | `true` | no |
 | <a name="input_enable_ray_operator"></a> [enable\_ray\_operator](#input\_enable\_ray\_operator) | The status of the Ray operator addon, This feature enables Kubernetes APIs for managing and scaling Ray clusters and jobs. You control and are responsible for managing ray.io custom resources in your cluster. This feature is not compatible with GKE clusters that already have another Ray operator installed. Supports clusters on Kubernetes version 1.29.8-gke.1054000 or later. | `bool` | `false` | no |
 | <a name="input_enable_shielded_nodes"></a> [enable\_shielded\_nodes](#input\_enable\_shielded\_nodes) | Enable Shielded Nodes features on all nodes in this cluster. | `bool` | `true` | no |
+| <a name="input_enable_slice_controller"></a> [enable\_slice\_controller](#input\_enable\_slice\_controller) | Enables the GKE Slice Controller for Super-slicing topologies. | `bool` | `false` | no |
 | <a name="input_gcp_public_cidrs_access_enabled"></a> [gcp\_public\_cidrs\_access\_enabled](#input\_gcp\_public\_cidrs\_access\_enabled) | Whether the cluster master is accessible via all the Google Compute Engine Public IPs. To view this list of IP addresses look here https://cloud.google.com/compute/docs/faq#find_ip_range | `bool` | `false` | no |
 | <a name="input_k8s_network_names"></a> [k8s\_network\_names](#input\_k8s\_network\_names) | Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values. | <pre>object({<br/>    gvnic_prefix      = optional(string, "")<br/>    gvnic_start_index = optional(number, 1)<br/>    gvnic_postfix     = optional(string, "")<br/>    rdma_prefix       = optional(string, "")<br/>    rdma_start_index  = optional(number, 0)<br/>    rdma_postfix      = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "gvnic_postfix": "",<br/>  "gvnic_prefix": "gvnic-",<br/>  "gvnic_start_index": 1,<br/>  "rdma_postfix": "",<br/>  "rdma_prefix": "rdma-",<br/>  "rdma_start_index": 0<br/>}</pre> | no |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name to use with the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |
