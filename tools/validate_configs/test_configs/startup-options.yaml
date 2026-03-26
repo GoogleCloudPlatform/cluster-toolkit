@@ -52,7 +52,7 @@ deployment_groups:
     use: [network1]
     settings:
       name_prefix: explicit
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
       startup_script: $(startup.startup_script)
 
   - id: instance-no-startup
@@ -60,20 +60,20 @@ deployment_groups:
     use: [network1]
     settings:
       name_prefix: no-startup
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
 
   - id: instance-use-startup
     source: modules/compute/vm-instance
     use: [network1, startup]
     settings:
       name_prefix: use-startup
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
 
   - id: instance-metadata-startup
     source: modules/compute/vm-instance
     use: [network1]
     settings:
       name_prefix: metadata-startup
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
       metadata:
         startup-script: $(startup.startup_script)

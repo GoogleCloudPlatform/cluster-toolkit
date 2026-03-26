@@ -54,7 +54,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network]
     settings:
-      system_node_pool_machine_type: "e2-standard-4"
+      system_node_pool_machine_type: "n4-standard-4"
       system_node_pool_node_count:
         total_min_nodes: 1
         total_max_nodes: 1000
