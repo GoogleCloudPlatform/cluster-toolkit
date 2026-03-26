@@ -569,6 +569,7 @@ variable "auto_monitoring_scope" {
   validation {
     condition     = contains(["ALL", "NONE"], var.auto_monitoring_scope)
     error_message = "auto_monitoring_scope can only be ALL or NONE."
+  }
 }
 
 variable "enable_slice_controller" {
