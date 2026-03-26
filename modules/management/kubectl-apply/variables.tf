@@ -116,13 +116,14 @@ variable "apply_manifests" {
 variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
-    install                 = optional(bool, false)
-    version                 = optional(string, "0.13.3")
-    config_path             = optional(string, null)
-    config_template_vars    = optional(map(any), null)
-    enable_slice_controller = optional(bool, false)
-    controller_cpu_limit    = optional(string, null)
-    controller_memory_limit = optional(string, null)
+    install                  = optional(bool, false)
+    version                  = optional(string, "0.13.3")
+    config_path              = optional(string, null)
+    config_template_vars     = optional(map(any), null)
+    enable_slice_controller  = optional(bool, false)
+    controller_cpu_limit     = optional(string, null)
+    controller_memory_limit  = optional(string, null)
+    enable_pathways_for_tpus = optional(bool, false)
   })
   default = {}
 }
