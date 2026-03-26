@@ -1,11 +1,11 @@
 #!/bin/bash
 # Copyright 2025 Google LLC
 # This script installs HPL and its dependencies on a cluster of VMs.
-# All HCS managed HPC images will come with these dependencies installed.
-# This script is only needed if the cluster is provisioned using non-HCS managed HPC images.
+# All Cluster Director managed HPC images will come with these dependencies installed.
+# This script is only needed if the cluster is provisioned using non-Cluster Director managed HPC images.
 set -e
 
-INSTALL_SCRIPT="$HOME/install-hpl-dependencies.sh"
+INSTALL_SCRIPT="$HOME/install_hpc_stack_payload.sh"
 
 echo "Creating installation payload at $INSTALL_SCRIPT..."
 
@@ -18,13 +18,13 @@ INSTALL_DIR="/opt"
 SOURCE_MIRROR_DIR="/opt/source-code-mirror"
 
 mkdir -p ${INSTALL_DIR}/spack ${INSTALL_DIR}/ramble ${SOURCE_MIRROR_DIR}
-chmod 777 ${INSTALL_DIR}/spack ${INSTALL_DIR}/ramble ${SOURCE_MIRROR_DIR}
+chmod 755 ${INSTALL_DIR}/spack ${INSTALL_DIR}/ramble ${SOURCE_MIRROR_DIR}
 
 if [ ! -d "${INSTALL_DIR}/spack/.git" ]; then
     git clone -c feature.manyFiles=true https://github.com/spack/spack.git ${INSTALL_DIR}/spack
 fi
 if [ ! -d "${INSTALL_DIR}/ramble/.git" ]; then
-    git clone https://github.com/GoogleCloudPlatform/ramble.git ${INSTALL_DIR}/ramble
+    git clone -b v0.6.0 https://github.com/GoogleCloudPlatform/ramble.git ${INSTALL_DIR}/ramble
 fi
 
 source ${INSTALL_DIR}/spack/share/spack/setup-env.sh

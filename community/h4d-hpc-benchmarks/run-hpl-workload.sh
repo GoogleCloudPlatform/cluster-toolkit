@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 # OPTIMIZED FOR: AMD H4D Nodes
 # USAGE: `chmod +x run-hpl-workload.sh && ./run-hpl-workload.sh [tcp|rxm] [n_nodes]`
 set -eu
@@ -22,21 +22,33 @@ case "$PROVIDER" in
     "rxm")
         PROVIDER_NAME="RXM (ofi_rxm)"
         MPI_FABRICS="shm:ofi"
-        NET_ENV_BLOCK=$(cat <<END
-export FI_PROVIDER="verbs;ofi_rxm"
-export FI_VERBS_IFACE=rdma0
-export FI_VERBS_MR_CACHE_ENABLE=1
-export FI_LOG_LEVEL=error
+        ENV_VARS_BLOCK=$(cat <<END
+  env_vars:
+    set:
+      I_MPI_FABRICS: "shm:ofi"
+      FI_PROVIDER: "verbs;ofi_rxm"
+      FI_VERBS_IFACE: "rdma0"
+      FI_VERBS_MR_CACHE_ENABLE: "1"
+      FI_LOG_LEVEL: "error"
+      OMP_NUM_THREADS: "{n_threads}"
+      OMP_PROC_BIND: "TRUE"
+      OMP_PLACES: "cores"
 END
 )
         ;;
     "tcp")
         PROVIDER_NAME="TCP"
         MPI_FABRICS="shm:ofi"
-        NET_ENV_BLOCK=$(cat <<END
-export FI_PROVIDER=tcp
-export FI_TCP_IFACE=ens8
-export FI_LOG_LEVEL=error
+        ENV_VARS_BLOCK=$(cat <<END
+  env_vars:
+    set:
+      I_MPI_FABRICS: "shm:ofi"
+      FI_PROVIDER: "tcp"
+      FI_TCP_IFACE: "ens8"
+      FI_LOG_LEVEL: "error"
+      OMP_NUM_THREADS: "{n_threads}"
+      OMP_PROC_BIND: "TRUE"
+      OMP_PLACES: "cores"
 END
 )
         ;;
@@ -51,9 +63,8 @@ cat <<EOF
 HPL Cluster Run: ORCHESTRATOR (${PROVIDER_NAME})
 =========================================================
 Workspace:      ${TEST_DIR}
-Target Nodes:   ${N_NODES} Node(s) (h4d-highmem-192)
+Target Nodes:   ${N_NODES} Node(s) (h4d-standard-192/h4d-highmem-192/h4d-highmem-192-lssd)
 Build OS:       Targeting Compute Node (Rocky Linux)
-Network Fabric: ${MPI_FABRICS}
 =========================================================
 EOF
 
@@ -64,7 +75,10 @@ cat <<EOF >"${TEST_DIR}"/configs_staging/ramble.yaml
 ramble:
   variants:
     package_manager: spack
+${ENV_VARS_BLOCK}
   variables:
+    batch_submit: 'sbatch {execute_experiment}'
+
     # Define MPI implementation for Spack
     mpi_pkg_spec: intel-oneapi-mpi@2021.17.2
 
@@ -77,6 +91,7 @@ ramble:
       --cpu-bind=cores
       --distribution=block:block
     mpi_command: srun {mpirun_args}
+
 
   applications:
     hpl:
@@ -140,17 +155,8 @@ source /opt/spack/share/spack/setup-env.sh
 spack load hpl ^amdblis ^{mpi_pkg_spec} %gcc@14
 spack load {mpi_pkg_spec} %gcc@14
 
-# NETWORK TUNING
-export I_MPI_FABRICS=${MPI_FABRICS}
-${NET_ENV_BLOCK}
-
-# OPTIMIZATION FOR AMD ZEN
-export OMP_NUM_THREADS={n_threads}
-export OMP_PROC_BIND=TRUE
-export OMP_PLACES=cores
-
 echo "--- Starting HPL workload (${PROVIDER}) ---"
-{mpi_command} "{hpl_path}"
+{mpi_command} "{hpl_path}" 2>&1 | tee "{log_file}"
 EOF
 
 # Create analyzer script
@@ -163,6 +169,7 @@ cat <<EOF >"${TEST_DIR}"/launch_analyzer.sh
 
 echo "--- Phase 4: Analyzing Results ---"
 cd "${TEST_DIR}"
+
 
 echo "Extracting HPL results directly from Slurm logs..."
 echo -e "Experiment\tN\tNB\tP\tQ\tTime(s)\tGflops" > summary.tsv
@@ -197,6 +204,9 @@ echo "--- Starting Orchestrator on \$(hostname) ---"
 # Phase 1: Environment Setup
 source "\${SPACK_ROOT}/share/spack/setup-env.sh"
 source "\${RAMBLE_ROOT}/share/ramble/setup-env.sh"
+if ! spack find -l | grep -q gcc@14.3.0; then
+  spack load gcc@14.3.0
+fi
 
 cd "${TEST_DIR}"
 ramble workspace create -a -d .
@@ -286,10 +296,10 @@ echo "  Orchestrator Job Submitted: $JOB_ID"
 echo "  Provider: $PROVIDER_NAME"
 echo "========================================================="
 echo "1. Monitoring Build: "
-echo "   tail -f ${TEST_DIR}/logs/orchestrator_${JOB_ID}.out"
+echo "tail -f ${TEST_DIR}/logs/orchestrator_${JOB_ID}.out"
 echo "2. Check queue: watch squeue -u \$(whoami)"
 echo "3. Monitor workload execution (Note: File appears after build completes):"
-echo "   tail -f ${TEST_DIR}/experiments/hpl/calculator/hpl-${PROVIDER}-${N_NODES}-nodes/slurm-*.out"
+echo "tail -f ${TEST_DIR}/experiments/hpl/calculator/hpl-${PROVIDER}-${N_NODES}-nodes/slurm-*.out"
 echo "4. Once complete, your results will be automatically parsed to:"
 echo "   ${TEST_DIR}/summary.tsv"
 echo "========================================================="
