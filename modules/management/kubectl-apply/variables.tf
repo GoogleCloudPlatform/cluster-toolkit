@@ -203,7 +203,7 @@ variable "asapd_lite" {
   description = "Install the asapd-lite daemonset for A4X-Max Bare Metal."
   type = object({
     install              = optional(bool, false)
-    config_path          = optional(string, "")
+    config_path          = optional(string, null)
     config_template_vars = optional(map(any), {})
   })
   default = {}
