@@ -23,7 +23,8 @@ def modify_vpcs(blueprint_path):
         yaml.dump(data, f, sort_keys=False)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <blueprint_path>", file=sys.stderr)
         sys.exit(1)
     modify_vpcs(sys.argv[1])
 
