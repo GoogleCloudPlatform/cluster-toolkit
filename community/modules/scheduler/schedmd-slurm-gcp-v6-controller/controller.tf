@@ -40,12 +40,13 @@ locals {
   ]
 
   state_disk = var.controller_state_disk != null ? [{
-    source              = google_compute_disk.controller_disk[0].name
-    device_name         = google_compute_disk.controller_disk[0].name
-    disk_labels         = null
-    auto_delete         = false
-    boot                = false
-    disk_encryption_key = var.disk_encryption_key
+    source                              = google_compute_disk.controller_disk[0].name
+    device_name                         = google_compute_disk.controller_disk[0].name
+    disk_labels                         = null
+    auto_delete                         = false
+    boot                                = false
+    disk_encryption_key                 = var.disk_encryption_key
+    disk_encryption_key_service_account = var.disk_encryption_key_service_account
   }] : []
 
   synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"

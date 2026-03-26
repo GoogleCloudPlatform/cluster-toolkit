@@ -120,15 +120,6 @@ resource "google_compute_instance_from_template" "slurm_instance" {
   # we have to explicitly override instance labels instead of inheriting them from template.
   labels = data.google_compute_instance_template.base.labels
 
-  dynamic "boot_disk" {
-    for_each = [for d in data.google_compute_instance_template.base.disk : d if d.boot]
-    content {
-      kms_key_self_link = try(boot_disk.value.disk_encryption_key[0].kms_key_self_link, null)
-    }
-  }
-
-
-
   lifecycle {
     replace_triggered_by = [null_resource.replace_trigger.id]
   }

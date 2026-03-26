@@ -1,435 +1,432 @@
-# Google Cluster Toolkit (formerly HPC Toolkit)
+# terraform-docs
 
-## Description
+[![Build Status](https://github.com/terraform-docs/terraform-docs/workflows/ci/badge.svg)](https://github.com/terraform-docs/terraform-docs/actions) [![GoDoc](https://pkg.go.dev/badge/github.com/terraform-docs/terraform-docs)](https://pkg.go.dev/github.com/terraform-docs/terraform-docs) [![Go Report Card](https://goreportcard.com/badge/github.com/terraform-docs/terraform-docs)](https://goreportcard.com/report/github.com/terraform-docs/terraform-docs) [![Codecov Report](https://codecov.io/gh/terraform-docs/terraform-docs/branch/master/graph/badge.svg)](https://codecov.io/gh/terraform-docs/terraform-docs) [![License](https://img.shields.io/github/license/terraform-docs/terraform-docs)](https://github.com/terraform-docs/terraform-docs/blob/master/LICENSE) [![Latest release](https://img.shields.io/github/v/release/terraform-docs/terraform-docs)](https://github.com/terraform-docs/terraform-docs/releases)
 
-Cluster Toolkit is an open-source software offered by Google Cloud which makes it
-easy for customers to deploy AI/ML and HPC environments on Google Cloud.
+![terraform-docs-teaser](./images/terraform-docs-teaser.png)
 
-Cluster Toolkit allows customers to deploy turnkey AI/ML and HPC environments (compute,
-networking, storage, etc.) following Google Cloud best-practices, in a repeatable
-manner. The Cluster Toolkit is designed to be highly customizable and extensible,
-and intends to address the AI/ML and HPC deployment needs of a broad range of customers.
+## What is terraform-docs
 
-## AI/ML Hypercomputer
+A utility to generate documentation from Terraform modules in various output formats.
 
-The Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer][aihc].
-Documentation concerning AI Hypercomputer solutions is available for
-[GKE][aihc-gke] and for [Slurm][aihc-slurm].
+## Installation
 
-[aihc]: https://cloud.google.com/ai-hypercomputer/docs
-[aihc-gke]: https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute
-[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster
+macOS users can install using [Homebrew]:
 
-## Detailed documentation and examples
-
-The Toolkit provides [tutorials], [examples], and comprehensive
-developer documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
-
-For end-user guides and how-to information, please refer to the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
-
-[tutorials]: docs/tutorials/README.md
-[examples]: examples/README.md
-[modules]: modules/README.md
-
-## Quickstart
-
-Running through the
-[quickstart tutorial](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster)
-is the recommended path to get started with the Cluster Toolkit.
-
----
-
-### Using the Pre-built Bundle (Recommended)
-
-For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., gcluster_bundle_linux_amd64.zip, gcluster_bundle_linux_arm64.zip, gcluster_bundle_mac_amd64.zip, or gcluster_bundle_mac_arm64.zip) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
-
-#### Bundle Compatibility Matrix
-
-The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
-
-##### Execution Platform (Where the binary runs)
-
-| Platform | Support Status | Notes |
-| :--- | :---: | :--- |
-| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
-| **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
-| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
-| **Windows** | ❎ | Please [Build from Source](#building-from-source). |
-
-1. Download and extract the bundle:
-
-    > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
-
-    For versions v1.85.0 and newer (Multi-architecture):
-
-    ```shell
-    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.85.0)
-    TAG=vX.Y.Z
-    # Set your OS (linux or mac) and Architecture (amd64 or arm64)
-    OS="linux"
-    ARCH="amd64"
-    # Download and extract the platform-specific bundle
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.zip
-    unzip gcluster_bundle_${OS}_${ARCH}.zip -d gcluster-bundle/
-    cd gcluster-bundle
-    chmod +x gcluster
-    ```
-
-    For versions v1.82.0 through v1.84.0:
-
-    ```shell
-    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.84.0)
-    TAG=vX.Y.Z
-    # Set your OS (linux or mac)
-    OS="linux"
-    # Download and extract
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}.zip
-    unzip gcluster_bundle_${OS}.zip -d gcluster-bundle/
-    cd gcluster-bundle
-    chmod +x gcluster
-    ```
-
-2. Verify the Installation:
-
-    ```shell
-    ./gcluster --version
-    ./gcluster --help
-    ```
-
-### Building from Source
-
-If you prefer to build the `gcluster` binary from source,
-you can use the following commands:
-
-```shell
-git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
-cd cluster-toolkit
-make
-./gcluster --version
-./gcluster --help
-```
-
-> **_NOTE:_** You may need to [install dependencies](#dependencies) first.
-
-## Cluster Toolkit Components
-
-Learn about the components that make up the Cluster Toolkit and more on how it works
-on the
-[Google Cloud Docs Product Overview](https://cloud.google.com/cluster-toolkit/docs/overview#components).
-
-## GCP Credentials
-
-### Supplying cloud credentials to Terraform
-
-Terraform can discover credentials for authenticating to Google Cloud Platform
-in several ways. We will summarize Terraform's documentation for using
-[gcloud][terraform-auth-gcloud] from your workstation and for automatically
-finding credentials in cloud environments. We do **not** recommend following
-Hashicorp's instructions for downloading
-[service account keys][terraform-auth-sa-key].
-
-[terraform-auth-gcloud]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#configuring-the-provider
-[terraform-auth-sa-key]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/getting_started#adding-credentials
-
-### Cloud credentials on your workstation
-
-You can generate cloud credentials associated with your Google Cloud account
-using the following command:
-
-```shell
-gcloud auth application-default login
-```
-
-You will be prompted to open your web browser and authenticate to Google Cloud
-and make your account accessible from the command-line. Once this command
-completes, Terraform will automatically use your "Application Default
-Credentials."
-
-If you receive failure messages containing "quota project" you should change the
-quota project associated with your Application Default Credentials with the
-following command and provide your current project ID as the argument:
-
-```shell
-gcloud auth application-default set-quota-project ${PROJECT-ID}
-```
-
-### Cloud credentials in virtualized cloud environments
-
-In virtualized settings, the cloud credentials of accounts can be attached
-directly to the execution environment. For example: a VM or a container can
-have [service accounts](https://cloud.google.com/iam/docs/service-accounts)
-attached to them. The Google [Cloud Shell][cloud-shell] is an interactive
-command line environment which inherits the credentials of the user logged in
-to the Google Cloud Console.
-
-[cloud-shell]: https://console.cloud.google.com/home/dashboard?cloudshell=true
-[cloud-shell-limitations]: https://cloud.google.com/shell/docs/quotas-limits#limitations_and_restrictions
-
-Many of the above examples are easily executed within a Cloud Shell environment.
-Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
-in particular an inactivity timeout that will close running shells after 20
-minutes. Please consider it only for blueprints that are quickly deployed.
-
-## VM Image Support
-
-### Standard Images
-
-The Cluster Toolkit officially supports the following VM images:
-
-* HPC Rocky Linux 8
-* Debian 11
-* Ubuntu 22.04 LTS
-
-For more information on these and other images, see
-[docs/vm-images.md](docs/vm-images.md).
-
-### Slurm Images
-
-> **_Warning:_** Slurm Terraform modules cannot be directly used on the standard OS images. They must be used in combination with images built for the versioned release of the Terraform module.
-
-The Cluster Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
-
-## Blueprint Validation
-
-The Toolkit contains "validator" functions that perform basic tests of the
-blueprint to ensure that deployment variables are valid and that the AI/ML and HPC
-environment can be provisioned in your Google Cloud project. Further information
-can be found in [dedicated documentation](docs/blueprint-validation.md).
-
-## Enable GCP APIs
-
-In a new GCP project there are several APIs that must be enabled to deploy your
-cluster. These will be caught when you perform `terraform apply` but you can
-save time by enabling them upfront.
-
-See
-[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis)
-for instructions.
-
-## GCP Quotas
-
-You may need to request additional quota to be able to deploy and use your
-cluster.
-
-See
-[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota)
-for more information.
-
-## Billing Reports
-
-You can view your billing reports for your cluster on the
-[Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports)
-page. ​​To view the Cloud Billing reports for your Cloud Billing account,
-including viewing the cost information for all of the Cloud projects that are
-linked to the account, you need a role that includes the
-`billing.accounts.getSpendingInformation` permission on your Cloud Billing
-account.
-
-To view the Cloud Billing reports for your Cloud Billing account:
-
-1. In the Google Cloud Console, go to `Navigation Menu` >
-   [`Billing`](https://console.cloud.google.com/billing/overview).
-2. At the prompt, choose the Cloud Billing account for which you'd like to view
-   reports. The Billing Overview page opens for the selected billing account.
-3. In the Billing navigation menu, select `Reports`.
-
-In the right side, expand the Filters view and then filter by label, specifying the key `ghpc_deployment` (or `ghpc_blueprint`) and the desired value.
-
-## Troubleshooting
-
-### Authentication
-
-Confirm that you have [properly setup Google Cloud credentials](#gcp-credentials)
-
-### Slurm Clusters
-
-Please see the dedicated [troubleshooting guide for Slurm](docs/slurm-troubleshooting.md).
-
-### Terraform Deployment
-
-When `terraform apply` fails, Terraform generally provides a useful error
-message. Here are some common reasons for the deployment to fail:
-
-* **GCP Access:** The credentials being used to call `terraform apply` do not
-  have access to the GCP project. This can be fixed by granting access in
-  `IAM & Admin`.
-* **Disabled APIs:** The GCP project must have the proper APIs enabled. See
-  [Enable GCP APIs](#enable-gcp-apis).
-* **Insufficient Quota:** The GCP project does not have enough quota to
-  provision the requested resources. See [GCP Quotas](#gcp-quotas).
-* **Filestore resource limit:** When regularly deploying Filestore instances
-  with a new VPC you may see an error during deployment such as:
-  `System limit for internal resources has been reached`. See
-  [this doc](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance)
-  for the solution.
-* **Required permission not found:**
-  * Example: `Required 'compute.projects.get' permission for 'projects/... forbidden`
-  * Credentials may not be set, or are not set correctly. Please follow
-    instructions at [Cloud credentials on your workstation](#cloud-credentials-on-your-workstation).
-  * Ensure proper permissions are set in the cloud console
-    [IAM section](https://console.cloud.google.com/iam-admin/iam).
-
-### Failure to Destroy VPC Network
-
-If `terraform destroy` fails with an error such as the following:
-
-```text
-│ Error: Error when reading or editing Subnetwork: googleapi: Error 400: The subnetwork resource 'projects/<project_name>/regions/<region>/subnetworks/<subnetwork_name>' is already being used by 'projects/<project_name>/zones/<zone>/instances/<instance_name>', resourceInUseByAnotherResource
+```bash
+brew install terraform-docs
 ```
 
 or
 
-```text
-│ Error: Error waiting for Deleting Network: The network resource 'projects/<project_name>/global/networks/<vpc_network_name>' is already being used by 'projects/<project_name>/global/firewalls/<firewall_rule_name>'
+```bash
+brew install terraform-docs/tap/terraform-docs
 ```
 
-These errors indicate that the VPC network cannot be destroyed because resources
-were added outside of Terraform and that those resources depend upon the
-network. These resources should be deleted manually. The first message indicates
-that a new VM has been added to a subnetwork within the VPC network. The second
-message indicates that a new firewall rule has been added to the VPC network.
-If your error message does not look like these, examine it carefully to identify
-the type of resource to delete and its unique name. In the two messages above,
-the resource names appear toward the end of the error message. The following
-links will take you directly to the areas within the Cloud Console for managing
-VMs and Firewall rules. Make certain that your project ID is selected in the
-drop-down menu at the top-left.
+Windows users can install using [Scoop]:
 
-* [Cloud Console: Manage VM instances][cc-vms]
-* [Cloud Console: Manage Firewall Rules][cc-firewall]
-
-[cc-vms]: https://console.cloud.google.com/compute/instances
-[cc-firewall]:  https://console.cloud.google.com/networking/firewalls/list
-
-## Inspecting the Deployment
-
-The deployment will be created with the following directory structure:
-
-```text
-<<OUTPUT_PATH>>/<<DEPLOYMENT_NAME>>/{<<DEPLOYMENT_GROUPS>>}/
+```bash
+scoop bucket add terraform-docs https://github.com/terraform-docs/scoop-bucket
+scoop install terraform-docs
 ```
 
-If an output directory is provided with the `--output/-o` flag, the deployment
-directory will be created in the output directory, represented as
-`<<OUTPUT_PATH>>` here. If not provided, `<<OUTPUT_PATH>>` will default to the
-current working directory.
+or [Chocolatey]:
 
-The deployment directory is created in `<<OUTPUT_PATH>>` as a directory matching
-the provided `deployment_name` deployment variable (`vars`) in the blueprint.
-
-Within the deployment directory are directories representing each deployment
-group in the blueprint named the same as the `group` field for each element
-in `deployment_groups`.
-
-In each deployment group directory, are all of the configuration scripts and
-modules needed to deploy. The modules are in a directory named `modules` named
-the same as the source module, for example the
-[vpc module](./modules/network/vpc/README.md) is in a directory named `vpc`.
-
-A hidden directory containing meta information and backups is also created and
-named `.ghpc`.
-
-From the [hpc-slurm.yaml example](./examples/hpc-slurm.yaml), we
-get the following deployment directory:
-
-```text
-hpc-slurm/
-  primary/
-    main.tf
-    modules/
-    providers.tf
-    terraform.tfvars
-    variables.tf
-    versions.tf
-  .ghpc/
+```bash
+choco install terraform-docs
 ```
 
-## Dependencies
+Stable binaries are also available on the [releases] page. To install, download the
+binary for your platform from "Assets" and place this into your `$PATH`:
 
-See
-[Cloud Docs on Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+```bash
+curl -Lo ./terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/v0.19.0/terraform-docs-v0.19.0-$(uname)-amd64.tar.gz
+tar -xzf terraform-docs.tar.gz
+chmod +x terraform-docs
+mv terraform-docs /usr/local/bin/terraform-docs
+```
 
-When running commands like `deploy`, `destroy`, or `export-outputs`, the toolkit can automatically download missing dependencies. You can control this behavior using the `--download-dependencies` flag:
+**NOTE:** Windows releases are in `ZIP` format.
 
-* `--download-dependencies`: Automatically download missing dependencies without prompting.
-* `--download-dependencies=false`: Fail immediately if any required dependencies are missing.
+The latest version can be installed using `go install` or `go get`:
 
-If the flag is not provided, you will be interactively asked to confirm the download.
+```bash
+# go1.17+
+go install github.com/terraform-docs/terraform-docs@v0.19.0
+```
 
-### Notes on Packer
+```bash
+# go1.16
+GO111MODULE="on" go get github.com/terraform-docs/terraform-docs@v0.19.0
+```
 
-The Toolkit supports Packer templates in the contemporary [HCL2 file
-format][pkrhcl2] and not in the legacy JSON file format. We require the use of
-Packer 1.7.9 or above, and recommend using the latest release.
+**NOTE:** please use the latest Go to do this, minimum `go1.16` is required.
 
-The Toolkit's [Packer template module documentation][pkrmodreadme] describes
-input variables and their behavior. An [image-building example][pkrexample]
-and [usage instructions][pkrexamplereadme] are provided. The example integrates
-Packer, Terraform and
-[startup-script](./modules/scripts/startup-script/README.md) runners to
-demonstrate the power of customizing images using the same scripts that can be
-applied at boot-time.
+This will put `terraform-docs` in `$(go env GOPATH)/bin`. If you encounter the error
+`terraform-docs: command not found` after installation then you may need to either add
+that directory to your `$PATH` as shown [here] or do a manual installation by cloning
+the repo and run `make build` from the repository which will put `terraform-docs` in:
 
-[pkrhcl2]: https://www.packer.io/guides/hcl
-[pkrmodreadme]: modules/packer/custom-image/README.md
-[pkrexamplereadme]: examples/README.md#image-builderyaml
-[pkrexample]: examples/image-builder.yaml
+```bash
+$(go env GOPATH)/src/github.com/terraform-docs/terraform-docs/bin/$(uname | tr '[:upper:]' '[:lower:]')-amd64/terraform-docs
+```
 
-## Development
+## Usage
 
-The following setup is in addition to the [dependencies](#dependencies) needed
-to build and run Cluster-Toolkit.
+### Running the binary directly
 
-Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
-this repository to ensure that all changes are validated, tested and properly
-documented before pushing code changes. The pre-commits configured
-in the Cluster Toolkit have a set of dependencies that need to be installed before
-successfully passing.
+To run and generate documentation into README within a directory:
 
-Follow these steps to install and setup pre-commit in your cloned repository:
+```bash
+terraform-docs markdown table --output-file README.md --output-mode inject /path/to/module
+```
 
-1. Install pre-commit using the instructions from [the pre-commit website](https://pre-commit.com/).
-1. Install TFLint using the instructions from
-   [the TFLint documentation](https://github.com/terraform-linters/tflint#installation).
+Check [`output`] configuration for more details and examples.
 
-   > **_NOTE:_** The version of TFLint must be compatible with the Google plugin
-   > version identified in [tflint.hcl](.tflint.hcl). Versions of the plugin
-   > `>=0.20.0` should use `tflint>=0.40.0`. These versions are readily
-   > available via GitHub or package managers. Please review the [TFLint Ruleset
-   > for Google Release Notes][tflint-google] for up-to-date requirements.
+### Using docker
 
-[tflint-google]: https://github.com/terraform-linters/tflint-ruleset-google/releases
+terraform-docs can be run as a container by mounting a directory with `.tf`
+files in it and run the following command:
 
-1. Install ShellCheck using the instructions from
-   [the ShellCheck documentation](https://github.com/koalaman/shellcheck#installing)
-1. The other dev dependencies can be installed by running the following command
-   in the project root directory:
+```bash
+docker run --rm --volume "$(pwd):/terraform-docs" -u $(id -u) quay.io/terraform-docs/terraform-docs:0.19.0 markdown /terraform-docs
+```
 
-    ```shell
-    make install-dev-deps
-    ```
+If `output.file` is not enabled for this module, generated output can be redirected
+back to a file:
 
-1. Pre-commit is enabled on a repo-by-repo basis by running the following command
-   in the project root directory:
+```bash
+docker run --rm --volume "$(pwd):/terraform-docs" -u $(id -u) quay.io/terraform-docs/terraform-docs:0.19.0 markdown /terraform-docs > doc.md
+```
 
-    ```shell
-    pre-commit install
-    ```
+**NOTE:** Docker tag `latest` refers to _latest_ stable released version and `edge`
+refers to HEAD of `master` at any given point in time.
 
-Now pre-commit is configured to automatically run before you commit.
+### Using GitHub Actions
 
-### Development on macOS
+To use terraform-docs GitHub Action, configure a YAML workflow file (e.g.
+`.github/workflows/documentation.yml`) with the following:
 
-While macOS is a supported environment for building and executing the Toolkit,
-it is not supported for Toolkit development due to GNU specific shell scripts.
+```yaml
+name: Generate terraform docs
+on:
+  - pull_request
 
-If developing on a mac, a workaround is to install GNU tooling by installing
-`coreutils` and `findutils` from a package manager such as homebrew or conda.
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
 
-### Contributing
+    - name: Render terraform docs and push changes back to PR
+      uses: terraform-docs/gh-actions@main
+      with:
+        working-dir: .
+        output-file: README.md
+        output-method: inject
+        git-push: "true"
+```
 
-Please refer to the [contributing file](CONTRIBUTING.md) in our GitHub
-repository, or to
-[Google’s Open Source documentation](https://opensource.google/docs/releasing/template/CONTRIBUTING/#).
+Read more about [terraform-docs GitHub Action] and its configuration and
+examples.
+
+### pre-commit hook
+
+With pre-commit, you can ensure your Terraform module documentation is kept
+up-to-date each time you make a commit.
+
+First [install pre-commit] and then create or update a `.pre-commit-config.yaml`
+in the root of your Git repo with at least the following content:
+
+```yaml
+repos:
+  - repo: https://github.com/terraform-docs/terraform-docs
+    rev: "v0.19.0"
+    hooks:
+      - id: terraform-docs-go
+        args: ["markdown", "table", "--output-file", "README.md", "./mymodule/path"]
+```
+
+Then run:
+
+```bash
+pre-commit install
+pre-commit install-hooks
+```
+
+Further changes to your module's `.tf` files will cause an update to documentation
+when you make a commit.
+
+## Configuration
+
+terraform-docs can be configured with a yaml file. The default name of this file is
+`.terraform-docs.yml` and the path order for locating it is:
+
+1. root of module directory
+1. `.config/` folder at root of module directory
+1. current directory
+1. `.config/` folder at current directory
+1. `$HOME/.tfdocs.d/`
+
+```yaml
+formatter: "" # this is required
+
+version: ""
+
+header-from: main.tf
+footer-from: ""
+
+recursive:
+  enabled: false
+  path: modules
+  include-main: true
+
+sections:
+  hide: []
+  show: []
+
+content: ""
+
+output:
+  file: ""
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+output-values:
+  enabled: false
+  from: ""
+
+sort:
+  enabled: true
+  by: name
+
+settings:
+  anchor: true
+  color: true
+  default: true
+  description: false
+  escape: true
+  hide-empty: false
+  html: true
+  indent: 2
+  lockfile: true
+  read-comments: true
+  required: true
+  sensitive: true
+  type: true
+```
+
+## Content Template
+
+Generated content can be customized further away with `content` in configuration.
+If the `content` is empty the default order of sections is used.
+
+Compatible formatters for customized content are `asciidoc` and `markdown`. `content`
+will be ignored for other formatters.
+
+`content` is a Go template with following additional variables:
+
+- `{{ .Header }}`
+- `{{ .Footer }}`
+- `{{ .Inputs }}`
+- `{{ .Modules }}`
+- `{{ .Outputs }}`
+- `{{ .Providers }}`
+- `{{ .Requirements }}`
+- `{{ .Resources }}`
+
+and following functions:
+
+- `{{ include "relative/path/to/file" }}`
+
+These variables are the generated output of individual sections in the selected
+formatter. For example `{{ .Inputs }}` is Markdown Table representation of _inputs_
+when formatter is set to `markdown table`.
+
+Note that sections visibility (i.e. `sections.show` and `sections.hide`) takes
+precedence over the `content`.
+
+Additionally there's also one extra special variable available to the `content`:
+
+- `{{ .Module }}`
+
+As opposed to the other variables mentioned above, which are generated sections
+based on a selected formatter, the `{{ .Module }}` variable is just a `struct`
+representing a [Terraform module].
+
+````yaml
+content: |-
+  Any arbitrary text can be placed anywhere in the content
+
+  {{ .Header }}
+
+  and even in between sections
+
+  {{ .Providers }}
+
+  and they don't even need to be in the default order
+
+  {{ .Outputs }}
+
+  include any relative files
+
+  {{ include "relative/path/to/file" }}
+
+  {{ .Inputs }}
+
+  # Examples
+
+  ```hcl
+  {{ include "examples/foo/main.tf" }}
+  ```
+
+  ## Resources
+
+  {{ range .Module.Resources }}
+  - {{ .GetMode }}.{{ .Spec }} ({{ .Position.Filename }}#{{ .Position.Line }})
+  {{- end }}
+````
+
+## Build on top of terraform-docs
+
+terraform-docs primary use-case is to be utilized as a standalone binary, but
+some parts of it is also available publicly and can be imported in your project
+as a library.
+
+```go
+import (
+    "github.com/terraform-docs/terraform-docs/format"
+    "github.com/terraform-docs/terraform-docs/print"
+    "github.com/terraform-docs/terraform-docs/terraform"
+)
+
+// buildTerraformDocs for module root `path` and provided content `tmpl`.
+func buildTerraformDocs(path string, tmpl string) (string, error) {
+    config := print.DefaultConfig()
+    config.ModuleRoot = path // module root path (can be relative or absolute)
+
+    module, err := terraform.LoadWithOptions(config)
+    if err != nil {
+        return "", err
+    }
+
+    // Generate in Markdown Table format
+    formatter := format.NewMarkdownTable(config)
+
+    if err := formatter.Generate(module); err != nil {
+        return "", err
+    }
+
+    // // Note: if you don't intend to provide additional template for the generated
+    // // content, or the target format doesn't provide templating (e.g. json, yaml,
+    // // xml, or toml) you can use `Content()` function instead of `Render()`.
+    // // `Content()` returns all the sections combined with predefined order.
+    // return formatter.Content(), nil
+
+    return formatter.Render(tmpl)
+}
+```
+
+## Plugin
+
+Generated output can be heavily customized with [`content`], but if using that
+is not enough for your use-case, you can write your own plugin.
+
+In order to install a plugin the following steps are needed:
+
+- download the plugin and place it in `~/.tfdocs.d/plugins` (or `./.tfdocs.d/plugins`)
+- make sure the plugin file name is `tfdocs-format-<NAME>`
+- modify [`formatter`] of `.terraform-docs.yml` file to be `<NAME>`
+
+**Important notes:**
+
+- if the plugin file name is different than the example above, terraform-docs won't
+be able to to pick it up nor register it properly
+- you can only use plugin thorough `.terraform-docs.yml` file and it cannot be used
+with CLI arguments
+
+To create a new plugin create a new repository called `tfdocs-format-<NAME>` with
+following `main.go`:
+
+```go
+package main
+
+import (
+    _ "embed" //nolint
+
+    "github.com/terraform-docs/terraform-docs/plugin"
+    "github.com/terraform-docs/terraform-docs/print"
+    "github.com/terraform-docs/terraform-docs/template"
+    "github.com/terraform-docs/terraform-docs/terraform"
+)
+
+func main() {
+    plugin.Serve(&plugin.ServeOpts{
+        Name:    "<NAME>",
+        Version: "0.1.0",
+        Printer: printerFunc,
+    })
+}
+
+//go:embed sections.tmpl
+var tplCustom []byte
+
+// printerFunc the function being executed by the plugin client.
+func printerFunc(config *print.Config, module *terraform.Module) (string, error) {
+    tpl := template.New(config,
+        &template.Item{Name: "custom", Text: string(tplCustom)},
+    )
+
+    rendered, err := tpl.Render("custom", module)
+    if err != nil {
+        return "", err
+    }
+
+    return rendered, nil
+}
+```
+
+Please refer to [tfdocs-format-template] for more details. You can create a new
+repository from it by clicking on `Use this template` button.
+
+## Documentation
+
+- **Users**
+  - Read the [User Guide] to learn how to use terraform-docs
+  - Read the [Formats Guide] to learn about different output formats of terraform-docs
+  - Refer to [Config File Reference] for all the available configuration options
+- **Developers**
+  - Read [Contributing Guide] before submitting a pull request
+
+Visit [our website] for all documentation.
+
+## Community
+
+- Discuss terraform-docs on [Slack]
+
+## License
+
+MIT License - Copyright (c) 2021 The terraform-docs Authors.
+
+[Chocolatey]: https://www.chocolatey.org
+[Config File Reference]: https://terraform-docs.io/user-guide/configuration/
+[`content`]: https://terraform-docs.io/user-guide/configuration/content/
+[Contributing Guide]: CONTRIBUTING.md
+[Formats Guide]: https://terraform-docs.io/reference/terraform-docs/
+[`formatter`]: https://terraform-docs.io/user-guide/configuration/formatter/
+[here]: https://golang.org/doc/code.html#GOPATH
+[Homebrew]: https://brew.sh
+[install pre-commit]: https://pre-commit.com/#install
+[`output`]: https://terraform-docs.io/user-guide/configuration/output/
+[releases]: https://github.com/terraform-docs/terraform-docs/releases
+[Scoop]: https://scoop.sh/
+[Slack]: https://slack.terraform-docs.io/
+[terraform-docs GitHub Action]: https://github.com/terraform-docs/gh-actions
+[Terraform module]: https://pkg.go.dev/github.com/terraform-docs/terraform-docs/terraform#Module
+[tfdocs-format-template]: https://github.com/terraform-docs/tfdocs-format-template
+[our website]: https://terraform-docs.io/
+[User Guide]: https://terraform-docs.io/user-guide/introduction/

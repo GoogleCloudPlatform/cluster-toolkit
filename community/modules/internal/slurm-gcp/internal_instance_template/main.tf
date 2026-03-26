@@ -126,18 +126,18 @@ resource "google_compute_instance_template" "tpl" {
       }
 
       dynamic "source_image_encryption_key" {
-        for_each = lookup(disk.value, "source_image_encryption_key", null) != null ? [1] : []
+        for_each = lookup(disk.value, "source_image_encryption_key", null) != null ? [lookup(disk.value, "source_image_encryption_key", null)] : (var.source_image_encryption_key != null ? [var.source_image_encryption_key] : [])
         content {
-          kms_key_self_link       = lookup(disk.value, "source_image_encryption_key", null)
-          kms_key_service_account = lookup(disk.value, "source_image_encryption_key_service_account", null)
+          kms_key_self_link       = source_image_encryption_key.value
+          kms_key_service_account = lookup(disk.value, "source_image_encryption_key_service_account", null) != null ? lookup(disk.value, "source_image_encryption_key_service_account", null) : var.source_image_encryption_key_service_account
         }
       }
 
       dynamic "source_snapshot_encryption_key" {
-        for_each = lookup(disk.value, "source_snapshot_encryption_key", null) != null ? [1] : []
+        for_each = lookup(disk.value, "source_snapshot_encryption_key", null) != null ? [lookup(disk.value, "source_snapshot_encryption_key", null)] : (var.source_snapshot_encryption_key != null ? [var.source_snapshot_encryption_key] : [])
         content {
-          kms_key_self_link       = lookup(disk.value, "source_snapshot_encryption_key", null)
-          kms_key_service_account = lookup(disk.value, "source_snapshot_encryption_key_service_account", null)
+          kms_key_self_link       = source_snapshot_encryption_key.value
+          kms_key_service_account = lookup(disk.value, "source_snapshot_encryption_key_service_account", null) != null ? lookup(disk.value, "source_snapshot_encryption_key_service_account", null) : var.source_snapshot_encryption_key_service_account
         }
       }
     }
