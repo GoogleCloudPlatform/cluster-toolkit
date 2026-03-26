@@ -18,13 +18,13 @@ locals {
   # Map to integers, defaulting to 0 for missing patch versions or gke build numbers
   ver_major = local.is_valid_current ? tonumber(local.parsed_ver[0]) : 0
   ver_minor = local.is_valid_current ? tonumber(local.parsed_ver[1]) : 0
-  ver_patch = local.is_valid_current ? (try(local.parsed_ver[2], "") != "" ? tonumber(local.parsed_ver[2]) : 0) : 0
-  ver_gke   = local.is_valid_current ? (try(local.parsed_ver[3], null) != null && try(local.parsed_ver[3], "") != "" ? tonumber(local.parsed_ver[3]) : 0) : 0
+  ver_patch = local.is_valid_current ? tonumber(coalesce(local.parsed_ver[2], "0")) : 0
+  ver_gke   = local.is_valid_current ? tonumber(coalesce(local.parsed_ver[3], "0")) : 0
 
   min_major = local.is_valid_min ? tonumber(local.parsed_min[0]) : 0
   min_minor = local.is_valid_min ? tonumber(local.parsed_min[1]) : 0
-  min_patch = local.is_valid_min ? (try(local.parsed_min[2], "") != "" ? tonumber(local.parsed_min[2]) : 0) : 0
-  min_gke   = local.is_valid_min ? (try(local.parsed_min[3], null) != null && try(local.parsed_min[3], "") != "" ? tonumber(local.parsed_min[3]) : 0) : 0
+  min_patch = local.is_valid_min ? tonumber(coalesce(local.parsed_min[2], "0")) : 0
+  min_gke   = local.is_valid_min ? tonumber(coalesce(local.parsed_min[3], "0")) : 0
 
   # Fail-open logic for custom tags
   is_greater_than_or_equal = local.is_valid_min ? (
