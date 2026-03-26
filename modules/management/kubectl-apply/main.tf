@@ -136,7 +136,7 @@ module "kubectl_apply_manifests" {
 }
 
 
-module "kueue_version_check" {
+module "super_slicing_kueue_version_check" {
   source = "../../internal/semver_compare"
 
   current_version = var.kueue.version
@@ -147,7 +147,7 @@ resource "terraform_data" "kueue_slice_controller_version_check" {
   count = local.install_kueue ? 1 : 0
   lifecycle {
     precondition {
-      condition     = var.kueue.enable_slice_controller ? module.kueue_version_check.is_greater_than_or_equal : true
+      condition     = !var.kueue.enable_slice_controller || module.super_slicing_kueue_version_check.is_greater_than_or_equal
       error_message = "Kueue super-slicing requires Kueue version >= 0.15.2."
     }
   }
