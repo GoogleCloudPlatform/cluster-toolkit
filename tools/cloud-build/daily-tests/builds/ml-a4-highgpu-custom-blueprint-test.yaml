@@ -75,6 +75,7 @@ steps:
       echo "INFO: Using $${VARS_FILE} as it is for SPOT provisioning."
     fi
 
+    python3 tools/modify_vpc.py "$${BLUEPRINT}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

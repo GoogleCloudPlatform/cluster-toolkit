@@ -60,6 +60,7 @@ steps:
     BLUEPRINT="examples/hpc-enterprise-slurm.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
+    python3 tools/modify_vpc.py "$${BLUEPRINT}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-enterprise-slurm.yml"

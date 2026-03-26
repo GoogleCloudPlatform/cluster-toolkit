@@ -97,6 +97,7 @@ steps:
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
     cat $${EXAMPLE_BP}
 
+    python3 tools/modify_vpc.py "$${EXAMPLE_BP}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
