@@ -35,4 +35,4 @@ cli_deployment_vars:
   zone: "{{ zone }}"
   a3u_reservation_name: hpc-exr-2
   a3u_provisioning_model: RESERVATION_BOUND
-  base_network_name: "{{ test_name }}"
+  base_network_name: 0vpc-$(build)

@@ -49,4 +49,4 @@ cli_deployment_vars:
   disk_size_gb: 100
   a3u_cluster_size: 2
   a3u_reservation_name: hpc-exr-2
-  base_network_name: "{{ test_name }}"
+  base_network_name: 0vpc-$(build)

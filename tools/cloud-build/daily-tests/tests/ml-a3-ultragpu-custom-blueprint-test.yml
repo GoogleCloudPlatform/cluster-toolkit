@@ -53,5 +53,5 @@ cli_deployment_vars:
   a3u_cluster_size: 2
   instance_image_project: "{{ instance_image_project }}"
   instance_image_family: "{{ instance_image_family }}"
-  base_network_name: "{{ test_name }}"
+  base_network_name: 0vpc-$(build)
   a3u_enable_spot_vm: true

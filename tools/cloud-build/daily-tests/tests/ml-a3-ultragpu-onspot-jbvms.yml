@@ -35,4 +35,4 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   a3u_provisioning_model: SPOT
-  base_network_name: "{{ test_name }}"
+  base_network_name: 0vpc-$(build)
