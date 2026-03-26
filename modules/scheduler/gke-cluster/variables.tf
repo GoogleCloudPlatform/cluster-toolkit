@@ -179,11 +179,18 @@ variable "enable_filestore_csi" {
   default     = false
 }
 
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level."
+  type        = bool
+  default     = false
+}
+
 variable "enable_gcsfuse_csi" {
   description = "The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes."
   type        = bool
   default     = false
 }
+
 
 variable "enable_persistent_disk_csi" {
   description = "The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes."
@@ -212,7 +219,7 @@ variable "enable_ray_operator" {
 variable "enable_dcgm_monitoring" {
   description = "Enable GKE to collect DCGM metrics"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_node_local_dns_cache" {
@@ -254,7 +261,7 @@ variable "system_node_pool_node_count" {
 variable "system_node_pool_machine_type" {
   description = "Machine type for the system node pool."
   type        = string
-  default     = "e2-standard-4"
+  default     = "n4-standard-4"
 }
 
 variable "system_node_pool_disk_size_gb" {
@@ -551,6 +558,12 @@ variable "enable_external_dns_endpoint" {
 
 variable "enable_inference_gateway" {
   description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
+  type        = bool
+  default     = false
+}
+
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
   type        = bool
   default     = false
 }
