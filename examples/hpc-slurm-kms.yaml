@@ -78,6 +78,7 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
       disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -99,6 +100,7 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
       disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -114,6 +116,7 @@ deployment_groups:
       machine_type: n2-standard-4
       enable_login_public_ips: true
       disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -127,4 +130,5 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
       slurm_bucket_kms_key: $(vars.kms_key)

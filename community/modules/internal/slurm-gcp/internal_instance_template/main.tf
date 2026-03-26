@@ -30,19 +30,15 @@ locals {
 
   boot_disk = [
     {
-      source_image                                   = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
-      disk_size_gb                                   = var.disk_size_gb
-      disk_type                                      = var.disk_type
-      disk_labels                                    = var.disk_labels
-      auto_delete                                    = var.auto_delete
-      disk_resource_manager_tags                     = var.disk_resource_manager_tags
-      boot                                           = "true"
-      disk_encryption_key                            = var.disk_encryption_key
-      disk_encryption_key_service_account            = var.disk_encryption_key_service_account
-      source_image_encryption_key                    = var.source_image_encryption_key
-      source_image_encryption_key_service_account    = var.source_image_encryption_key_service_account
-      source_snapshot_encryption_key                 = var.source_snapshot_encryption_key
-      source_snapshot_encryption_key_service_account = var.source_snapshot_encryption_key_service_account
+      source_image                        = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
+      disk_size_gb                        = var.disk_size_gb
+      disk_type                           = var.disk_type
+      disk_labels                         = var.disk_labels
+      auto_delete                         = var.auto_delete
+      disk_resource_manager_tags          = var.disk_resource_manager_tags
+      boot                                = "true"
+      disk_encryption_key                 = var.disk_encryption_key
+      disk_encryption_key_service_account = var.disk_encryption_key_service_account
     },
   ]
 
@@ -122,22 +118,6 @@ resource "google_compute_instance_template" "tpl" {
         content {
           kms_key_self_link       = disk_encryption_key.value
           kms_key_service_account = lookup(disk.value, "disk_encryption_key_service_account", null) != null ? lookup(disk.value, "disk_encryption_key_service_account", null) : var.disk_encryption_key_service_account
-        }
-      }
-
-      dynamic "source_image_encryption_key" {
-        for_each = lookup(disk.value, "source_image_encryption_key", null) != null ? [lookup(disk.value, "source_image_encryption_key", null)] : (var.source_image_encryption_key != null ? [var.source_image_encryption_key] : [])
-        content {
-          kms_key_self_link       = source_image_encryption_key.value
-          kms_key_service_account = lookup(disk.value, "source_image_encryption_key_service_account", null) != null ? lookup(disk.value, "source_image_encryption_key_service_account", null) : var.source_image_encryption_key_service_account
-        }
-      }
-
-      dynamic "source_snapshot_encryption_key" {
-        for_each = lookup(disk.value, "source_snapshot_encryption_key", null) != null ? [lookup(disk.value, "source_snapshot_encryption_key", null)] : (var.source_snapshot_encryption_key != null ? [var.source_snapshot_encryption_key] : [])
-        content {
-          kms_key_self_link       = source_snapshot_encryption_key.value
-          kms_key_service_account = lookup(disk.value, "source_snapshot_encryption_key_service_account", null) != null ? lookup(disk.value, "source_snapshot_encryption_key_service_account", null) : var.source_snapshot_encryption_key_service_account
         }
       }
     }

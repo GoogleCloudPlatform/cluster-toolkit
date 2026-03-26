@@ -102,46 +102,18 @@ variable "disk_encryption_key_service_account" {
   default     = null
 }
 
-variable "source_image_encryption_key" {
-  type        = string
-  description = "The self link of the encryption key that is stored in Google Cloud KMS to use to decrypt the source image"
-  default     = null
-}
-
-variable "source_image_encryption_key_service_account" {
-  type        = string
-  description = "The service account being used for the encryption request for the given KMS key to decrypt the source image. If absent, the Compute Engine default service account is used."
-  default     = null
-}
-
-variable "source_snapshot_encryption_key" {
-  type        = string
-  description = "The self link of the encryption key that is stored in Google Cloud KMS to use to decrypt the source snapshot"
-  default     = null
-}
-
-variable "source_snapshot_encryption_key_service_account" {
-  type        = string
-  description = "The service account being used for the encryption request for the given KMS key to decrypt the source snapshot. If absent, the Compute Engine default service account is used."
-  default     = null
-}
-
 variable "additional_disks" {
   type = list(object({
-    disk_name                                      = optional(string)
-    device_name                                    = optional(string)
-    disk_size_gb                                   = optional(number)
-    disk_type                                      = optional(string)
-    disk_labels                                    = optional(map(string))
-    auto_delete                                    = optional(bool)
-    boot                                           = optional(bool)
-    disk_resource_manager_tags                     = optional(map(string))
-    disk_encryption_key                            = optional(string)
-    disk_encryption_key_service_account            = optional(string)
-    source_image_encryption_key                    = optional(string)
-    source_image_encryption_key_service_account    = optional(string)
-    source_snapshot_encryption_key                 = optional(string)
-    source_snapshot_encryption_key_service_account = optional(string)
+    disk_name                           = optional(string)
+    device_name                         = optional(string)
+    disk_size_gb                        = optional(number)
+    disk_type                           = optional(string)
+    disk_labels                         = optional(map(string))
+    auto_delete                         = optional(bool)
+    boot                                = optional(bool)
+    disk_resource_manager_tags          = optional(map(string))
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   }))
   description = "List of maps of disks."
   default     = []

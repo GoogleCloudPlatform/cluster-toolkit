@@ -40,13 +40,9 @@ locals {
           slurm_instance_role = var.slurm_instance_role
         },
       )
-      disk_resource_manager_tags                     = disk.disk_resource_manager_tags
-      disk_encryption_key                            = disk.disk_encryption_key
-      disk_encryption_key_service_account            = disk.disk_encryption_key_service_account
-      source_image_encryption_key                    = disk.source_image_encryption_key
-      source_image_encryption_key_service_account    = disk.source_image_encryption_key_service_account
-      source_snapshot_encryption_key                 = disk.source_snapshot_encryption_key
-      source_snapshot_encryption_key_service_account = disk.source_snapshot_encryption_key_service_account
+      disk_resource_manager_tags          = disk.disk_resource_manager_tags
+      disk_encryption_key                 = disk.disk_encryption_key
+      disk_encryption_key_service_account = disk.disk_encryption_key_service_account
     }
   ]
 
@@ -176,10 +172,6 @@ module "instance_template" {
   provisioning_model   = var.provisioning_model
   reservation_affinity = var.reservation_affinity
 
-  disk_encryption_key                            = var.disk_encryption_key
-  disk_encryption_key_service_account            = var.disk_encryption_key_service_account
-  source_image_encryption_key                    = var.source_image_encryption_key
-  source_image_encryption_key_service_account    = var.source_image_encryption_key_service_account
-  source_snapshot_encryption_key                 = var.source_snapshot_encryption_key
-  source_snapshot_encryption_key_service_account = var.source_snapshot_encryption_key_service_account
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 }

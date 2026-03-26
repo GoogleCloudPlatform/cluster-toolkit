@@ -22,20 +22,16 @@ module "gpu" {
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name                                      = ad.disk_name
-      device_name                                    = ad.device_name
-      disk_type                                      = ad.disk_type
-      disk_size_gb                                   = ad.disk_size_gb
-      disk_labels                                    = merge(ad.disk_labels, local.labels)
-      auto_delete                                    = ad.auto_delete
-      boot                                           = ad.boot
-      disk_resource_manager_tags                     = ad.disk_resource_manager_tags
-      disk_encryption_key                            = ad.disk_encryption_key
-      disk_encryption_key_service_account            = ad.disk_encryption_key_service_account
-      source_image_encryption_key                    = ad.source_image_encryption_key
-      source_image_encryption_key_service_account    = ad.source_image_encryption_key_service_account
-      source_snapshot_encryption_key                 = ad.source_snapshot_encryption_key
-      source_snapshot_encryption_key_service_account = ad.source_snapshot_encryption_key_service_account
+      disk_name                           = ad.disk_name
+      device_name                         = ad.device_name
+      disk_type                           = ad.disk_type
+      disk_size_gb                        = ad.disk_size_gb
+      disk_labels                         = merge(ad.disk_labels, local.labels)
+      auto_delete                         = ad.auto_delete
+      boot                                = ad.boot
+      disk_resource_manager_tags          = ad.disk_resource_manager_tags
+      disk_encryption_key                 = ad.disk_encryption_key
+      disk_encryption_key_service_account = ad.disk_encryption_key_service_account
     }
   ]
 
@@ -83,7 +79,8 @@ resource "google_compute_disk" "controller_disk" {
   dynamic "disk_encryption_key" {
     for_each = compact([var.disk_encryption_key])
     content {
-      kms_key_self_link = disk_encryption_key.value
+      kms_key_self_link       = disk_encryption_key.value
+      kms_key_service_account = var.disk_encryption_key_service_account
     }
   }
 }
@@ -105,12 +102,8 @@ module "slurm_controller_template" {
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = concat(local.additional_disks, local.state_disk)
 
-  disk_encryption_key                            = var.disk_encryption_key
-  disk_encryption_key_service_account            = var.disk_encryption_key_service_account
-  source_image_encryption_key                    = var.source_image_encryption_key
-  source_image_encryption_key_service_account    = var.source_image_encryption_key_service_account
-  source_snapshot_encryption_key                 = var.source_snapshot_encryption_key
-  source_snapshot_encryption_key_service_account = var.source_snapshot_encryption_key_service_account
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path
