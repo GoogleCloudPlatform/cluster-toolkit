@@ -357,12 +357,18 @@ module "install_gib" {
 }
 
 module "install_asapd_lite" {
-  source            = "./kubectl"
-  source_path       = local.install_asapd_lite ? var.asapd_lite.config_path : null
-  server_side_apply = true
-  wait_for_rollout  = true
+  source        = "./helm_install"
+  count         = local.install_asapd_lite ? 1 : 0
+  release_name  = "asapd-lite"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  namespace     = "kube-system"
+  wait          = true
+  depends_on    = [var.gke_cluster_exists]
 
-  providers = {
-    kubectl = kubectl
-  }
+  values_yaml = [
+    yamlencode({
+      manifests = [for doc in split("\n---", local.asapd_lite_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+    })
+  ]
 }
