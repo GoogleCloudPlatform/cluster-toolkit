@@ -20,16 +20,16 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   kueue_config_content = join("\n---\n", compact([
-    try(var.kueue.enable_slice_controller, false) ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
+    var.kueue.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
       super_slice_topology_name = "super-slice-topology"
     }) : "",
     var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
-      templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
+      endswith(var.kueue.config_path, ".tftpl") || length(coalesce(var.kueue.config_template_vars, {})) > 0 ?
+      templatefile(var.kueue.config_path, coalesce(var.kueue.config_template_vars, {})) :
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_slice_controller, false))
+  configure_kueue = local.install_kueue && ((var.kueue.config_path != null && var.kueue.config_path != "") || var.kueue.enable_slice_controller)
 
   kueue_docs        = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
   parsed_kueue_docs = [for doc in [for d in local.kueue_docs : try(yamldecode(d), null)] : doc if doc != null]
@@ -90,12 +90,12 @@ locals {
 
   )
 
-  install_kueue             = try(var.kueue.install, false)
-  install_jobset            = try(var.jobset.install, false)
-  install_gpu_operator      = try(var.gpu_operator.install, false)
-  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
-  install_gib               = try(var.gib.install, false)
-  install_asapd_lite        = try(var.asapd_lite.install, false)
+  install_kueue             = var.kueue.install
+  install_jobset            = var.jobset.install
+  install_gpu_operator      = var.gpu_operator.install
+  install_nvidia_dra_driver = var.nvidia_dra_driver.install
+  install_gib               = var.gib.install
+  install_asapd_lite        = var.asapd_lite.install
 }
 
 data "http" "manifest_from_url" {
@@ -127,6 +127,24 @@ module "kubectl_apply_manifests" {
   }
 }
 
+
+module "kueue_version_check" {
+  source = "../../internal/semver_compare"
+
+  current_version = var.kueue.version
+  minimum_version = "0.15.2"
+}
+
+resource "terraform_data" "kueue_slice_controller_version_check" {
+  count = local.install_kueue ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = var.kueue.enable_slice_controller ? module.kueue_version_check.is_greater_than_or_equal : true
+      error_message = "Kueue super-slicing requires Kueue version >= 0.15.2."
+    }
+  }
+}
+
 module "install_kueue" {
   source           = "./helm_install"
   count            = local.install_kueue ? 1 : 0
@@ -140,24 +158,24 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    try(var.kueue.enable_slice_controller, false) || try(var.kueue.controller_cpu_limit, null) != null || try(var.kueue.controller_memory_limit, null) != null ? yamlencode({
+    var.kueue.enable_slice_controller || var.kueue.controller_cpu_limit != null || var.kueue.controller_memory_limit != null ? yamlencode({
       controllerManager = merge(
-        try(var.kueue.enable_slice_controller, false) ? { replicas = 3 } : {},
+        var.kueue.enable_slice_controller ? { replicas = 3 } : {},
         {
           manager = {
             resources = merge(
               {
                 limits = {
                   for k, v in {
-                    cpu    = try(var.kueue.enable_slice_controller, false) ? "16" : try(var.kueue.controller_cpu_limit, null)
-                    memory = try(var.kueue.enable_slice_controller, false) ? "64Gi" : try(var.kueue.controller_memory_limit, null)
+                    cpu    = var.kueue.enable_slice_controller ? coalesce(var.kueue.controller_cpu_limit, "16") : var.kueue.controller_cpu_limit
+                    memory = var.kueue.enable_slice_controller ? coalesce(var.kueue.controller_memory_limit, "64Gi") : var.kueue.controller_memory_limit
                   } : k => v if v != null
                 }
               },
-              try(var.kueue.enable_slice_controller, false) ? {
+              var.kueue.enable_slice_controller ? {
                 requests = {
-                  cpu    = "16"
-                  memory = "64Gi"
+                  cpu    = coalesce(var.kueue.controller_cpu_limit, "16")
+                  memory = coalesce(var.kueue.controller_memory_limit, "64Gi")
                 }
               } : {}
             )
@@ -173,6 +191,7 @@ module "install_kueue" {
 }
 
 resource "time_sleep" "wait_for_kueue_crd" {
+  count           = local.install_kueue ? 1 : 0
   depends_on      = [module.install_kueue]
   create_duration = "15s"
 }
@@ -210,10 +229,10 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    try(var.jobset.controller_cpu_limit, null) != null || try(var.jobset.controller_memory_limit, null) != null ? yamlencode({
+    var.jobset.controller_cpu_limit != null || var.jobset.controller_memory_limit != null ? yamlencode({
       controller = {
         resources = {
-          limits = { for k, v in { cpu = try(var.jobset.controller_cpu_limit, null), memory = try(var.jobset.controller_memory_limit, null) } : k => v if v != null }
+          limits = { for k, v in { cpu = var.jobset.controller_cpu_limit, memory = var.jobset.controller_memory_limit } : k => v if v != null }
         }
       }
     }) : ""
