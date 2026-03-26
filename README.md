@@ -41,7 +41,7 @@ is the recommended path to get started with the Cluster Toolkit.
 
 ### Using the Pre-built Bundle (Recommended)
 
-For the easiest setup, download the `gcluster_bundle_linux.zip` (for Linux) or `gcluster_bundle_mac.zip` (for macOS) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
+For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., gcluster_bundle_linux_amd64.zip, gcluster_bundle_linux_arm64.zip, gcluster_bundle_mac_amd64.zip, or gcluster_bundle_mac_arm64.zip) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
 #### Bundle Compatibility Matrix
 
@@ -51,25 +51,45 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
-| **Linux** | ✅ | Pre-compiled on Debian Bullseye. |
-| **Google Cloud Shell** | ✅ | Native support via the Linux binary. |
-| **macOS** | ✅ | Native support via the Mac binary. |
+| **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
+| **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
+| **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
 | **Windows** | ❎ | Please [Build from Source](#building-from-source). |
 
 1. Download and extract the bundle:
 
+    > **_NOTE:_** The binary is available starting with version 1.82.0 [Only supports x86/amd64 arch]. Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0.
+
+    For versions v1.85.0 and newer (Multi-architecture):
+
     ```shell
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
-    # Set the desired version TAG (e.g., v1.82.0)
+    # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
-    # Replace gcluster-bundle.zip with the platform-specific filename (e.g., gcluster_bundle_linux.zip)
-    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster-bundle.zip
-    unzip gcluster-bundle.zip -d gcluster-bundle/
+    # Set your OS (linux or mac) and Architecture (amd64 or arm64)
+    OS="linux"
+    ARCH="amd64"
+    # Download and extract the platform-specific bundle
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.zip
+    unzip gcluster_bundle_${OS}_${ARCH}.zip -d gcluster-bundle/
     cd gcluster-bundle
     chmod +x gcluster
     ```
 
-    > **_NOTE:_** The binary is available starting with version 1.82.0
+    For versions v1.82.0 through v1.84.0:
+
+    ```shell
+    # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
+    # Set the desired version TAG (e.g., v1.84.0)
+    TAG=vX.Y.Z
+    # Set your OS (linux or mac)
+    OS="linux"
+    # Download and extract
+    curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}.zip
+    unzip gcluster_bundle_${OS}.zip -d gcluster-bundle/
+    cd gcluster-bundle
+    chmod +x gcluster
+    ```
 
 2. Verify the Installation:
 
@@ -330,6 +350,13 @@ hpc-slurm/
 
 See
 [Cloud Docs on Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+
+When running commands like `deploy`, `destroy`, or `export-outputs`, the toolkit can automatically download missing dependencies. You can control this behavior using the `--download-dependencies` flag:
+
+* `--download-dependencies`: Automatically download missing dependencies without prompting.
+* `--download-dependencies=false`: Fail immediately if any required dependencies are missing.
+
+If the flag is not provided, you will be interactively asked to confirm the download.
 
 ### Notes on Packer
 

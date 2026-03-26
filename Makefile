@@ -68,11 +68,10 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
 	go install github.com/google/addlicense@latest
-	go install mvdan.cc/sh/v3/cmd/shfmt@latest
-	go install golang.org/x/tools/cmd/goimports@latest
+	go install mvdan.cc/sh/v3/cmd/shfmt@v3.12.0
+	go install golang.org/x/tools/cmd/goimports@v0.42.0
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/jstemmer/go-junit-report/v2@latest
-	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
 	pip install mypy==1.18.2
 

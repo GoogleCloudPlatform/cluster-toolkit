@@ -23,11 +23,13 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -62,6 +64,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
+  * [gke-a4](#gke-a4-) ![core-badge]
+  * [gke-a4x](#gke-a4x-) ![core-badge]
+  * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
@@ -404,6 +409,27 @@ timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
+### [ml-slurm-g4.yaml] ![core-badge]
+
+This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads.
+
+Before deploying the blueprint, ensure you are utilizing one of the provision models specified within the blueprint.
+
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/ml-slurm-g4.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy <deployment_name>
+```
+
+When you are done, clean up the resources:
+
+```text
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
+```
+
+[ml-slurm-g4.yaml]: ../examples/ml-slurm-g4.yaml
+
 ### [image-builder.yaml] ![core-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
@@ -651,6 +677,18 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
+
+### [rapid-storage-slurm.yaml] ![core-badge]
+
+This blueprint showcases the integration of several storage solutions:
+
+* **Google Cloud Storage (GCS):**
+  * The `data-bucket-zonal` module defines a GCS bucket configured with the `RAPID` storage class and `enable_hierarchical_namespace: true` for high-performance, zonal storage. More details on the [RAPID Bucket Cloud Docs](https://docs.cloud.google.com/storage/docs/rapid/rapid-bucket).
+  * **Anywhere Cache Support:** This blueprint also highlights support for [Anywhere Cache](https://cloud.google.com/storage/docs/anywhere-cache), a fully managed service that caches Cloud Storage data in Google Cloud. This improves read performance by co-locating cached data with compute resources.
+    * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
+    * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
+
+[rapid-storage-slurm.yaml]: ./rapid-storage-slurm.yaml
 
 ### [gke-managed-lustre.yaml] ![core-badge]
 
@@ -1241,30 +1279,26 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
 ### [storage-gke.yaml] ![core-badge]
 
-This blueprint shows how to use different storage options with GKE in the toolkit.
+This blueprint showcases the integration of several storage solutions:
 
-> [!NOTE]
-> This blueprint also demonstrates support for Anywhere Cache. Anywhere Cache is a fully managed service
-> that caches Cloud Storage data in Google Cloud. For each bucket, you can create a maximum of one cache per zone.
-> For example, if a bucket is located in the us-east1 region, you could create a cache in us-east1-b and another cache in us-east1-c.
-> For information on other parameters to enable anywhere cache, see [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache)
-> For more information, see [Anywhere Cache documentation](https://cloud.google.com/storage/docs/anywhere-cache).
+* **Google Cloud Storage (GCS):**
+  * The `data-bucket-zonal` module defines a GCS bucket configured with the `RAPID` storage class and `enable_hierarchical_namespace: true` for high-performance, zonal storage. More details on the [RAPID Bucket Cloud Docs](https://docs.cloud.google.com/storage/docs/rapid/rapid-bucket).
+  * **Anywhere Cache Support:** This blueprint also highlights support for [Anywhere Cache](https://cloud.google.com/storage/docs/anywhere-cache), a fully managed service that caches Cloud Storage data in Google Cloud. This improves read performance by co-locating cached data with compute resources.
+    * Note: A maximum of one cache per zone can be created for each bucket. For example, a bucket in `us-east1` can have caches in `us-east1-b` and `us-east1-c`.
+    * Refer to [Create a Cache](https://docs.cloud.google.com/storage/docs/anywhere-cache#create_a_cache) for more parameter details.
 
-The blueprint contains the following:
+* **Filestore:**
+  * A K8s Job utilizes a Filestore instance as another shared filesystem between pods.
+  * The `filestore` module sets up the Filestore instance, and `shared-filestore-pv` configures the Persistent Volume for GKE.
 
-* A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
-* A K8s Job that demonstrates different ephemeral storage options:
-  * memory backed emptyDir
-  * local SSD backed emptyDir
-  * SSD persistent disk backed ephemeral volume
-  * balanced persistent disk backed ephemeral volume
-
-Note that when type `local-ssd` is used, the specified node pool must have
-`local_ssd_count_ephemeral_storage` specified.
-
-When using either `pd-ssd` or `pd-balanced` ephemeral storage, a persistent disk
-will be created when the job is submitted. The disk will be automatically
-cleaned up when the job is deleted.
+* **Ephemeral Storage Options in GKE:**
+  * A dedicated K8s Job (`ephemeral-storage-job`) demonstrates different ephemeral storage types:
+    * **Memory-backed `emptyDir`**: Uses node memory for temporary storage.
+    * **Local SSD-backed `emptyDir`**: Leverages Local SSDs on the node for high-performance ephemeral storage.
+      * **Requirement**: The node pool (`local-ssd-pool`) *must* have `local_ssd_count_ephemeral_storage` specified.
+    * **SSD Persistent Disk (`pd-ssd`) ephemeral volume**: A Persistent Disk is dynamically created and managed for the job's lifecycle.
+    * **Balanced Persistent Disk (`pd-balanced`) ephemeral volume**: Similar to `pd-ssd`, a Persistent Disk is created and cleaned up with the job.
+  * When using `pd-ssd` or `pd-balanced`, a persistent disk is automatically created upon job submission and cleaned up when the job is deleted.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1274,6 +1308,25 @@ cleaned up when the job is deleted.
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+#### Requirements
+
+1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
+    1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
+
+#### Deployment Instructions
+
+1. Update the `vars` block of the blueprint file (`examples/storage-gke.yaml`) with your specific configurations.
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    2. `deployment_name`: Name of the deployment.
+    3. `region` / `zone`: Ensure these map to your intended location.
+    4. `authorized_cidr`: Update to your IP address in `<your-ip-address>/32` format.
+2. Deploy the blueprint using the following command:
+
+   ```shell
+   ./gcluster deploy examples/storage-gke.yaml
+   ```
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
@@ -1625,6 +1678,24 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
 
 [gke-g4]: ../examples/gke-g4
+
+### [gke-a4] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-a4-vms-powered-by-nvidia-b200-gpu-aka-blackwell). The deployment instructions can be found in the [README](/examples/gke-a4/README.md).
+
+[gke-a4]: ../examples/gke-a4
+
+### [gke-a4x] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found [here](https://cloud.google.com/blog/products/compute/new-a4x-vms-powered-by-nvidia-gb200-gpus). The deployment instructions can be found in the [README](/examples/gke-a4x/README.md).
+
+[gke-a4x]: ../examples/gke-a4x
+
+### [gke-a4x-max-bm] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found [here](https://cloud.google.com/blog/products/compute/now-shipping-a4x-max-vertex-ai-training-and-more). The deployment instructions can be found in the [README](/examples/gke-a4x-max-bm/README.md).
+
+[gke-a4x-max-bm]: ../examples/gke-a4x-max-bm
 
 ### [netapp-volumes.yaml] ![core-badge]
 

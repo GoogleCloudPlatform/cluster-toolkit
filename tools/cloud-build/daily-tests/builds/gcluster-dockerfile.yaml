@@ -29,6 +29,16 @@ steps:
   name: 'gcr.io/cloud-builders/docker'
   args: ['build', '-t', 'gcluster', 'tools/cloud-build/images/cluster-toolkit-dockerfile/']
 
+- id: modify-blueprint
+  name: 'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner' # Using an image with bash
+  script: |
+    #!/usr/bin/env bash
+    set -ex
+    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+
+    echo "--- Modifying Blueprint with add_ttl_label.sh ---"
+    bash tools/add_ttl_label.sh "${BLUEPRINT}"
+
 - id: create-deployment-folder
   name: 'gcluster'
   args:
@@ -58,4 +68,4 @@ steps:
 
 - id: destroy-resources
   name: 'gcluster'
-  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve']
+  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve', '--robust']

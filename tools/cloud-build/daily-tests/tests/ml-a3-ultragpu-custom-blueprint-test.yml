@@ -22,7 +22,7 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/a3ultra-custom-image-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: "{{ test_name }}-net-0"
+network: "{{ test_name }}"
 nccl_test_path: "examples/machine-learning/a3-ultragpu-8g/nccl-tests"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -46,6 +46,7 @@ custom_vars:
     a3ultra_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
@@ -53,5 +54,4 @@ cli_deployment_vars:
   a3u_cluster_size: 2
   instance_image_project: "{{ instance_image_project }}"
   instance_image_family: "{{ instance_image_family }}"
-  base_network_name: "{{ test_name }}"
   a3u_enable_spot_vm: true

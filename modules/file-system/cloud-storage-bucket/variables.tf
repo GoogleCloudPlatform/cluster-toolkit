@@ -106,9 +106,26 @@ variable "storage_class" {
       "REGIONAL",
       "NEARLINE",
       "COLDLINE",
-      "ARCHIVE"
+      "ARCHIVE",
+      "RAPID"
     ], var.storage_class)
-    error_message = "Allowed values for GCS storage_class are 'STANDARD', 'MULTI_REGIONAL', 'REGIONAL', 'NEARLINE', 'COLDLINE', 'ARCHIVE'.\nhttps://cloud.google.com/storage/docs/storage-classes"
+    error_message = "Allowed values for GCS storage_class are 'STANDARD', 'MULTI_REGIONAL', 'REGIONAL', 'NEARLINE', 'COLDLINE', 'ARCHIVE', 'RAPID'.\nhttps://cloud.google.com/storage/docs/storage-classes"
+  }
+}
+
+variable "placement_zones" {
+  description = "A list of locations for data placement. This can be a zone for a zonal bucket or a region for a regional bucket. When using this, `storage_class` must be `RAPID` for zonal buckets or `REGIONAL` for regional buckets."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.placement_zones == null || contains(["RAPID", "REGIONAL"], var.storage_class)
+    error_message = "`placement_zones` can only be set when `storage_class` is `RAPID` or `REGIONAL`."
+  }
+
+  validation {
+    condition     = var.placement_zones == null || (var.region != null && alltrue([for loc in var.placement_zones : startswith(loc, var.region)]))
+    error_message = "`region` must be provided and all `placement_zones` must be within that region."
   }
 }
 
