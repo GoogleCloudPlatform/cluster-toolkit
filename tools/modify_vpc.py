@@ -7,7 +7,7 @@ def modify_vpcs(blueprint_path):
 
     vpc_count = 0
     # Iterate through all deployment groups and modules
-    if 'deployment_groups' in data:
+    if data and 'deployment_groups' in data:
         for group in data['deployment_groups']:
             for module in group.get('modules', []):
                 # Identify VPC modules by their source path
