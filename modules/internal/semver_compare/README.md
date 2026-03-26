@@ -6,6 +6,8 @@ It safely parses inputs using native Terraform `regex()`. It evaluates up to fou
 
 Critically, this module implements **fail-open validation**: if the provided `current_version` cannot be resolved to a standard 3-integer format (for example, if a user specifies a Github branch name like `my-custom-feature` or a commit SHA `sha256-4c4892`), the output `is_greater_than_or_equal` evaluates to `true`. This protects the Cluster Toolkit from inadvertently blocking advanced users running fully custom artifacts.
 
+**Note on GKE Versions:** This module evaluates the `-gke.X` suffix as a post-release build number (where `1.35.0-gke.100` is strictly *greater* than `1.35.0`). This correctly maps to GKE's versioning scheme, but diverges from strict SemVer which treats hyphenated suffixes as pre-releases.
+
 ## Usage
 
 You must invoke this inside a module, and usually consume it via a `lifecycle { precondition {} }` block since `module` outputs cannot be natively read from `variable { validation {} }` blocks.
