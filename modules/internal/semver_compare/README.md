@@ -2,7 +2,7 @@
 
 This internal module securely performs a semantic version comparison (major.minor.patch) between a target version and a required minimum version.
 
-It safely parses inputs using native Terraform `regex()`, explicitly ignoring anything after the `patch` string (e.g., `-gke.126`, `-beta`, `+build123`). 
+It safely parses inputs using native Terraform `regex()`. It evaluates up to four hierarchical components: `major`, `minor`, `patch`, and an optional GKE build number (`-gke.X`). It explicitly ignores any other suffixes (e.g., `-beta`, `+build123`) that follow the parsed components. 
 
 Critically, this module implements **fail-open validation**: if the provided `current_version` cannot be resolved to a standard 3-integer format (for example, if a user specifies a Github branch name like `my-custom-feature` or a commit SHA `sha256-4c4892`), the output `is_greater_than_or_equal` evaluates to `true`. This protects the Cluster Toolkit from inadvertently blocking advanced users running fully custom artifacts.
 
