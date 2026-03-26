@@ -4,7 +4,7 @@ locals {
   clean_min_version = trimprefix(var.minimum_version, "v")
 
   # Regex to capture strictly major.minor.patch integers, and optionally a -gke.123 build suffix
-  version_regex = "^([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?(?:-gke\\.([0-9]+))?(?:[-+].*)?$"
+  version_regex = "^([0-9]+)(?:\\.([0-9]+))?(?:\\.([0-9]+))?(?:-gke\\.([0-9]+))?(?:[-+].*)?$"
 
   # Try to parse. If it fails (e.g., 'sha256-12345'), it returns null.
   parsed_ver = try(regex(local.version_regex, local.clean_version), null)
@@ -17,12 +17,12 @@ locals {
 
   # Map to integers, defaulting to 0 for missing patch versions or gke build numbers
   ver_major = local.is_valid_current ? tonumber(local.parsed_ver[0]) : 0
-  ver_minor = local.is_valid_current ? tonumber(local.parsed_ver[1]) : 0
+  ver_minor = local.is_valid_current ? tonumber(coalesce(local.parsed_ver[1], "0")) : 0
   ver_patch = local.is_valid_current ? tonumber(coalesce(local.parsed_ver[2], "0")) : 0
   ver_gke   = local.is_valid_current ? tonumber(coalesce(local.parsed_ver[3], "0")) : 0
 
   min_major = local.is_valid_min ? tonumber(local.parsed_min[0]) : 0
-  min_minor = local.is_valid_min ? tonumber(local.parsed_min[1]) : 0
+  min_minor = local.is_valid_min ? tonumber(coalesce(local.parsed_min[1], "0")) : 0
   min_patch = local.is_valid_min ? tonumber(coalesce(local.parsed_min[2], "0")) : 0
   min_gke   = local.is_valid_min ? tonumber(coalesce(local.parsed_min[3], "0")) : 0
 
