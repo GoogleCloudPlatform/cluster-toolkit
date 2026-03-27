@@ -59,6 +59,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
@@ -1577,6 +1578,12 @@ is deployed as the native resource manager.
 See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
+
+### [hpc-slurm-kms.yaml] ![community-badge] ![experimental-badge]
+
+Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket.
+
+[hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
 
 ### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
