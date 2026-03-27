@@ -122,7 +122,7 @@ deployment_groups:
     use: [gke_cluster, node_pool_service_account]
     settings:
       name: "default"
-      machine_type: "e2-standard-2"
+      machine_type: "n4-standard-2"
       autoscaling_total_min_nodes: 1
       autoscaling_total_max_nodes: 3
       zones: [$(vars.zone)]

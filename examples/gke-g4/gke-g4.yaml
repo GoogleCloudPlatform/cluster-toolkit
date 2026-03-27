@@ -117,7 +117,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-g4-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_machine_type: "n4-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
@@ -143,8 +143,8 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
-      release_channel: REGULAR
+      version_prefix: "1.35.2-gke.1485000"
+      release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
         start_time: "2025-12-01T00:00:00Z"
