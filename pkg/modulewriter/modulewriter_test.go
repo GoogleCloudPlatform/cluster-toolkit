@@ -658,3 +658,137 @@ func (s *zeroSuite) TestStageFile(c *C) {
 	}
 
 }
+
+func (s *zeroSuite) TestPatchEmbeddedModulesVersionsTf(c *C) {
+	groupPath := c.MkDir()
+	modDir := filepath.Join(groupPath, "github.com/mock/repo.git")
+	err := os.MkdirAll(modDir, 0755)
+	c.Assert(err, IsNil)
+
+	vtfPath := filepath.Join(modDir, "versions.tf")
+
+	originalVtf := `
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "3.90.0"
+    }
+    other = {
+      source = "hashicorp/other"
+    }
+  }
+}
+`
+	err = os.WriteFile(vtfPath, []byte(originalVtf), 0644)
+	c.Assert(err, IsNil)
+
+	modules := []config.Module{
+		{
+			Kind:   config.TerraformKind,
+			Source: "github.com/mock/repo.git",
+		},
+		{
+			Kind: config.PackerKind, // Should be ignored
+		},
+		{
+			Kind:   config.TerraformKind,
+			Source: "github.com/mock/missing.git", // Missing file, should skip gracefully
+		},
+	}
+
+	providers := map[string]config.TerraformProvider{
+		"google": {
+			Source:  "hashicorp/google-private",
+			Version: "4.0.0",
+		},
+	}
+
+	err = patchEmbeddedModulesVersionsTf(modules, groupPath, providers)
+	c.Assert(err, IsNil)
+
+	// Check that versions.tf was modified
+	b, err := os.ReadFile(vtfPath)
+	c.Assert(err, IsNil)
+	content := string(b)
+	c.Assert(strings.Contains(content, `"hashicorp/google-private"`), Equals, true)
+	c.Assert(strings.Contains(content, `"4.0.0"`), Equals, true)
+	// other provider should be untouched
+	c.Assert(strings.Contains(content, `"hashicorp/other"`), Equals, true)
+}
+
+func (s *zeroSuite) TestPatchEmbeddedModulesMainTf(c *C) {
+	groupPath := c.MkDir()
+	modDir := filepath.Join(groupPath, "github.com/mock/repo.git")
+	err := os.MkdirAll(modDir, 0755)
+	c.Assert(err, IsNil)
+
+	mainTfPath := filepath.Join(modDir, "main.tf")
+
+	originalMainTf := `
+resource "google_compute_instance" "test1" {
+  name = "test1"
+  scheduling {
+    automatic_restart = true
+    location_hint     = "xxx"
+  }
+}
+
+resource "google_compute_instance_template" "test2" {
+  name = "test2"
+  scheduling {
+    location_hint = "yyy"
+  }
+}
+
+resource "google_compute_instance" "test3" {
+  name = "test3"
+  scheduling {
+    automatic_restart = true
+  }
+}
+
+resource "other_resource" "test4" {
+  scheduling {
+    location_hint = "zzz"
+  }
+}
+`
+	err = os.WriteFile(mainTfPath, []byte(originalMainTf), 0644)
+	c.Assert(err, IsNil)
+
+	modules := []config.Module{
+		{
+			Kind:   config.TerraformKind,
+			Source: "github.com/mock/repo.git",
+		},
+	}
+
+	// Test 1: Providers have google-private, so it should exit early without modifications
+	providersPrivate := map[string]config.TerraformProvider{
+		"google-beta": {Source: "hashicorp/google-private"},
+	}
+	err = patchEmbeddedModulesMainTf(modules, groupPath, providersPrivate)
+	c.Assert(err, IsNil)
+	b, err := os.ReadFile(mainTfPath)
+	c.Assert(err, IsNil)
+	c.Assert(strings.Contains(string(b), `location_hint     = "xxx"`), Equals, true)
+
+	// Test 2: Providers don't have google-private, so modifications should happen
+	providersPublic := map[string]config.TerraformProvider{
+		"google": {Source: "hashicorp/google"},
+	}
+	err = patchEmbeddedModulesMainTf(modules, groupPath, providersPublic)
+	c.Assert(err, IsNil)
+	b2, err := os.ReadFile(mainTfPath)
+	c.Assert(err, IsNil)
+	content := string(b2)
+	
+	// location_hint should be removed from test1 and test2 (compute_instance and compute_instance_template)
+	c.Assert(strings.Contains(content, `"xxx"`), Equals, false)
+	c.Assert(strings.Contains(content, `"yyy"`), Equals, false)
+	// it should remain in test4 (other_resource)
+	c.Assert(strings.Contains(content, `"zzz"`), Equals, true)
+	// automatic_restart should remain untouched
+	c.Assert(strings.Contains(content, `automatic_restart`), Equals, true)
+}
