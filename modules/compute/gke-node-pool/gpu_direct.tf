@@ -70,15 +70,19 @@ locals {
 
   gke_major    = tonumber(split(".", local.gke_version_parts[0])[0])
   gke_minor    = tonumber(split(".", local.gke_version_parts[0])[1])
+  gke_patch    = tonumber(local.gke_version_parts[1])
+  gke_build    = tonumber(local.gke_version_parts[2])
   dranet_major = tonumber(split(".", local.dranet_min_parts[0])[0])
   dranet_minor = tonumber(split(".", local.dranet_min_parts[0])[1])
+  dranet_patch = tonumber(local.dranet_min_parts[1])
+  dranet_build = tonumber(local.dranet_min_parts[2])
 
   is_dranet_compatible = (
     local.gke_major > local.dranet_major ||
     (local.gke_major == local.dranet_major && local.gke_minor > local.dranet_minor) ||
     (local.gke_major == local.dranet_major && local.gke_minor == local.dranet_minor && (
-      tonumber(local.gke_version_parts[1]) > tonumber(local.dranet_min_parts[1]) ||
-      (local.gke_version_parts[1] == local.dranet_min_parts[1] && tonumber(local.gke_version_parts[2]) >= tonumber(local.dranet_min_parts[2]))
+      local.gke_patch > local.dranet_patch ||
+      (local.gke_patch == local.dranet_patch && local.gke_build >= local.dranet_build)
     ))
   )
 
