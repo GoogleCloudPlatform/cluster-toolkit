@@ -19,15 +19,39 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = (
-    var.kueue.config_path != null && var.kueue.config_path != "" ?
-    (
+  kueue_config_content = join("\n---\n", compact([
+    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+      pathways_nodepool_name = "cpu-np"
+      pathways_cpu_quota     = 480
+      pathways_memory_quota  = "2000G"
+    }) : "",
+    var.kueue.config_path != null && var.kueue.config_path != "" ? (
       endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
       templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
       file(var.kueue.config_path)
     ) : ""
-  )
-  configure_kueue = local.install_kueue && try(var.kueue.config_path, "") != ""
+  ]))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+
+  kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+  parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
+  cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
+  other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
+  merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
+  final_cluster_queues = [
+    for name, cqs in local.merged_cluster_queues : {
+      apiVersion = cqs[0].apiVersion
+      kind       = cqs[0].kind
+      metadata   = cqs[0].metadata
+      spec = merge(
+        try(cqs[0].spec, {}),
+        {
+          resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
+        }
+      )
+    }
+  ]
+  final_kueue_manifests = concat([for doc in local.other_docs : yamlencode(doc)], [for doc in local.final_cluster_queues : yamlencode(doc)])
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -128,7 +152,7 @@ module "configure_kueue" {
 
   values_yaml = [
     yamlencode({
-      manifests = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+      manifests = local.final_kueue_manifests
     })
   ]
 
