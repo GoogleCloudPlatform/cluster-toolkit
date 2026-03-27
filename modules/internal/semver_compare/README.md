@@ -2,7 +2,7 @@
 
 This internal module securely performs a semantic version comparison (major.minor.patch) between a target version and a required minimum version.
 
-It safely parses inputs using native Terraform `regex()`. It evaluates up to four hierarchical components: `major`, `minor`, `patch`, and an optional GKE build number (`-gke.X`). It explicitly ignores any other suffixes (e.g., `-beta`, `+build123`) that follow the parsed components. 
+It safely parses inputs using native Terraform `regex()`. It evaluates up to four hierarchical components: `major`, `minor`, `patch`, and an optional GKE build number (`-gke.X`). It explicitly ignores any other suffixes (e.g., `-beta`, `+build123`) that follow the parsed components.
 
 Critically, this module implements **fail-open validation**: if the provided `current_version` cannot be resolved to a standard 3-integer format (for example, if a user specifies a Github branch name like `my-custom-feature` or a commit SHA `sha256-4c4892`), the output `is_greater_than_or_equal` evaluates to `true`. This protects the Cluster Toolkit from inadvertently blocking advanced users running fully custom artifacts.
 
@@ -28,3 +28,37 @@ resource "terraform_data" "feature_guard" {
   }
 }
 ```
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+
+## Providers
+
+No providers.
+
+## Modules
+
+No modules.
+
+## Resources
+
+No resources.
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_current_version"></a> [current\_version](#input\_current\_version) | The version string to evaluate (e.g. 1.35.2-gke, v0.15.2, sha256-123). | `string` | n/a | yes |
+| <a name="input_minimum_version"></a> [minimum\_version](#input\_minimum\_version) | The minimum required version (e.g. 1.35.0). | `string` | n/a | yes |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_is_greater_than_or_equal"></a> [is\_greater\_than\_or\_equal](#output\_is\_greater\_than\_or\_equal) | True if the version meets the minimum requirement, or if the version is a non-standard custom string (fail-open). |
+| <a name="output_is_valid_semver"></a> [is\_valid\_semver](#output\_is\_valid\_semver) | True if both versions could be parsed into major.minor semantic logic. |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
