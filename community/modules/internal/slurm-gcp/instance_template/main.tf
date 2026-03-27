@@ -40,7 +40,9 @@ locals {
           slurm_instance_role = var.slurm_instance_role
         },
       )
-      disk_resource_manager_tags = disk.disk_resource_manager_tags
+      disk_resource_manager_tags          = disk.disk_resource_manager_tags
+      disk_encryption_key                 = disk.disk_encryption_key
+      disk_encryption_key_service_account = disk.disk_encryption_key_service_account
     }
   ]
 
@@ -169,4 +171,7 @@ module "instance_template" {
   max_run_duration     = var.max_run_duration
   provisioning_model   = var.provisioning_model
   reservation_affinity = var.reservation_affinity
+
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 }
