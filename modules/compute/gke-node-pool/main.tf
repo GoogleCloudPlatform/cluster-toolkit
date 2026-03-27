@@ -48,16 +48,10 @@ locals {
   }] : []
 
   is_accelerator = local.has_gpu || module.tpu.is_tpu
-  dranet_supported_machine_types = [
-    "a4x-highgpu-4g",
-    "a4x-highgpu-4g-nolssd",
-    "a4-highgpu-8g",
-    "a3-ultragpu-8g",
-    "a3-highgpu-8g",
-    "a3-megagpu-8g"
-  ]
   is_dranet_supported_machine = (
-    contains(local.dranet_supported_machine_types, var.machine_type) ||
+    startswith(var.machine_type, "a3-") ||
+    startswith(var.machine_type, "a4-") ||
+    startswith(var.machine_type, "a4x-") ||
     startswith(var.machine_type, "ct6e-")
   )
   enable_dranet_actual = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible && length(var.additional_networks) == 0)
