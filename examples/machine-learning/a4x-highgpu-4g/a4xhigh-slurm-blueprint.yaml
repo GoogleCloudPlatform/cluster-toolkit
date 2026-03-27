@@ -710,3 +710,4 @@ deployment_groups:
         switch_type: switch/nvidia_imex
       controller_state_disk: null
       controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true
