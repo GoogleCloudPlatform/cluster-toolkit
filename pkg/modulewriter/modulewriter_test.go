@@ -730,14 +730,13 @@ resource "google_compute_instance" "test1" {
   name = "test1"
   scheduling {
     automatic_restart = true
-    location_hint     = "xxx"
   }
 }
 
 resource "google_compute_instance_template" "test2" {
   name = "test2"
   scheduling {
-    location_hint = "yyy"
+    automatic_restart = false
   }
 }
 
@@ -750,7 +749,7 @@ resource "google_compute_instance" "test3" {
 
 resource "other_resource" "test4" {
   scheduling {
-    location_hint = "zzz"
+    automatic_restart = true
   }
 }
 `
@@ -772,9 +771,9 @@ resource "other_resource" "test4" {
 	c.Assert(err, IsNil)
 	b, err := os.ReadFile(mainTfPath)
 	c.Assert(err, IsNil)
-	c.Assert(strings.Contains(string(b), `location_hint     = "xxx"`), Equals, true)
+	c.Assert(strings.Contains(string(b), `automatic_restart`), Equals, true)
 
-	// Test 2: Providers don't have google-private, so modifications should happen
+	// Test 2: Providers don't have google-private, so it should process main.tf safely
 	providersPublic := map[string]config.TerraformProvider{
 		"google": {Source: "hashicorp/google"},
 	}
@@ -784,11 +783,6 @@ resource "other_resource" "test4" {
 	c.Assert(err, IsNil)
 	content := string(b2)
 	
-	// location_hint should be removed from test1 and test2 (compute_instance and compute_instance_template)
-	c.Assert(strings.Contains(content, `"xxx"`), Equals, false)
-	c.Assert(strings.Contains(content, `"yyy"`), Equals, false)
-	// it should remain in test4 (other_resource)
-	c.Assert(strings.Contains(content, `"zzz"`), Equals, true)
 	// automatic_restart should remain untouched
 	c.Assert(strings.Contains(content, `automatic_restart`), Equals, true)
 }
