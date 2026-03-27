@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: Topology
+metadata:
+  name: "gke-default"
+spec:
+  levels:
+  - nodeLabel: "cloud.google.com/gce-topology-block"
+  - nodeLabel: "cloud.google.com/gce-topology-subblock"
+  - nodeLabel: "cloud.google.com/gce-topology-host"
+  - nodeLabel: "kubernetes.io/hostname"
+---
 kind: ResourceFlavor
 apiVersion: kueue.x-k8s.io/v1beta1
 metadata:
@@ -20,6 +30,7 @@ metadata:
 spec:
   nodeLabels:
     cloud.google.com/gke-accelerator: ${accelerator_type}
+  topologyName: "gke-default"
   tolerations:
   - key: "nvidia.com/gpu"
     operator: "Exists"
