@@ -15,6 +15,8 @@
 ---
 tags:
 - m.cloud-storage-bucket
+- gcs-rapid
+- anywhere-cache
 - m.filestore
 - m.gke-cluster
 - m.service-account
@@ -64,7 +66,7 @@ steps:
     echo '    use: [network1]'                     >> $${SG_EXAMPLE}
     echo '    settings:'                           >> $${SG_EXAMPLE}
     echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
-    echo '      zone: us-central1-a'               >> $${SG_EXAMPLE}
+    echo '      zone: us-central1-b'               >> $${SG_EXAMPLE}
     bash tools/add_ttl_label.sh "$${SG_EXAMPLE}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
