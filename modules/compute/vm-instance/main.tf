@@ -43,8 +43,8 @@ locals {
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
 
   provisioning_model = var.provisioning_model
-  location_hint = var.location_hint
-  spot = var.provisioning_model == "SPOT"
+  location_hint      = var.location_hint
+  spot               = var.provisioning_model == "SPOT"
 
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
@@ -277,7 +277,7 @@ resource "google_compute_instance" "compute_vm" {
     automatic_restart   = local.automatic_restart
     preemptible         = local.spot
     provisioning_model  = local.provisioning_model
-    location_hint       = local.location_hint  
+    location_hint       = local.location_hint
 
   }
 
