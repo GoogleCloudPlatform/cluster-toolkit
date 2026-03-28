@@ -586,3 +586,20 @@ variable "enable_slice_controller" {
   type        = bool
   default     = false
 }
+
+variable "cluster_autoscaling" {
+  description = "GKE Node Auto-Provisioning and Cluster Autoscaling configuration."
+  type = object({
+    enabled = bool
+    limits = list(object({
+      autoprovisioning_machine_type          = string
+      autoprovisioning_max_accelerator_count = optional(number)
+    }))
+    service_account_email = optional(string, "")
+    oauth_scopes          = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+  })
+  default = {
+    enabled = false
+    limits  = []
+  }
+}

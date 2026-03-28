@@ -65,6 +65,15 @@ locals {
   ]
 }
 
+# GKE Node Auto-Provisioning (NAP) locals
+locals {
+  is_accelerator_enabled = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
+  nap_service_account    = var.cluster_autoscaling.service_account_email != "" ? var.cluster_autoscaling.service_account_email : local.sa_email
+
+  nap_cpu_max    = 1000000
+  nap_memory_max = 10000000
+}
+
 data "google_project" "project" {
   project_id = var.project_id
 }
@@ -135,11 +144,47 @@ resource "google_container_cluster" "gke_cluster" {
   enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
-    # Controls auto provisioning of node-pools
-    enabled = false
+    enabled = var.cluster_autoscaling.enabled
 
     # Controls autoscaling algorithm of node-pools
     autoscaling_profile = var.autoscaling_profile
+
+    dynamic "resource_limits" {
+      for_each = var.cluster_autoscaling.enabled ? [
+        { type = "cpu", min = 1, max = local.nap_cpu_max },
+        { type = "memory", min = 1, max = local.nap_memory_max }
+      ] : []
+      content {
+        resource_type = resource_limits.value.type
+        minimum       = resource_limits.value.min
+        maximum       = resource_limits.value.max
+      }
+    }
+
+    dynamic "resource_limits" {
+      for_each = local.is_accelerator_enabled ? var.cluster_autoscaling.limits : []
+      content {
+        resource_type = resource_limits.value.autoprovisioning_machine_type
+        minimum       = 0
+        maximum       = resource_limits.value.autoprovisioning_max_accelerator_count
+      }
+    }
+
+    dynamic "auto_provisioning_defaults" {
+      for_each = var.cluster_autoscaling.enabled ? [1] : []
+      content {
+        service_account = local.nap_service_account
+        oauth_scopes    = var.cluster_autoscaling.oauth_scopes
+
+        management {
+          auto_upgrade = true
+          auto_repair  = true
+        }
+
+        disk_size = 100
+        disk_type = "hyperdisk-balanced"
+      }
+    }
   }
 
   datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
