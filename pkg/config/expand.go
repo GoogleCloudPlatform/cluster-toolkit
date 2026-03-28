@@ -181,6 +181,9 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 		}
 	}
 
+	if err := ExpandClusterAutoscaling(bp, m); err != nil {
+		return err
+	}
 	return validateModuleInputs(mp, *m, bp)
 }
 
