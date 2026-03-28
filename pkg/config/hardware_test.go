@@ -20,7 +20,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-func TestCalculateTPUNodes(t *testing.T) {
+func TestCalculateAcceleratorNodes(t *testing.T) {
 	tests := []struct {
 		name          string
 		machineType   string
@@ -95,7 +95,7 @@ func TestCalculateTPUNodes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			nodes, err := calculateTPUNodes(tc.machineType, tc.topology)
+			nodes, err := calculateAcceleratorNodes(tc.machineType, tc.topology)
 			if tc.expectErr {
 				if err == nil {
 					t.Fatalf("expected error but got nil")

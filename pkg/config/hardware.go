@@ -22,7 +22,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-const defaultChipsPerVM = 4
+const defaultAcceleratorsPerVM = 4
 
 var tpuFamilyDefaults = map[string]int{
 	"ct5lp":     8, // Default for TPU v5e when suffix is missing
@@ -94,7 +94,7 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 		return nil
 	}
 
-	nodes, err := calculateTPUNodes(mtStr, tpuTopologyStr)
+	nodes, err := calculateAcceleratorNodes(mtStr, tpuTopologyStr)
 	if err != nil {
 		return fmt.Errorf("failed to automatically calculate static_node_count for module %q: %w", mod.ID, err)
 	}
@@ -108,46 +108,47 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 	return nil
 }
 
-// calculateTPUNodes derives the node count from topology and machine type.
-func calculateTPUNodes(machineType, topology string) (int, error) {
-	// 1. Calculate Total Chips from topology
+// calculateAcceleratorNodes derives the node count from topology and machine type.
+func calculateAcceleratorNodes(machineType, topology string) (int, error) {
+	// 1. Calculate Total Accelerators from topology
 	dims := strings.Split(topology, "x")
-	totalChips := 1
+	totalAccelerators := 1
 	for _, dim := range dims {
 		val, err := strconv.Atoi(dim)
 		if err != nil {
 			return 0, fmt.Errorf("invalid tpu_topology format %q: %w", topology, err)
 		}
-		totalChips *= val
+		totalAccelerators *= val
 	}
 
-	// 2. Identify Chips per VM from machine_type
-	chipsPerVM := defaultChipsPerVM // Default for most TPU families (e.g., v4, v5p, v6e)
+	// 2. Identify Accelerators per VM from machine_type
+	acceleratorsPerVM := defaultAcceleratorsPerVM // Default for most TPU families (e.g., v4, v5p, v6e)
 
 	// Explicitly check if the machine_type defines chips per VM, e.g., "-1t", "-4t", "-8t"
-	hasExplicitChips := false
+	hasExplicitAccelerators := false
 	if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
 		if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil {
-			chipsPerVM = val
-			hasExplicitChips = true
+			acceleratorsPerVM = val
+			hasExplicitAccelerators = true
 		}
 	}
 
 	// Fallback to known machine family defaults if no explicit "-Nt" suffix
-	if !hasExplicitChips {
-		for family, defaultChips := range tpuFamilyDefaults {
+	if !hasExplicitAccelerators {
+		for family, defaultAccs := range tpuFamilyDefaults {
 			if strings.Contains(machineType, family) {
-				chipsPerVM = defaultChips
+				acceleratorsPerVM = defaultAccs
 				break
 			}
 		}
 	}
 
 	// 3. Calculate Nodes
-	if totalChips%chipsPerVM != 0 {
-		return 0, fmt.Errorf("topology %q (%d chips) is not divisible by machine_type %q capacity (%d chips/VM)",
-			topology, totalChips, machineType, chipsPerVM)
+	if totalAccelerators%acceleratorsPerVM != 0 {
+		return 0, fmt.Errorf("topology %q (%d accelerators) is not divisible by machine_type %q capacity (%d accelerators/VM). "+
+			"We assumed a default of %d accelerators/VM; if this is incorrect for a new machine type, please report a bug to the toolkit maintainers.",
+			topology, totalAccelerators, machineType, acceleratorsPerVM, acceleratorsPerVM)
 	}
 
-	return totalChips / chipsPerVM, nil
+	return totalAccelerators / acceleratorsPerVM, nil
 }
