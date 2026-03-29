@@ -44,6 +44,15 @@ const (
 var (
 	ErrUnknownValue        = errors.New("value is unknown")
 	machineTypeFamilyRegex = regexp.MustCompile(`^([a-z][0-9]+[a-z]?)-`)
+	acceleratorMetricMap   = map[string]string{
+		"h100": "NVIDIA_H100_GPUS",
+		"l4":   "NVIDIA_L4_GPUS",
+		"t4":   "NVIDIA_T4_GPUS",
+		"v100": "NVIDIA_V100_GPUS",
+		"p100": "NVIDIA_P100_GPUS",
+		"p4":   "NVIDIA_P4_GPUS",
+		"k80":  "NVIDIA_K80_GPUS",
+	}
 )
 
 type QuotaClient interface {
@@ -364,15 +373,7 @@ func mapAcceleratorTypeToMetric(accType string) []string {
 	original := accType
 	lAccType := strings.ToLower(accType)
 
-	var metricMap = map[string]string{
-		"h100": "NVIDIA_H100_GPUS",
-		"l4":   "NVIDIA_L4_GPUS",
-		"t4":   "NVIDIA_T4_GPUS",
-		"v100": "NVIDIA_V100_GPUS",
-		"p100": "NVIDIA_P100_GPUS",
-		"p4":   "NVIDIA_P4_GPUS",
-		"k80":  "NVIDIA_K80_GPUS",
-	}
+	metricMap := acceleratorMetricMap
 
 	if strings.Contains(lAccType, "nvidia") {
 		// Special case for a100
@@ -765,8 +766,10 @@ func addTPUQuota(bp config.Blueprint, settings config.Dict, projectID, region st
 
 			isTpuPreemptible := false
 			if settings.Has("preemptible") {
-				v, _ := evalBool(bp, settings.Get("preemptible"))
-				if v {
+				v, err := evalBool(bp, settings.Get("preemptible"))
+				if err != nil {
+					logging.Error("WARNING: failed to evaluate TPU preemptible setting for %s: %v", accTypeStr, err)
+				} else if v {
 					isTpuPreemptible = true
 				}
 			}
