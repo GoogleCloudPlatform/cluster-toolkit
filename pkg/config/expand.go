@@ -161,6 +161,9 @@ func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	bp.applyUseModules(m)
 	bp.applyGlobalVarsInModule(m)
+	if err := expandHardwareSettings(bp, m); err != nil {
+		return err
+	}
 	return validateModuleInputs(mp, *m, bp)
 }
 
