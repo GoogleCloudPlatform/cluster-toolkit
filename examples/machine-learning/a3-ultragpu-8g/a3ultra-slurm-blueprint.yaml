@@ -49,7 +49,7 @@ vars:
   # Managed Lustre is only supported in specific regions and zones
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
   # Managed-Lustre instance name. This should be unique for each deployment.
-  lustre_instance_id: lustre-instance
+  lustre_instance_id: $(vars.deployment_name)-lustre
 
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
