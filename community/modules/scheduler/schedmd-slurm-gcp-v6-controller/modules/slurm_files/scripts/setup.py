@@ -561,7 +561,7 @@ def setup_compute():
         munge_override_dir = Path("/etc/systemd/system/munge.service.d")
         munge_override_dir.mkdir(parents=True, exist_ok=True)
         (munge_override_dir / "require-key.conf").write_text(
-            "[Unit]\nConditionPathExists=/etc/munge/munge.key\n"
+            f"[Unit]\nConditionPathExists={dirs.munge / 'munge.key'}\n"
         )
         run("systemctl daemon-reload", timeout=30)
         run("systemctl reset-failed munge", timeout=30, check=False)
