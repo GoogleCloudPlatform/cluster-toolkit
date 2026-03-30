@@ -46,7 +46,7 @@ vars:
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # Managed-Lustre instance name. This should be unique for each deployment.
-  lustre_instance_id: lustre-instance
+  lustre_instance_id: $(vars.deployment_name)-lustre
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
   # Storage capacity of the lustre instance in GiB
