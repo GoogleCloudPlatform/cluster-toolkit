@@ -16,7 +16,13 @@
 
 locals {
   # Load shared JSON
-  accelerators_json = try(jsondecode(var.machine_configs), var.machine_configs)
+  accelerators_json = jsondecode(file("${path.module}/../../../pkg/config/accelerators.json"))
+  tpu_accelerators = try(
+    jsondecode(var.machine_configs).tpus,
+    var.machine_configs.tpus,
+    local.accelerators_json.tpus,
+    {}
+  )
 
   # Determine if this is a TPU node pool by checking if the machine_type exists in our authoritative map of TPU machine types.
   is_tpu = contains(keys(local.tpu_chip_count_map), var.machine_type)
@@ -38,8 +44,9 @@ locals {
 
   # Project shared JSON into the expected format for tpu_chip_count_map (machine_type -> count)
   tpu_chip_count_map = {
-    for k, v in try(local.accelerators_json.tpus, {}) : k => v.count
+    for k, v in local.tpu_accelerators : k => v.count
   }
+
 
   # Robustly extract the machine family prefix (e.g., "ct6e").
   tpu_machine_family   = local.is_tpu ? element(split("-", var.machine_type), 0) : ""
