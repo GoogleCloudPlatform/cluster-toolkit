@@ -60,7 +60,7 @@ func (s *zeroSuite) TestExpandClusterAutoscaling_GPU(c *C) {
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	c.Check(resMap["autoprovisioning_machine_type"].AsString(), Equals, "a3-highgpu-8g")
+	c.Check(resMap["autoprovisioning_machine_type"].AsString(), Equals, "nvidia-h100-80gb")
 	c.Check(resMap["autoprovisioning_max_accelerator_count"].AsBigFloat(), DeepEquals, cty.NumberIntVal(16).AsBigFloat())
 }
 
@@ -112,15 +112,24 @@ func (s *zeroSuite) TestExtractAcceleratorCountAndType(c *C) {
 	// GPU
 	count, t := extractAcceleratorCountAndType("a3-highgpu-8g")
 	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "a3-highgpu-8g")
+	c.Check(t, Equals, "nvidia-h100-80gb")
 
 	count, t = extractAcceleratorCountAndType("a3-megagpu-8g")
 	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "a3-megagpu-8g")
+	c.Check(t, Equals, "nvidia-h100-mega-80gb")
 
 	count, t = extractAcceleratorCountAndType("a3-ultragpu-8g")
 	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "a3-ultragpu-8g")
+	c.Check(t, Equals, "nvidia-h200-141gb")
+
+	// TPU
+	count, t = extractAcceleratorCountAndType("ct4p-hightpu-4t")
+	c.Check(count, Equals, 4)
+	c.Check(t, Equals, "tpu-v4-podslice")
+
+	count, t = extractAcceleratorCountAndType("ct5lp-hightpu-4t")
+	c.Check(count, Equals, 4)
+	c.Check(t, Equals, "tpu-v5-lite-podslice")
 
 	// Unknown or non-accelerator
 	count, t = extractAcceleratorCountAndType("n1-standard-4")

@@ -15,9 +15,9 @@
 package config
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -127,19 +127,37 @@ func processAutoscalingLimit(resVal cty.Value) (cty.Value, bool, error) {
 	return cty.ObjectVal(resMap), true, nil
 }
 
-func extractAcceleratorCountAndType(machineType string) (int, string) {
-	switch {
-	case strings.Contains(machineType, "tpu") || strings.HasPrefix(machineType, "v"):
-		return extractTPUChipsPerVM(machineType), machineType // Returning exact machineType literal as corrected
+//go:embed accelerators.json
+var acceleratorsBytes []byte
 
-	case strings.Contains(machineType, "highgpu") || strings.Contains(machineType, "megagpu") || strings.Contains(machineType, "ultragpu"):
-		idx := strings.LastIndex(machineType, "-")
-		if idx != -1 && strings.HasSuffix(machineType, "g") {
-			if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil {
-				return val, machineType // Returning exact machineType literal
-			}
-		}
+type acceleratorData struct {
+	Count int    `json:"count"`
+	Type  string `json:"type"`
+}
+
+var (
+	gpuMachineTypeToAccelerator map[string]acceleratorData
+	tpuMachineTypeToAccelerator map[string]acceleratorData
+)
+
+func init() {
+	var data struct {
+		Gpus map[string]acceleratorData `json:"gpus"`
+		Tpus map[string]acceleratorData `json:"tpus"`
 	}
+	if err := json.Unmarshal(acceleratorsBytes, &data); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal accelerators.json: %v", err))
+	}
+	gpuMachineTypeToAccelerator = data.Gpus
+	tpuMachineTypeToAccelerator = data.Tpus
+}
 
+func extractAcceleratorCountAndType(machineType string) (int, string) {
+	if acc, ok := gpuMachineTypeToAccelerator[machineType]; ok {
+		return acc.Count, acc.Type
+	}
+	if acc, ok := tpuMachineTypeToAccelerator[machineType]; ok {
+		return acc.Count, acc.Type
+	}
 	return 0, ""
 }
