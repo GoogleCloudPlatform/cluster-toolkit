@@ -14,8 +14,8 @@
 
 locals {
   # Strip leading 'v' if present
-  clean_version     = trimprefix(var.current_version, "v")
-  clean_min_version = trimprefix(var.minimum_version, "v")
+  clean_version     = var.current_version != null ? trimprefix(var.current_version, "v") : ""
+  clean_min_version = var.minimum_version != null ? trimprefix(var.minimum_version, "v") : ""
 
   # Regex to capture strictly major.minor.patch integers, and optionally a -gke.123 build suffix
   version_regex = "^([0-9]+)(?:\\.([0-9]+))?(?:\\.([0-9]+))?(?:-gke\\.([0-9]+))?(?:[-+].*)?$"
