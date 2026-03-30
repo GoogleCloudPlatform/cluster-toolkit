@@ -24,7 +24,7 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
-  base_pool_machine_type: n4-standard-8
+  base_pool_machine_type: e2-standard-8
   base_pool_size: 2
   debug_nodeset_replicas: 2
   compute_pool_machine_type: h3-standard-88
