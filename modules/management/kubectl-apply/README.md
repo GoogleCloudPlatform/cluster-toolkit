@@ -115,6 +115,17 @@ The `path` field accepts a template file. You will need to provide variables for
 
 ## Callouts
 
+### Helm-based Manifest Application
+
+#### 1. Large Manifests and CRDs
+Helm stores the entire release state (including the generated manifests) as a standard Kubernetes Secret in the release namespace. Before storing the state, Helm runs the YAML through [GZIP compression and base64 encoding](https://helm.sh/docs/topics/kubernetes_apis/#:~:text=The%20manifest%20is,of%20the%20release.). This effectively raises the limit to ~1MB or more, allowing for the deployment of very large manifests and complex CRDs without requiring Server-Side Apply (SSA). This behaviour is guaranteed because the [Terraform Helm Provider](https://github.com/hashicorp/terraform-provider-helm) directly imports the official [Helm Go SDK](https://github.com/helm/helm/tree/main/pkg/action).
+
+#### 2. Release Suffixes
+The module introduces a `random_id` to generate a unique 4-byte suffix for each Helm release (e.g., `manifest-apply-ceab0dfc-0`). This prevents name collisions when multiple module instances (e.g., `gke-cluster` and `gke-node-pool`) instantiate the `kubectl-apply` source simultaneously within the same blueprint. This ID is stored in the Terraform state, ensuring the release name remains stable across re-deployments.
+
+#### 3. Re-deployment Conflicts
+If a deployment fails, the `atomic = true` setting ensures that Helm automatically rolls back the release, preventing the cluster from being left in a "half-applied" state. If you encounter persistent conflicts during re-deployment due to immutable fields, you may need to manually delete the resource or the Helm release before re-applying.
+
 ### Applying Manifests from URLs: Considerations & Callouts
 
 While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository. Moreover, this method will be deprecated soon. Hence we recommend to use other methods to source manifests.
