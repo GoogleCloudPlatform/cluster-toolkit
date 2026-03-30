@@ -18,7 +18,7 @@ spec:
     services:
     - parallelstore.googleapis.com
 ghpc:
-  deprecation_date: "2026-06-30"
+  deprecation_date: "2026-08-31"
   alternative_module: "modules/file-system/managed-lustre"
   validators:
   - validator: regex

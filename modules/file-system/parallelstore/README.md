@@ -1,5 +1,5 @@
 > [!WARNING]
-> This module is deprecated and will be removed on June 30, 2026. The
+> This module is deprecated and will be removed on August 31, 2026. The
 > recommended replacement is the
 > [GCP Managed Lustre module](../managed-lustre/README.md)
 
