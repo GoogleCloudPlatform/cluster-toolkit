@@ -261,7 +261,7 @@ variable "system_node_pool_node_count" {
 variable "system_node_pool_machine_type" {
   description = "Machine type for the system node pool."
   type        = string
-  default     = "n4-standard-4"
+  default     = "e2-standard-4"
 }
 
 variable "system_node_pool_disk_size_gb" {
