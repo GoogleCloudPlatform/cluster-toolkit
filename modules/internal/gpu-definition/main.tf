@@ -37,6 +37,12 @@ variable "guest_accelerator" {
   nullable = false
 }
 
+variable "accelerator_configs" {
+  description = "JSON text containing the definition of GKE machine types and counts"
+  type        = string
+  default     = "{}"
+}
+
 locals {
   # example state; terraform will ignore diffs if last element of URL matches
   # guest_accelerator = [
@@ -45,7 +51,7 @@ locals {
   #     type  = "https://www.googleapis.com/compute/beta/projects/PROJECT/zones/ZONE/acceleratorTypes/nvidia-tesla-a100"
   #   },
   # ]
-  accelerators_json    = jsondecode(file("${path.module}/../../../pkg/config/accelerators.json"))
+  accelerators_json    = jsondecode(var.accelerator_configs)
   accelerator_machines = local.accelerators_json.gpus
 
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])

@@ -15,6 +15,7 @@
 package config
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"regexp"
@@ -28,6 +29,9 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
+
+//go:embed accelerators.json
+var acceleratorsJSON []byte
 
 const (
 	blueprintLabel        = "ghpc_blueprint"
@@ -168,6 +172,15 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	if err := expandHardwareSettings(bp, m); err != nil {
 		return err
 	}
+
+	// Inject accelerator_configs if supported by the module
+	for _, input := range m.InfoOrDie().Inputs {
+		if input.Name == "accelerator_configs" {
+			m.Settings = m.Settings.With("accelerator_configs", cty.StringVal(string(acceleratorsJSON)))
+			break
+		}
+	}
+
 	return validateModuleInputs(mp, *m, bp)
 }
 

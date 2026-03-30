@@ -27,3 +27,9 @@ variable "placement_policy" {
     tpu_topology = optional(string)
   })
 }
+
+variable "accelerator_configs" {
+  description = "JSON text containing the definition of GKE machine types and counts"
+  type        = string
+  default     = "{}"
+}
