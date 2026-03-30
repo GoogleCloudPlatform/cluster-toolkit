@@ -554,6 +554,18 @@ def setup_compute():
     install_custom_scripts()
 
     setup_nss_slurm()
+
+    if not lkp.cfg.enable_slurm_auth:
+        # Prevent a race where munge.service starts at boot before munge.key is
+        # deployed, leaving munge in a failed state that blocks slurmd authentication.
+        munge_override_dir = Path("/etc/systemd/system/munge.service.d")
+        munge_override_dir.mkdir(parents=True, exist_ok=True)
+        (munge_override_dir / "require-key.conf").write_text(
+            "[Unit]\nConditionPathExists=/etc/munge/munge.key\n"
+        )
+        run("systemctl daemon-reload", timeout=30)
+        run("systemctl reset-failed munge", timeout=30, check=False)
+
     setup_network_storage()
 
     has_gpu = run("lspci | grep --ignore-case 'NVIDIA' | wc -l", shell=True).returncode
