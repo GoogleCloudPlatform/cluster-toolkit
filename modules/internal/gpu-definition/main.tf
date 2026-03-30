@@ -14,35 +14,6 @@
  * limitations under the License.
  */
 
-variable "machine_type" {
-  description = "Machine type to use for the instance creation"
-  type        = string
-}
-
-variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the instance."
-  type = list(object({
-    type  = string
-    count = number
-    gpu_driver_installation_config = optional(object({
-      gpu_driver_version = string
-    }), { gpu_driver_version = "DEFAULT" })
-    gpu_partition_size = optional(string)
-    gpu_sharing_config = optional(object({
-      gpu_sharing_strategy       = string
-      max_shared_clients_per_gpu = number
-    }))
-  }))
-  default  = []
-  nullable = false
-}
-
-variable "accelerator_configs" {
-  description = "JSON text containing the definition of GKE machine types and counts"
-  type        = string
-  default     = "{}"
-}
-
 locals {
   # example state; terraform will ignore diffs if last element of URL matches
   # guest_accelerator = [
