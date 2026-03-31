@@ -377,7 +377,7 @@ module "install_asapd_lite" {
 
   values_yaml = [
     yamlencode({
-      manifests = [for doc in split("\n---", local.asapd_lite_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+      manifests = length(trimspace(local.asapd_lite_config_content)) > 0 ? [local.asapd_lite_config_content] : []
     })
   ]
 }
