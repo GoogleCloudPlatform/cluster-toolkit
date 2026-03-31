@@ -89,8 +89,6 @@
   - name: Perform CHS Operations
     environment:
       PATH: "{{ chs_venv_path }}/bin:{{ lookup('env', 'PATH') }}"
-      ENROOT_RUNTIME_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/run"
-      ENROOT_CACHE_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/cache"
     block:
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
@@ -142,5 +140,6 @@
     ansible.builtin.file:
       path: "{{ chs_temp_dir.path }}"
       state: absent
+    become: true
     ignore_errors: true
     when: chs_temp_dir.path is defined
