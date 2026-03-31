@@ -43,7 +43,7 @@ No modules.
 | <a name="input_keyring"></a> [keyring](#input\_keyring) | Location of public keys used for verification ('helm install --keyring'). Used if 'verify' is true. | `string` | `null` | no |
 | <a name="input_lint"></a> [lint](#input\_lint) | Run the helm chart linter during the plan ('helm lint'). | `bool` | `false` | no |
 | <a name="input_max_history"></a> [max\_history](#input\_max\_history) | Limit the maximum number of revisions saved per release ('helm upgrade --history-max'). 0 for no limit. | `number` | `null` | no |
-| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the Helm release into. | `string` | `"default"` | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the Helm release into. | `string` | `null` | no |
 | <a name="input_pass_credentials"></a> [pass\_credentials](#input\_pass\_credentials) | Pass credentials to all domains ('helm install --pass-credentials'). Use with caution. | `bool` | `false` | no |
 | <a name="input_postrender"></a> [postrender](#input\_postrender) | Configuration for a post-rendering executable ('helm install --post-renderer'). Should be an object with 'binary\_path' attribute. | <pre>object({<br/>    binary_path = string # Path to the post-renderer executable<br/>  })</pre> | `null` | no |
 | <a name="input_recreate_pods"></a> [recreate\_pods](#input\_recreate\_pods) | Perform pods restart for the resource if applicable ('helm upgrade --recreate-pods'). Note: This flag is deprecated in Helm CLI v3 itself. | `bool` | `false` | no |

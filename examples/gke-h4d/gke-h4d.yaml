@@ -182,7 +182,6 @@ deployment_groups:
         install: true
       apply_manifests:
       - source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.7.0/deploy/v2beta1/mpi-operator.yaml"
-        server_side_apply: true
 
   # Filestore
   - id: filestore
