@@ -417,6 +417,14 @@ resource "google_container_node_pool" "node_pool" {
       condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
+    precondition {
+      condition     = (var.reservation_sub_block == null || var.reservation_sub_block == "") || (var.reservation_block != null && var.reservation_block != "")
+      error_message = "reservation_block must be set when reservation_sub_block is provided."
+    }
+    precondition {
+      condition     = (!var.enable_slice_controller) || (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "")
+      error_message = "When enable_slice_controller is true, reservation_block and reservation_sub_block must be explicitly provided."
+    }
   }
 }
 

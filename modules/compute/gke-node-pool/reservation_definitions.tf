@@ -32,7 +32,7 @@ data "google_compute_reservation" "specific_reservations" {
     {} :
     {
       for pair in flatten([
-        for zone in try(var.zones, []) : [
+        for zone in(var.reservation_zone != null && var.reservation_zone != "" ? [var.reservation_zone] : try(var.zones, [])) : [
           for i, reservation_name in try(local.input_reservation_names, []) : {
             key : "${local.input_reservation_projects[i]}/${zone}/${reservation_name}"
             zone : zone
@@ -96,12 +96,19 @@ locals {
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
     for i, r in local.verified_specific_reservations :
-    length(local.input_reservation_suffixes[i]) > 0 ?
-    format("%s%s", r.name, local.input_reservation_suffixes[i]) :
-    "projects/${r.project}/reservations/${r.name}"
+    (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
+    "projects/${r.project}/zones/${r.zone}/reservations/${r.name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
+    (length(local.input_reservation_suffixes[i]) > 0 ?
+      format("%s%s", r.name, local.input_reservation_suffixes[i]) :
+    "projects/${r.project}/reservations/${r.name}")
   ]
 
   # Define a default reservation value if no specific reservations are present
-  specific_reservation_name  = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
-  default_reservation_values = ["projects/${var.project_id}/reservations/${local.specific_reservation_name}"]
+  specific_reservation_name = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
+  default_reservation_values = [
+    for zone in(var.reservation_zone != null && var.reservation_zone != "" ? [var.reservation_zone] : try(var.zones, [])) :
+    (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
+    "projects/${var.project_id}/zones/${zone}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
+    "projects/${var.project_id}/reservations/${local.specific_reservation_name}"
+  ]
 }

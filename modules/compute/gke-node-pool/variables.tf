@@ -372,6 +372,12 @@ variable "additional_networks" {
   nullable = false
 }
 
+variable "reservation_zone" {
+  description = "The specific zone where the reservation and sub-block are located. If not provided, falls back to iterating over all var.zones."
+  type        = string
+  default     = null
+}
+
 variable "reservation_affinity" {
   description = <<-EOT
   Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.
@@ -395,6 +401,24 @@ variable "reservation_affinity" {
     condition     = contains(["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"], var.reservation_affinity.consume_reservation_type)
     error_message = "Accepted values are: {NO_RESERVATION, ANY_RESERVATION, SPECIFIC_RESERVATION}"
   }
+}
+
+variable "reservation_block" {
+  description = "The name of the reservation block."
+  type        = string
+  default     = null
+}
+
+variable "reservation_sub_block" {
+  description = "The name of the reservation sub-block."
+  type        = string
+  default     = null
+}
+
+variable "enable_slice_controller" {
+  description = "Enables the GKE Slice Controller for Super-slicing topologies."
+  type        = bool
+  default     = false
 }
 
 variable "host_maintenance_interval" {
