@@ -64,8 +64,7 @@
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
-        refspec: 'refs/changes/00/2700/5'
-        version: FETCH_HEAD
+        version: develop
       async: 120
       poll: 10
 
