@@ -166,7 +166,9 @@ func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.Comm
 }
 
 type GKEOrchestrator struct {
-	executor Executor
+	executor     Executor
+	clusterZones []string
+	nodePoolSAs  []string
 }
 
 func NewGKEOrchestrator() (*GKEOrchestrator, error) {
@@ -314,6 +316,32 @@ func (g *GKEOrchestrator) initializeJobSubmission(job orchestrator.JobDefinition
 	}
 	job.ProjectID = projectID
 
+	logging.Info("Fetching GKE cluster metadata for '%s'...", job.ClusterName)
+	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
+		"--location", job.ClusterLocation,
+		"--project", job.ProjectID,
+		"--format=json")
+	if res.ExitCode != 0 {
+		return job, fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+	}
+
+	var clusterDesc gkeCluster
+	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
+		return job, fmt.Errorf("failed to parse GKE cluster description: %w", err)
+	}
+
+	g.clusterZones = clusterDesc.Locations
+	if len(g.clusterZones) == 0 {
+		return job, fmt.Errorf("GKE cluster %s has no locations/zones configured", job.ClusterName)
+	}
+
+	for _, np := range clusterDesc.NodePools {
+		sa := strings.TrimSpace(np.Config.ServiceAccount)
+		if sa != "" && sa != "default" {
+			g.nodePoolSAs = append(g.nodePoolSAs, sa)
+		}
+	}
+
 	logging.Info("Configuring kubectl for GKE cluster '%s'...", job.ClusterName)
 	err = g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID)
 	if err != nil {
@@ -453,6 +481,7 @@ func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) 
 }
 
 type gkeCluster struct {
+	Locations []string `json:"locations"`
 	NodePools []struct {
 		Config struct {
 			ServiceAccount string `json:"serviceAccount"`
@@ -461,33 +490,17 @@ type gkeCluster struct {
 }
 
 func (g *GKEOrchestrator) ensureNodePoolImagePullPermissions(job orchestrator.JobDefinition) error {
+	if len(g.nodePoolSAs) == 0 {
+		logging.Info("No custom node pool service accounts found to grant Artifact Registry permissions.")
+		return nil
+	}
+
 	logging.Info("Ensuring node pool service accounts have artifactregistry.reader role...")
-
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
-		"--location", job.ClusterLocation,
-		"--project", job.ProjectID,
-		"--format=json")
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to describe cluster: %s", res.Stderr)
-	}
-
-	var clusterDesc gkeCluster
-	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
-		return fmt.Errorf("failed to parse gcloud output: %w", err)
-	}
-
-	if len(clusterDesc.NodePools) == 0 {
-		return fmt.Errorf("no node pools found in cluster")
-	}
 
 	var uniqueSAs []string
 	seen := make(map[string]bool)
 
-	for _, np := range clusterDesc.NodePools {
-		sa := strings.TrimSpace(np.Config.ServiceAccount)
-		if sa == "" || sa == "default" {
-			continue
-		}
+	for _, sa := range g.nodePoolSAs {
 		if !seen[sa] {
 			seen[sa] = true
 			uniqueSAs = append(uniqueSAs, sa)
@@ -608,8 +621,14 @@ func (g *GKEOrchestrator) parseAcceleratorOutput(output string) (string, error) 
 		return uniqueAccels[0], nil
 	}
 
-	logging.Info("Warning: Multiple Accelerator Types found (%v). Defaulting to the first one: %s", uniqueAccels, uniqueAccels[0])
-	return uniqueAccels[0], nil
+	var sb strings.Builder
+	sb.WriteString("Multiple Accelerator Types found on the cluster. Please specify which one you want to use with --accelerator.\n\n")
+	sb.WriteString(fmt.Sprintf("%-30s\n", "ACCELERATOR TYPE"))
+	sb.WriteString(fmt.Sprintf("%-30s\n", "----------------"))
+	for _, acc := range uniqueAccels {
+		sb.WriteString(fmt.Sprintf("%-30s\n", acc))
+	}
+	return "", fmt.Errorf("%s", sb.String())
 }
 
 func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, clusterName string, clusterLocation string) (string, error) {
@@ -750,8 +769,11 @@ func (g *GKEOrchestrator) buildContainerImage(project, baseImage, buildContext, 
 }
 
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	credsRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "get-credentials", clusterName, "--zone", clusterLocation, "--project", projectID)
+	credsRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID)
 	if credsRes.ExitCode != 0 {
+		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
+			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --cluster-location to disambiguate.", clusterName)
+		}
 		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
 	}
 	return nil

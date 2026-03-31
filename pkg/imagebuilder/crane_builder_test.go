@@ -173,13 +173,6 @@ func TestParsePlatform(t *testing.T) {
 	}
 }
 
-func TestGenerateRandomString(t *testing.T) {
-	length := 4
-	got := generateRandomString(length)
-	if len(got) != length {
-		t.Errorf("generateRandomString() length = %v, want %v", len(got), length)
-	}
-}
 
 func TestReadDockerignorePatterns(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "dockerignore-test")

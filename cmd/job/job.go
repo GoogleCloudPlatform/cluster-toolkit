@@ -33,11 +33,11 @@ var JobCmd = &cobra.Command{
 
 func init() {
 	JobCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "Name of the GKE cluster. Required.")
-	JobCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-region", "", "Region of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-location", "", "Location (region or zone) of the GKE cluster. Required.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
 
 	_ = JobCmd.MarkPersistentFlagRequired("cluster")
-	_ = JobCmd.MarkPersistentFlagRequired("cluster-region")
+	_ = JobCmd.MarkPersistentFlagRequired("cluster-location")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)

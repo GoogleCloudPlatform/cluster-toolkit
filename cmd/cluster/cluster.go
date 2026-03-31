@@ -33,7 +33,7 @@ var ClusterCmd = &cobra.Command{
 
 func init() {
 	ClusterCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "Name of the GKE cluster. Required for info, describe, volume.")
-	ClusterCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-region", "", "Region of the GKE cluster. Required for info, describe, volume.")
+	ClusterCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-location", "", "Location (region or zone) of the GKE cluster. Required for info, describe, volume.")
 	ClusterCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
 
 	ClusterCmd.AddCommand(ListCmd)

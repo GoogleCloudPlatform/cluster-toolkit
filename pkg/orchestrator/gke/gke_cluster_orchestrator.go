@@ -53,7 +53,7 @@ func (g *GKEOrchestrator) ListEnvironments(opts orchestrator.ListOptions) ([]orc
 
 // GetClusterInfo shows summarized status of the current target cluster's resources.
 func (g *GKEOrchestrator) GetClusterInfo(name string, opts orchestrator.ListOptions) (string, error) {
-	result := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", name, "--zone="+opts.ClusterLocation, "--format=json")
+	result := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", name, "--location="+opts.ClusterLocation, "--format=json")
 	if result.ExitCode != 0 {
 		return "", fmt.Errorf("gcloud container clusters describe failed: %s", result.Stderr)
 	}
@@ -94,7 +94,7 @@ func (g *GKEOrchestrator) GetClusterInfo(name string, opts orchestrator.ListOpti
 
 // DescribeEnvironment details the specific environment exhaustively.
 func (g *GKEOrchestrator) DescribeEnvironment(name string, opts orchestrator.ListOptions) (string, error) {
-	result := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", name, "--zone="+opts.ClusterLocation, "--format=yaml")
+	result := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", name, "--location="+opts.ClusterLocation, "--format=yaml")
 	if result.ExitCode != 0 {
 		return "", fmt.Errorf("gcloud container clusters describe failed: %s", result.Stderr)
 	}

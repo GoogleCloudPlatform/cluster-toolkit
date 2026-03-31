@@ -80,7 +80,35 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		return 0, fmt.Errorf("zone is required for machine capacity lookup")
 	}
 
-	maxRetries := 3
+	isRegion := len(strings.Split(zone, "-")) < 3
+	zonesToTry := []string{zone}
+
+	if isRegion && len(g.clusterZones) > 0 {
+		zonesToTry = g.clusterZones
+	}
+
+	var lastErr error
+	for _, z := range zonesToTry {
+		count, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion) // Only retry if it was an explicit zone from user
+		if err == nil {
+			logging.Info("Discovered machine capacity in zone %s: %d", z, count)
+			return count, nil
+		}
+		lastErr = err
+	}
+
+	if isRegion {
+		return 0, fmt.Errorf("GCE machine-types are zonal resources. Tried resolving capacity for %s via cluster zones %v but failed: %w. Please specify an exact Zone using --cluster-location to proceed.", machineType, zonesToTry, lastErr)
+	}
+	return 0, lastErr
+}
+
+func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string, shouldRetry bool) (int, error) {
+	maxRetries := 1
+	if shouldRetry {
+		maxRetries = 3
+	}
+
 	var result shell.CommandResult
 
 	for i := 0; i < maxRetries; i++ {
@@ -88,12 +116,14 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		if result.ExitCode == 0 {
 			break
 		}
-		logging.Info("gcloud compute machine-types describe failed (attempt %d/%d): %s. Retrying...", i+1, maxRetries, result.Stderr)
-		time.Sleep(time.Duration(1<<i) * time.Second) // Exponential backoff
+		if shouldRetry {
+			logging.Info("gcloud compute machine-types describe failed (attempt %d/%d): %s. Retrying...", i+1, maxRetries, result.Stderr)
+			time.Sleep(time.Duration(1<<i) * time.Second)
+		}
 	}
 
 	if result.ExitCode != 0 {
-		return 0, fmt.Errorf("gcloud compute machine-types describe failed after %d retries: %s", maxRetries, result.Stderr)
+		return 0, fmt.Errorf("gcloud compute machine-types describe failed for zone %s: %s", zone, result.Stderr)
 	}
 
 	var cap MachineTypeCap
@@ -105,12 +135,11 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		return cap.Accelerators[0].Count, nil
 	}
 
-	// For CPU-only machines, return the vCPUs count as "capacity"
 	if cap.GuestCpus > 0 {
 		return cap.GuestCpus, nil
 	}
 
-	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s", machineType)
+	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
 
 func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, error) {
@@ -126,7 +155,7 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 		return false, nil
 	}
 
-	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+opts.ClusterName, "--zone="+opts.ClusterLocation, "--format=json(placementPolicy)")
+	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+opts.ClusterName, "--location="+opts.ClusterLocation, "--format=json(placementPolicy)")
 	if result.ExitCode != 0 {
 		logging.Warn("gcloud container node-pools describe failed: %s. Proceeding assuming no Super-slicing.", result.Stderr)
 		return false, nil
