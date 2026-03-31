@@ -1642,25 +1642,30 @@ class Lookup:
         
         prefix, suffix = parts
         
-        matched_ns = None
-        for ns_name in chain(self.cfg.nodeset.keys(), self.cfg.nodeset_tpu.keys()):
-            if prefix.endswith(f"-{ns_name}"):
-                matched_ns = ns_name
-                break
-                
-        if not matched_ns:
-            raise Exception(f"could not find nodeset for node {node_name}")
+        cluster_name = self.cfg.slurm_cluster_name
+        if not prefix.startswith(f"{cluster_name}-"):
+            raise Exception(f"node name {node_name} does not start with cluster name {cluster_name}")
             
-        cluster_name = prefix[:-(len(matched_ns)+1)]
+        matched_ns = prefix[len(cluster_name)+1:]
+        
+        valid_nodesets = [
+            getattr(ns, "nodeset_name", None) 
+            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+        ]
+        
+        if matched_ns not in valid_nodesets:
+            raise Exception(f"could not find nodeset {matched_ns} for node {node_name}")
+            
+        is_range = suffix.startswith("[") and suffix.endswith("]")
         
         return {
             "prefix": prefix,
             "cluster": cluster_name,
             "nodeset": matched_ns,
-            "suffix": suffix,
-            "node": node_name_short
+            "suffix": None if is_range else suffix,
+            "range": suffix if is_range else None,
+            "node": suffix
         }
-
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
