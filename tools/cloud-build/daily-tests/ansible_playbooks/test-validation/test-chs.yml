@@ -106,6 +106,36 @@
       poll: 10
       changed_when: false
 
+    - name: "Diagnostic: Run sinfo without state filter"
+      ansible.builtin.shell: |
+        set -e -u
+        sinfo -N -h -o %N
+      register: sinfo_basic
+      ignore_errors: true
+
+    - name: "Diagnostic: Run sinfo with state filter (the failing command)"
+      ansible.builtin.shell: |
+        set -e -u
+        sinfo -t idle,idle~,idle# -N -h -o %N
+      register: sinfo_filtered
+      ignore_errors: true
+
+    - name: "Diagnostic: CHS run help"
+      ansible.builtin.shell: |
+        set -e -u
+        chs run --help
+      register: chs_help
+      ignore_errors: true
+
+    - name: "Diagnostic: Print sinfo outputs"
+      ansible.builtin.debug:
+        msg: |
+          Basic sinfo: {{ sinfo_basic.stdout_lines | default([]) }}
+          Basic sinfo stderr: {{ sinfo_basic.stderr_lines | default([]) }}
+          Filtered sinfo: {{ sinfo_filtered.stdout_lines | default([]) }}
+          Filtered sinfo stderr: {{ sinfo_filtered.stderr_lines | default([]) }}
+          CHS Help: {{ chs_help.stdout_lines | default([]) }}
+
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
         set -e -u
