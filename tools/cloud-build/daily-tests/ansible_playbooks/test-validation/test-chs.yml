@@ -97,6 +97,14 @@
       async: 120
       poll: 10
       changed_when: false
+    
+    - name: Check sinfo
+      ansible.builtin.shell: |
+        set -e -u
+        sinfo
+      async: 120
+      poll: 10
+      changed_when: false
 
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
