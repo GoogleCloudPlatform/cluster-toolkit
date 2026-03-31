@@ -28,10 +28,14 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.17"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">= 3.0.0"
+    }
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:mldiagnostics/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:diagnostics/v1.84.0"
   }
 
   required_version = "= 1.12.2"

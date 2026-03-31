@@ -49,7 +49,7 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
-  workload_namespace: diagon
+  # workload_namespace: # Set the workload namespace for ML diagnostics
 
 
 deployment_groups:
@@ -103,13 +103,11 @@ deployment_groups:
       - storage.objectAdmin
       - artifactregistry.reader
       - container.admin
-      - hypercomputecluster.editor
 
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net, workload_service_account]
     settings:
-      k8s_service_account_namespace: $(vars.workload_namespace)
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
@@ -165,19 +163,16 @@ deployment_groups:
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
-          workload_namespace: $(vars.workload_namespace)
       jobset:
         install: true
+      # cert_manager:
+      #   install: true
 
+  # For instructions on enabling ML Diagnostics, refer to README.md#understanding-ml-diagnostics-integration
   - id: gke-ml-diagnostics
-    source: modules/management/mldiagnostics
+    source: modules/management/diagnostics
     use: [gke-tpu-7x-cluster, workload-manager-install]
     settings:
-      workload_namespace: $(vars.workload_namespace)
-      cert_manager:
-        install: true
-      mldiagnostics_webhook:
-        install: true
-      mldiagnostics_connection_operator:
-        install: true
+      mldiagnostics:
+        enable: false
     outputs: [instructions]

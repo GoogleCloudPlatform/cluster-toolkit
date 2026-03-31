@@ -49,6 +49,8 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
+  # workload_namespace: # Set the workload namespace for ML diagnostics
+
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # # Managed Lustre is only supported in specific regions and zones
@@ -294,6 +296,17 @@ deployment_groups:
           accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true
+      # cert-manager:
+      #   install: true
+
+  # For instructions on enabling ML Diagnostics, refer to README.md#understanding-ml-diagnostics-integration
+  - id: gke-ml-diagnostics
+    source: modules/management/diagnostics
+    use: [gke-tpu-7x-cluster, workload-manager-install]
+    settings:
+      mldiagnostics:
+        enable: false
+    outputs: [instructions]
 
   - id: gcs-training
     source: modules/file-system/pre-existing-network-storage

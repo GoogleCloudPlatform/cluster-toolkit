@@ -21,19 +21,20 @@ limitations under the License.
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
+| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | >= 3.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
-| <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | >= 1.7.0 |
+| <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 3.0.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_install_cert_manager"></a> [install\_cert\_manager](#module\_install\_cert\_manager) | ../kubectl-apply/helm_install | n/a |
 | <a name="module_install_mldiagnostics_connection_operator"></a> [install\_mldiagnostics\_connection\_operator](#module\_install\_mldiagnostics\_connection\_operator) | ../kubectl-apply/helm_install | n/a |
 | <a name="module_install_mldiagnostics_webhook"></a> [install\_mldiagnostics\_webhook](#module\_install\_mldiagnostics\_webhook) | ../kubectl-apply/helm_install | n/a |
 
@@ -41,23 +42,25 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [kubectl_manifest.workload_namespace](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
+| [terraform_data.validate_cert_manager](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.validate_namespace](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.validate_sa](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
+| [kubernetes_all_namespaces.all](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/data-sources/all_namespaces) | data source |
+| [kubernetes_service_account_v1.workload_sa](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/data-sources/service_account_v1) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_cert_manager"></a> [cert\_manager](#input\_cert\_manager) | Install cert-manager | <pre>object({<br/>    install = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
-| <a name="input_mldiagnostics_connection_operator"></a> [mldiagnostics\_connection\_operator](#input\_mldiagnostics\_connection\_operator) | Install mldiagnostics connection operator | <pre>object({<br/>    install = optional(bool, false)<br/>  })</pre> | `{}` | no |
-| <a name="input_mldiagnostics_namespace"></a> [mldiagnostics\_namespace](#input\_mldiagnostics\_namespace) | Namespace for mldiagnostics infrastructure components | `string` | `"gke-mldiagnostics"` | no |
-| <a name="input_mldiagnostics_webhook"></a> [mldiagnostics\_webhook](#input\_mldiagnostics\_webhook) | Install mldiagnostics webhook | <pre>object({<br/>    install = optional(bool, false)<br/>  })</pre> | `{}` | no |
+| <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name used by the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |
+| <a name="input_mldiagnostics"></a> [mldiagnostics](#input\_mldiagnostics) | Unified settings for mldiagnostics | <pre>object({<br/>    enable                      = optional(bool, false)<br/>    workload_namespace          = optional(string, "default")<br/>    injection_webhook_version   = optional(string, "0.25.0")<br/>    connection_operator_version = optional(string, "0.21.0")<br/>  })</pre> | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |
 | <a name="input_ready"></a> [ready](#input\_ready) | A static flag that signals to downstream modules that upstream dependencies are ready. | `any` | `false` | no |
-| <a name="input_workload_namespace"></a> [workload\_namespace](#input\_workload\_namespace) | Namespace where ML workloads will run (it will be labeled) | `string` | `"default"` | no |
 
 ## Outputs
 

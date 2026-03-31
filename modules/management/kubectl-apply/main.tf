@@ -133,6 +133,7 @@ locals {
   })
 
   install_kueue             = try(var.kueue.install, false)
+  install_cert_manager      = try(var.cert_manager.install, false)
   install_jobset            = try(var.jobset.install, false)
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
@@ -236,6 +237,21 @@ module "install_jobset" {
     file("${path.module}/jobset/jobset-helm-values.yaml")
   ]
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
+}
+
+module "install_cert_manager" {
+  source           = "./helm_install"
+  count            = local.install_cert_manager ? 1 : 0
+  wait_for_jobs    = true
+  timeout          = 1200
+  release_name     = "cert-manager"
+  chart_repository = "https://charts.jetstack.io"
+  chart_name       = "cert-manager"
+  chart_version    = var.cert_manager.version
+  namespace        = "cert-manager"
+  create_namespace = true
+  set_values       = [{ name = "installCRDs", value = "true", type = "auto" }]
+  depends_on       = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
 }
 
 module "install_nvidia_dra_driver" {

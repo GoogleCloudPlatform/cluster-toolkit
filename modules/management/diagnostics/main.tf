@@ -20,9 +20,7 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
-  install_cert_manager                      = try(var.cert_manager.install, false)
-  install_mldiagnostics_connection_operator = try(var.mldiagnostics_connection_operator.install, false)
-  install_mldiagnostics_webhook             = try(var.mldiagnostics_webhook.install, false)
+  mldiagnostics_namespace = "gke-mldiagnostics"
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -33,56 +31,63 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
-resource "kubectl_manifest" "workload_namespace" {
-  yaml_body = <<YAML
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ${var.workload_namespace}
-  labels:
-    diagon-enabled: "true"
-    managed-mldiagnostics-gke: "true"
-YAML
-
-  depends_on = [var.gke_cluster_exists]
+data "kubernetes_all_namespaces" "all" {
+  count = var.mldiagnostics.enable ? 1 : 0
 }
 
-module "install_cert_manager" {
-  source           = "../kubectl-apply/helm_install"
-  count            = local.install_cert_manager ? 1 : 0
-  wait             = true
-  timeout          = 1200
-  release_name     = "cert-manager"
-  chart_repository = "https://charts.jetstack.io"
-  chart_name       = "cert-manager"
-  namespace        = "cert-manager"
-  set_values       = [{ name = "installCRDs", value = "true", type = "auto" }]
-  depends_on       = [var.gke_cluster_exists, var.ready]
+data "kubernetes_service_account_v1" "workload_sa" {
+  count = var.mldiagnostics.enable ? 1 : 0
+  metadata {
+    name      = var.k8s_service_account_name
+    namespace = var.mldiagnostics.workload_namespace
+  }
+}
+
+resource "kubernetes_labels" "workload_namespace_labels" {
+  count       = var.mldiagnostics.enable ? 1 : 0
+  api_version = "v1"
+  kind        = "Namespace"
+
+  metadata {
+    name = var.mldiagnostics.workload_namespace
+  }
+
+  labels = {
+    "managed-mldiagnostics-gke" = "true"
+  }
+
+  depends_on = [
+    terraform_data.validate_namespace,
+    terraform_data.validate_sa,
+    terraform_data.validate_cert_manager
+  ]
 }
 
 module "install_mldiagnostics_webhook" {
   source           = "../kubectl-apply/helm_install"
-  count            = local.install_mldiagnostics_webhook ? 1 : 0
+  count            = var.mldiagnostics.enable ? 1 : 0
   wait             = true
   timeout          = 1200
   release_name     = "mld-webhook"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-injection-webhook"
   chart_repository = ""
-  namespace        = var.mldiagnostics_namespace
+  chart_version    = var.mldiagnostics.injection_webhook_version
+  namespace        = local.mldiagnostics_namespace
   create_namespace = true
-  depends_on       = [var.gke_cluster_exists, module.install_cert_manager]
+  depends_on       = [var.gke_cluster_exists, var.ready, kubernetes_labels.workload_namespace_labels]
 }
 
 module "install_mldiagnostics_connection_operator" {
   source           = "../kubectl-apply/helm_install"
-  count            = local.install_mldiagnostics_connection_operator ? 1 : 0
+  count            = var.mldiagnostics.enable ? 1 : 0
   wait             = true
   timeout          = 1200
   release_name     = "mld-op"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-connection-operator"
   chart_repository = ""
-  namespace        = var.mldiagnostics_namespace
+  chart_version    = var.mldiagnostics.connection_operator_version
+  namespace        = local.mldiagnostics_namespace
   create_namespace = false
   set_values       = [{ name = "fullnameOverride", value = "mld-op" }]
-  depends_on       = [var.gke_cluster_exists, module.install_cert_manager, module.install_mldiagnostics_webhook]
+  depends_on       = [var.gke_cluster_exists, var.ready, module.install_mldiagnostics_webhook]
 }
