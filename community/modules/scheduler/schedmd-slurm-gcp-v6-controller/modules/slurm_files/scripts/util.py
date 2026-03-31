@@ -1629,21 +1629,38 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
-    node_desc_regex = re.compile(
-        r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
-    )
-
     @lru_cache(maxsize=None)
-    def _node_desc(self, node_name):
+    def _node_desc(self, node_name: str) -> dict:
         """Get parts from node name"""
         if not node_name:
             node_name = self.hostname
-        # workaround below is for VMs whose hostname is FQDN
         node_name_short = node_name.split(".")[0]
-        m = self.node_desc_regex.match(node_name_short)
-        if not m:
+        
+        parts = node_name_short.rsplit("-", 1)
+        if len(parts) != 2:
             raise Exception(f"node name {node_name} is not valid")
-        return m.groupdict()
+        
+        prefix, suffix = parts
+        
+        matched_ns = None
+        for ns_name in chain(self.cfg.nodeset.keys(), self.cfg.nodeset_tpu.keys()):
+            if prefix.endswith(f"-{ns_name}"):
+                matched_ns = ns_name
+                break
+                
+        if not matched_ns:
+            raise Exception(f"could not find nodeset for node {node_name}")
+            
+        cluster_name = prefix[:-(len(matched_ns)+1)]
+        
+        return {
+            "prefix": prefix,
+            "cluster": cluster_name,
+            "nodeset": matched_ns,
+            "suffix": suffix,
+            "node": node_name_short
+        }
+
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
