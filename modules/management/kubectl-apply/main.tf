@@ -19,15 +19,39 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = (
-    var.kueue.config_path != null && var.kueue.config_path != "" ?
-    (
+  kueue_config_content = join("\n---\n", compact([
+    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+      pathways_nodepool_name = "cpu-np"
+      pathways_cpu_quota     = 480
+      pathways_memory_quota  = "2000G"
+    }) : "",
+    var.kueue.config_path != null && var.kueue.config_path != "" ? (
       endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
       templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
       file(var.kueue.config_path)
     ) : ""
-  )
-  configure_kueue = local.install_kueue && try(var.kueue.config_path, "") != ""
+  ]))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+
+  kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+  parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
+  cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
+  other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
+  merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
+  final_cluster_queues = [
+    for name, cqs in local.merged_cluster_queues : {
+      apiVersion = cqs[0].apiVersion
+      kind       = cqs[0].kind
+      metadata   = cqs[0].metadata
+      spec = merge(
+        try(cqs[0].spec, {}),
+        {
+          resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
+        }
+      )
+    }
+  ]
+  final_kueue_manifests = concat([for doc in local.other_docs : yamlencode(doc)], [for doc in local.final_cluster_queues : yamlencode(doc)])
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -41,23 +65,50 @@ locals {
     if try(startswith(manifest.source, "http://") || startswith(manifest.source, "https://"), false)
   }
 
-  # 3. Rebuild the map by populating the 'content' field for URLs based manifest
+  # 3. Identify directory-based manifests
+  directory_manifests = {
+    for index, manifest in local.enabled_manifests : index => manifest
+    if try(manifest.source, null) != null &&
+    !contains(keys(local.url_manifests), index) &&
+    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
+  }
+
+  # 4. Rebuild the map by populating the 'content' field for all manifests
   processed_apply_manifests_map = tomap({
     for index, manifest in local.enabled_manifests : tostring(index) => {
-      # If this manifest was a URL, its content is the body from the HTTP call.
-      content = contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body : manifest.content
+      content = (
+        # Step A: Use the fetched body if it's a URL
+        contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
 
-      # If this was a URL, its source path is now null. Otherwise, use original.
-      source = contains(keys(local.url_manifests), tostring(index)) ? null : manifest.source
-
-      # Pass other vars
-      template_vars     = manifest.template_vars
-      server_side_apply = manifest.server_side_apply
-      wait_for_rollout  = manifest.wait_for_rollout
+        # Step B: Process directory files 
+        contains(keys(local.directory_manifests), index) ? (
+          join("\n---\n", [
+            # Use union() to combine the results of fileset (which are sets)
+            for f in union(
+              fileset(manifest.source, "*.yaml"),
+              fileset(manifest.source, "*.yml"),
+              fileset(manifest.source, "*.tftpl")
+              ) : (
+              endswith(f, ".tftpl") ?
+              templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
+              file("${trimsuffix(manifest.source, "/")}/${f}")
+            )
+          ])
+        ) :
+        # Step C: Single file logic (implied if source is provided but not a URL or Dir)
+        (manifest.source != null && manifest.source != "") ? (
+          endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
+          templatefile(manifest.source, try(manifest.template_vars, {})) :
+          file(manifest.source)
+        )
+        :
+        # Step D: Fallback to the raw 'content' field
+        coalesce(manifest.content, "")
+      )
+      wait_for_rollout = manifest.wait_for_rollout
+      namespace        = manifest.namespace
     }
-    }
-
-  )
+  })
 
   install_kueue             = try(var.kueue.install, false)
   install_jobset            = try(var.jobset.install, false)
@@ -80,20 +131,28 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
+resource "random_id" "release_suffix" {
+  byte_length = 4
+}
+
 module "kubectl_apply_manifests" {
   for_each   = local.processed_apply_manifests_map
-  source     = "./kubectl"
+  source     = "./helm_install"
   depends_on = [var.gke_cluster_exists]
 
-  content           = each.value.content
-  source_path       = each.value.source
-  template_vars     = each.value.template_vars
-  server_side_apply = each.value.server_side_apply
-  wait_for_rollout  = each.value.wait_for_rollout
-
-  providers = {
-    kubectl = kubectl
-  }
+  release_name  = "manifest-apply-${random_id.release_suffix.hex}-${each.key}"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  namespace     = each.value.namespace
+  atomic        = true
+  wait          = each.value.wait_for_rollout
+  timeout       = 1200
+  values_yaml = [
+    yamlencode({
+      # Pass the entire unbroken string to Helm. Helm will parse inner '---' natively.
+      manifests = length(trimspace(each.value.content)) > 0 ? [each.value.content] : []
+    })
+  ]
 }
 
 module "install_kueue" {
@@ -128,7 +187,7 @@ module "configure_kueue" {
 
   values_yaml = [
     yamlencode({
-      manifests = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+      manifests = local.final_kueue_manifests
     })
   ]
 

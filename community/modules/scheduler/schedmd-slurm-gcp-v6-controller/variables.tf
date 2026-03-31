@@ -100,14 +100,16 @@ variable "login_nodes" {
       network_tier = string
     })))
     additional_disks = optional(list(object({
-      disk_name                  = optional(string)
-      device_name                = optional(string)
-      disk_size_gb               = optional(number)
-      disk_type                  = optional(string)
-      disk_labels                = optional(map(string), {})
-      auto_delete                = optional(bool, true)
-      boot                       = optional(bool, false)
-      disk_resource_manager_tags = optional(map(string), {})
+      disk_name                           = optional(string)
+      device_name                         = optional(string)
+      disk_size_gb                        = optional(number)
+      disk_type                           = optional(string)
+      disk_labels                         = optional(map(string), {})
+      auto_delete                         = optional(bool, true)
+      boot                                = optional(bool, false)
+      disk_resource_manager_tags          = optional(map(string), {})
+      disk_encryption_key                 = optional(string)
+      disk_encryption_key_service_account = optional(string)
     })), [])
     additional_networks = optional(list(object({
       access_config = optional(list(object({
@@ -169,15 +171,17 @@ variable "login_nodes" {
       enable_secure_boot          = optional(bool, true)
       enable_vtpm                 = optional(bool, true)
     }))
-    source_image_family  = optional(string)
-    source_image_project = optional(string)
-    source_image         = optional(string)
-    static_ips           = optional(list(string), [])
-    subnetwork           = string
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    zone                 = optional(string)
-    termination_action   = optional(string)
+    source_image_family                 = optional(string)
+    source_image_project                = optional(string)
+    source_image                        = optional(string)
+    static_ips                          = optional(list(string), [])
+    subnetwork                          = string
+    spot                                = optional(bool, false)
+    tags                                = optional(list(string), [])
+    zone                                = optional(string)
+    termination_action                  = optional(string)
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   }))
   default = []
   validation {
@@ -207,21 +211,23 @@ variable "nodeset" {
       boot                       = optional(bool, false)
       disk_resource_manager_tags = optional(map(string), {})
     })), [])
-    bandwidth_tier                   = optional(string, "platform_default")
-    can_ip_forward                   = optional(bool, false)
-    disk_auto_delete                 = optional(bool, true)
-    disk_labels                      = optional(map(string), {})
-    disk_resource_manager_tags       = optional(map(string), {})
-    disk_size_gb                     = optional(number)
-    disk_type                        = optional(string)
-    enable_confidential_vm           = optional(bool, false)
-    confidential_instance_type       = optional(string)
-    enable_placement                 = optional(bool, false)
-    placement_max_distance           = optional(number, null)
-    enable_oslogin                   = optional(bool, true)
-    enable_shielded_vm               = optional(bool, false)
-    enable_maintenance_reservation   = optional(bool, false)
-    enable_opportunistic_maintenance = optional(bool, false)
+    bandwidth_tier                      = optional(string, "platform_default")
+    can_ip_forward                      = optional(bool, false)
+    disk_auto_delete                    = optional(bool, true)
+    disk_labels                         = optional(map(string), {})
+    disk_resource_manager_tags          = optional(map(string), {})
+    disk_size_gb                        = optional(number)
+    disk_type                           = optional(string)
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
+    enable_confidential_vm              = optional(bool, false)
+    confidential_instance_type          = optional(string)
+    enable_placement                    = optional(bool, false)
+    placement_max_distance              = optional(number, null)
+    enable_oslogin                      = optional(bool, true)
+    enable_shielded_vm                  = optional(bool, false)
+    enable_maintenance_reservation      = optional(bool, false)
+    enable_opportunistic_maintenance    = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
@@ -812,4 +818,10 @@ DEPRECATED: `compute_startup_script` has been deprecated.
 Use `startup_script` of nodeset module instead.
 EOD
   }
+}
+
+variable "slurm_bucket_kms_key" {
+  description = "Customer-managed encryption key self-link to use for the Slurm configuration bucket."
+  type        = string
+  default     = null
 }

@@ -32,10 +32,14 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 2.1"
+    }
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.85.0"
   }
 
   required_version = "= 1.12.2"
