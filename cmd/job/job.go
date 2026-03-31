@@ -1,0 +1,46 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package job
+
+import (
+	"github.com/spf13/cobra"
+)
+
+var (
+	clusterName     string
+	clusterLocation string
+	projectID       string
+)
+
+// JobCmd represents the base command for job-related operations
+var JobCmd = &cobra.Command{
+	Use:   "job",
+	Short: "[EXPERIMENTAL] Manage jobs on the cluster.",
+	Long:  `Manage jobs on the cluster (EXPERIMENTAL/BETA). This feature is under active development and not yet supported for production use.`,
+}
+
+func init() {
+	JobCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "Name of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-region", "", "Region of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
+
+	_ = JobCmd.MarkPersistentFlagRequired("cluster")
+	_ = JobCmd.MarkPersistentFlagRequired("cluster-region")
+
+	JobCmd.AddCommand(SubmitCmd)
+	JobCmd.AddCommand(CancelJobCmd)
+	JobCmd.AddCommand(ListWorkloadsCmd)
+	JobCmd.AddCommand(LogsCmd)
+}
