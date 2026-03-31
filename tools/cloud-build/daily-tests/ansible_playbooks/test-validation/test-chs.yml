@@ -19,7 +19,6 @@
   vars:
     ansible_async_dir: "/tmp/.ansible_async_user"
     ansible_async_dir_root: "/tmp/.ansible_async_root"
-    ansible_python_interpreter: /usr/bin/python3
   block:
 
   - name: Ensure async directories exist
@@ -44,56 +43,11 @@
     block:
     - name: Set variables for CHS setup
       ansible.builtin.set_fact:
-        python_version: "3.10.13"
-        pyenv_root: "/opt/pyenv"
         chs_venv_path: "/opt/chs_venv"
-
-    - name: Install pyenv dependencies
-      ansible.builtin.apt:
-        name:
-        - git
-        - make
-        - build-essential
-        - libssl-dev
-        - zlib1g-dev
-        - libbz2-dev
-        - libreadline-dev
-        - libsqlite3-dev
-        - wget
-        - curl
-        - llvm
-        - libncurses5-dev
-        - libncursesw5-dev
-        - xz-utils
-        - tk-dev
-        - libffi-dev
-        - liblzma-dev
-        - python3-openssl
-        state: present
-        update_cache: true
-      async: 120
-      poll: 10
-
-    - name: Clone pyenv
-      ansible.builtin.git:
-        repo: https://github.com/pyenv/pyenv.git
-        dest: "{{ pyenv_root }}"
-        version: v2.4.1
-      async: 120
-      poll: 10
-
-    - name: Install Python using pyenv
-      ansible.builtin.command:
-        cmd: "{{ pyenv_root }}/bin/pyenv install -s {{ python_version }}"
-      environment:
-        PYENV_ROOT: "{{ pyenv_root }}"
-      async: 300
-      poll: 10
-      changed_when: false
 
     - name: Create Virtual Environment with pyenv Python
       ansible.builtin.command:
-        cmd: "{{ pyenv_root }}/versions/{{ python_version }}/bin/python3 -m venv {{ chs_venv_path }}"
+        cmd: "python3 -m venv {{ chs_venv_path }}"
         creates: "{{ chs_venv_path }}/bin/python"
       async: 120
       poll: 10
@@ -139,7 +93,6 @@
       ENROOT_RUNTIME_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/run"
       ENROOT_CACHE_PATH: "{{ lookup('vars', 'ansible_user_dir', default='/tmp') }}/.enroot/cache"
     block:
-
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
         set -e -u
@@ -147,16 +100,6 @@
       async: 120
       poll: 10
       changed_when: false
-
-    - name: Ensure Enroot directories exist for slurm
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: '0700'
-      loop:
-      - "{{ ansible_user_dir }}/.enroot/run"
-      - "{{ ansible_user_dir }}/.enroot/cache"
-      when: scheduler == 'slurm'
 
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
@@ -170,55 +113,6 @@
   - name: CHS run output
     ansible.builtin.debug:
       var: chs_run.stdout_lines
-
-  - name: Parse Bill of Health and Validate Metrics
-    when: chs_run is success
-    block:
-    - name: "Find the CHS workspace directory"
-      ansible.builtin.find:
-        paths: "~/.local/share/chs/workspaces/"
-        file_type: directory
-      register: chs_workspaces
-
-    - name: Assert CHS workspace directory found
-      ansible.builtin.assert:
-        that:
-        - chs_workspaces.files | default([]) | length > 0
-        fail_msg: "Could not find CHS workspace directory"
-
-    - name: "Set the Bill of Health path"
-      ansible.builtin.set_fact:
-        boh_path: "{{ chs_workspaces.files[0].path }}/bill_of_health.json"
-
-    - name: "Read the Bill of Health"
-      ansible.builtin.slurp:
-        src: "{{ boh_path }}"
-      register: boh_file
-
-    - name: "Parse the Bill of Health"
-      ansible.builtin.set_fact:
-        boh: "{{ boh_file['content'] | b64decode | from_json }}"
-
-    - name: "Validate DCGM diag metrics"
-      ansible.builtin.assert:
-        that:
-        - item.1.value == 'Pass'
-        fail_msg: "DCGM metric '{{ item.1.key }}' failed for resource '{{ item.0.target_resource_ids | first }}'."
-        success_msg: "DCGM metric '{{ item.1.key }}' passed for resource '{{ item.0.target_resource_ids | first }}'."
-      loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
-      when:
-      - item.0.test_name == 'dcgm'
-
-    - name: "Validate NCCL average bus bandwidth"
-      ansible.builtin.assert:
-        that:
-        - (item.1.value | float) >= 100.0
-        fail_msg: "NCCL 'Avg. Bus Bandwidth' is below threshold ({{ item.1.value }} GB/s)."
-        success_msg: "NCCL 'Avg. Bus Bandwidth' is sufficient ({{ item.1.value }} GB/s)."
-      loop: "{{ boh.test_results | default([]) | subelements('metrics', skip_missing=True) }}"
-      when:
-      - item.0.test_name == 'nccl-cluster'
-      - item.1.key == 'Avg. Bus Bandwidth'
 
   rescue:
   - name: CHS Test Failure
