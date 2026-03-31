@@ -33,6 +33,15 @@ locals {
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
 
+  asapd_lite_config_content = (
+    var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
+    (
+      endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null ? length(var.asapd_lite.config_template_vars) : 0) > 0 ?
+      templatefile(var.asapd_lite.config_path, var.asapd_lite.config_template_vars != null ? var.asapd_lite.config_template_vars : {}) :
+      file(var.asapd_lite.config_path)
+    ) : ""
+  )
+
   kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
   parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
   cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
