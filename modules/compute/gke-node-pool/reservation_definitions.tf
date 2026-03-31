@@ -92,11 +92,12 @@ locals {
 locals {
   # Check if reservation is valid, that is, if it exists, there should be only 1 verified specific reservation or the reservation doesn't exist
   is_valid_reservation = length(local.verified_specific_reservations) == 1 || !var.is_reservation_active
+  use_sub_blocks       = (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "")
 
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
     for i, r in local.verified_specific_reservations :
-    (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
+    local.use_sub_blocks ?
     "projects/${r.project}/zones/${r.zone}/reservations/${r.name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
     (length(local.input_reservation_suffixes[i]) > 0 ?
       format("%s%s", r.name, local.input_reservation_suffixes[i]) :
@@ -105,10 +106,8 @@ locals {
 
   # Define a default reservation value if no specific reservations are present
   specific_reservation_name = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
-  default_reservation_values = [
+  default_reservation_values = local.use_sub_blocks ? [
     for zone in(var.reservation_zone != null && var.reservation_zone != "" ? [var.reservation_zone] : try(var.zones, [])) :
-    (var.reservation_block != null && var.reservation_block != "" && var.reservation_sub_block != null && var.reservation_sub_block != "") ?
-    "projects/${var.project_id}/zones/${zone}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}" :
-    "projects/${var.project_id}/reservations/${local.specific_reservation_name}"
-  ]
+    "projects/${var.project_id}/zones/${zone}/reservations/${local.specific_reservation_name}/reservationBlocks/${var.reservation_block}/reservationSubBlocks/${var.reservation_sub_block}"
+  ] : ["projects/${var.project_id}/reservations/${local.specific_reservation_name}"]
 }
