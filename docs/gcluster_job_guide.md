@@ -1,4 +1,4 @@
-# Replication Guide: `gcluster job submit` Sample Job
+# Gcluster Job Submission Guide
 
 This guide provides a step-by-step process to deploy a GKE cluster, submit a sample Python script as a job using `gcluster job submit` with on-the-fly image building via Crane, and then destroy the cluster.
 
@@ -135,7 +135,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'`). If empty, `gcluster job submit` will auto-discover the optimal accelerator available on the cluster nodes. (Optional)
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
 * `--cluster string`: Name of the GKE cluster to deploy the job to. (Required)
-* `--cluster-region string`: Region of the GKE cluster. (Required)
+* `--cluster-location string`: Location (Zone or Region) of the GKE cluster. (Required)
 * `-p, --project string`: Google Cloud Project ID. If not provided, it will be inferred from your `gcloud` configuration.
 * `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
 * `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
@@ -144,6 +144,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`)
 * `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--ttl-seconds-after-finished int`: Time (in seconds) to retain the JobSet after it finishes. (Default: `3600` seconds / 1 hour)
+* `--mount stringArray`: Mount a storage volume (e.g., `gs://bucket:/data` or `/host/path:/data`). Can be specified multiple times.
 
 ## 7. Submit the Sample Job with `gcluster job submit`
 
@@ -159,7 +160,7 @@ Because `gcluster job submit` features auto-discovery, you can use the exact sam
     ./gcluster job submit \
       --project <YOUR_GCP_PROJECT_ID> \
       --cluster my-test-cluster \
-      --cluster-region us-central1 \
+      --cluster-location us-central1 \
       --base-image python:3.9-slim \
       --build-context job_details \
       --command "python app.py" \
@@ -173,7 +174,23 @@ Because `gcluster job submit` features auto-discovery, you can use the exact sam
     2. Auto-discover the Kueue LocalQueue name from the cluster.
     3. Auto-discover the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
     4. Build a container image from `job_details/Dockerfile` using `python:3.9-slim` as the base, and push it to Artifact Registry.
-    5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your `my-test-cluster`.
+    5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
+
+### 7.1 Example: Submit Job with Persistent Storage (Mounting Bucket)
+
+You can mount Cloud Storage buckets or host paths using the `--mount` flag:
+
+```bash
+./gcluster job submit \
+  --project <YOUR_GCP_PROJECT_ID> \
+  --cluster my-test-cluster \
+  --cluster-location us-central1 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --command "python app.py" \
+  --name my-storage-job \
+  --mount "gs://<YOUR_BUCKET_NAME>:/data"
+```
 
 ## 8. Verify the Job
 
@@ -221,7 +238,7 @@ You can now list the status of jobs directly through `gcluster`.
 ./gcluster job list \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1
+  --cluster-location us-central1
 ```
 
 You should see a table output with `NAME`, `STATUS`, `CREATION_TIME`, and `COMPLETION_TIME`.
@@ -234,7 +251,7 @@ You can view the logs of your submitted job directly with `gcluster job logs`.
 ./gcluster job logs <job-name> \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1
+  --cluster-location us-central1
 ```
 
 This will fetch and print output logs from all containers in the job pods.
@@ -250,7 +267,7 @@ Use `--machine-label` to target specific hardware (e.g., C2 nodes).
 ./gcluster job submit \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1 \
+  --cluster-location us-central1 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
@@ -300,7 +317,7 @@ Use `--kueue-queue` to submit the job to a specific Kueue LocalQueue.
 ./gcluster job submit \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1 \
+  --cluster-location us-central1 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
@@ -318,7 +335,7 @@ You can clean up specific job without destroying the entire cluster.
 ./gcluster job cancel my-python-app-job \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1
+  --cluster-location us-central1
 ```
 
 Verify it's gone by running `gcluster job list` again.
@@ -340,7 +357,7 @@ Request a specific TPU slice topology using `--topology`.
 ./gcluster job submit \
   --project <YOUR_GCP_PROJECT_ID> \
   --cluster my-test-cluster \
-  --cluster-region us-central1 \
+  --cluster-location us-central1 \
   --name my-topology-job \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -535,7 +552,7 @@ fi
 $GCLUSTER job submit \
     --name maxtext-llama3-1-final-v6e8-2 \
     --cluster $CLUSTER_NAME \
-    --cluster-region $ZONE \
+    --cluster-location $ZONE \
     --image $IMAGE_NAME \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --accelerator v6e-8 \
@@ -562,10 +579,10 @@ You can verify the job status and check logs using `gcluster` or `kubectl`.
 
 ```bash
 # List jobs
-./gcluster job list --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-region southamerica-west1
+./gcluster job list --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-location southamerica-west1
 
 # View logs
-./gcluster job logs maxtext-llama3-1-final-v6e8-2 --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-region southamerica-west1
+./gcluster job logs maxtext-llama3-1-final-v6e8-2 --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-location southamerica-west1
 ```
 
 **Using `kubectl`**:
@@ -788,7 +805,7 @@ fi
 $GCLUSTER job submit \
     --name maxtext-llama3-1-final-tpu7x-32 \
     --cluster $CLUSTER_NAME \
-    --cluster-region us-central1 \
+    --cluster-location us-central1 \
     --image $IMAGE_NAME \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --accelerator tpu7x-32 \
@@ -815,10 +832,10 @@ TPU v7x utilizes Megacore, which initializes 2 logical devices per chip. For a 3
 
 ```bash
 # List jobs
-./gcluster job list --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-region us-central1
+./gcluster job list --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-location us-central1
 
 # View logs
-./gcluster job logs maxtext-llama3-1-final-tpu7x-32 --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-region us-central1
+./gcluster job logs maxtext-llama3-1-final-tpu7x-32 --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-location us-central1
 ```
 
 **Verification Highlights**:

@@ -28,7 +28,7 @@ func TestInfoCmd_MissingFlags(t *testing.T) {
 		t.Fatalf("expected error for missing flags, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "--cluster and --cluster-region are required") {
+	if !strings.Contains(err.Error(), "--cluster and --cluster-location are required") {
 		t.Errorf("unexpected error output: %v", err)
 	}
 }
@@ -49,7 +49,7 @@ func TestInfoCmd_Success(t *testing.T) {
 		return g, nil
 	}
 
-	output, err := executeCommand(ClusterCmd, "info", "--cluster", "test-cluster", "--cluster-region", "us-central1-a", "--project", "test-project")
+	output, err := executeCommand(ClusterCmd, "info", "--cluster", "test-cluster", "--cluster-location", "us-central1-a", "--project", "test-project")
 
 	if err != nil {
 		if !strings.Contains(err.Error(), "unhandled mock command") && !strings.Contains(err.Error(), "failed to get kubeconfig") && !strings.Contains(err.Error(), "invalid configuration") {

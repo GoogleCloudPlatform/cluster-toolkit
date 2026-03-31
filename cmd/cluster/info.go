@@ -31,7 +31,7 @@ var InfoCmd = &cobra.Command{
 
 func runClusterInfo(cmd *cobra.Command, args []string) error {
 	if clusterName == "" || clusterLocation == "" {
-		return fmt.Errorf("--cluster and --cluster-region are required for info")
+		return fmt.Errorf("--cluster and --cluster-location are required for info")
 	}
 
 	logging.Info("Fetching cluster info for %s...", clusterName)

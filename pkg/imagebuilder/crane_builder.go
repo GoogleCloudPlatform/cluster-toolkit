@@ -20,11 +20,12 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-containerregistry/pkg/compression"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -72,7 +73,7 @@ func BuildContainerImageFromBaseImage(
 		userName = "unknown"
 	}
 
-	tagRandomPrefix := generateRandomString(4)
+	tagRandomPrefix := shell.RandomString(4)
 	tagDatetime := time.Now().Format("2006-01-02-15-04-05") // YYYY-MM-DD-HH-MM-SS
 	imageName := fmt.Sprintf("gcr.io/%s/%s-runner:%s-%s", project, userName, tagRandomPrefix, tagDatetime)
 
@@ -155,18 +156,6 @@ func parsePlatform(platformStr string) (v1.Platform, error) {
 		OS:           parts[0],
 		Architecture: parts[1],
 	}, nil
-}
-
-// generateRandomString generates a random string of specified length.
-func generateRandomString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz"
-	// Seed the random number generator using the current time
-	var seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
 }
 
 func ReadDockerignorePatterns(dir string, defaultPatterns []string) (*patternmatcher.PatternMatcher, error) {

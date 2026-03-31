@@ -36,7 +36,7 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 		return g, nil
 	}
 
-	output, err := executeCommand(JobCmd, "list", "--cluster", "test-cluster", "--cluster-region", "us-central1-a", "--project", "test-project")
+	output, err := executeCommand(JobCmd, "list", "--cluster", "test-cluster", "--cluster-location", "us-central1-a", "--project", "test-project")
 
 	if err != nil {
 		if !strings.Contains(err.Error(), "unhandled mock command") && !strings.Contains(err.Error(), "failed to get kubeconfig") && !strings.Contains(err.Error(), "invalid configuration") {

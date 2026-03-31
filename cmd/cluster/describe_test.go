@@ -16,7 +16,6 @@ package cluster
 
 import (
 	"bytes"
-	"fmt"
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
 	"strings"
@@ -44,7 +43,7 @@ func TestDescribeCmd_MissingFlags(t *testing.T) {
 		t.Fatalf("expected error for missing flags, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "--cluster and --cluster-region are required") {
+	if !strings.Contains(err.Error(), "--cluster and --cluster-location are required") {
 		t.Errorf("unexpected error output: %v", err)
 	}
 }
@@ -52,7 +51,6 @@ func TestDescribeCmd_MissingFlags(t *testing.T) {
 func TestDescribeCmd_Success(t *testing.T) {
 	resetClusterCmdFlags()
 
-	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
@@ -61,27 +59,17 @@ func TestDescribeCmd_Success(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		// We could set a mock executor here if DescribeEnvironment uses it.
-		// For now let's see if we need it. If it fails due to lack of environment, we will mock it.
+		g.SetExecutor(&mockClusterExecutor{})
 		return g, nil
 	}
 
-	// Wait, we need to mock DescribeEnvironment itself if it's too heavy.
-	// Since we can't easily override DescribeEnvironment on the concrete type *gke.GKEOrchestrator
-	// without an interface, let's see if it works or if we need to mock the executor.
-	// If it fails with "gcloud not found" or similar, it's fine for a unit test as long as we can catch it or mock the command.
-
-	output, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--cluster-region", "us-central1-a")
-
-	// Since we are running in a test environment without real clusters, it will likely fail.
-	// But let's see how it fails. If we can return a mocked description, that would be better.
-	// Since GKEOrchestrator is a struct, we can't easily mock methods.
-	// Let's see if we can at least verify it reaches the orchestrator.
-
+	output, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--cluster-location", "us-central1-a")
 	if err != nil {
-		// It might fail because NewGKEOrchestrator checks for kubectl or something.
-		// Let's just verify if it calls it.
-		fmt.Printf("Describe output: %s, error : %v\n", output, err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "status: RUNNING") {
+		t.Errorf("expected output to contain status: RUNNING, got %s", output)
 	}
 }
 
@@ -97,6 +85,12 @@ func (m *mockClusterExecutor) ExecuteCommand(name string, args ...string) shell.
 	if name == "gcloud" {
 		if len(args) > 2 && args[0] == "container" && args[1] == "clusters" {
 			if args[2] == "describe" {
+				if strings.Contains(strings.Join(args, " "), "--format=yaml") {
+					return shell.CommandResult{
+						ExitCode: 0,
+						Stdout:   "status: RUNNING\nname: test-cluster\n",
+					}
+				}
 				return shell.CommandResult{
 					ExitCode: 0,
 					Stdout:   `{"status": "RUNNING", "name": "test-cluster"}`,

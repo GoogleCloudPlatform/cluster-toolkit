@@ -140,10 +140,9 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 
-	SubmitCmd.Flags().StringSliceVar(&volumeStr, "volume", nil, "Volumes to mount (format: <src>:<dest>).")
+	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>).")
 
 	_ = SubmitCmd.MarkFlagRequired("command")
-	_ = SubmitCmd.MarkFlagRequired("accelerator")
 	_ = SubmitCmd.MarkFlagRequired("cluster")
 }
 

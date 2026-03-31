@@ -36,7 +36,7 @@ var gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
 
 func runClusterDescribe(cmd *cobra.Command, args []string) error {
 	if clusterName == "" || clusterLocation == "" {
-		return fmt.Errorf("--cluster and --cluster-region are required for describe")
+		return fmt.Errorf("--cluster and --cluster-location are required for describe")
 	}
 
 	logging.Info("Describing cluster %s...", clusterName)
@@ -56,6 +56,6 @@ func runClusterDescribe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to describe cluster: %w", err)
 	}
 
-	fmt.Println(description)
+	cmd.Println(description)
 	return nil
 }

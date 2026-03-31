@@ -512,7 +512,7 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 			},
 			envVars: map[string]string{"GKE_NODE_POOL_NAME": "test-pool"},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container node-pools describe test-pool --cluster=test-cluster --zone=us-central1-a --format=json(placementPolicy)": {
+				"gcloud container node-pools describe test-pool --cluster=test-cluster --location=us-central1-a --format=json(placementPolicy)": {
 					{ExitCode: 0, Stdout: `{"placementPolicy": {"acceleratorTopologyMode": "PROVISION_ONLY"}}`},
 				},
 				"kubectl get crd topologies.kueue.x-k8s.io": {
@@ -552,7 +552,7 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 			},
 			envVars: map[string]string{"GKE_NODE_POOL_NAME": "test-pool"},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container node-pools describe test-pool --cluster=test-cluster --zone=us-central1-a --format=json(placementPolicy)": {
+				"gcloud container node-pools describe test-pool --cluster=test-cluster --location=us-central1-a --format=json(placementPolicy)": {
 					{ExitCode: 1, Stderr: "slow network"},
 				},
 			},
@@ -575,6 +575,51 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 			}
 			if got != tt.wantResult {
 				t.Errorf("Expected %t, got %t", tt.wantResult, got)
+			}
+		})
+	}
+}
+
+func TestParseAcceleratorOutput(t *testing.T) {
+	tests := []struct {
+		name      string
+		output    string
+		wantAccel string
+		wantErr   bool
+	}{
+		{
+			name:      "Single Accelerator (Success)",
+			output:    "nvidia-l4",
+			wantAccel: "nvidia-l4",
+			wantErr:   false,
+		},
+		{
+			name:      "Multiple Accelerators (Failure)",
+			output:    "nvidia-l4\ntpu-v6e-slice",
+			wantAccel: "",
+			wantErr:   true,
+		},
+		{
+			name:      "Empty Output (Success, CPU Default)",
+			output:    "",
+			wantAccel: "",
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{}
+			got, err := orc.parseAcceleratorOutput(tt.output)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseAcceleratorOutput() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantAccel {
+				t.Errorf("parseAcceleratorOutput() got = %v, want %v", got, tt.wantAccel)
+			}
+			if tt.wantErr && !strings.Contains(err.Error(), "Multiple Accelerator Types found") {
+				t.Errorf("Expected error message to contain 'Multiple Accelerator Types found', got %v", err)
 			}
 		})
 	}
