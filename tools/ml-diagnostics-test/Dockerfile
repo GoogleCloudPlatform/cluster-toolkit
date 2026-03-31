@@ -12,18 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "ready" {
-  description = "Ensures sequential ordering with other Helm chart modules to avoid race conditions or deployment conflicts."
-  value       = true
-  depends_on = [
-    module.install_kueue,
-    module.configure_kueue,
-    module.install_jobset,
-    module.install_gpu_operator,
-    module.install_nvidia_dra_driver,
-    module.install_gib,
-    module.install_asapd_lite,
-    module.kubectl_apply_manifests,
-    module.install_cert_manager,
-  ]
-}
+FROM python:3.11-slim # base image
+
+WORKDIR /sample_workload
+
+COPY ./sample_workload/ .
+
+RUN pip install --no-cache-dir "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html && \
+pip install --no-cache-dir libtpu && \
+pip install google-cloud-mldiagnostics && \
+pip install xprof
+# Users' own dependencies
+# ......
+
+CMD ["python", "sample_workload.py"]
