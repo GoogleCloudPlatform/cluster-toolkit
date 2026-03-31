@@ -108,6 +108,7 @@ variable "apply_manifests" {
     template_vars     = optional(map(any), null)
     server_side_apply = optional(bool, false)
     wait_for_rollout  = optional(bool, true)
+    force_conflicts   = optional(bool, false)
   }))
   default = []
 }

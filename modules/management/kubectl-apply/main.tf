@@ -54,6 +54,7 @@ locals {
       template_vars     = manifest.template_vars
       server_side_apply = manifest.server_side_apply
       wait_for_rollout  = manifest.wait_for_rollout
+      force_conflicts   = manifest.force_conflicts
     }
     }
 
@@ -90,6 +91,7 @@ module "kubectl_apply_manifests" {
   template_vars     = each.value.template_vars
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
+  force_conflicts   = each.value.force_conflicts
 
   providers = {
     kubectl = kubectl
