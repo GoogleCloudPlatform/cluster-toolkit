@@ -139,7 +139,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
-      apply_manifests:
       kueue:
         install: true
         wait: true
