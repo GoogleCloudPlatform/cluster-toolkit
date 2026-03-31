@@ -55,7 +55,7 @@ locals {
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
-    for index, manifest in var.apply_manifests : index => manifest
+    for index, manifest in coalesce(var.apply_manifests, []) : index => manifest
     if try(manifest.enable, true)
   }
 
