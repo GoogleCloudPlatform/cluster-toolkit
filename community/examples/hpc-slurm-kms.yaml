@@ -14,18 +14,18 @@
 
 ---
 
-blueprint_name: hpc-slurm-ubuntu2204-v6
+blueprint_name: hpc-slurm-kms
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-gcp-v6
-  region: us-west4
-  zone: us-west4-c
-  slurm_image:
-    # Please refer to the following link for the latest images:
-    # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-    family: slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570
-    project: schedmd-slurm-public
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: hpc-slurm-kms
+  region: us-central1
+  zone: us-central1-a
+  kms_key: "projects/my-project/locations/us-central1/keyRings/my-keyring/cryptoKeys/my-key"
+  kms_service_account: "my-sa@my-project.iam.gserviceaccount.com"
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
@@ -55,13 +55,16 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      instance_image: $(vars.slurm_image)
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
+      allow_automatic_updates: false
+      disk_encryption_key_service_account: $(vars.kms_service_account)
+      disk_encryption_key: $(vars.kms_key)
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset]
+    use:
+    - debug_nodeset
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
@@ -71,32 +74,61 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      instance_image: $(vars.slurm_image)
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset]
+    use:
+    - compute_nodeset
     settings:
       partition_name: compute
 
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use:
-    - network
-    - slurm_login
-    - debug_partition
-    - compute_partition
-    - homefs
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
-      instance_image: $(vars.slurm_image)
-      enable_controller_public_ips: true
+      node_count_dynamic_max: 20
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
+      machine_type: h3-standard-88
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
+
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h3_nodeset
+    settings:
+      partition_name: h3
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
       enable_login_public_ips: true
+      disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - h3_partition
+    - homefs
+    - slurm_login
+    settings:
+      enable_controller_public_ips: true
+      disk_encryption_key: $(vars.kms_key)
+      disk_encryption_key_service_account: $(vars.kms_service_account)
+      slurm_bucket_kms_key: $(vars.kms_key)

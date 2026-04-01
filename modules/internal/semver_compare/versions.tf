@@ -12,35 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 7.2"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.17"
-    }
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = ">= 2.1"
-    }
-  }
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.85.0"
-  }
-
-  required_version = "= 1.12.2"
+  required_version = ">= 1.3"
 }

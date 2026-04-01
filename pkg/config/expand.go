@@ -30,7 +30,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.23.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.25.0"
 )
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
@@ -161,6 +161,9 @@ func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	bp.applyUseModules(m)
 	bp.applyGlobalVarsInModule(m)
+	if err := expandHardwareSettings(bp, m); err != nil {
+		return err
+	}
 	return validateModuleInputs(mp, *m, bp)
 }
 

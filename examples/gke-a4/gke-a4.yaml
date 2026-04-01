@@ -304,29 +304,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a4-cluster]
     settings:
-      apply_manifests:
-      - source: $(vars.permissions_file_staged_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-      - source: $(vars.chs_pvc_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          pvc_name: $(vars.chs_pvc_claim_name)
-          access_mode: ReadWriteOnce
-          capacity: 1Gi
-          storage_class_name: standard-rwo
-      - source: $(vars.chs_cronjob_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-          region: $(vars.region)
-          machine_type: a4-highgpu-8g
-          gcs_bucket: $(vars.chs_output_bucket_name)
-          gcs_pvc: $(vars.chs_pvc_claim_name)
-          cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
