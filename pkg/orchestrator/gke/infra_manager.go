@@ -179,9 +179,6 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 		return err
 	}
 
-	logging.Info("Force-recreating JobSet Controller Manager...")
-	g.executor.ExecuteCommand("kubectl", "delete", "deployment", "jobset-controller-manager", "-n", "jobset-system", "--ignore-not-found=true")
-
 	if err := g.applyJobSetManifests(cleanedManifests); err != nil {
 		return err
 	}

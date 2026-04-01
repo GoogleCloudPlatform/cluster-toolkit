@@ -1098,9 +1098,19 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 	}
 
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	list, err := client.Resource(gvr).Namespace("default").List(context.TODO(), metav1.ListOptions{})
+
+	// Get active context's namespace
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	ns, _, err := kubeConfig.Namespace()
+	if err != nil || ns == "" {
+		ns = "default" // Fallback to default
+	}
+
+	list, err := client.Resource(gvr).Namespace(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list jobsets: %w", err)
+		return nil, fmt.Errorf("failed to list jobsets in namespace %s: %w", ns, err)
 	}
 
 	var jobs []orchestrator.JobStatus
@@ -1142,9 +1152,31 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	}
 
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	err = client.Resource(gvr).Namespace("default").Delete(context.TODO(), name, metav1.DeleteOptions{})
+
+	// Find the job to get its namespace
+	optsSelector := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", name),
+	}
+	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
 	if err != nil {
-		return fmt.Errorf("failed to delete jobset %s: %w", name, err)
+		return fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
+	}
+
+	var foundNamespace string
+	if len(list.Items) == 1 {
+		foundNamespace = list.Items[0].GetNamespace()
+	} else if len(list.Items) > 1 {
+		return fmt.Errorf("found multiple jobsets named %s in different namespaces. Please specify a single job", name)
+	}
+
+	if foundNamespace == "" {
+		// Fallback to "default" if not found (or return not found error)
+		foundNamespace = "default"
+	}
+
+	err = client.Resource(gvr).Namespace(foundNamespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to delete jobset %s in namespace %s: %w", name, foundNamespace, err)
 	}
 
 	logging.Info("Job '%s' deleted successfully.", name)
@@ -1157,20 +1189,38 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 
-	// Check if JobSet exists
-	checkRes := g.executor.ExecuteCommand("kubectl", "get", "jobset", name)
-	if checkRes.ExitCode != 0 {
-		if strings.Contains(strings.ToLower(checkRes.Stderr), "not found") || strings.Contains(strings.ToLower(checkRes.Stdout), "notfound") {
-			return "", fmt.Errorf("job '%s' not found on cluster (it may have been cancelled or deleted)", name)
-		}
-		return "", fmt.Errorf("failed to verify job existence: %s", checkRes.Stderr)
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get dynamic client: %w", err)
+	}
+
+	// Find the job to get its namespace
+	optsSelector := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", name),
+	}
+	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
+	if err != nil {
+		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
+	}
+
+	var foundNamespace string
+	if len(list.Items) == 1 {
+		foundNamespace = list.Items[0].GetNamespace()
+	} else if len(list.Items) > 1 {
+		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces. Please specify a single job", name)
+	}
+
+	if foundNamespace == "" {
+		return "", fmt.Errorf("job %s not found on cluster in any namespace", name)
 	}
 
 	// Retry loop for pulling logs, especially to handle ImagePullBackOff/waiting states
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers")
+		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers")
 		if res.ExitCode == 0 {
 			break
 		}
