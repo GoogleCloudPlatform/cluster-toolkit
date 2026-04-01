@@ -14,13 +14,12 @@
 
 ---
 
-- name: CHS Test Suite
+- name: CHS Test Lite Suite
   delegate_to: "{{ 'localhost' if scheduler == 'gke' else inventory_hostname }}"
   vars:
     ansible_async_dir: "/tmp/.ansible_async_user"
     ansible_async_dir_root: "/tmp/.ansible_async_root"
   block:
-
   - name: Ensure async directories exist
     block:
     - name: Ensure user async directory exists
@@ -45,7 +44,7 @@
       ansible.builtin.set_fact:
         chs_venv_path: "/opt/chs_venv"
 
-    - name: Create Virtual Environment with pyenv Python
+    - name: Create Python Virtual Environment
       ansible.builtin.command:
         cmd: "python3 -m venv {{ chs_venv_path }}"
         creates: "{{ chs_venv_path }}/bin/python"
@@ -68,17 +67,9 @@
       async: 120
       poll: 10
 
-    - name: Find CHS package directory
-      ansible.builtin.find:
-        paths: "{{ chs_temp_dir.path }}"
-        file_type: file
-        patterns: 'pyproject.toml'
-        recurse: true
-      register: chs_setup_file
-
     - name: Install CHS into venv
       ansible.builtin.pip:
-        name: "{{ chs_setup_file.files[0].path | dirname }}"
+        name: "{{ chs_temp_dir.path }}"
         virtualenv: "{{ chs_venv_path }}"
       async: 300
       poll: 10
@@ -97,44 +88,6 @@
       async: 120
       poll: 10
       changed_when: false
-    
-    - name: Check sinfo
-      ansible.builtin.shell: |
-        set -e -u
-        sinfo
-      async: 120
-      poll: 10
-      changed_when: false
-
-    - name: "Diagnostic: Run sinfo without state filter"
-      ansible.builtin.shell: |
-        set -e -u
-        sinfo -N -h -o %N
-      register: sinfo_basic
-      ignore_errors: true
-
-    - name: "Diagnostic: Run sinfo with state filter (the failing command)"
-      ansible.builtin.shell: |
-        set -e -u
-        sinfo -t idle,idle~,idle# -N -h -o %N
-      register: sinfo_filtered
-      ignore_errors: true
-
-    - name: "Diagnostic: CHS run help"
-      ansible.builtin.shell: |
-        set -e -u
-        chs run --help
-      register: chs_help
-      ignore_errors: true
-
-    - name: "Diagnostic: Print sinfo outputs"
-      ansible.builtin.debug:
-        msg: |
-          Basic sinfo: {{ sinfo_basic.stdout_lines | default([]) }}
-          Basic sinfo stderr: {{ sinfo_basic.stderr_lines | default([]) }}
-          Filtered sinfo: {{ sinfo_filtered.stdout_lines | default([]) }}
-          Filtered sinfo stderr: {{ sinfo_filtered.stderr_lines | default([]) }}
-          CHS Help: {{ chs_help.stdout_lines | default([]) }}
 
     - name: "Run CHS lite suite"
       ansible.builtin.shell: |
@@ -145,14 +98,15 @@
       poll: 10
       changed_when: false
 
-  - name: CHS run output
-    ansible.builtin.debug:
-      var: chs_run.stdout_lines
+    - name: CHS run output
+      ansible.builtin.debug:
+        var: chs_run.stdout_lines
 
   rescue:
   - name: CHS Test Failure
     ansible.builtin.debug:
       msg: "CHS tests failed or timed out. Continuing playbook execution."
+    ignore_errors: true
 
   always:
   - name: Cleanup Kubernetes resources
