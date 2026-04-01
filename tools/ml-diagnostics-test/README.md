@@ -67,6 +67,7 @@ docker push "${IMAGE_URI}"
 Update the following placeholders in `sample_job.yaml`:
 - Line 19 and 29: replace `<workload_namespace>` with your workload namespace from the blueprint.
 - Line 44: replace `<k8s-service-account-name>` with your K8s service account name from the blueprint, default is `workload-identity-k8s-sa`.
+- Line 48: replace `<tpu_accelerator>` with TPU accelerator type provisioned in your cluster.
 - Line 49: replace `<tpu_topology>` with your TPU topology from the blueprint.
 - Line 53: replace `#Add Image tag here` with your `IMAGE_URI` generated in step 3.
 
@@ -77,8 +78,10 @@ namespace: <workload_namespace>
 # Line 44
 serviceAccountName: <k8s-service-account-name>
 
-# Line 49
-cloud.google.com/gke-tpu-topology: <tpu_topology>
+# Line 48 and 49
+nodeSelector:
+    cloud.google.com/gke-tpu-accelerator: <tpu_accelerator> # ex: tpu-v6e-slice for TPU v6e and tpu7x for TPU 7x
+    cloud.google.com/gke-tpu-topology: <tpu_topology>
 
 # Line 53
 image: #Add Image tag here

@@ -76,8 +76,7 @@ def main():
       project=<project-name>,
       region=<region>,
       gcs_path=<existing-gcs-bucket-path>, #"gs://diagon-xprof-gcs/test"
-      on_demand_xprof=False,
-      environment = "autopush"
+      on_demand_xprof=False
   )
 
   loss_jit = jax.jit(loss)
