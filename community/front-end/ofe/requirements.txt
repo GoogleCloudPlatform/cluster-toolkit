@@ -2,7 +2,7 @@ altgraph==0.17.5
 archspec==0.2.5
 argcomplete==3.6.3
 asgiref==3.11.1
-astroid>=4.0.2,<4.1.0
+astroid>=4.0.2,<4.2.0
 attrs==25.4.0
 # This should be supported by zoneinfo in Python 3.9+
 backports.zoneinfo==0.2.1;python_version<"3.9"
