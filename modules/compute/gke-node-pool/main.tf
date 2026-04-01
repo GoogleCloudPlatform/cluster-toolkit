@@ -417,6 +417,10 @@ resource "google_container_node_pool" "node_pool" {
       condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
+    precondition {
+      condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
+      error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
+    }
   }
 }
 
