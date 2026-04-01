@@ -419,7 +419,6 @@ deployment_groups:
     use:
     - sysnet
 
-  # 2. Add Managed Lustre as homefs
   - id: homefs
     source: modules/file-system/managed-lustre
     use:

@@ -70,7 +70,6 @@ deployment_groups:
     use:
     - sysnet
 
-  # REPLACE: Filestore with Managed Lustre
   - id: homefs
     source: modules/file-system/managed-lustre
     use:
