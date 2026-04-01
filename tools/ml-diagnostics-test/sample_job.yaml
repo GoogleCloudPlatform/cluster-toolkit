@@ -45,7 +45,7 @@ spec:
             subdomain: tpu-discovery-service
             restartPolicy: Never
             nodeSelector:
-              cloud.google.com/gke-tpu-accelerator: tpu-podslice
+              cloud.google.com/gke-tpu-accelerator: <tpu-accelerator>
               cloud.google.com/gke-tpu-topology: <tpu_topology>
             containers:
             - name: jax-job
