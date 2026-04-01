@@ -489,13 +489,15 @@ To enable Google Cloud ML Diagnostics, perform the following steps before deploy
         source: modules/management/kubectl-apply
         use: [gke-tpu-7x-cluster]
         settings:
-          cert_manager: {install: true}
           kueue:
             install: true
             config_path: $(vars.kueue_configuration_path)
             config_template_vars:
               # ... other vars ...
               workload_namespace: $(vars.workload_namespace)
+          cert_manager: 
+            install: true
+            #version: "v1.17.2" # optional
     ```
 
 6. Enable `gke-ml-diagnostics` module to install ML Diagnostics charts and configurations to workload namespace, add `workload_namespace: $(vars.workload_namespace)` in `gke-ml-diagnostics` module settings.
