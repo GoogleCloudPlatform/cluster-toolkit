@@ -84,7 +84,14 @@ locals {
 
   # 4. Rebuild the map by populating the 'content' field for all manifests
   processed_apply_manifests_map = tomap({
-    for index, manifest in local.enabled_manifests : tostring(index) => {
+    for index, manifest in local.enabled_manifests :
+    (
+      try(manifest.name, null) != null ? manifest.name :
+      (manifest.source != null && manifest.source != "" ?
+        "${trimsuffix(trimsuffix(trimsuffix(basename(manifest.source), ".tftpl"), ".yaml"), ".yml")}-${index}" :
+        "${var.module_id}-raw-${index}"
+      )
+      ) => {
       content = (
         # Step A: Use the fetched body if it's a URL
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
@@ -149,7 +156,7 @@ module "kubectl_apply_manifests" {
   source     = "./helm_install"
   depends_on = [var.gke_cluster_exists]
 
-  release_name  = "manifest-apply-${random_id.release_suffix.hex}-${each.key}"
+  release_name  = "manifest-${each.key}"
   chart_name    = "${path.module}/raw-config-chart"
   chart_version = "0.1.0"
   namespace     = each.value.namespace

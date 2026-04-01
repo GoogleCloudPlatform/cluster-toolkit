@@ -208,3 +208,9 @@ variable "asapd_lite" {
   })
   default = {}
 }
+
+variable "module_id" {
+  description = "The ID of the module as defined in the blueprint. Injected by ghpc."
+  type        = string
+  default     = "kubectl-apply" # Fallback if run manually
+}
