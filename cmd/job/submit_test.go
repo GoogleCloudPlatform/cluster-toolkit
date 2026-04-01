@@ -210,3 +210,65 @@ func (m *mockExecutorForTest) ExecuteCommand(name string, args ...string) shell.
 	}
 	return shell.CommandResult{ExitCode: 1, Stderr: "unhandled mock command"}
 }
+
+func TestParseVolumeFlag(t *testing.T) {
+	tests := []struct {
+		name      string
+		vStrs     []string
+		wantCount int
+		wantErr   bool
+		checkFunc func([]orchestrator.VolumeDefinition) bool
+	}{
+		{
+			name:      "Valid PVC (default)",
+			vStrs:     []string{"my-pvc:/mnt/data"},
+			wantCount: 1,
+			wantErr:   false,
+			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
+				return v[0].Type == "pvc" && v[0].MountPath == "/mnt/data"
+			},
+		},
+		{
+			name:      "Valid GCS Fuse",
+			vStrs:     []string{"gs://my-bucket:/mnt/gcs"},
+			wantCount: 1,
+			wantErr:   false,
+			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
+				return v[0].Type == "gcsfuse" && v[0].MountPath == "/mnt/gcs"
+			},
+		},
+		{
+			name:      "Valid Host Path",
+			vStrs:     []string{"/home/user/data:/mnt/host"},
+			wantCount: 1,
+			wantErr:   false,
+			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
+				return v[0].Type == "hostPath" && v[0].MountPath == "/mnt/host"
+			},
+		},
+		{
+			name:      "Invalid Format (No separator)",
+			vStrs:     []string{"invalid-format"},
+			wantCount: 0,
+			wantErr:   true,
+			checkFunc: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseVolumeFlag(tt.vStrs)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseVolumeFlag() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				if len(got) != tt.wantCount {
+					t.Errorf("parseVolumeFlag() got %v volumes, want %v", len(got), tt.wantCount)
+				}
+				if tt.checkFunc != nil && !tt.checkFunc(got) {
+					t.Errorf("parseVolumeFlag() did not match assertions: %+v", got)
+				}
+			}
+		})
+	}
+}
