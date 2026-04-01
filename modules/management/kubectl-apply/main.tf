@@ -62,7 +62,7 @@ locals {
   # 2. Identify URL-based manifests
   url_manifests = {
     for index, manifest in local.enabled_manifests : index => manifest
-    if try(manifest.source, null) != null && (startswith(manifest.source, "http://") || startswith(manifest.source, "https://"))
+    if try(startswith(manifest.source, "http://") || startswith(manifest.source, "https://"), false)
   }
 
   # 3. Identify directory-based manifests
