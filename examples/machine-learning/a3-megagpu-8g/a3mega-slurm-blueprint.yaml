@@ -26,7 +26,7 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
