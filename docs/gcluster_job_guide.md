@@ -559,7 +559,7 @@ $GCLUSTER job submit \
     --nodes 1 \
     --vms-per-slice 2 \
     --topology 2x4 \
-    --priority medium
+    --priority medium \
     --service-account workload-identity-k8s-sa
 ```
 

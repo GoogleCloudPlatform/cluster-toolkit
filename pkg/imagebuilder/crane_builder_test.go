@@ -173,7 +173,6 @@ func TestParsePlatform(t *testing.T) {
 	}
 }
 
-
 func TestReadDockerignorePatterns(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "dockerignore-test")
 	if err != nil {

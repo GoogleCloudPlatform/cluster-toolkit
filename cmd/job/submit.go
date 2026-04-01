@@ -217,12 +217,12 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 	var vols []orchestrator.VolumeDefinition
 	for i, vStr := range vStrs {
-		parts := strings.SplitN(vStr, ":", 2)
-		if len(parts) != 2 {
+		idx := strings.LastIndex(vStr, ":")
+		if idx == -1 {
 			return nil, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>", vStr)
 		}
-		src := parts[0]
-		dest := parts[1]
+		src := vStr[:idx]
+		dest := vStr[idx+1:]
 
 		volType := "pvc" // Default
 		if strings.HasPrefix(src, "gs://") {
