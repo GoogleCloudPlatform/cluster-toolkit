@@ -146,7 +146,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
-            install_managed_lustre: true,
+            "install_managed_lustre": true,
           }
       - type: shell
         destination: install_slurm.sh
