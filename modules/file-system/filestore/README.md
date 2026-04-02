@@ -13,7 +13,7 @@ We recommend considering enabling [Filestore deletion protection][fdp]. Deletion
 protection will prevent unintentional deletion of an entire Filestore instance.
 It does not prevent deletion of files within the Filestore instance when mounted
 by a VM. It is not available on some [tiers](#filestore-tiers), including the
-default BASIC\_HDD tier or BASIC\_SSD tier. Follow the documentation link for
+default BASIC\_SSD tier or BASIC\_HDD tier. Follow the documentation link for
 up to date details.
 
 Usage can be enabled in a blueprint with, for example:
@@ -99,11 +99,11 @@ tier, [make a request and wait for it to be approved][hs-ssd-quota].
 
 [hs-ssd-quota]: https://cloud.google.com/filestore/docs/high-scale
 
-### Example - Basic HDD
+### Example - Basic SSD
 
 The Filestore instance defined below will have the following attributes:
 
-- (default) `BASIC_HDD` tier
+- (default) `BASIC_SSD` tier
 - (default) 1TiB capacity
 - `homefs` module ID
 - mount point at `/home`
@@ -221,7 +221,7 @@ No modules.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | A description of the filestore instance. | `string` | `""` | no |
 | <a name="input_filestore_share_name"></a> [filestore\_share\_name](#input\_filestore\_share\_name) | Name of the file system share on the instance. | `string` | `"nfsshare"` | no |
-| <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |
+| <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_SSD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. Note: If set to the same as the `filestore_share_name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"defaults,_netdev"` | no |
@@ -232,7 +232,7 @@ No modules.
 | <a name="input_protocol"></a> [protocol](#input\_protocol) | NFS protocol version. Default is NFS\_V3. NFS\_V4\_1 is only supported with HIGH\_SCALE\_SSD, ZONAL, REGIONAL, and ENTERPRISE tiers. | `string` | `"NFS_V3"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
 | <a name="input_reserved_ip_range"></a> [reserved\_ip\_range](#input\_reserved\_ip\_range) | Reserved IP range for Filestore instance. Users are encouraged to set to null<br/>for automatic selection. If supplied, it must be:<br/><br/>CIDR format when var.connect\_mode == "DIRECT\_PEERING"<br/>Named IP Range when var.connect\_mode == "PRIVATE\_SERVICE\_ACCESS"<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/filestore/docs/creating-instances#configure_a_reserved_ip_address_range | `string` | `null` | no |
-| <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `1024` | no |
+| <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `2560` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for Filestore instances below Enterprise tier. | `string` | n/a | yes |
 
 ## Outputs
