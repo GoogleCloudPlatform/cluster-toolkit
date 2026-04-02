@@ -624,3 +624,43 @@ func TestParseAcceleratorOutput(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
+	orc, _ := NewGKEOrchestrator()
+	opts := ManifestOptions{
+		WorkloadName:    "test-workload",
+		FullImageName:   "test-image:latest",
+		CommandToRun:    "python app.py",
+		AcceleratorType: "nvidia-l4",
+		Verbose:         true,
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, JobProfile{})
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "export NCCL_DEBUG=INFO") {
+		t.Errorf("manifest missing expected GPU verbose export.\nManifest: %s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
+	orc, _ := NewGKEOrchestrator()
+	opts := ManifestOptions{
+		WorkloadName:    "test-workload",
+		FullImageName:   "test-image:latest",
+		CommandToRun:    "python app.py",
+		AcceleratorType: "tpu-v6e-slice",
+		Verbose:         true,
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, JobProfile{})
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "export TPU_STDERR_LOG_LEVEL=0") {
+		t.Errorf("manifest missing expected TPU verbose export.\nManifest: %s", manifest)
+	}
+}

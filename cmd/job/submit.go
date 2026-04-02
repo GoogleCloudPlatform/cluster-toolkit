@@ -55,6 +55,7 @@ var (
 	awaitJobCompletion bool
 	priorityClassName  string
 	isPathwaysJob      bool
+	verbose            bool
 
 	volumeStr []string
 	pathways  orchestrator.PathwaysJobDefinition
@@ -128,6 +129,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
@@ -202,6 +204,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		IsPathwaysJob:           isPathwaysJob,
 		Pathways:                pathways,
 		Volumes:                 vols,
+		Verbose:                 verbose,
 	}
 
 	if err := submitGKEJob(jobDef); err != nil {

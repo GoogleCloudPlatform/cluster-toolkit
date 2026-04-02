@@ -79,6 +79,8 @@ type JobDefinition struct {
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
 	Volumes []VolumeDefinition
+
+	Verbose bool
 }
 
 type JobStatus struct {
