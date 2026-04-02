@@ -83,7 +83,7 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 
 	out, err := gcloud.RunGcloudJsonCommand("compute", "machine-types", "describe", machineType, "--zone", zone, "--project", project)
 	if err != nil {
-		return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w", machineType, zone, project, err)
+		return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w. If this machine type is very new, you might need to update your gcloud version using 'gcloud components update'", machineType, zone, project, err)
 	}
 
 	var mt struct {
@@ -122,15 +122,18 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 
 	result.CPUs[machineType] = cpuConfig{Count: mt.GuestCpus}
 
-	if strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu") {
-		if count := parseTPUCount(machineType); count > 0 {
-			result.TPUs[machineType] = tpuConfig{Count: count}
+	if len(mt.Accelerators) > 0 {
+		acc := mt.Accelerators[0]
+		if strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
+			result.TPUs[machineType] = tpuConfig{Count: acc.GuestAcceleratorCount}
+		} else {
+			result.GPUs[machineType] = gpuConfig{
+				Count: acc.GuestAcceleratorCount,
+				Type:  acc.GuestAcceleratorType,
+			}
 		}
-	} else if len(mt.Accelerators) > 0 {
-		result.GPUs[machineType] = gpuConfig{
-			Count: mt.Accelerators[0].GuestAcceleratorCount,
-			Type:  mt.Accelerators[0].GuestAcceleratorType,
-		}
+	} else if count := parseTPUCount(machineType); count > 0 {
+		result.TPUs[machineType] = tpuConfig{Count: count}
 	}
 
 	resBytes, err := json.Marshal(result)
