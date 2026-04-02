@@ -30,9 +30,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-//go:embed accelerators.json
-var acceleratorsJSON []byte
-
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
@@ -176,7 +173,11 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	// Inject accelerator_configs if supported by the module
 	for _, input := range m.InfoOrDie().Inputs {
 		if input.Name == "accelerator_configs" {
-			m.Settings = m.Settings.With("accelerator_configs", cty.StringVal(string(acceleratorsJSON)))
+			cfgJson, err := getMachineConfigJSON(m, bp)
+			if err != nil {
+				return err
+			}
+			m.Settings = m.Settings.With("accelerator_configs", cty.StringVal(cfgJson))
 			break
 		}
 	}
