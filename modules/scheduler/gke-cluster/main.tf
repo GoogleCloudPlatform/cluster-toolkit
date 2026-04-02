@@ -40,7 +40,7 @@ locals {
   default_sa_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
   sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
-  # additional VPCs enable multi networking 
+  # additional VPCs enable multi networking
   derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
@@ -55,7 +55,8 @@ locals {
     "STORAGE",
     "HPA",
     "CADVISOR",
-    "KUBELET"
+    "KUBELET",
+    "JOBSET"
   ]
 
   default_logging_component = [
@@ -243,11 +244,25 @@ resource "google_container_cluster" "gke_cluster" {
         disabled = false
       }
     }
+    slice_controller_config {
+      enabled = var.enable_slice_controller
+    }
   }
 
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
+  }
+
+  dynamic "node_pool_defaults" {
+    for_each = var.enable_gcfs ? [1] : []
+    content {
+      node_config_defaults {
+        gcfs_config {
+          enabled = true
+        }
+      }
+    }
   }
 
   node_config {
@@ -280,6 +295,13 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
+    }
+    precondition {
+      condition = (
+        !var.enable_slice_controller ||
+        try(tonumber(split(".", local.master_version)[0]) > 1 || (tonumber(split(".", local.master_version)[0]) == 1 && tonumber(split(".", local.master_version)[1]) >= 35), true)
+      )
+      error_message = "The GKE Slice Controller requires a GKE version of 1.35 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
 
@@ -393,6 +415,59 @@ resource "google_container_node_pool" "system_node_pools" {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
+  }
+}
+
+resource "google_container_node_pool" "cpu_np" {
+  provider = google-beta
+  count    = var.enable_pathways_for_tpus ? 1 : 0
+
+  project        = var.project_id
+  name           = "cpu-np"
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  node_locations = var.system_node_pool_zones
+  version        = local.master_version
+
+  autoscaling {
+    total_min_node_count = 0
+    total_max_node_count = 100
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+
+  node_config {
+    resource_labels = local.labels
+    service_account = var.service_account_email
+    oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    machine_type    = "n4-standard-64"
+    image_type      = var.system_node_pool_image_type
+
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+
+    gvnic {
+      enabled = var.system_node_pool_image_type == "COS_CONTAINERD"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+
+    metadata = {
+      "disable-legacy-endpoints" = "true"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      version,
+    ]
   }
 }
 

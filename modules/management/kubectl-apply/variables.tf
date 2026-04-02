@@ -100,14 +100,14 @@ variable "cluster_id" {
 }
 
 variable "apply_manifests" {
-  description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md).\n NOTE: The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
+  description = "A list of manifests to apply to the GKE cluster using helm_install. For more details on the underlying deployment mechanism, see the [helm_install module](helm_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
   type = list(object({
-    enable            = optional(bool, true)
-    content           = optional(string, null)
-    source            = optional(string, null)
-    template_vars     = optional(map(any), null)
-    server_side_apply = optional(bool, false)
-    wait_for_rollout  = optional(bool, true)
+    enable           = optional(bool, true)
+    content          = optional(string, null)
+    source           = optional(string, null)
+    template_vars    = optional(map(any), null)
+    wait_for_rollout = optional(bool, true)
+    namespace        = optional(string, null)
   }))
   default = []
 }
@@ -116,10 +116,11 @@ variable "apply_manifests" {
 variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
-    install              = optional(bool, false)
-    version              = optional(string, "0.13.3")
-    config_path          = optional(string, null)
-    config_template_vars = optional(map(any), null)
+    install                  = optional(bool, false)
+    version                  = optional(string, "0.13.3")
+    config_path              = optional(string, null)
+    config_template_vars     = optional(map(any), null)
+    enable_pathways_for_tpus = optional(bool, false)
   })
   default = {}
 }
