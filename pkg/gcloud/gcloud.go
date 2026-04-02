@@ -41,7 +41,7 @@ func RunGcloudJsonCommand(args ...string) ([]byte, error) {
 		args = append(args, "--format=json")
 	}
 
-	cacheKey := strings.Join(args, " ")
+	cacheKey := fmt.Sprintf("%q", args)
 	if v, ok := gcloudCache.Load(cacheKey); ok {
 		return v.([]byte), nil
 	}

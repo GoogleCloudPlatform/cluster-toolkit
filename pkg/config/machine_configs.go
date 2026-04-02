@@ -55,11 +55,30 @@ func extractMachineParams(m *Module, bp Blueprint) (string, string, string) {
 	return machineType, zone, project
 }
 
+func parseTPUCount(machineType string) int {
+	if !(strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")) {
+		return 0
+	}
+	parts := strings.Split(machineType, "-")
+	if len(parts) == 0 {
+		return 0
+	}
+	suffix := parts[len(parts)-1]
+	if !strings.HasSuffix(suffix, "t") {
+		return 0
+	}
+	var count int
+	if _, err := fmt.Sscanf(suffix, "%dt", &count); err != nil {
+		return 0
+	}
+	return count
+}
+
 func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 	machineType, zone, project := extractMachineParams(m, bp)
 
 	if machineType == "" || zone == "" || project == "" {
-		return `{"gpus": {}, "tpus": {}}`, nil
+		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
 	}
 
 	out, err := gcloud.RunGcloudJsonCommand("compute", "machine-types", "describe", machineType, "--zone", zone, "--project", project)
@@ -79,25 +98,45 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 		return "", fmt.Errorf("failed to parse gcloud output for machine_type=%s: %w", machineType, err)
 	}
 
-	cpuSection := fmt.Sprintf(`"%s": {"count": %d}`, machineType, mt.GuestCpus)
-
-	if strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu") {
-		count := 0
-		parts := strings.Split(machineType, "-")
-		if len(parts) > 0 {
-			suffix := parts[len(parts)-1]
-			if strings.HasSuffix(suffix, "t") {
-				if _, err := fmt.Sscanf(suffix, "%dt", &count); err != nil {
-					count = 0
-				}
-			}
-		}
-		if count > 0 {
-			return fmt.Sprintf(`{"gpus": {}, "tpus": {"%s": {"count": %d}}, "cpus": {%s}}`, machineType, count, cpuSection), nil
-		}
-	} else if len(mt.Accelerators) > 0 {
-		return fmt.Sprintf(`{"gpus": {"%s": {"count": %d, "type": "%s"}}, "tpus": {}, "cpus": {%s}}`, machineType, mt.Accelerators[0].GuestAcceleratorCount, mt.Accelerators[0].GuestAcceleratorType, cpuSection), nil
+	type gpuConfig struct {
+		Count int    `json:"count"`
+		Type  string `json:"type"`
+	}
+	type tpuConfig struct {
+		Count int `json:"count"`
+	}
+	type cpuConfig struct {
+		Count int `json:"count"`
+	}
+	type outputConfig struct {
+		GPUs map[string]gpuConfig `json:"gpus"`
+		TPUs map[string]tpuConfig `json:"tpus"`
+		CPUs map[string]cpuConfig `json:"cpus"`
 	}
 
-	return fmt.Sprintf(`{"gpus": {}, "tpus": {}, "cpus": {%s}}`, cpuSection), nil
+	result := outputConfig{
+		GPUs: make(map[string]gpuConfig),
+		TPUs: make(map[string]tpuConfig),
+		CPUs: make(map[string]cpuConfig),
+	}
+
+	result.CPUs[machineType] = cpuConfig{Count: mt.GuestCpus}
+
+	if strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu") {
+		if count := parseTPUCount(machineType); count > 0 {
+			result.TPUs[machineType] = tpuConfig{Count: count}
+		}
+	} else if len(mt.Accelerators) > 0 {
+		result.GPUs[machineType] = gpuConfig{
+			Count: mt.Accelerators[0].GuestAcceleratorCount,
+			Type:  mt.Accelerators[0].GuestAcceleratorType,
+		}
+	}
+
+	resBytes, err := json.Marshal(result)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal machine config object to JSON: %w", err)
+	}
+
+	return string(resBytes), nil
 }
