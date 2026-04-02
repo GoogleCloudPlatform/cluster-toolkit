@@ -153,6 +153,7 @@ type ManifestOptions struct {
 	IsSuperSlicing          bool // True if the cluster supports and is configured for Super-slicing.
 	IsCPUMachine            bool // Track if the machine type is deduced to be a CPU machine
 	Pathways                orchestrator.PathwaysJobDefinition
+	Verbose                 bool
 }
 
 type Executor interface {

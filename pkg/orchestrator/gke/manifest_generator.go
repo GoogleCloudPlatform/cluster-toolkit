@@ -48,6 +48,14 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	resourcesString := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
 
+	if opts.Verbose {
+		if tpuLimit != "" {
+			opts.CommandToRun = "export TPU_STDERR_LOG_LEVEL=0 && export TPU_MIN_LOG_LEVEL=0 && export TF_CPP_MIN_LOG_LEVEL=0 && export TPU_VMODULE=real_program_continuator=1 && " + opts.CommandToRun
+		} else if gpuLimit != "" {
+			opts.CommandToRun = "export NCCL_DEBUG=INFO && " + opts.CommandToRun
+		}
+	}
+
 	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
 	var jsonBuf bytes.Buffer
 	enc := json.NewEncoder(&jsonBuf)
@@ -219,6 +227,7 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 		AwaitJobCompletion:      job.AwaitJobCompletion,
 		PriorityClassName:       job.PriorityClassName,
 		Topology:                schedOpts.Topology,
+		Verbose:                 job.Verbose,
 	}
 
 	g.addVolumeOptions(&opts, job.Volumes)
