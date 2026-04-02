@@ -640,7 +640,9 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [sysnet]
+    use:
+    - sysnet
+    - homefs
     settings:
       name_prefix: login
       disk_type: pd-balanced
