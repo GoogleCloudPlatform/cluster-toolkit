@@ -3,7 +3,7 @@
 This module simplifies the following functionality:
 
 * Applying Kubernetes manifests to GKE clusters: It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
-* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/),[Jobset](https://jobset.sigs.k8s.io/docs/) or [NCCL gIB plugin](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview).
+* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/),[Jobset](https://jobset.sigs.k8s.io/docs/), [NCCL gIB plugin](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview) or [`asapd-lite`](https://docs.cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute-custom-a4x-max#configure-mrdma-nics) daemonset.
 
 > Note: Kueue can work with a variety of frameworks out of the box, find them [here](https://kueue.sigs.k8s.io/docs/tasks/run/)
 
@@ -105,6 +105,18 @@ The `path` field accepts a template file. You will need to provide variables for
         template_vars:
           version: v1.1.0
           accelerator_count: 2
+```
+
+You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-max-bm](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/examples/gke-a4x-max-bm)) by setting the `asapd_lite` input variable and providing the path to the installer manifest using the `config_path` field.
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      asapd_lite:
+        install: true
+        config_path: $(ghpc_stage("manifests/asapd-lite-installer.yaml"))
 ```
 
 > **_NOTE:_**
