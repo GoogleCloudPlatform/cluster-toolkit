@@ -143,7 +143,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
 * `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`)
 * `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
-* `--ttl-seconds-after-finished int`: Time (in seconds) to retain the JobSet after it finishes. (Default: `3600` seconds / 1 hour)
+* `--ttl int`: Time (in seconds) to retain the JobSet after it finishes. (Default: `3600` seconds / 1 hour)
 * `--mount stringArray`: Mount a storage volume (e.g., `gs://bucket:/data` or `/host/path:/data`). Can be specified multiple times.
 
 ## 7. Submit the Sample Job with `gcluster job submit`
@@ -196,27 +196,26 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag:
 
 Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
-* **Check JobSet Status:**
+* **Check Job Status:**
+    You can check the status of your submitted job directly with `gcluster job list`:
 
     ```bash
-    kubectl get jobset --namespace default
+    ./gcluster job list \
+      --project <YOUR_GCP_PROJECT_ID> \
+      --cluster my-test-cluster \
+      --cluster-location us-central1
     ```
 
-    Look for a JobSet named `my-python-app-job` with a `SUCCEEDED` status in the `CONDITIONS` section.
+    Look for `my-python-app-job` with a `Succeeded` status.
 
-* **Get Pod Logs:**
-    First, get the name of the Pod created by your JobSet:
-
-    ```bash
-    kubectl get pods --namespace default -l jobset.sigs.k8s.io/jobset-name=my-python-app-job
-    ```
-
-    Note the Pod name (e.g., `my-python-app-job-worker-0-xxxxxx`).
-
-    Then, get the logs from the pod:
+* **Get Job Logs:**
+    You can view the logs of your submitted job directly with `gcluster job logs`:
 
     ```bash
-    kubectl logs <POD_NAME> --namespace default
+    ./gcluster job logs my-python-app-job \
+      --project <YOUR_GCP_PROJECT_ID> \
+      --cluster my-test-cluster \
+      --cluster-location us-central1
     ```
 
     You should see the output:
@@ -228,35 +227,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
 ## 8. Verify Phase 2 Features (Advanced Scheduling & Lifecycle)
 
-Phase 2 introduces job lifecycle management (`job list`, `job cancel`, `job logs`) and advanced scheduling flags.
-
-### 8.1 List Jobs
-
-You can now list the status of jobs directly through `gcluster`.
-
-```bash
-./gcluster job list \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1
-```
-
-You should see a table output with `NAME`, `STATUS`, `CREATION_TIME`, and `COMPLETION_TIME`.
-
-### 8.2 Inspect Logs
-
-You can view the logs of your submitted job directly with `gcluster job logs`.
-
-```bash
-./gcluster job logs <job-name> \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1
-```
-
-This will fetch and print output logs from all containers in the job pods.
-
-### 8.3 Run with Advanced Scheduling Flags
+### 8.1 Run with Advanced Scheduling Flags
 
 Try running a job with advanced scheduling options.
 
@@ -327,7 +298,7 @@ Use `--kueue-queue` to submit the job to a specific Kueue LocalQueue.
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
 
-### 8.4 Cancel Jobs
+### 8.2 Cancel Jobs
 
 You can clean up specific job without destroying the entire cluster.
 
@@ -340,15 +311,15 @@ You can clean up specific job without destroying the entire cluster.
 
 Verify it's gone by running `gcluster job list` again.
 
-### 8.5 Job Retention (TTL)
+### 8.3 Job Retention (TTL)
 
-By default, finished jobs are kept for 1 hour (3600 seconds). You can change this using `--ttl-seconds-after-finished`.
+By default, finished jobs are kept for 1 hour (3600 seconds). You can change this using `--ttl`.
 
 ```bash
-./gcluster job submit ... --ttl-seconds-after-finished 600 # Keep for only 10 minutes
+./gcluster job submit ... --ttl 600 # Keep for only 10 minutes
 ```
 
-### 8.6 Topology & Scheduler
+### 8.4 Topology & Scheduler
 
 **Example 1: Topology Awareness**
 Request a specific TPU slice topology using `--topology`.
