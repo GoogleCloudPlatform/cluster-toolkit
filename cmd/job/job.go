@@ -27,8 +27,8 @@ var (
 // JobCmd represents the base command for job-related operations
 var JobCmd = &cobra.Command{
 	Use:   "job",
-	Short: "[EXPERIMENTAL] Manage jobs on the cluster.",
-	Long:  `Manage jobs on the cluster (EXPERIMENTAL/BETA). This feature is under active development and not yet supported for production use.`,
+	Short: "[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. Alpha version and not yet supported for production use.",
+	Long:  `[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. This is the alpha version of the feature and is under active development. The feature is not yet supported for production use.`,
 }
 
 func init() {
