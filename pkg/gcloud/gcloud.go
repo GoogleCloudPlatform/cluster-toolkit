@@ -21,7 +21,10 @@ import (
 	"sync"
 )
 
-var gcloudCache sync.Map // map[string][]byte (cmd args string -> output)
+var (
+	gcloudCache sync.Map // map[string][]byte (cmd args string -> output)
+	execCommand = exec.Command
+)
 
 // RunGcloudJsonCommand runs a gcloud command and automatically appends --format=json.
 // It caches the result based on the arguments to prevent duplicate executions.
@@ -43,7 +46,7 @@ func RunGcloudJsonCommand(args ...string) ([]byte, error) {
 		return v.([]byte), nil
 	}
 
-	cmd := exec.Command("gcloud", args...)
+	cmd := execCommand("gcloud", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute gcloud %s: %w. Output: %s", cacheKey, err, string(out))
