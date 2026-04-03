@@ -449,6 +449,12 @@ variable "run_workload_script" {
   default     = true
 }
 
+variable "install_gpu_direct_manifests" {
+  description = "If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually."
+  type        = bool
+  default     = true
+}
+
 variable "enable_queued_provisioning" {
   description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. This cannot be true if `accelerator_topology_mode` is set to `PROVISION_ONLY`."
   type        = bool
