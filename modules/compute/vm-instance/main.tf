@@ -22,8 +22,9 @@ locals {
 module "gpu" {
   source = "../../internal/gpu-definition"
 
-  machine_type      = var.machine_type
-  guest_accelerator = var.guest_accelerator
+  machine_type        = var.machine_type
+  guest_accelerator   = var.guest_accelerator
+  accelerator_configs = var.accelerator_configs
 }
 
 locals {

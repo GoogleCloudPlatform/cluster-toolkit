@@ -437,3 +437,9 @@ variable "reservation_name" {
     error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
   }
 }
+
+variable "accelerator_configs" {
+  description = "JSON text containing the definition of GKE machine types and counts"
+  type        = string
+  default     = "{}"
+}

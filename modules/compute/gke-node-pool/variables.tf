@@ -532,9 +532,14 @@ variable "linux_node_config" {
   nullable = false
 }
 
-
 variable "accelerator_topology_mode" {
   description = "The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`."
   type        = string
   default     = null
+}
+
+variable "accelerator_configs" {
+  description = "JSON text containing the definition of GKE machine types and counts"
+  type        = string
+  default     = "{}"
 }

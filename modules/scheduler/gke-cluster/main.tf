@@ -40,7 +40,7 @@ locals {
   default_sa_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
   sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
-  # additional VPCs enable multi networking
+  # additional VPCs enable multi networking 
   derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
@@ -63,6 +63,15 @@ locals {
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
   ]
+}
+
+# GKE Node Auto-Provisioning (NAP) locals
+locals {
+  is_accelerator_enabled = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
+  nap_service_account    = var.cluster_autoscaling.service_account_email != "" ? var.cluster_autoscaling.service_account_email : local.sa_email
+
+  nap_cpu_max    = 1000000
+  nap_memory_max = 10000000
 }
 
 data "google_project" "project" {
@@ -135,11 +144,47 @@ resource "google_container_cluster" "gke_cluster" {
   enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
-    # Controls auto provisioning of node-pools
-    enabled = false
+    enabled = var.cluster_autoscaling.enabled
 
     # Controls autoscaling algorithm of node-pools
-    autoscaling_profile = var.autoscaling_profile
+    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+
+    dynamic "resource_limits" {
+      for_each = var.cluster_autoscaling.enabled ? [
+        { type = "cpu", min = 1, max = local.nap_cpu_max },
+        { type = "memory", min = 1, max = local.nap_memory_max }
+      ] : []
+      content {
+        resource_type = resource_limits.value.type
+        minimum       = resource_limits.value.min
+        maximum       = resource_limits.value.max
+      }
+    }
+
+    dynamic "resource_limits" {
+      for_each = local.is_accelerator_enabled ? var.cluster_autoscaling.limits : []
+      content {
+        resource_type = resource_limits.value.autoprovisioning_machine_type
+        minimum       = 0
+        maximum       = resource_limits.value.autoprovisioning_max_accelerator_count
+      }
+    }
+
+    dynamic "auto_provisioning_defaults" {
+      for_each = var.cluster_autoscaling.enabled ? [1] : []
+      content {
+        service_account = local.nap_service_account
+        oauth_scopes    = var.cluster_autoscaling.oauth_scopes
+
+        management {
+          auto_upgrade = true
+          auto_repair  = true
+        }
+
+        disk_size = 100
+        disk_type = "hyperdisk-balanced"
+      }
+    }
   }
 
   datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
@@ -259,17 +304,6 @@ resource "google_container_cluster" "gke_cluster" {
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
-  }
-
-  dynamic "node_pool_defaults" {
-    for_each = var.enable_gcfs ? [1] : []
-    content {
-      node_config_defaults {
-        gcfs_config {
-          enabled = true
-        }
-      }
-    }
   }
 
   node_config {
@@ -425,59 +459,6 @@ resource "google_container_node_pool" "system_node_pools" {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
-  }
-}
-
-resource "google_container_node_pool" "cpu_np" {
-  provider = google-beta
-  count    = var.enable_pathways_for_tpus ? 1 : 0
-
-  project        = var.project_id
-  name           = "cpu-np"
-  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
-  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  node_locations = var.system_node_pool_zones
-  version        = local.master_version
-
-  autoscaling {
-    total_min_node_count = 0
-    total_max_node_count = 100
-  }
-
-  management {
-    auto_repair  = true
-    auto_upgrade = true
-  }
-
-  node_config {
-    resource_labels = local.labels
-    service_account = var.service_account_email
-    oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
-    machine_type    = "n4-standard-64"
-    image_type      = var.system_node_pool_image_type
-
-    shielded_instance_config {
-      enable_secure_boot          = var.system_node_pool_enable_secure_boot
-      enable_integrity_monitoring = true
-    }
-
-    gvnic {
-      enabled = var.system_node_pool_image_type == "COS_CONTAINERD"
-    }
-
-    workload_metadata_config {
-      mode = "GKE_METADATA"
-    }
-
-    metadata = {
-      "disable-legacy-endpoints" = "true"
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      version,
-    ]
   }
 }
 
