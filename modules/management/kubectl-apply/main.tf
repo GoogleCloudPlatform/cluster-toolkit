@@ -148,10 +148,6 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
-resource "random_id" "release_suffix" {
-  byte_length = 4
-}
-
 module "kubectl_apply_manifests" {
   for_each   = local.processed_apply_manifests_map
   source     = "./helm_install"

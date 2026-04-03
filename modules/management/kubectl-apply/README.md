@@ -132,8 +132,11 @@ You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-
 #### 1. Large Manifests and CRDs
 Helm stores the entire release state (including the generated manifests) as a standard Kubernetes Secret in the release namespace. Before storing the state, Helm runs the YAML through [GZIP compression and base64 encoding](https://helm.sh/docs/topics/kubernetes_apis/#:~:text=The%20manifest%20is,of%20the%20release.). This effectively raises the limit to ~1MB or more, allowing for the deployment of very large manifests and complex CRDs without requiring Server-Side Apply (SSA). This behaviour is guaranteed because the [Terraform Helm Provider](https://github.com/hashicorp/terraform-provider-helm) directly imports the official [Helm Go SDK](https://github.com/helm/helm/tree/main/pkg/action).
 
-#### 2. Release Suffixes
-The module introduces a `random_id` to generate a unique 4-byte suffix for each Helm release (e.g., `manifest-apply-ceab0dfc-0`). This prevents name collisions when multiple module instances (e.g., `gke-cluster` and `gke-node-pool`) instantiate the `kubectl-apply` source simultaneously within the same blueprint. This ID is stored in the Terraform state, ensuring the release name remains stable across re-deployments.
+#### 2. Helm-Release Suffixes
+To make releases more identifiable, the module generates deterministic Helm release names based on the following precedence hierarchy:
+* If you provide a `name` field in the `apply_manifests` list object, it will be used directly.
+* If applying from a local file or URL, it extracts the file basename (e.g., `mpi-operator` from `.../mpi-operator.yaml`) and appends the list index (e.g., `mpi-operator-0`).
+* For raw content without a source or name, it falls back to using the module ID and list index: `${module_id}-raw-${index}` (e.g., `gke-cluster-raw-1`).
 
 #### 3. Re-deployment Conflicts
 If a deployment fails, the `atomic = true` setting ensures that Helm automatically rolls back the release, preventing the cluster from being left in a "half-applied" state. If you encounter persistent conflicts during re-deployment due to immutable fields, you may need to manually delete the resource or the Helm release before re-applying.
@@ -216,7 +219,6 @@ limitations under the License.
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 | <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
-| <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.1 |
 
 ## Providers
 
@@ -224,7 +226,6 @@ limitations under the License.
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | >= 2.1 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
