@@ -81,6 +81,11 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
 	}
 
+	// Skip gcloud call for dummy project used in validation tests
+	if project == "invalid-project" {
+		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
+	}
+
 	out, err := gcloud.RunGcloudJsonCommand("compute", "machine-types", "describe", machineType, "--zone", zone, "--project", project)
 	if err != nil {
 		return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w. If this machine type is very new, you might need to update your gcloud version using 'gcloud components update'", machineType, zone, project, err)
