@@ -36,7 +36,7 @@ locals {
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
     (
-      endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null ? length(var.asapd_lite.config_template_vars) : 0) > 0 ?
+      endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null && length(var.asapd_lite.config_template_vars) > 0) ?
       templatefile(var.asapd_lite.config_path, var.asapd_lite.config_template_vars != null ? var.asapd_lite.config_template_vars : {}) :
       file(var.asapd_lite.config_path)
     ) : ""
