@@ -45,8 +45,9 @@ module "second-fs" {
 }
 
 module "first-vm" {
-  source          = "./modules/embedded/modules/compute/vm-instance"
-  deployment_name = var.deployment_name
+  source              = "./modules/embedded/modules/compute/vm-instance"
+  accelerator_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
+  deployment_name     = var.deployment_name
   labels = merge(var.labels, {
     green = "sleeves"
   })
@@ -57,11 +58,12 @@ module "first-vm" {
 }
 
 module "second-vm" {
-  source          = "./modules/embedded/modules/compute/vm-instance"
-  deployment_name = var.deployment_name
-  labels          = var.labels
-  network_storage = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
-  project_id      = var.project_id
-  region          = var.region
-  zone            = var.zone
+  source              = "./modules/embedded/modules/compute/vm-instance"
+  accelerator_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
+  deployment_name     = var.deployment_name
+  labels              = var.labels
+  network_storage     = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
+  project_id          = var.project_id
+  region              = var.region
+  zone                = var.zone
 }
