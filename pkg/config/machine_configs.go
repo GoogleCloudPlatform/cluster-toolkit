@@ -127,9 +127,11 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 
 	result.CPUs[machineType] = cpuConfig{Count: mt.GuestCpus}
 
+	isTPU := strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")
+
 	if len(mt.Accelerators) > 0 {
 		acc := mt.Accelerators[0]
-		if strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
+		if isTPU || strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
 			result.TPUs[machineType] = tpuConfig{Count: acc.GuestAcceleratorCount}
 		} else {
 			result.GPUs[machineType] = gpuConfig{
