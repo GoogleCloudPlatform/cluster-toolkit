@@ -48,7 +48,7 @@ variable "devel" {
 variable "namespace" {
   description = "Kubernetes namespace to install the Helm release into."
   type        = string
-  default     = "default"
+  default     = null
 }
 
 variable "create_namespace" {

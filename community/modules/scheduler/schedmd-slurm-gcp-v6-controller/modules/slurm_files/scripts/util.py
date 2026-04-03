@@ -484,6 +484,11 @@ def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
     return parse_bucket_uri(uri)
 
+def blob_fetch(file):
+    bucket_name, _ = _get_bucket_and_common_prefix()
+    return storage_client().get_bucket(bucket_name).get_blob(file)
+
+
 def blob_get(file):
     bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
@@ -670,7 +675,11 @@ class _ConfigBlobs:
     
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
-            h.update(blob.md5_hash.encode("utf-8"))
+            # Fallback to blob_fetch if md5_hash is missing (can happen with CMEK/lists)
+            hash_val = blob_fetch(blob.name).md5_hash if blob.md5_hash is None else blob.md5_hash
+            # Fallback to crc32c or empty string if it's fundamentally CMEK encrypted
+            safe_hash = hash_val or blob.crc32c or ""
+            h.update(safe_hash.encode("utf-8"))
         return h.hexdigest()
 
 @dataclass

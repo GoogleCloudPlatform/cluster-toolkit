@@ -101,15 +101,10 @@ deployment_groups:
       - source: $(vars.storage_crd_path)
         # Server-side applies avoid last-applied-configuration and associated annotation length issues
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_applicationprofiles.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_jobtemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayclustertemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayjobtemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_volumebundles.yaml
-        server_side_apply: true
 
   - id: homefs
     source: modules/file-system/filestore
