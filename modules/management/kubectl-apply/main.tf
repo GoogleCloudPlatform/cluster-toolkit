@@ -33,6 +33,15 @@ locals {
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
 
+  asapd_lite_config_content = (
+    var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
+    (
+      endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null && length(var.asapd_lite.config_template_vars) > 0) ?
+      templatefile(var.asapd_lite.config_path, var.asapd_lite.config_template_vars != null ? var.asapd_lite.config_template_vars : {}) :
+      file(var.asapd_lite.config_path)
+    ) : ""
+  )
+
   kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
   parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
   cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
@@ -357,12 +366,18 @@ module "install_gib" {
 }
 
 module "install_asapd_lite" {
-  source            = "./kubectl"
-  source_path       = local.install_asapd_lite ? var.asapd_lite.config_path : null
-  server_side_apply = true
-  wait_for_rollout  = true
+  source        = "./helm_install"
+  count         = local.install_asapd_lite ? 1 : 0
+  release_name  = "asapd-lite"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  namespace     = "kube-system"
+  wait          = true
+  depends_on    = [var.gke_cluster_exists]
 
-  providers = {
-    kubectl = kubectl
-  }
+  values_yaml = [
+    yamlencode({
+      manifests = length(trimspace(local.asapd_lite_config_content)) > 0 ? [local.asapd_lite_config_content] : []
+    })
+  ]
 }
