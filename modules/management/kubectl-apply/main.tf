@@ -26,8 +26,8 @@ locals {
       pathways_memory_quota  = "2000G"
     }) : "",
     var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
-      templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
+      endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
+      templatefile(var.kueue.config_path, var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}) :
       file(var.kueue.config_path)
     ) : ""
   ]))
@@ -90,15 +90,15 @@ locals {
               fileset(manifest.source, "*.tftpl")
               ) : (
               endswith(f, ".tftpl") ?
-              templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
+              templatefile("${trimsuffix(manifest.source, "/")}/${f}", manifest.template_vars != null ? manifest.template_vars : {}) :
               file("${trimsuffix(manifest.source, "/")}/${f}")
             )
           ])
         ) :
         # Step C: Single file logic (implied if source is provided but not a URL or Dir)
         (manifest.source != null && manifest.source != "") ? (
-          endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
-          templatefile(manifest.source, try(manifest.template_vars, {})) :
+          endswith(manifest.source, ".tftpl") || (manifest.template_vars != null && length(manifest.template_vars) > 0) ?
+          templatefile(manifest.source, manifest.template_vars != null ? manifest.template_vars : {}) :
           file(manifest.source)
         )
         :
