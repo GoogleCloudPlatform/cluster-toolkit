@@ -56,10 +56,8 @@ Run the script with the following arguments: `./run-hpl-workload.sh [provider]
 
 | Provider | Argument | Description                                          |
 | :------- | :------- | :--------------------------------------------------- |
-| **RXM**  | `rxm`    | Uses RDMA via `ofi_rxm` |
-:          :          : for highest GFLOPS and best latency.                 :
-| **TCP**  | `tcp`    | (Default) Standard TCP/IP sockets. Useful for        |
-:          :          : debugging; lowest performance.                       :
+| **RXM**  | `rxm`    | Uses RDMA via `ofi_rxm` for highest GFLOPS and best latency. |
+| **TCP**  | `tcp`    | (Default) Standard TCP/IP sockets. Useful for debugging; lowest performance. |
 
 **Example Commands:**
 

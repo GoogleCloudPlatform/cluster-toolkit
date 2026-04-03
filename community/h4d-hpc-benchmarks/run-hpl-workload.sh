@@ -1,10 +1,28 @@
 #!/bin/bash
 # Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 # OPTIMIZED FOR: AMD H4D Nodes
 # USAGE: `chmod +x run-hpl-workload.sh && ./run-hpl-workload.sh [tcp|rxm] [n_nodes]`
 set -eu
 
 PROVIDER=${1:-tcp}
+
+# Default environment variables
+MPI_FABRICS=${MPI_FABRICS:-"shm:ofi"}
+RXM_IFACE=${RXM_IFACE:-"rdma0"}
+TCP_IFACE=${TCP_IFACE:-"ens8"}
 
 TAG=$(date +%s)
 TEST_DIR=${PWD}/hpl-${PROVIDER}-${TAG}
@@ -21,13 +39,12 @@ fi
 case "$PROVIDER" in
     "rxm")
         PROVIDER_NAME="RXM (ofi_rxm)"
-        MPI_FABRICS="shm:ofi"
         ENV_VARS_BLOCK=$(cat <<END
   env_vars:
     set:
-      I_MPI_FABRICS: "shm:ofi"
+      I_MPI_FABRICS: "${MPI_FABRICS}"
       FI_PROVIDER: "verbs;ofi_rxm"
-      FI_VERBS_IFACE: "rdma0"
+      FI_VERBS_IFACE: "${RXM_IFACE}"
       FI_VERBS_MR_CACHE_ENABLE: "1"
       FI_LOG_LEVEL: "error"
       OMP_NUM_THREADS: "{n_threads}"
@@ -38,13 +55,12 @@ END
         ;;
     "tcp")
         PROVIDER_NAME="TCP"
-        MPI_FABRICS="shm:ofi"
         ENV_VARS_BLOCK=$(cat <<END
   env_vars:
     set:
-      I_MPI_FABRICS: "shm:ofi"
+      I_MPI_FABRICS: "${MPI_FABRICS}"
       FI_PROVIDER: "tcp"
-      FI_TCP_IFACE: "ens8"
+      FI_TCP_IFACE: "${TCP_IFACE}"
       FI_LOG_LEVEL: "error"
       OMP_NUM_THREADS: "{n_threads}"
       OMP_PROC_BIND: "TRUE"
@@ -175,8 +191,8 @@ echo "Extracting HPL results directly from Slurm logs..."
 echo -e "Experiment\tN\tNB\tP\tQ\tTime(s)\tGflops" > summary.tsv
 
 EXP_LOG_DIR="${TEST_DIR}/experiments/hpl/calculator/hpl-${PROVIDER}-${N_NODES}-nodes"
-if ls \$EXP_LOG_DIR/slurm-*.out 1> /dev/null 2>&1; then
-    awk '/^WR00C2C4/ {print "hpl-${PROVIDER}-${N_NODES}-nodes\t" \$2 "\t" \$3 "\t" \$4 "\t" \$5 "\t" \$6 "\t" \$7}' \$EXP_LOG_DIR/slurm-*.out >> summary.tsv
+if ls "\$EXP_LOG_DIR"/slurm-*.out 1> /dev/null 2>&1; then
+    awk '/^WR00C2C4/ {print "hpl-${PROVIDER}-${N_NODES}-nodes\t" \$2 "\t" \$3 "\t" \$4 "\t" \$5 "\t" \$6 "\t" \$7}' "\$EXP_LOG_DIR"/slurm-*.out >> summary.tsv
 else
     echo "Error: Could not find slurm-*.out in \$EXP_LOG_DIR"
 fi
