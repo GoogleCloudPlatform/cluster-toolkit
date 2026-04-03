@@ -32,7 +32,7 @@ data "google_compute_reservation" "specific_reservations" {
     {} :
     {
       for pair in flatten([
-        for zone in try(var.zones, []) : [
+        for zone in(var.zones != null ? var.zones : []) : [
           for i, reservation_name in try(local.input_reservation_names, []) : {
             key : "${local.input_reservation_projects[i]}/${zone}/${reservation_name}"
             zone : zone
@@ -90,18 +90,21 @@ locals {
 }
 
 locals {
-  # Check if reservation is valid, that is, if it exists, there should be only 1 verified specific reservation or the reservation doesn't exist
-  is_valid_reservation = length(local.verified_specific_reservations) == 1 || !var.is_reservation_active
+  # Check if reservation is valid: specific reservations must be verified in all targeted zones
+  is_valid_reservation = (length(local.verified_specific_reservations) > 0 && length(local.verified_specific_reservations) == length(toset(var.zones != null ? var.zones : []))) || !var.is_reservation_active
 
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
-    for i, r in local.verified_specific_reservations :
-    length(local.input_reservation_suffixes[i]) > 0 ?
-    format("%s%s", r.name, local.input_reservation_suffixes[i]) :
-    "projects/${r.project}/reservations/${r.name}"
+    for r in local.verified_specific_reservations :
+    "projects/${r.project}/zones/${r.zone}/reservations/${r.name}${try(local.input_reservation_suffixes[0], "")}"
   ]
 
-  # Define a default reservation value if no specific reservations are present
-  specific_reservation_name  = length(local.input_reservation_names) > 0 ? local.input_reservation_names[0] : ""
-  default_reservation_values = ["projects/${var.project_id}/reservations/${local.specific_reservation_name}"]
+  default_reservation_values = local.input_specific_reservations_count == 0 ? [] : (
+    length(var.zones != null ? var.zones : []) > 0 ? [
+      for z in toset(var.zones != null ? var.zones : []) :
+      "projects/${local.input_reservation_projects[0]}/zones/${z}/reservations/${local.input_reservation_names[0]}${try(local.input_reservation_suffixes[0], "")}"
+      ] : [
+      "projects/${local.input_reservation_projects[0]}/reservations/${local.input_reservation_names[0]}${try(local.input_reservation_suffixes[0], "")}"
+    ]
+  )
 }
