@@ -131,7 +131,7 @@ variable "import_gcs_bucket_uri" {
 }
 
 variable "kms_key" {
-  description = "The self-link of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance."
+  description = "The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project_id>/locations/<location>/keyRings/<key_ring>/cryptoKeys/<key_name>"
   type        = string
   default     = null
 }
