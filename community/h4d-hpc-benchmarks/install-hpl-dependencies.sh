@@ -57,7 +57,10 @@ echo "Installing Intel MPI and HPL..."
 spack install intel-oneapi-mpi@2021.17.2 %gcc@14
 spack install hpl@2.3 +openmp ^amdblis threads=openmp ^intel-oneapi-mpi %gcc@14
 
+python3 -m venv /opt/ramble/venv
+source /opt/ramble/venv/bin/activate
 pip3 install -r /opt/ramble/requirements.txt
+deactivate
 
 # CLEANUP
 echo "Cleaning up caches..."

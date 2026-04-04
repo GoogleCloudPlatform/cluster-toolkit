@@ -18,11 +18,7 @@
 set -eu
 
 PROVIDER=${1:-tcp}
-
-# Default environment variables
 MPI_FABRICS=${MPI_FABRICS:-"shm:ofi"}
-RXM_IFACE=${RXM_IFACE:-"rdma0"}
-TCP_IFACE=${TCP_IFACE:-"ens8"}
 
 TAG=$(date +%s)
 TEST_DIR=${PWD}/hpl-${PROVIDER}-${TAG}
@@ -44,7 +40,7 @@ case "$PROVIDER" in
     set:
       I_MPI_FABRICS: "${MPI_FABRICS}"
       FI_PROVIDER: "verbs;ofi_rxm"
-      FI_VERBS_IFACE: "${RXM_IFACE}"
+      FI_VERBS_IFACE: "rdma0"
       FI_VERBS_MR_CACHE_ENABLE: "1"
       FI_LOG_LEVEL: "error"
       OMP_NUM_THREADS: "{n_threads}"
@@ -60,7 +56,7 @@ END
     set:
       I_MPI_FABRICS: "${MPI_FABRICS}"
       FI_PROVIDER: "tcp"
-      FI_TCP_IFACE: "${TCP_IFACE}"
+      FI_TCP_IFACE: "ens8"
       FI_LOG_LEVEL: "error"
       OMP_NUM_THREADS: "{n_threads}"
       OMP_PROC_BIND: "TRUE"
@@ -216,6 +212,8 @@ SPACK_ROOT="/opt/spack"
 RAMBLE_ROOT="/opt/ramble"
 
 echo "--- Starting Orchestrator on \$(hostname) ---"
+
+source /opt/ramble/venv/bin/activate
 
 # Phase 1: Environment Setup
 source "\${SPACK_ROOT}/share/spack/setup-env.sh"
