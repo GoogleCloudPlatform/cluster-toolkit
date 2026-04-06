@@ -563,7 +563,10 @@ variable "enable_inference_gateway" {
 }
 
 variable "auto_monitoring_scope" {
-  description = "Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'."
+  description = <<-EOT
+  Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.
+  For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring
+  EOT
   type        = string
   default     = "NONE"
   validation {
