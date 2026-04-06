@@ -664,3 +664,104 @@ func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
 		t.Errorf("manifest missing expected TPU verbose export.\nManifest: %s", manifest)
 	}
 }
+
+func TestParseJobStatus_CompletionTime(t *testing.T) {
+	orc := &GKEOrchestrator{}
+
+	tests := []struct {
+		name               string
+		obj                map[string]interface{}
+		wantStatus         string
+		wantCompletionTime string
+	}{
+		{
+			name: "Top-level completionTime",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"completionTime": "2026-04-03T12:00:00Z",
+				},
+			},
+			wantStatus:         "Unknown",
+			wantCompletionTime: "2026-04-03T12:00:00Z",
+		},
+		{
+			name: "TransitionTime in Succeeded condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Succeeded",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:15:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Succeeded",
+			wantCompletionTime: "2026-04-03T12:15:00Z",
+		},
+		{
+			name: "TransitionTime in Failed condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Failed",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:30:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Failed",
+			wantCompletionTime: "2026-04-03T12:30:00Z",
+		},
+		{
+			name: "Top-level completionTime wins over condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"completionTime": "2026-04-03T12:00:00Z",
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Succeeded",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-03T12:15:00Z",
+						},
+					},
+				},
+			},
+			wantStatus:         "Succeeded",
+			wantCompletionTime: "2026-04-03T12:00:00Z",
+		},
+		{
+			name: "Running (no completion time)",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{
+					"suspend": false,
+				},
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":   "Active",
+							"status": "True",
+						},
+					},
+				},
+			},
+			wantStatus:         "Running",
+			wantCompletionTime: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotStatus, gotCompletionTime := orc.parseJobStatus(tt.obj)
+			if gotStatus != tt.wantStatus {
+				t.Errorf("parseJobStatus() gotStatus = %v, want %v", gotStatus, tt.wantStatus)
+			}
+			if gotCompletionTime != tt.wantCompletionTime {
+				t.Errorf("parseJobStatus() gotCompletionTime = %v, want %v", gotCompletionTime, tt.wantCompletionTime)
+			}
+		})
+	}
+}
