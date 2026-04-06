@@ -592,17 +592,3 @@ variable "enable_pathways_for_tpus" {
   type        = bool
   default     = false
 }
-
-variable "cluster_autoscaling" {
-  description = "Auto-scaling configuration for Nap or static limits"
-  type = object({
-    enabled               = optional(bool, false)
-    service_account_email = optional(string, "")
-    oauth_scopes          = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
-    limits = optional(list(object({
-      autoprovisioning_machine_type          = string
-      autoprovisioning_max_accelerator_count = number
-    })), [])
-  })
-  default = {}
-}
