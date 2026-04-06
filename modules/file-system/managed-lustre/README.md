@@ -151,6 +151,41 @@ to 6988.
 > 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
 > compatibility must be built into the Slurm image.
 
+### Example - CMEK
+
+To create a Managed Lustre instance with a Customer-Managed Encryption Key (CMEK), use the `kms_key` option.
+
+```yaml
+  - id: managed-lustre
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 18000
+      kms_key: projects/<project_id>/locations/<location>/keyRings/<key_ring>/cryptoKeys/<key_name>
+```
+
+> [!IMPORTANT]
+> When using CMEK, you must grant the Managed Lustre Service Account the `Cloud KMS CryptoKey Encrypter/Decrypter` role on the KMS key.
+>
+> The service account email follows the pattern: `service-<PROJECT_NUMBER>@gcp-sa-lustre.iam.gserviceaccount.com`.
+>
+> If the service account does not exist, you can create it using:
+> `gcloud beta services identity create --service=lustre.googleapis.com --project=<PROJECT_ID>`
+>
+> You can grant the role using:
+>
+> ```bash
+> gcloud kms keys add-iam-policy-binding <KEY_NAME> \
+>     --location=<LOCATION> \
+>     --keyring=<KEYRING_NAME> \
+>     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-lustre.iam.gserviceaccount.com" \
+>     --role="roles/cloudkms.cryptoKeyEncrypterDecrypter" \
+>     --project=<PROJECT_ID>
+> ```
+
 ### Example - Importing data from GSC Bucket
 
 One option with the Managed Lustre instance is to import data from a GSC bucket
@@ -265,6 +300,7 @@ No modules.
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
 | <a name="input_gke_support_enabled"></a> [gke\_support\_enabled](#input\_gke\_support\_enabled) | Set to true to create Managed Lustre instance with GKE compatibility.<br/>Note: This does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | `bool` | `false` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to managed lustre. Data will<br/>be imported to the local\_mount directory. Changing this value will not<br/>trigger a redeployment, to prevent data deletion. | `string` | `null` | no |
+| <a name="input_kms_key"></a> [kms\_key](#input\_kms\_key) | The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project\_id>/locations/<location>/keyRings/<key\_ring>/cryptoKeys/<key\_name> | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Managed Lustre instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Local mount point for the Managed Lustre instance. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |

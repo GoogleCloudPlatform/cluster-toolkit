@@ -73,6 +73,7 @@ resource "google_lustre_instance" "lustre_instance" {
   network = var.network_id
 
   gke_support_enabled = var.gke_support_enabled
+  kms_key             = var.kms_key
 
   timeouts {
     create = "1h"
