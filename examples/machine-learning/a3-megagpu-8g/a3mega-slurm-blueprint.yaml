@@ -153,36 +153,12 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-      - type: ansible-local
-        destination: update-gvnic.yml
-        content: |
-          ---
-          - name: Install updated gVNIC driver from GitHub
-            hosts: all
-            become: true
-            vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-            tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |
           #!/bin/bash
           set -ex -o pipefail
           # 1. Install the specific compatible versions without the virtual libnvsdm package
-          add-nvidia-repositories -y
           apt install -y \
               cuda-toolkit-12-8 \
               nvidia-container-toolkit \
@@ -347,8 +323,9 @@ deployment_groups:
           #!/bin/bash
           # Signal Packer to finish using the clean short hostname
           BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
-          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
+          LOG_DEST=`curl -s -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null`
+          if [ -n "\$LOG_DEST" ]; then rm -f "\$LOG_DEST"; fi
+          gcloud compute instances add-metadata `hostname -s` --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: slurm-build
   modules:
