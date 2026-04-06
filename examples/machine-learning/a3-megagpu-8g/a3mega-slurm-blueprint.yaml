@@ -26,11 +26,11 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
-    family: $(vars.final_image_family)
+    family: $(vars.final_image_family)-u24
     project: $(vars.project_id)
   enable_login_public_ips: true
   enable_controller_public_ips: true
@@ -181,16 +181,16 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -ex -o pipefail
+          # 1. Install the specific compatible versions without the virtual libnvsdm package
           add-nvidia-repositories -y
-          apt update -y
           apt install -y \
               cuda-toolkit-12-8 \
               nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.2-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.2-1 \
-              datacenter-gpu-manager-4-core=1:4.5.2-1
+              datacenter-gpu-manager-4-cuda12=1:4.5.3-1 \
+              datacenter-gpu-manager-4-dev=1:4.5.3-1 \
+              datacenter-gpu-manager-4-core=1:4.5.3-1
 
-          # 2. Hold ALL components
+          # 2. Hold the packages to prevent accidental updates
           apt-mark hold \
               datacenter-gpu-manager-4-cuda12 \
               datacenter-gpu-manager-4-dev \
@@ -341,6 +341,14 @@ deployment_groups:
           apt-get install --assume-yes google-cloud-cli
           # Clean up the bash executable hash for subsequent steps using gsutil
           hash -r
+      - type: shell
+        destination: stop_packer_early.sh
+        content: |
+          #!/bin/bash
+          # Signal Packer to finish using the clean short hostname
+          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
+          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
+          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: slurm-build
   modules:
