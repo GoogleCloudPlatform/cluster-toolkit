@@ -116,3 +116,7 @@ func (m *mockClusterExecutor) ExecuteCommand(name string, args ...string) shell.
 	}
 	return shell.CommandResult{ExitCode: 0, Stdout: "{}"} // Default to empty object JSON
 }
+
+func (m *mockClusterExecutor) ExecuteCommandStream(name string, args ...string) error {
+	return nil
+}

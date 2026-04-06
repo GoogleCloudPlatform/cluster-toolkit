@@ -139,7 +139,7 @@ func (g *GKEOrchestrator) ListVolumes(opts orchestrator.ListOptions) ([]orchestr
 		volumes = append(volumes, orchestrator.VolumeStatus{
 			Name:      pvc.Metadata.Name,
 			Type:      volType,
-			MountPath: fmt.Sprintf("/mnt/data/%s", pvc.Metadata.Name), // Guessing from PR context
+			MountPath: fmt.Sprintf("/mnt/data/%s", pvc.Metadata.Name),
 			Cluster:   opts.ClusterName,
 		})
 	}

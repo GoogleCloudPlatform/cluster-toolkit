@@ -53,6 +53,7 @@ var (
 	platform           string
 
 	awaitJobCompletion bool
+	timeoutStr         string
 	priorityClassName  string
 	isPathwaysJob      bool
 	verbose            bool
@@ -126,6 +127,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&scheduler, "scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
+	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
@@ -151,17 +153,8 @@ func init() {
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	logging.Info("Executing gcluster job submit command...")
 
-	if imageName == "" && baseImage == "" {
-		return fmt.Errorf("either --image or --base-image must be provided")
-	}
-	if imageName != "" && baseImage != "" {
-		return fmt.Errorf("cannot provide both --image and --base-image")
-	}
-	if imageName != "" && buildContext != "" {
-		return fmt.Errorf("--build-context cannot be provided when --image is used as no build is performed")
-	}
-	if baseImage != "" && buildContext == "" {
-		return fmt.Errorf("a --build-context must be provided when --base-image is used for a Crane build")
+	if err := validateImageFlags(); err != nil {
+		return err
 	}
 
 	affinity := map[string]string{}
@@ -172,6 +165,10 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	vols, err := parseVolumeFlag(volumeStr)
 	if err != nil {
 		return fmt.Errorf("invalid volume configuration: %w", err)
+	}
+
+	if timeoutStr != "-1s" {
+		awaitJobCompletion = true
 	}
 
 	jobDef := orchestrator.JobDefinition{
@@ -200,6 +197,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Topology:                topology,
 		Scheduler:               scheduler,
 		AwaitJobCompletion:      awaitJobCompletion,
+		Timeout:                 timeoutStr,
 		PriorityClassName:       priorityClassName,
 		IsPathwaysJob:           isPathwaysJob,
 		Pathways:                pathways,
@@ -242,6 +240,22 @@ func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 		})
 	}
 	return vols, nil
+}
+
+func validateImageFlags() error {
+	if imageName == "" && baseImage == "" {
+		return fmt.Errorf("either --image or --base-image must be provided")
+	}
+	if imageName != "" && baseImage != "" {
+		return fmt.Errorf("cannot provide both --image and --base-image")
+	}
+	if imageName != "" && buildContext != "" {
+		return fmt.Errorf("--build-context cannot be provided when --image is used as no build is performed")
+	}
+	if baseImage != "" && buildContext == "" {
+		return fmt.Errorf("a --build-context must be provided when --base-image is used for a Crane build")
+	}
+	return nil
 }
 
 func submitGKEJob(jobDef orchestrator.JobDefinition) error {

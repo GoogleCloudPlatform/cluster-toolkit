@@ -52,6 +52,10 @@ func (m *mockCancelExecutor) ExecuteCommand(name string, args ...string) shell.C
 	return shell.CommandResult{ExitCode: 0}
 }
 
+func (m *mockCancelExecutor) ExecuteCommandStream(name string, args ...string) error {
+	return nil
+}
+
 func TestCancelCmd_MissingArgs(t *testing.T) {
 	resetSubmitCmdFlags()
 

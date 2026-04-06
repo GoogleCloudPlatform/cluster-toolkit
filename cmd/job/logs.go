@@ -30,7 +30,10 @@ var LogsCmd = &cobra.Command{
 	SilenceUsage: true,
 }
 
+var follow bool
+
 func init() {
+	LogsCmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream logs continuously")
 }
 
 func runLogsCmd(cmd *cobra.Command, args []string) error {
@@ -46,6 +49,7 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 		ClusterName:     clusterName,
 		ClusterLocation: clusterLocation,
 		ProjectID:       projectID,
+		Follow:          follow,
 	}
 
 	output, err := orc.GetJobLogs(jobName, opts)
