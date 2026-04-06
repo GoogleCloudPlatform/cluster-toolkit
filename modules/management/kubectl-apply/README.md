@@ -134,7 +134,7 @@ Helm stores the entire release state (including the generated manifests) as a st
 
 #### 2. Helm-Release Suffixes
 To make releases more identifiable, the module generates deterministic Helm release names based on the following precedence hierarchy:
-* If you provide a `name` field in the `apply_manifests` list object, it will be used directly.
+* If you provide a `name` field in the `apply_manifests` list object, it will be used directly. Note: Explicit names must be unique across the list.
 * If applying from a local file or URL, it extracts the file basename (e.g., `mpi-operator` from `.../mpi-operator.yaml`) and appends the list index (e.g., `mpi-operator-0`).
 * For raw content without a source or name, it falls back to using the module ID and list index: `${module_id}-raw-${index}` (e.g., `gke-cluster-raw-1`).
 
