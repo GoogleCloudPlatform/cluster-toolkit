@@ -277,7 +277,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.24.0 |
@@ -286,7 +286,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
@@ -294,7 +294,7 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
@@ -302,7 +302,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google-beta_google_container_node_pool.node_pool](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -315,9 +315,9 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `string` | `null` | no |
+|------|-------------|------|---------|:--------:|
 | <a name="input_accelerator_configs"></a> [accelerator\_configs](#input\_accelerator\_configs) | JSON text containing the definition of GKE machine types and counts | `string` | `"{}"` | no |
+| <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `string` | `null` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_auto_repair"></a> [auto\_repair](#input\_auto\_repair) | Whether the nodes will be automatically repaired. | `bool` | `true` | no |
 | <a name="input_auto_upgrade"></a> [auto\_upgrade](#input\_auto\_upgrade) | Whether the nodes will be automatically upgraded. | `bool` | `false` | no |
@@ -375,7 +375,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |

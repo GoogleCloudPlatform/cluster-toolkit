@@ -23,7 +23,7 @@ locals {
   #   },
   # ]
   accelerators_json    = jsondecode(var.accelerator_configs)
-  accelerator_machines = local.accelerators_json.gpus
+  accelerator_machines = try(local.accelerators_json.gpus, {})
 
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 
