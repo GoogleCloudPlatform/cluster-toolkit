@@ -49,6 +49,11 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	return shell.CommandResult{ExitCode: 1, Stderr: "mock error: unexpected command"}
 }
 
+func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
+	// Mock implementation: just return nil to satisfy interface
+	return nil
+}
+
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 
 	tests := []struct {
@@ -336,7 +341,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	}
 }
 
-func TestWaitForJobCompletion(t *testing.T) {
+func TestAwaitJobCompletion(t *testing.T) {
 	workloadName := "test-workload"
 	clusterName := "test-cluster"
 	clusterLocation := "us-central1-a"
@@ -408,7 +413,7 @@ func TestWaitForJobCompletion(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
 			orc := &GKEOrchestrator{executor: mockExecutor}
 
-			err := orc.waitForJobCompletion(workloadName, clusterName, clusterLocation, projectID)
+			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
 
 			if tt.expectedError == "" {
 				if err != nil {

@@ -72,6 +72,7 @@ type JobDefinition struct {
 	Topology           string
 	Scheduler          string
 	AwaitJobCompletion bool
+	Timeout            string
 	PriorityClassName  string
 
 	// Pathways-specific fields encapsulated
@@ -109,6 +110,7 @@ type LogsOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	Follow          bool
 }
 
 type JobOrchestrator interface {

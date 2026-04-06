@@ -211,6 +211,10 @@ func (m *mockExecutorForTest) ExecuteCommand(name string, args ...string) shell.
 	return shell.CommandResult{ExitCode: 1, Stderr: "unhandled mock command"}
 }
 
+func (m *mockExecutorForTest) ExecuteCommandStream(name string, args ...string) error {
+	return nil
+}
+
 func TestParseVolumeFlag(t *testing.T) {
 	tests := []struct {
 		name      string
