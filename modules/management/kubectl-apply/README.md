@@ -134,9 +134,11 @@ Helm stores the entire release state (including the generated manifests) as a st
 
 #### 2. Helm-Release Suffixes
 To make releases more identifiable, the module generates deterministic Helm release names based on the following precedence hierarchy:
-* If you provide a `name` field in the `apply_manifests` list object, it will be used directly. Note: Explicit names must be unique across the list.
-* If applying from a local file or URL, it extracts the file basename (e.g., `mpi-operator` from `.../mpi-operator.yaml`) and appends the list index (e.g., `mpi-operator-0`).
-* For raw content without a source or name, it falls back to using the module ID and list index: `${module_id}-raw-${index}` (e.g., `gke-cluster-raw-1`).
+* If you provide a `name` field in the `apply_manifests` list object, it will be used directly.
+* If applying from a local file or URL, it extracts the file basename (e.g., `mpi-operator` from `.../mpi-operator.yaml`) and appends a short hash of the manifest configuration to ensure uniqueness if applied multiple times with different variables.
+* For raw content without a source or name, it falls back to using the module ID and a short hash: `${module_id}-raw-${hash}`.
+
+*Note:* Explicit names must be unique across the list.
 
 #### 3. Re-deployment Conflicts
 If a deployment fails, the `atomic = true` setting ensures that Helm automatically rolls back the release, preventing the cluster from being left in a "half-applied" state. If you encounter persistent conflicts during re-deployment due to immutable fields, you may need to manually delete the resource or the Helm release before re-applying.
