@@ -25,6 +25,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"hpc-toolkit/pkg/telemetry"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -216,6 +217,16 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return fmt.Errorf("failed to check or install Kueue: %w", err)
 	}
 
+	if job.WorkloadName != "" {
+		status, err := g.getJobStatus(job.WorkloadName)
+		if err != nil {
+			return err
+		}
+		if status != "" {
+			return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s', or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName)
+		}
+	}
+
 	fullImageName, err := g.buildContainerImage(job.ProjectID, job.BaseImage, job.BuildContext, job.Platform, job.ImageName)
 	if err != nil {
 		return err
@@ -297,9 +308,7 @@ func (g *GKEOrchestrator) applyManifest(manifestContent, outputManifestPath, wor
 		}
 		logging.Info("GKE manifest saved successfully.")
 	} else {
-		logging.Info("Cleaning up any existing JobSet with name '%s'...", workloadName)
-		g.executor.ExecuteCommand("kubectl", "delete", "jobset", workloadName, "--ignore-not-found=true")
-
+		// Submit will fail if a job with the same name already exists.
 		logging.Info("Applying GKE manifest to cluster...")
 		err := g.applyJobSetManifests([]byte(manifestContent))
 		if err != nil {
@@ -645,6 +654,12 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 		return top, nil
 	}
 
+	if requested != "" {
+		if err := g.validateTopologyMeshFormat(requested, accelType); err != nil {
+			return "", err
+		}
+	}
+
 	logging.Info("Auto-discovering Topology for %s...", accelType)
 
 	output, err := g.queryDiscoveredTopologies()
@@ -668,11 +683,20 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 
 	if requested != "" {
 		if !topologies[requested] {
-			var valid []string
+			contained := false
 			for t := range topologies {
-				valid = append(valid, t)
+				if fit, _ := g.checkTopologyContainment(requested, t, accelType); fit {
+					contained = true
+					break
+				}
 			}
-			return "", fmt.Errorf("requested topology %s is not valid for cluster. Valid topologies discovered: %v", requested, valid)
+			if !contained {
+				var valid []string
+				for t := range topologies {
+					valid = append(valid, t)
+				}
+				return "", fmt.Errorf("requested topology %s is not valid for cluster. It must match or fit inside discovered limits: %v", requested, valid)
+			}
 		}
 		logging.Info("Validated provided Topology: %s", requested)
 		return requested, nil
@@ -734,6 +758,55 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies() (string, error) {
 		output = strings.TrimSpace(res.Stdout)
 	}
 	return output, nil
+}
+
+func (g *GKEOrchestrator) validateTopologyMeshFormat(requested string, accelType string) error {
+	dims := strings.Split(requested, "x")
+	isV6e := strings.Contains(accelType, "v6e") || strings.Contains(accelType, "ct6e")
+	isV5e := strings.Contains(accelType, "v5-lite") || strings.Contains(accelType, "ct5lp")
+
+	if isV6e || isV5e {
+		if len(dims) != 2 {
+			return fmt.Errorf("topology format invalid for %s: requested %s, expected AxB (2 dimensions)", accelType, requested)
+		}
+	} else {
+		if len(dims) != 3 {
+			return fmt.Errorf("topology format invalid for %s: requested %s, expected AxBxC (3 dimensions)", accelType, requested)
+		}
+	}
+	for _, d := range dims {
+		if _, err := strconv.Atoi(d); err != nil {
+			return fmt.Errorf("invalid topology dimension footprint val: %s", d)
+		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) checkTopologyContainment(requested, container string, accelType string) (bool, error) {
+	reqDims := strings.Split(requested, "x")
+	conDims := strings.Split(container, "x")
+	if len(reqDims) != len(conDims) {
+		return false, nil
+	}
+	for i := 0; i < len(reqDims); i++ {
+		r, _ := strconv.Atoi(reqDims[i])
+		c, _ := strconv.Atoi(conDims[i])
+		if r > c {
+			return false, nil
+		}
+	}
+
+	if requested != container {
+		if strings.Contains(accelType, "v6e") || strings.Contains(accelType, "ct6e") {
+			allowedShapes := map[string]bool{
+				"1x1": true, "2x2": true, "2x4": true, "4x4": true, "4x8": true, "8x8": true, "8x16": true, "16x16": true,
+			}
+			if !allowedShapes[requested] {
+				return false, fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout", requested)
+			}
+		}
+	}
+	return true, nil
 }
 
 func (g *GKEOrchestrator) buildContainerImage(project, baseImage, buildContext, platformStr, imageName string) (string, error) {
@@ -1011,6 +1084,11 @@ func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr,
 		return
 	}
 
+	// Try to get top-level completionTime
+	if compTime, ok := statusMap["completionTime"].(string); ok && compTime != "" {
+		completionTime = compTime
+	}
+
 	if conditions, ok := statusMap["conditions"].([]interface{}); ok {
 		for _, c := range conditions {
 			cond := c.(map[string]interface{})
@@ -1020,8 +1098,18 @@ func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr,
 				switch condType {
 				case "Completed", "Succeeded":
 					statusStr = "Succeeded"
+					if completionTime == "" {
+						if transitionTime, ok := cond["lastTransitionTime"].(string); ok {
+							completionTime = transitionTime
+						}
+					}
 				case "Failed":
 					statusStr = "Failed"
+					if completionTime == "" {
+						if transitionTime, ok := cond["lastTransitionTime"].(string); ok {
+							completionTime = transitionTime
+						}
+					}
 				case "Suspended":
 					statusStr = "Suspended"
 				}
@@ -1030,6 +1118,41 @@ func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr,
 	}
 
 	return
+}
+
+func (g *GKEOrchestrator) getCurrentNamespace() (string, error) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	ns, _, err := kubeConfig.Namespace()
+	if err != nil || ns == "" {
+		return "default", nil
+	}
+	return ns, nil
+}
+
+func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return "", err
+	}
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+
+	ns, err := g.getCurrentNamespace()
+	if err != nil {
+		return "", err
+	}
+
+	obj, err := client.Resource(gvr).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			return "", nil
+		}
+		return "", err
+	}
+
+	status, _ := g.parseJobStatus(obj.Object)
+	return status, nil
 }
 
 func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, error) {
@@ -1101,12 +1224,9 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 
 	// Get active context's namespace
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	ns, _, err := kubeConfig.Namespace()
-	if err != nil || ns == "" {
-		ns = "default" // Fallback to default
+	ns, err := g.getCurrentNamespace()
+	if err != nil {
+		return nil, err
 	}
 
 	list, err := client.Resource(gvr).Namespace(ns).List(context.TODO(), metav1.ListOptions{})

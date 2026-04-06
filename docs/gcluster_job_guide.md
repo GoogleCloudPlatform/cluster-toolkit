@@ -504,12 +504,12 @@ fi
 IMAGE_NAME=gcr.io/$PROJECT/maxtext-runner:latest
 
 echo "Ensuring permissions for $SA_NAME..."
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
 
 echo "Submitting MaxText job to cluster $CLUSTER_NAME..."
 
@@ -754,15 +754,15 @@ IMAGE_NAME=gcr.io/$PROJECT/maxtext-runner:latest
 
 echo "Ensuring permissions for tpu7xpkv-gke-wl-sa..."
 # Note: Ensure the SA matches the one created by the 7x blueprint (tpu7xpkv-gke-wl-sa)
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
 
 echo "Ensuring permissions for node pool service account..."
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
 
 echo "Submitting MaxText job to cluster $CLUSTER_NAME..."
 
