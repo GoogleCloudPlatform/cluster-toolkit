@@ -34,24 +34,50 @@ func extractStringSetting(m *Module, bp Blueprint, key string) string {
 	return ""
 }
 
-func extractMachineParams(m *Module, bp Blueprint) (string, string, string) {
-	machineType := extractStringSetting(m, bp, "machine_type")
-
+func extractZone(m *Module, bp Blueprint) string {
 	zone := extractStringSetting(m, bp, "zone")
-	if zone == "" && bp.Vars.Has("zone") {
+	if zone != "" {
+		return zone
+	}
+	if bp.Vars.Has("zone") {
 		v, ok := attemptEvalModuleInput(bp.Vars.Get("zone"), bp)
 		if ok && v.Type() == cty.String {
-			zone = v.AsString()
+			return v.AsString()
 		}
 	}
+	if bp.Vars.Has("zones") {
+		v, ok := attemptEvalModuleInput(bp.Vars.Get("zones"), bp)
+		if ok && (v.Type().IsTupleType() || v.Type().IsListType()) {
+			iter := v.ElementIterator()
+			if iter.Next() {
+				_, val := iter.Element()
+				if val.Type() == cty.String {
+					return val.AsString()
+				}
+			}
+		}
+	}
+	return ""
+}
 
+func extractProject(m *Module, bp Blueprint) string {
 	project := extractStringSetting(m, bp, "project_id")
-	if project == "" && bp.Vars.Has("project_id") {
+	if project != "" {
+		return project
+	}
+	if bp.Vars.Has("project_id") {
 		v, ok := attemptEvalModuleInput(bp.Vars.Get("project_id"), bp)
 		if ok && v.Type() == cty.String {
-			project = v.AsString()
+			return v.AsString()
 		}
 	}
+	return ""
+}
+
+func extractMachineParams(m *Module, bp Blueprint) (string, string, string) {
+	machineType := extractStringSetting(m, bp, "machine_type")
+	zone := extractZone(m, bp)
+	project := extractProject(m, bp)
 	return machineType, zone, project
 }
 

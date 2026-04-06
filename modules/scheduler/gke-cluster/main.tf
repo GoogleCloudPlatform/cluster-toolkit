@@ -147,7 +147,7 @@ resource "google_container_cluster" "gke_cluster" {
     enabled = var.cluster_autoscaling.enabled
 
     # Controls autoscaling algorithm of node-pools
-    autoscaling_profile = "OPTIMIZE_UTILIZATION"
+    autoscaling_profile = var.autoscaling_profile
 
     dynamic "resource_limits" {
       for_each = var.cluster_autoscaling.enabled ? [
@@ -313,6 +313,17 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  dynamic "node_pool_defaults" {
+    for_each = var.enable_gcfs ? [1] : []
+    content {
+      node_config_defaults {
+        gcfs_config {
+          enabled = true
+        }
+      }
+    }
+  }
+
   control_plane_endpoints_config {
     dns_endpoint_config {
       allow_external_traffic = var.enable_external_dns_endpoint
@@ -459,6 +470,59 @@ resource "google_container_node_pool" "system_node_pools" {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
+  }
+}
+
+resource "google_container_node_pool" "cpu_np" {
+  provider = google-beta
+  count    = var.enable_pathways_for_tpus ? 1 : 0
+
+  project        = var.project_id
+  name           = "cpu-np"
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  node_locations = var.system_node_pool_zones
+  version        = local.master_version
+
+  autoscaling {
+    total_min_node_count = 0
+    total_max_node_count = 100
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+
+  node_config {
+    resource_labels = local.labels
+    service_account = var.service_account_email
+    oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    machine_type    = "n4-standard-64"
+    image_type      = var.system_node_pool_image_type
+
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+
+    gvnic {
+      enabled = var.system_node_pool_image_type == "COS_CONTAINERD"
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+
+    metadata = {
+      "disable-legacy-endpoints" = "true"
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      version,
+    ]
   }
 }
 

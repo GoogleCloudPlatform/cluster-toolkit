@@ -179,7 +179,11 @@ variable "enable_filestore_csi" {
   default     = false
 }
 
-
+variable "enable_gcfs" {
+  description = "Enable the Google Container Filesystem (GCFS) for Image Streaming at the cluster level."
+  type        = bool
+  default     = false
+}
 
 variable "enable_gcsfuse_csi" {
   description = "The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes."
@@ -374,7 +378,11 @@ variable "k8s_service_account_name" {
   default     = "workload-identity-k8s-sa"
 }
 
-
+variable "autoscaling_profile" {
+  description = "(Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE_UTILIZATION."
+  type        = string
+  default     = "OPTIMIZE_UTILIZATION"
+}
 
 variable "authenticator_security_group" {
   description = "The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com"
@@ -575,6 +583,12 @@ variable "enable_pathways_for_tpus" {
 
 variable "enable_slice_controller" {
   description = "Enables the GKE Slice Controller for Super-slicing topologies."
+  type        = bool
+  default     = false
+}
+
+variable "enable_pathways_for_tpus" {
+  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
   type        = bool
   default     = false
 }
