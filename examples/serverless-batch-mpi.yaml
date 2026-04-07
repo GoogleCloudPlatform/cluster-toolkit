@@ -148,6 +148,7 @@ deployment_groups:
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-16
       allow_automatic_updates: false
+      instance_image: $(vars.instance_image)
 
   ### Batch Modules ###
   - id: batch-job
@@ -160,6 +161,7 @@ deployment_groups:
       task_count: 2
       mpi_mode: true
       allow_automatic_updates: false
+      instance_image: $(vars.instance_image)
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

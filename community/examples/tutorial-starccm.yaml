@@ -21,6 +21,9 @@ vars:
   deployment_name: starccm
   region: us-east4
   zone: us-east4-c
+  instance_image:
+    family: hpc-rocky-linux-9
+    project: cloud-hpc-image-preprod
 
 deployment_groups:
 - group: primary
@@ -71,6 +74,7 @@ deployment_groups:
         collocation: "COLLOCATED"
         availability_domain_count: null
       allow_automatic_updates: false
+      instance_image: $(vars.instance_image)
 
   - source: community/modules/scripts/wait-for-startup
     kind: terraform

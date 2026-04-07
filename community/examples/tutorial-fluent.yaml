@@ -21,6 +21,9 @@ vars:
   deployment_name: fluent-wl
   region: us-central1
   zone: us-central1-c
+  instance_image:
+    family: hpc-rocky-linux-9
+    project: cloud-hpc-image-preprod
 
 deployment_groups:
 - group: primary
@@ -145,6 +148,7 @@ deployment_groups:
         collocation: "COLLOCATED"
         availability_domain_count: null
       allow_automatic_updates: false
+      instance_image: $(vars.instance_image)
 
   - id: login
     source: modules/compute/vm-instance
@@ -160,6 +164,7 @@ deployment_groups:
       machine_type: c2-standard-8
       instance_count: 1
       name_prefix: fluent-login
+      instance_image: $(vars.instance_image)
 
   - id: wait
     source: community/modules/scripts/wait-for-startup
