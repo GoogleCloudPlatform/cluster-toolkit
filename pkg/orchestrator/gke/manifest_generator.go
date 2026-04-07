@@ -136,22 +136,7 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 	}
 	schedOpts.Topology = topology
 
-	// Calculate VmsPerSlice dynamically for TPUs if not provided and topology is present.
-	if job.VmsPerSlice <= 1 && topology != "" && strings.Contains(strings.ToLower(mappedLabel), "tpu") {
-		machineType := g.resolveMachineName(job.AcceleratorType)
-		chipsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
-		if err == nil && chipsPerVM > 0 {
-			dims := strings.Split(topology, "x")
-			totalChips := 1
-			for _, dim := range dims {
-				if val, err := strconv.Atoi(dim); err == nil {
-					totalChips *= val
-				}
-			}
-			job.VmsPerSlice = totalChips / chipsPerVM
-			logging.Info("Dynamically determined vms_per_slice for %s: %d", topology, job.VmsPerSlice)
-		}
-	}
+	g.dynamicallyCalculateVmsPerSlice(&job, topology, mappedLabel)
 
 	isSuperSlicing, _ := g.verifySuperSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
@@ -187,14 +172,9 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 
 	topologyAnnotationStr := g.buildTopologyAnnotation(schedOpts.Topology)
 
-	tolerations := GetTolerations(job.AcceleratorType)
-	var tolerationsStr string
-	if len(tolerations) > 0 {
-		b, err := k8syaml.Marshal(tolerations)
-		if err != nil {
-			return ManifestOptions{}, JobProfile{}, fmt.Errorf("failed to marshal tolerations: %w", err)
-		}
-		tolerationsStr = g.indentYaml(string(b), 16)
+	tolerationsStr, err := g.resolveTolerations(job.AcceleratorType)
+	if err != nil {
+		return ManifestOptions{}, JobProfile{}, err
 	}
 
 	opts := ManifestOptions{
@@ -286,4 +266,38 @@ func (g *GKEOrchestrator) resolveXPKStyleAccelerator(job *orchestrator.JobDefini
 	job.AcceleratorType = g.GenerateGKENodeSelectorLabel(prefix)
 
 	return nil
+}
+
+func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobDefinition, topology, mappedLabel string) {
+	if job.VmsPerSlice <= 1 && topology != "" && strings.Contains(strings.ToLower(mappedLabel), "tpu") {
+		machineType := g.resolveMachineName(job.AcceleratorType)
+		chipsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
+		if err != nil {
+			logging.Warn("Failed to fetch machine capacity for %s: %v", machineType, err)
+			return
+		}
+		if chipsPerVM > 0 {
+			dims := strings.Split(topology, "x")
+			totalChips := 1
+			for _, dim := range dims {
+				if val, err := strconv.Atoi(dim); err == nil {
+					totalChips *= val
+				}
+			}
+			job.VmsPerSlice = totalChips / chipsPerVM
+			logging.Info("Dynamically determined vms_per_slice for %s: %d", topology, job.VmsPerSlice)
+		}
+	}
+}
+
+func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, error) {
+	tolerations := GetTolerations(acceleratorType)
+	if len(tolerations) == 0 {
+		return "", nil
+	}
+	b, err := k8syaml.Marshal(tolerations)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
+	}
+	return g.indentYaml(string(b), 16), nil
 }
