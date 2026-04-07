@@ -15,8 +15,7 @@
 ---
 tags:
 - slurm6
-- m.managed-lustre
-- m.private-service-access
+- m.filestore
 - m.multivpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login

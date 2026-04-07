@@ -16,6 +16,7 @@ blueprint_name: a3high-slurm
 
 vars:
   sys_net_range: 172.16.0.0/16
+  filestore_ip_range: 192.168.0.0/29
   source_image_project_id: ubuntu-os-cloud
   source_image_family: ubuntu-2204-lts
   local_mount_homefs: /home
@@ -30,14 +31,6 @@ vars:
   a3_reservation_name: "" # supply reservation name
   a3_dws_flex_enabled: false
   a3_enable_spot_vm: false
-  # Managed-Lustre instance name. This should be unique for each deployment.
-  lustre_instance_id: $(vars.deployment_name)-lustre
-  # The values of size_gib and per_unit_storage_throughput are co-related
-  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
-  # Storage capacity of the lustre instance in GiB
-  lustre_size_gib: 36000
-  # Maximum throughput of the lustre instance in MBps per TiB
-  per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: base
@@ -65,22 +58,15 @@ deployment_groups:
       network_count: 4
       subnetwork_cidr_suffix: 20
 
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use:
-    - sysnet
-
   - id: homefs
-    source: modules/file-system/managed-lustre
+    source: modules/file-system/filestore
     use:
     - sysnet
-    - private_service_access
     settings:
-      size_gib: $(vars.lustre_size_gib)
-      name: $(vars.lustre_instance_id)
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      reserved_ip_range: $(vars.filestore_ip_range)
       local_mount: $(vars.local_mount_homefs)
-      remote_mount: lustrefs
-      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
 
 - group: build-script
   modules:
@@ -308,7 +294,6 @@ deployment_groups:
             "install_cuda": false,
             "install_gcsfuse": true,
             "install_lustre": false,
-            "install_managed_lustre": true,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
@@ -640,9 +625,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use:
-    - sysnet
-    - homefs
+    use: [sysnet]
     settings:
       name_prefix: login
       disk_type: pd-balanced
