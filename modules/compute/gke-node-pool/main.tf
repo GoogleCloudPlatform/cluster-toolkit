@@ -30,9 +30,9 @@ locals {
 module "gpu" {
   source = "../../internal/gpu-definition"
 
-  machine_type        = var.machine_type
-  guest_accelerator   = var.guest_accelerator
-  accelerator_configs = var.accelerator_configs
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+  machine_configs   = var.machine_configs
 }
 
 locals {
@@ -75,9 +75,9 @@ locals {
 module "tpu" {
   source = "../../internal/tpu-definition"
 
-  machine_type        = var.machine_type
-  placement_policy    = var.placement_policy
-  accelerator_configs = var.accelerator_configs
+  machine_type     = var.machine_type
+  placement_policy = var.placement_policy
+  machine_configs  = var.machine_configs
 }
 
 

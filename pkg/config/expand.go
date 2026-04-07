@@ -169,14 +169,14 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 		return err
 	}
 
-	// Inject accelerator_configs if supported by the module
+	// Inject machine_configs if supported by the module
 	for _, input := range m.InfoOrDie().Inputs {
-		if input.Name == "accelerator_configs" {
+		if input.Name == "machine_configs" {
 			cfgJson, err := getMachineConfigJSON(m, bp)
 			if err != nil {
 				return err
 			}
-			m.Settings = m.Settings.With("accelerator_configs", cty.StringVal(cfgJson))
+			m.Settings = m.Settings.With("machine_configs", cty.StringVal(cfgJson))
 			break
 		}
 	}

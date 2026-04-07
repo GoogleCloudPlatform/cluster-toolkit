@@ -36,7 +36,7 @@ variable "guest_accelerator" {
   default = []
 }
 
-variable "accelerator_configs" {
+variable "machine_configs" {
   description = "JSON text containing the definition of GKE machine types and counts"
   type        = string
   default     = "{}"

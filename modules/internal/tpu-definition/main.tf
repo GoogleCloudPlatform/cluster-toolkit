@@ -16,7 +16,7 @@
 
 locals {
   # Load shared JSON
-  accelerators_json = jsondecode(var.accelerator_configs)
+  accelerators_json = jsondecode(var.machine_configs)
 
   # Determine if this is a TPU node pool by checking if the machine_type exists in our authoritative map of TPU machine types.
   is_tpu = contains(keys(local.tpu_chip_count_map), var.machine_type)

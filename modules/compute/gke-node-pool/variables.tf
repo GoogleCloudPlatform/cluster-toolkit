@@ -538,7 +538,7 @@ variable "accelerator_topology_mode" {
   default     = null
 }
 
-variable "accelerator_configs" {
+variable "machine_configs" {
   description = "JSON text containing the definition of GKE machine types and counts"
   type        = string
   default     = "{}"
