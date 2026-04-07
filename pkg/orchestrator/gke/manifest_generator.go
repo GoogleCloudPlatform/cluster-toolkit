@@ -31,12 +31,28 @@ import (
 func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobProfile) (string, error) {
 	g.setManifestDefaults(&opts)
 
-	// Calculate VmsPerSlice dynamically if not provided and topology is present.
-	g.dynamicallyDetermineVmsPerSlice(&opts)
-
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	if err != nil {
 		return "", fmt.Errorf("failed to calculate resource limits: %w", err)
+	}
+
+	// Calculate VmsPerSlice dynamically for TPUs if not provided and topology is present.
+	if opts.VmsPerSlice <= 1 && opts.Topology != "" && tpuLimit != "" {
+		tpuCount, err := strconv.Atoi(tpuLimit)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse tpu limit: %w", err)
+		}
+		if tpuCount > 0 {
+			dims := strings.Split(opts.Topology, "x")
+			totalChips := 1
+			for _, dim := range dims {
+				if val, err := strconv.Atoi(dim); err == nil {
+					totalChips *= val
+				}
+			}
+			opts.VmsPerSlice = totalChips / tpuCount
+			logging.Info("Dynamically determined vms_per_slice for %s: %d", opts.Topology, opts.VmsPerSlice)
+		}
 	}
 
 	// If it was deduced to be a CPU machine type (no GPU/TPU limit returned, but user provided an accelerator string),
@@ -78,29 +94,6 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", fmt.Errorf("failed to execute jobset template: %w", err)
 	}
 	return buf.String(), nil
-}
-
-func (g *GKEOrchestrator) dynamicallyDetermineVmsPerSlice(opts *ManifestOptions) {
-	if opts.VmsPerSlice <= 1 && opts.Topology != "" {
-		machineTypeMap := map[string]string{
-			"nvidia-l4":     "g2-standard-4",
-			"tpu-v6e-slice": "ct6e-standard-4t",
-		}
-		mapped := g.GenerateGKENodeSelectorLabel(opts.AcceleratorType)
-		if machineName, exists := machineTypeMap[mapped]; exists {
-			if chipsPerVM, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation); err == nil && chipsPerVM > 0 {
-				dims := strings.Split(opts.Topology, "x")
-				totalChips := 1
-				for _, dim := range dims {
-					if val, err := strconv.Atoi(dim); err == nil {
-						totalChips *= val
-					}
-				}
-				opts.VmsPerSlice = totalChips / chipsPerVM
-				logging.Info("Dynamically determined vms_per_slice for %s: %d", opts.Topology, opts.VmsPerSlice)
-			}
-		}
-	}
 }
 
 func (g *GKEOrchestrator) setManifestDefaults(opts *ManifestOptions) {
@@ -153,7 +146,8 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 		Scheduler:          job.Scheduler,
 	}
 
-	topology, err := g.resolveTopology(job.Topology, job.AcceleratorType, job.ClusterName, job.ClusterLocation)
+	mappedLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
+	topology, err := g.resolveTopology(job.Topology, mappedLabel, job.ClusterName, job.ClusterLocation)
 	if err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
