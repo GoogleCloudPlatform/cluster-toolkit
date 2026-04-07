@@ -25,7 +25,6 @@ import (
 
 const (
 	ClearcutProdURL   = "https://play.googleapis.com/log"
-	ClientType        = "CLUSTER_TOOLKIT"
 	configDirName     = "cluster-toolkit"
 	HttpServerTimeout = 10 * time.Second
 	CLUSTER_TOOLKIT   = "CLUSTER_TOOLKIT"

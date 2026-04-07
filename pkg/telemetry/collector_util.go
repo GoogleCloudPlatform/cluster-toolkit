@@ -19,7 +19,7 @@ import (
 )
 
 func getBlueprint(args []string) config.Blueprint {
-	if args == nil {
+	if len(args) == 0 {
 		return config.Blueprint{}
 	}
 	bp, _, _ := config.NewBlueprint(args[0])
