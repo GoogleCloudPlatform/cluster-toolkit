@@ -15,13 +15,18 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"hpc-toolkit/pkg/gcloud"
+	"sync"
 
 	"github.com/zclconf/go-cty/cty"
+	compute "google.golang.org/api/compute/v1"
+)
+
+var (
+	machineTypeCache sync.Map // map[string]*compute.MachineType
 )
 
 func extractStringSetting(m *Module, bp Blueprint, key string) string {
@@ -107,61 +112,67 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
 	}
 
-	// Skip gcloud call for dummy project used in validation tests
+	// Skip dummy project used in validation tests
 	if project == "invalid-project" {
 		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
 	}
 
-	out, err := gcloud.RunGcloudJsonCommand("compute", "machine-types", "describe", machineType, "--zone", zone, "--project", project)
-	if err != nil {
-		return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w. If this machine type is very new, you might need to update your gcloud version using 'gcloud components update'", machineType, zone, project, err)
+	cacheKey := fmt.Sprintf("%s/%s/%s", project, zone, machineType)
+	var mt *compute.MachineType
+
+	if cached, ok := machineTypeCache.Load(cacheKey); ok {
+		mt = cached.(*compute.MachineType)
+	} else {
+		s, err := compute.NewService(context.Background())
+		if err != nil {
+			return "", fmt.Errorf("failed to initialize compute service for machine_type=%s: %w", machineType, err)
+		}
+
+		res, err := s.MachineTypes.Get(project, zone, machineType).Do()
+		if err != nil {
+			return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w", machineType, zone, project, err)
+		}
+		mt = res
+		machineTypeCache.Store(cacheKey, mt)
 	}
 
-	var mt struct {
-		GuestCpus    int `json:"guestCpus"`
-		Accelerators []struct {
-			GuestAcceleratorCount int    `json:"guestAcceleratorCount"`
-			GuestAcceleratorType  string `json:"guestAcceleratorType"`
-		} `json:"accelerators"`
-	}
+	return buildOutputConfigJSON(machineType, mt)
+}
 
-	if err := json.Unmarshal(out, &mt); err != nil {
-		return "", fmt.Errorf("failed to parse gcloud output for machine_type=%s: %w", machineType, err)
-	}
+type gpuConfig struct {
+	Count int    `json:"count"`
+	Type  string `json:"type"`
+}
+type tpuConfig struct {
+	Count int `json:"count"`
+}
+type cpuConfig struct {
+	Count int `json:"count"`
+}
+type outputConfig struct {
+	GPUs map[string]gpuConfig `json:"gpus"`
+	TPUs map[string]tpuConfig `json:"tpus"`
+	CPUs map[string]cpuConfig `json:"cpus"`
+}
 
-	type gpuConfig struct {
-		Count int    `json:"count"`
-		Type  string `json:"type"`
-	}
-	type tpuConfig struct {
-		Count int `json:"count"`
-	}
-	type cpuConfig struct {
-		Count int `json:"count"`
-	}
-	type outputConfig struct {
-		GPUs map[string]gpuConfig `json:"gpus"`
-		TPUs map[string]tpuConfig `json:"tpus"`
-		CPUs map[string]cpuConfig `json:"cpus"`
-	}
-
+func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string, error) {
 	result := outputConfig{
 		GPUs: make(map[string]gpuConfig),
 		TPUs: make(map[string]tpuConfig),
 		CPUs: make(map[string]cpuConfig),
 	}
 
-	result.CPUs[machineType] = cpuConfig{Count: mt.GuestCpus}
+	result.CPUs[machineType] = cpuConfig{Count: int(mt.GuestCpus)}
 
 	isTPU := strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")
 
 	if len(mt.Accelerators) > 0 {
 		acc := mt.Accelerators[0]
 		if isTPU || strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
-			result.TPUs[machineType] = tpuConfig{Count: acc.GuestAcceleratorCount}
+			result.TPUs[machineType] = tpuConfig{Count: int(acc.GuestAcceleratorCount)}
 		} else {
 			result.GPUs[machineType] = gpuConfig{
-				Count: acc.GuestAcceleratorCount,
+				Count: int(acc.GuestAcceleratorCount),
 				Type:  acc.GuestAcceleratorType,
 			}
 		}
