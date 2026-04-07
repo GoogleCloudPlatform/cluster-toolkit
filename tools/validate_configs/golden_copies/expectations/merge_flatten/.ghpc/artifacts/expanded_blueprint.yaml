@@ -92,12 +92,12 @@ deployment_groups:
         use:
           - first-fs
         settings:
-          accelerator_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           deployment_name: ((var.deployment_name))
           labels: |-
             ((merge(var.labels, {
               green = "sleeves"
             })))
+          machine_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           network_storage: ((flatten([module.first-fs.network_storage])))
           project_id: ((var.project_id))
           region: ((var.region))
@@ -109,9 +109,9 @@ deployment_groups:
           - first-fs
           - second-fs
         settings:
-          accelerator_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
+          machine_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])))
           project_id: ((var.project_id))
           region: ((var.region))

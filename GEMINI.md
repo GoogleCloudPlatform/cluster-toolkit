@@ -314,4 +314,4 @@ Created a new branch `swarnabm/update_machine_info_map` from `upstream/develop` 
 **Context:**
 - **Goal:** Rename `accelerator_configs` to `machine_configs` to better reflect content (CPUs included).
 - **Plan:** Update `pkg/config/expand.go` and Terraform modules in `modules/compute/` and `modules/internal/`.
-- **Status:** Completed. Verified with unit tests. Integration tests failed on unrelated local blueprints.
+- **Status:** Completed and committed (hash: `ca3a0ab3d`). Verified with unit tests. Integration tests failed on unrelated local blueprints.
