@@ -40,84 +40,6 @@ import (
 	k8syaml "sigs.k8s.io/yaml"
 )
 
-const JobSetTemplate = `
-apiVersion: jobset.x-k8s.io/v1alpha2
-kind: JobSet
-metadata:
-  name: {{.WorkloadName}}
-  labels:
-    gcluster.google.com/workload: {{.WorkloadName}}
-    kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
-spec:
-  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
-  failurePolicy:
-    maxRestarts: {{.MaxRestarts}}
-  replicatedJobs:
-    - name: main-job
-      replicas: {{.NumSlices}}
-      template:
-        spec:
-          parallelism: {{.VmsPerSlice}}
-          completions: {{.VmsPerSlice}}
-          backoffLimit: 0
-{{- if .PodFailurePolicy }}
-          podFailurePolicy:
-{{.PodFailurePolicy}}
-{{- end }}
-          template:
-            metadata:
-              labels:
-                gcluster.google.com/workload: {{.WorkloadName}}
-{{- if or .TopologyAnnotation .GCSFuseEnabled }}
-              annotations:
-{{- if .TopologyAnnotation }}
-{{.TopologyAnnotation}}
-{{- end }}
-{{- if .GCSFuseEnabled }}
-                gke-gcsfuse/volumes: "true"
-{{- end }}
-{{- end }}
-            spec:
-{{- if .SchedulerName }}
-              schedulerName: {{.SchedulerName}}
-{{- end }}
-{{- if .PriorityClassName }}
-              priorityClassName: {{.PriorityClassName}}
-{{- end }}
-              restartPolicy: Never
-              containers:
-              - name: workload-container
-                image: {{.FullImageName}}
-{{.CommandToRun}}
-                volumeMounts:
-                - name: temp-storage
-                  mountPath: /mnt/data
-{{.VolumeMountsYAML}}
-              volumes:
-              - name: temp-storage
-                emptyDir: {}
-{{.VolumesYAML}}
-{{- if .NodeSelector }}
-              nodeSelector:
-{{.NodeSelector}}
-{{- end }}
-{{- if .Affinity }}
-              affinity:
-{{.Affinity}}
-{{- end }}
-{{- if .Tolerations }}
-              tolerations:
-{{.Tolerations}}
-{{- end }}
-{{- if .ImagePullSecrets }}
-              imagePullSecrets:
-{{.ImagePullSecrets}}
-{{- end }}
-{{- if .ServiceAccountName }}
-              serviceAccountName: {{.ServiceAccountName}}
-{{- end }}
-`
-
 type JobProfile struct {
 	IsCPUMachine  bool
 	CapacityCount int
@@ -151,8 +73,8 @@ type ManifestOptions struct {
 	VolumesYAML             string
 	VolumeMountsYAML        string
 	GCSFuseEnabled          bool
-	IsSuperSlicing          bool // True if the cluster supports and is configured for Super-slicing.
-	IsCPUMachine            bool // Track if the machine type is deduced to be a CPU machine
+	IsSuperSlicing          bool
+	IsCPUMachine            bool
 	Pathways                orchestrator.PathwaysJobDefinition
 	Verbose                 bool
 }
@@ -292,7 +214,7 @@ func (g *GKEOrchestrator) generatePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.GCSLocation = "gs://cloud-pathways-staging/tmp"
 	}
 
-	tmpl, err := template.New("pathwaysJobSet").Parse(pathwaysJobSetTemplate)
+	tmpl, err := template.ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
@@ -619,6 +541,61 @@ func (g *GKEOrchestrator) queryAcceleratorLabels() (string, error) {
 	return output, nil
 }
 
+func (g *GKEOrchestrator) queryMachineType() (string, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={.items[*].metadata.labels.node\\.kubernetes\\.io/instance-type}")
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("failed to query Nodes for machine type: %s", res.Stderr)
+	}
+	output := strings.TrimSpace(res.Stdout)
+	if output == "" {
+		return "", nil
+	}
+
+	fields := strings.Fields(output)
+	if len(fields) > 0 {
+		return fields[0], nil
+	}
+	return "", nil
+}
+
+func (g *GKEOrchestrator) resolveTopologyForChips(prefix string, totalChips int) (string, error) {
+	// 3D topologies for v4, v5p, tpu7, tpu7x
+	if prefix == "v4" || prefix == "v5p" || prefix == "tpu7" || prefix == "tpu7x" {
+		shapeMap := map[int]string{
+			4:   "2x2x1",
+			8:   "2x2x2",
+			16:  "2x2x4",
+			32:  "2x4x4",
+			64:  "4x4x4",
+			128: "4x4x8",
+			256: "4x8x8",
+		}
+		if prefix == "tpu7" || prefix == "tpu7x" {
+			shapeMap[1] = "1x1x1"
+		}
+		if shape, exists := shapeMap[totalChips]; exists {
+			return shape, nil
+		}
+	} else {
+		// 2D topologies for v5e and v6e (default)
+		shapeMap := map[int]string{
+			1:   "1x1",
+			4:   "2x2",
+			8:   "2x4",
+			16:  "4x4",
+			32:  "4x8",
+			64:  "8x8",
+			128: "8x16",
+			256: "16x16",
+		}
+		if shape, exists := shapeMap[totalChips]; exists {
+			return shape, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find a valid topology shape for %d chips with prefix %s", totalChips, prefix)
+}
+
 func (g *GKEOrchestrator) parseAcceleratorOutput(output string) (string, error) {
 	accelerators := make(map[string]bool)
 	for _, acc := range strings.Split(output, "\n") {
@@ -736,6 +713,11 @@ func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies
 }
 
 func (g *GKEOrchestrator) resolveSuperSlicingTopology(requested string, clusterName string, clusterLocation string, accelType string) (string, bool, error) {
+	// This function should work only for TPU 7x
+	if !strings.Contains(accelType, "tpu7x") {
+		return "", false, nil
+	}
+
 	if active, _ := g.verifySuperSlicingActive(ManifestOptions{
 		ClusterName:     clusterName,
 		ClusterLocation: clusterLocation,
@@ -743,9 +725,26 @@ func (g *GKEOrchestrator) resolveSuperSlicingTopology(requested string, clusterN
 	}); active {
 		logging.Info("Super-slicing detected. Skipping strict physical state queries for topology.")
 		if requested != "" {
-			if len(strings.Split(requested, "x")) != 3 {
+			dims := strings.Split(requested, "x")
+			if len(dims) != 3 {
 				return "", true, fmt.Errorf("invalid topology format %s. Must be AxBxC", requested)
 			}
+
+			a, err1 := strconv.Atoi(dims[0])
+			b, err2 := strconv.Atoi(dims[1])
+			c, err3 := strconv.Atoi(dims[2])
+			if err1 != nil || err2 != nil || err3 != nil {
+				return "", true, fmt.Errorf("invalid topology dimensions in %s", requested)
+			}
+
+			if a%4 != 0 || b%4 != 0 || c%4 != 0 {
+				return "", true, fmt.Errorf("all values in the topology %s must be a multiple of 4", requested)
+			}
+
+			if (a*b*c)/64 > 144 {
+				return "", true, fmt.Errorf("requested cubes for topology %s exceeds the maximum limit of 144", requested)
+			}
+
 			logging.Info("Validated provided Topology (Super-Slicing): %s", requested)
 			return requested, true, nil
 		}

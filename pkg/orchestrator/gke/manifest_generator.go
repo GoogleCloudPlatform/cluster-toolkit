@@ -36,27 +36,6 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", fmt.Errorf("failed to calculate resource limits: %w", err)
 	}
 
-	// Calculate VmsPerSlice dynamically for TPUs if not provided and topology is present.
-	if opts.VmsPerSlice <= 1 && opts.Topology != "" && tpuLimit != "" {
-		tpuCount, err := strconv.Atoi(tpuLimit)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse tpu limit: %w", err)
-		}
-		if tpuCount > 0 {
-			dims := strings.Split(opts.Topology, "x")
-			totalChips := 1
-			for _, dim := range dims {
-				if val, err := strconv.Atoi(dim); err == nil {
-					totalChips *= val
-				}
-			}
-			opts.VmsPerSlice = totalChips / tpuCount
-			logging.Info("Dynamically determined vms_per_slice for %s: %d", opts.Topology, opts.VmsPerSlice)
-		}
-	}
-
-	// If it was deduced to be a CPU machine type (no GPU/TPU limit returned, but user provided an accelerator string),
-	// unsetopts.AcceleratorType to suppress the nodeSelector label injection!
 	if opts.AcceleratorType != "" && gpuLimit == "" && tpuLimit == "" {
 		logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
 		opts.AcceleratorType = ""
@@ -82,7 +61,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	trimmedCmdBytes := bytes.TrimSpace(jsonBuf.Bytes())
 	updatedCommand := fmt.Sprintf("                command: %s\n%s", string(trimmedCmdBytes), resourcesString)
 
-	tmpl, err := template.New("jobSet").Parse(JobSetTemplate)
+	tmpl, err := template.ParseFS(templatesFS, "templates/jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse jobset template: %w", err)
 	}
@@ -139,6 +118,10 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) string
 }
 
 func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
+	if err := g.resolveXPKStyleAccelerator(&job); err != nil {
+		return ManifestOptions{}, JobProfile{}, err
+	}
+
 	schedOpts := SchedulingOptions{
 		PlacementPolicy:    job.PlacementPolicy,
 		NodeAffinityLabels: job.NodeSelector,
@@ -152,6 +135,23 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 		return ManifestOptions{}, JobProfile{}, err
 	}
 	schedOpts.Topology = topology
+
+	// Calculate VmsPerSlice dynamically for TPUs if not provided and topology is present.
+	if job.VmsPerSlice <= 1 && topology != "" && strings.Contains(strings.ToLower(mappedLabel), "tpu") {
+		machineType := g.resolveMachineName(job.AcceleratorType)
+		chipsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
+		if err == nil && chipsPerVM > 0 {
+			dims := strings.Split(topology, "x")
+			totalChips := 1
+			for _, dim := range dims {
+				if val, err := strconv.Atoi(dim); err == nil {
+					totalChips *= val
+				}
+			}
+			job.VmsPerSlice = totalChips / chipsPerVM
+			logging.Info("Dynamically determined vms_per_slice for %s: %d", topology, job.VmsPerSlice)
+		}
+	}
 
 	isSuperSlicing, _ := g.verifySuperSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
@@ -232,4 +232,58 @@ func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition,
 	}
 
 	return opts, profile, nil
+}
+
+func (g *GKEOrchestrator) resolveXPKStyleAccelerator(job *orchestrator.JobDefinition) error {
+	if job.AcceleratorType == "" {
+		return nil
+	}
+
+	// Prioritize shorthands over total-chip requests to avoid collisions (e.g., v6e-8)
+	if _, exists := acceleratorShorthandMap[job.AcceleratorType]; exists {
+		return nil
+	}
+
+	parts := strings.Split(job.AcceleratorType, "-")
+	if len(parts) != 2 {
+		return nil
+	}
+
+	prefix := parts[0]
+	totalChipsStr := parts[1]
+
+	totalChips, err := strconv.Atoi(totalChipsStr)
+	if err != nil || totalChips <= 0 {
+		return nil
+	}
+
+	logging.Info("Detected XPK-style accelerator request: %s", job.AcceleratorType)
+
+	machineType, err := g.queryMachineType()
+	if err != nil {
+		return err
+	}
+	if machineType == "" {
+		return fmt.Errorf("could not auto-discover machine type because no active nodes were found. If this is an auto-provisioning (NAP) cluster, please specify the exact base accelerator unit (e.g., --accelerator v6e-8) instead of the total shape (%s)", job.AcceleratorType)
+	}
+
+	chipsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
+	if err != nil {
+		return fmt.Errorf("failed to fetch capacity for machine type %s: %w", machineType, err)
+	}
+
+	job.VmsPerSlice = totalChips / chipsPerVM
+	if job.VmsPerSlice == 0 {
+		job.VmsPerSlice = 1
+	}
+
+	topology, err := g.resolveTopologyForChips(prefix, totalChips)
+	if err != nil {
+		return err
+	}
+	job.Topology = topology
+
+	job.AcceleratorType = g.GenerateGKENodeSelectorLabel(prefix)
+
+	return nil
 }

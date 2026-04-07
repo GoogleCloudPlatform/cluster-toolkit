@@ -75,7 +75,7 @@ type JobDefinition struct {
 	Timeout            string
 	PriorityClassName  string
 
-	// Pathways-specific fields encapsulated
+	// Pathways-specific fields
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
