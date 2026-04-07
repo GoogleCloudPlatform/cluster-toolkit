@@ -481,6 +481,21 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
+          # Required for enroot/pyxis to work
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
+
+          # 2. Ensure /etc/hostname exists (needed by enroot/pyxis)
+          if [ ! -f /etc/hostname ]; then
+            hostname > /etc/hostname
+          fi
       # Install NCCL
       - type: ansible-local
         destination: install_nccl.yml
