@@ -21,8 +21,8 @@ vars:
   zone: us-central1-a
 
   image_build_machine_type: n2d-standard-16
-  build_from_image_family: hpc-rocky-linux-8
-  build_from_image_project: cloud-hpc-image-public
+  build_from_image_family: hpc-rocky-linux-9
+  build_from_image_project: cloud-hpc-image-preprod
   build_from_git_ref: 6.12.1
   built_image_family: my-custom-slurm
   built_instance_image:

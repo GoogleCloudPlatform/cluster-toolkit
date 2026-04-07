@@ -58,7 +58,7 @@ deployment_groups:
     - htcondor_install_script
     settings:
       disk_size: $(vars.disk_size_gb)
-      source_image_family: hpc-rocky-linux-8
+      source_image_family: hpc-rocky-linux-9
       image_family: $(vars.new_image.family)
 
 - group: pool
