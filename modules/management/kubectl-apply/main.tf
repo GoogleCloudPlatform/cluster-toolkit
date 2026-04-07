@@ -87,7 +87,7 @@ locals {
     for index, manifest in local.enabled_manifests :
     trim(replace(lower(
       (try(manifest.name, null) != null ? manifest.name :
-        "${(manifest.source != null && manifest.source != "") ? trimsuffix(trimsuffix(trimsuffix(basename(manifest.source), ".tftpl"), ".yaml"), ".yml") : "${var.module_id}-raw"}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
+        "${substr((manifest.source != null && manifest.source != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
       )
       ), "/[^a-z0-9-]+/", "-"), "-") => {
       content = (
