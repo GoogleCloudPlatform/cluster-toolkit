@@ -63,7 +63,7 @@
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
-        version: develop
+        version: main
       async: 120
       poll: 10
 
@@ -94,7 +94,7 @@
         set -e -u
         chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite lite
       register: chs_run
-      async: 1800
+      async: 2400
       poll: 10
       changed_when: false
 
