@@ -23,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
-	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"strconv"
@@ -125,7 +124,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 			"nodes":            fmt.Sprintf("%d", job.NumSlices),
 		}
 
-		telemetry.RecordLocalMetrics(job.WorkloadName, latencySecs, success, profile)
+		orchestrator.RecordLocalMetrics(job.WorkloadName, latencySecs, success, profile)
 	}()
 
 	var err error
