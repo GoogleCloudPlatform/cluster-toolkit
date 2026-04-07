@@ -679,10 +679,6 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 		return "", err
 	}
 
-	if output == "" {
-		return "", nil
-	}
-
 	topologies := g.parseTopologies(output)
 
 	return g.selectTopology(requested, topologies, accelType)
