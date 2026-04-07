@@ -26,12 +26,21 @@ locals {
       pathways_memory_quota  = "2000G"
     }) : "",
     var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || length(try(var.kueue.config_template_vars, {})) > 0 ?
-      templatefile(var.kueue.config_path, try(var.kueue.config_template_vars, {})) :
+      endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
+      templatefile(var.kueue.config_path, var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}) :
       file(var.kueue.config_path)
     ) : ""
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+
+  asapd_lite_config_content = (
+    var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
+    (
+      endswith(var.asapd_lite.config_path, ".tftpl") || (var.asapd_lite.config_template_vars != null && length(var.asapd_lite.config_template_vars) > 0) ?
+      templatefile(var.asapd_lite.config_path, var.asapd_lite.config_template_vars != null ? var.asapd_lite.config_template_vars : {}) :
+      file(var.asapd_lite.config_path)
+    ) : ""
+  )
 
   kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
   parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
@@ -62,7 +71,7 @@ locals {
   # 2. Identify URL-based manifests
   url_manifests = {
     for index, manifest in local.enabled_manifests : index => manifest
-    if try(manifest.source, null) != null && (startswith(manifest.source, "http://") || startswith(manifest.source, "https://"))
+    if try(startswith(manifest.source, "http://") || startswith(manifest.source, "https://"), false)
   }
 
   # 3. Identify directory-based manifests
@@ -90,15 +99,15 @@ locals {
               fileset(manifest.source, "*.tftpl")
               ) : (
               endswith(f, ".tftpl") ?
-              templatefile("${trimsuffix(manifest.source, "/")}/${f}", try(manifest.template_vars, {})) :
+              templatefile("${trimsuffix(manifest.source, "/")}/${f}", manifest.template_vars != null ? manifest.template_vars : {}) :
               file("${trimsuffix(manifest.source, "/")}/${f}")
             )
           ])
         ) :
         # Step C: Single file logic (implied if source is provided but not a URL or Dir)
         (manifest.source != null && manifest.source != "") ? (
-          endswith(manifest.source, ".tftpl") || length(try(manifest.template_vars, {})) > 0 ?
-          templatefile(manifest.source, try(manifest.template_vars, {})) :
+          endswith(manifest.source, ".tftpl") || (manifest.template_vars != null && length(manifest.template_vars) > 0) ?
+          templatefile(manifest.source, manifest.template_vars != null ? manifest.template_vars : {}) :
           file(manifest.source)
         )
         :
@@ -357,12 +366,18 @@ module "install_gib" {
 }
 
 module "install_asapd_lite" {
-  source            = "./kubectl"
-  source_path       = local.install_asapd_lite ? var.asapd_lite.config_path : null
-  server_side_apply = true
-  wait_for_rollout  = true
+  source        = "./helm_install"
+  count         = local.install_asapd_lite ? 1 : 0
+  release_name  = "asapd-lite"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  namespace     = "kube-system"
+  wait          = true
+  depends_on    = [var.gke_cluster_exists]
 
-  providers = {
-    kubectl = kubectl
-  }
+  values_yaml = [
+    yamlencode({
+      manifests = length(trimspace(local.asapd_lite_config_content)) > 0 ? [local.asapd_lite_config_content] : []
+    })
+  ]
 }

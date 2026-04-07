@@ -31,9 +31,10 @@ resource "google_compute_resource_policy" "policy" {
     for_each = var.workload_policy.type != null ? [1] : []
 
     content {
-      type                  = var.workload_policy.type
-      max_topology_distance = var.workload_policy.max_topology_distance
-      accelerator_topology  = var.workload_policy.accelerator_topology
+      type                      = var.workload_policy.type
+      max_topology_distance     = var.workload_policy.max_topology_distance
+      accelerator_topology      = var.workload_policy.accelerator_topology
+      accelerator_topology_mode = var.workload_policy.accelerator_topology_mode
     }
   }
 
@@ -43,6 +44,13 @@ resource "google_compute_resource_policy" "policy" {
     content {
       collocation  = "COLLOCATED"
       max_distance = var.group_placement_max_distance
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.workload_policy.accelerator_topology_mode == null || (var.workload_policy.type != null && var.workload_policy.accelerator_topology != null)
+      error_message = "Both workload_policy.type and workload_policy.accelerator_topology must be set when accelerator_topology_mode is specified."
     }
   }
 }

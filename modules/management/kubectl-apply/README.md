@@ -3,7 +3,7 @@
 This module simplifies the following functionality:
 
 * Applying Kubernetes manifests to GKE clusters: It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
-* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/),[Jobset](https://jobset.sigs.k8s.io/docs/) or [NCCL gIB plugin](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview).
+* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/),[Jobset](https://jobset.sigs.k8s.io/docs/), [NCCL gIB plugin](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview) or [`asapd-lite`](https://docs.cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute-custom-a4x-max#configure-mrdma-nics) daemonset.
 
 > Note: Kueue can work with a variety of frameworks out of the box, find them [here](https://kueue.sigs.k8s.io/docs/tasks/run/)
 
@@ -105,6 +105,18 @@ The `path` field accepts a template file. You will need to provide variables for
         template_vars:
           version: v1.1.0
           accelerator_count: 2
+```
+
+You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-max-bm](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/examples/gke-a4x-max-bm)) by setting the `asapd_lite` input variable and providing the path to the installer manifest using the `config_path` field.
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      asapd_lite:
+        install: true
+        config_path: $(ghpc_stage("manifests/asapd-lite-installer.yaml"))
 ```
 
 > **_NOTE:_**
@@ -220,7 +232,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./helm_install | n/a |
-| <a name="module_install_asapd_lite"></a> [install\_asapd\_lite](#module\_install\_asapd\_lite) | ./kubectl | n/a |
+| <a name="module_install_asapd_lite"></a> [install\_asapd\_lite](#module\_install\_asapd\_lite) | ./helm_install | n/a |
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
@@ -246,7 +258,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
-| <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install     = bool<br/>    config_path = string<br/>  })</pre> | <pre>{<br/>  "config_path": "",<br/>  "install": false<br/>}</pre> | no |
+| <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install              = optional(bool, false)<br/>    config_path          = optional(string, null)<br/>    config_template_vars = optional(map(any), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>      max_unavailable   = optional(string, "50%")<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |

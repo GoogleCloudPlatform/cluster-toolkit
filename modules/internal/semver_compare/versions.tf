@@ -12,23 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 terraform {
-  required_providers {
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 7.24.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:resource-policy/v1.86.0"
-  }
-
-  required_version = "= 1.12.2"
+  required_version = ">= 1.3"
 }

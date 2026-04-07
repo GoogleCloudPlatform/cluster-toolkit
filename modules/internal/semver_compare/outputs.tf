@@ -11,18 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
----
 
-spec:
-  requirements:
-    services:
-    - parallelstore.googleapis.com
-ghpc:
-  deprecation_date: "2026-08-31"
-  alternative_module: "modules/file-system/managed-lustre"
-  validators:
-  - validator: regex
-    inputs:
-      vars: [network_id]
-      pattern: ^projects/[^/]+/global/networks/[^/]+$
-    error_message: "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+output "is_valid_semver" {
+  value       = local.is_valid_semver
+  description = "True if both versions could be parsed into major.minor semantic logic."
+}
+
+output "is_greater_than_or_equal" {
+  value       = local.is_greater_than_or_equal
+  description = "True if the version meets the minimum requirement, or if the version is a non-standard custom string (fail-open)."
+}
