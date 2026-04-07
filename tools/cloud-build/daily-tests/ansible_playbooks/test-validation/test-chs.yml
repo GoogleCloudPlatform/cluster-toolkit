@@ -14,7 +14,7 @@
 
 ---
 
-- name: CHS Test Lite Suite
+- name: CHS Test Standard Suite
   delegate_to: "{{ 'localhost' if scheduler == 'gke' else inventory_hostname }}"
   vars:
     ansible_async_dir: "/tmp/.ansible_async_user"
@@ -89,10 +89,10 @@
       poll: 10
       changed_when: false
 
-    - name: "Run CHS lite suite"
+    - name: "Run CHS standard suite"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite lite
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite standard
       register: chs_run
       async: 2400
       poll: 10
