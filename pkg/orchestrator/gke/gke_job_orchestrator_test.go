@@ -63,17 +63,17 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 		memoryLimit     string
 		gpuLimit        string
 		tpuLimit        string
-		wantLabels      []string // Labels that should be in the output
-		wantLimits      []string // Limits that should be in the output,
-		dontWantLimits  []string // Limits that should NOT be in the output
-		wantErr         bool     // Whether GenerateGKEManifest should return an error
+		wantLabels      []string
+		wantLimits      []string
+		dontWantLimits  []string
+		wantErr         bool
 	}{
 		{
 			name:            "A3 Mega (H100)",
 			acceleratorType: "nvidia-h100-mega-80gb",
-			cpuLimit:        "",  // Omitted
-			memoryLimit:     "",  // Omitted
-			gpuLimit:        "1", // NVIDIA fallback default
+			cpuLimit:        "",
+			memoryLimit:     "",
+			gpuLimit:        "1",
 			wantLabels:      []string{"cloud.google.com/gke-accelerator: nvidia-h100-mega-80gb"},
 			wantLimits:      []string{"nvidia.com/gpu: 1"},
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
@@ -111,7 +111,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 		{
 			name:            "CPU Only (Default)",
 			acceleratorType: "",
-			wantErr:         true, // Empty accelerator is no longer allowed
+			wantErr:         true,
 		},
 		{
 			name:            "Fallback NVIDIA",
@@ -153,8 +153,6 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			if err != nil {
 				t.Fatalf("prepareManifestOptions failed: %v", err)
 			}
-			// prepareManifestOptions doesn't set limits in opts (GenerateGKEManifest does),
-			// but it sets NodeSelector string which is key for labels.
 
 			manifest, err := orc.GenerateGKEManifest(opts, profile)
 			if (err != nil) != tt.wantErr {
@@ -197,7 +195,7 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		WorkloadName:    "volume-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "n2-standard-4", // Required for strict enforcement
+		AcceleratorType: "n2-standard-4",
 		Volumes: []orchestrator.VolumeDefinition{
 			{Name: "vol-0", Source: "gs://my-bucket", MountPath: "/data", Type: "gcsfuse"},
 			{Name: "vol-1", Source: "/host/path", MountPath: "/host", Type: "hostPath"},
@@ -776,6 +774,7 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe ct6e-standard-8t": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
 		},
 		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
@@ -788,7 +787,7 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 		AcceleratorType: "v6e-8",
 		Topology:        "16x16",
-		VmsPerSlice:     0, // Trigger auto-calculation
+		VmsPerSlice:     0,
 	}
 
 	opts, profile, err := orc.prepareManifestOptions(job, "test-image:latest")

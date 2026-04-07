@@ -38,12 +38,11 @@ func executeCommand(root *cobra.Command, args ...string) (string, error) {
 }
 
 func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
-	// Create a temporary file for the dry-run output
 	tmpfile, err := os.CreateTemp("", "pathways-manifest-*.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name()) // clean up
+	defer os.Remove(tmpfile.Name())
 
 	os.Setenv("GCLUSTER_SKIP_PREREQ_CHECKS", "true")
 
@@ -62,7 +61,6 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 	// Reset flags before each test
 	resetSubmitCmdFlags()
 
-	// Execute the command
 	output, err := executeCommand(JobCmd,
 		"submit",
 		"--pathways",
@@ -86,7 +84,6 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 		}
 	}
 
-	// Read the output file
 	manifest, err := os.ReadFile(tmpfile.Name())
 	if err != nil {
 		t.Fatalf("failed to read dry-run output file: %v", err)
@@ -108,12 +105,11 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 }
 
 func TestSubmitCmd_RegularDryRun(t *testing.T) {
-	// Create a temporary file for the dry-run output
 	tmpfile, err := os.CreateTemp("", "regular-manifest-*.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name()) // clean up
+	defer os.Remove(tmpfile.Name())
 
 	os.Setenv("GCLUSTER_SKIP_PREREQ_CHECKS", "true")
 
@@ -132,7 +128,6 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	// Reset flags before each test
 	resetSubmitCmdFlags()
 
-	// Execute the command
 	output, err := executeCommand(JobCmd,
 		"submit",
 		"--name", "regular-test",

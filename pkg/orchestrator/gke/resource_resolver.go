@@ -29,7 +29,7 @@ type MachineTypeCap struct {
 		Count int    `json:"guestAcceleratorCount"`
 		Type  string `json:"guestAcceleratorType"`
 	} `json:"accelerators"`
-	GuestCpus int `json:"guestCpus"` // Parse vCPUs for CPU-only machines
+	GuestCpus int `json:"guestCpus"`
 }
 
 var acceleratorShorthandMap = map[string]string{
@@ -60,7 +60,7 @@ var acceleratorShorthandMap = map[string]string{
 	"b200-8":           "a4-highgpu-8g",
 	"gb200-4":          "a4x-highgpu-4g",
 
-	// TPUs mappings
+	// TPU mappings
 	"v4-8":    "ct4p-hightpu-4t",
 	"v5p-1":   "ct5p-hightpu-1t",
 	"v5p-2":   "ct5p-hightpu-2t",
@@ -143,12 +143,12 @@ func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string
 }
 
 func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, error) {
-	// 1. TPU Focus: Return false immediately if not using TPUs.
+	// Return false immediately if not using TPUs.
 	if opts.AcceleratorType == "" || !strings.Contains(strings.ToLower(opts.AcceleratorType), "tpu") {
 		return false, nil
 	}
 
-	// 2. Machine Type/Profile Guard: Describe node pool to see if it uses PROVISION_ONLY!
+	// Describe node pool to see if it uses PROVISION_ONLY!
 	poolName := os.Getenv("GKE_NODE_POOL_NAME")
 	if poolName == "" {
 		logging.Warn("GKE_NODE_POOL_NAME is not set. Assuming Super-slicing is not active for this node pool.")
@@ -171,7 +171,7 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 		}
 	}
 
-	// 3. Kueue CRD Checks: Check for topologies.kueue.x-k8s.io and AdmissionChecks (simulated via shell commands)
+	// Check for topologies.kueue.x-k8s.io and AdmissionCheck
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
 		logging.Warn("Topology CRD not found. Kueue Super-slicing not active.")
@@ -189,7 +189,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 			if !strings.Contains(strings.ToLower(mapped), "nvidia") && !isTPUFallback(mapped) {
 				return "", "", "", "", fmt.Errorf("cluster location (zone/region) is required to determine if %s is a CPU machine", opts.AcceleratorType)
 			}
-			// Let it fall through to the hardcoded NVIDIA/TPU fallbacks below!
+			// Let it fall through to the hardcoded GPU/TPU fallbacks below!
 		} else {
 			cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
 			if err != nil {

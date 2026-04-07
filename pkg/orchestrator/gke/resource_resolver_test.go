@@ -41,7 +41,7 @@ func TestResolveMachineName(t *testing.T) {
 		},
 		{
 			name:            "GKE label string resolution for unknown shorthand",
-			acceleratorType: "nvidia-l4", // Assuming GenerateGKENodeSelectorLabel maps it to something we have in shorthand map
+			acceleratorType: "nvidia-l4",
 			wantMachineName: "nvidia-l4", // Default fallthrough if neither matches
 		},
 	}

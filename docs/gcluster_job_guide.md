@@ -132,7 +132,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-c, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will automatically look for a `Dockerfile` within this directory.
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
-* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'`). If empty, `gcluster job submit` will auto-discover the optimal accelerator available on the cluster nodes. (Optional)
+* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'`). If empty, `gcluster job submit` will auto-discover the optimal accelerator available on the cluster nodes. It also supports XPK-style strings like `v6e-256` to request total chips; the tool will auto-discover the machine type and calculate `vms-per-slice` and `topology` automatically. (Optional)
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
 * `--cluster string`: Name of the GKE cluster to deploy the job to. (Required)
 * `--cluster-location string`: Location (Zone or Region) of the GKE cluster. (Required)
@@ -141,7 +141,8 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
 * `--kueue-queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
 * `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
-* `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`)
+* `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
+* `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
 * `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--ttl int`: Time (in seconds) to retain the JobSet after it finishes. (Default: `3600` seconds / 1 hour)
 * `--mount stringArray`: Mount a storage volume (e.g., `gs://bucket:/data` or `/host/path:/data`). Can be specified multiple times.
