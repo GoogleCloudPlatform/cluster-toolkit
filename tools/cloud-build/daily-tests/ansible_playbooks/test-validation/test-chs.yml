@@ -64,6 +64,7 @@
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
         version: main
+        accept_hostkey: true
       async: 120
       poll: 10
 
