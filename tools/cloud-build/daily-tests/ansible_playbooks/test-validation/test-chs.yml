@@ -95,7 +95,7 @@
         set -e -u
         chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite standard
       register: chs_run
-      async: 2400
+      async: 3000
       poll: 10
       changed_when: false
 
