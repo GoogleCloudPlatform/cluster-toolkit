@@ -2,33 +2,33 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | ../internal_instance_template | n/a |
 | <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [local_file.startup](https://registry.terraform.io/providers/hashicorp/local/latest/docs/data-sources/file) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br/>    source                              = optional(string)<br/>    disk_name                           = optional(string)<br/>    device_name                         = string<br/>    disk_type                           = optional(string)<br/>    disk_size_gb                        = optional(number)<br/>    disk_labels                         = map(string)<br/>    auto_delete                         = bool<br/>    boot                                = bool<br/>    disk_resource_manager_tags          = optional(map(string))<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = optional(string)<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>  }))</pre> | `[]` | no |
@@ -80,7 +80,7 @@
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template details |
 | <a name="output_labels"></a> [labels](#output\_labels) | Labels attached to the instance template |
 | <a name="output_name"></a> [name](#output\_name) | Name of instance template |
