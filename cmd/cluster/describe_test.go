@@ -38,12 +38,12 @@ func executeCommand(root *cobra.Command, args ...string) (string, error) {
 func TestDescribeCmd_MissingFlags(t *testing.T) {
 	resetClusterCmdFlags()
 
-	_, err := executeCommand(ClusterCmd, "describe")
+	_, err := executeCommand(ClusterCmd, "describe", "--project", "test-project")
 	if err == nil {
 		t.Fatalf("expected error for missing flags, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "--cluster and --cluster-location are required") {
+	if !strings.Contains(err.Error(), `required flag(s) "cluster", "location" not set`) {
 		t.Errorf("unexpected error output: %v", err)
 	}
 }
@@ -54,16 +54,13 @@ func TestDescribeCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockClusterExecutor{})
-		return g, nil
+		return g
 	}
 
-	output, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--cluster-location", "us-central1-a")
+	output, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -75,7 +72,7 @@ func TestDescribeCmd_Success(t *testing.T) {
 
 func resetClusterCmdFlags() {
 	clusterName = ""
-	clusterLocation = ""
+	location = ""
 	projectID = ""
 }
 

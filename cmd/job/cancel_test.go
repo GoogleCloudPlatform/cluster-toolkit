@@ -28,19 +28,20 @@ func TestCancelCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockCancelExecutor{})
-		return g, nil
+		g.SetKubeClient(&mockKubeClient{namespace: "default"})
+		return g
 	}
 
-	output, err := executeCommand(JobCmd, "cancel", "test-job", "--cluster", "test-cluster", "--cluster-location", "us-central1-a", "--project", "test-project")
+	output, err := executeCommand(JobCmd, "cancel", "test-job", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 
 	if err != nil {
-		if !strings.Contains(err.Error(), "unhandled mock command") && !strings.Contains(err.Error(), "failed to get kubeconfig") && !strings.Contains(err.Error(), "invalid configuration") {
+		if !strings.Contains(err.Error(), "unhandled mock command") &&
+			!strings.Contains(err.Error(), "failed to get kubeconfig") &&
+			!strings.Contains(err.Error(), "invalid configuration") &&
+			!strings.Contains(err.Error(), "gke-gcloud-auth-plugin not found") {
 			t.Fatalf("unexpected error: %v, output: %s", err, output)
 		}
 	}
@@ -54,6 +55,23 @@ func (m *mockCancelExecutor) ExecuteCommand(name string, args ...string) shell.C
 
 func (m *mockCancelExecutor) ExecuteCommandStream(name string, args ...string) error {
 	return nil
+}
+
+type mockKubeClient struct {
+	namespace string
+	err       error
+}
+
+func (m *mockKubeClient) GetJobNamespace(workloadName string) (string, error) {
+	return m.namespace, m.err
+}
+
+func (m *mockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
+	return m.err
 }
 
 func TestCancelCmd_MissingArgs(t *testing.T) {

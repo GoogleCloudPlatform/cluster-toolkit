@@ -16,6 +16,7 @@ package job
 
 import (
 	"encoding/json"
+	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,7 +189,7 @@ func TestAskForConfirmation_Yes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := askForConfirmation("Test prompt")
+	got := shell.PromptYesNo("Test prompt")
 	if !got {
 		t.Error("expected true for 'y', got false")
 	}
@@ -210,7 +211,7 @@ func TestAskForConfirmation_No(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := askForConfirmation("Test prompt")
+	got := shell.PromptYesNo("Test prompt")
 	if got {
 		t.Error("expected false for 'n', got true")
 	}

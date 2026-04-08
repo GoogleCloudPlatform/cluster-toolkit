@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
-	"hpc-toolkit/pkg/shell"
 	"strconv"
 	"strings"
 	"text/template"
@@ -29,8 +28,6 @@ import (
 )
 
 func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobProfile) (string, error) {
-	g.setManifestDefaults(&opts)
-
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	if err != nil {
 		return "", fmt.Errorf("failed to calculate resource limits: %w", err)
@@ -75,27 +72,6 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	return buf.String(), nil
 }
 
-func (g *GKEOrchestrator) setManifestDefaults(opts *ManifestOptions) {
-	if opts.WorkloadName == "" {
-		opts.WorkloadName = "gcluster-workload-" + shell.RandomString(8)
-	}
-	if opts.KueueQueueName == "" {
-		opts.KueueQueueName = "default-queue"
-	}
-	if opts.NumSlices == 0 {
-		opts.NumSlices = 1
-	}
-	if opts.VmsPerSlice == 0 {
-		opts.VmsPerSlice = 1
-	}
-	if opts.MaxRestarts == 0 {
-		opts.MaxRestarts = 1
-	}
-	if opts.TtlSecondsAfterFinished == 0 {
-		opts.TtlSecondsAfterFinished = 3600
-	}
-}
-
 func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) string {
 	var limits []string
 	if cpu != "" {
@@ -117,7 +93,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) string
 	return ""
 }
 
-func (g *GKEOrchestrator) prepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
+func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
 	if err := g.resolveXPKStyleAccelerator(&job); err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
@@ -269,7 +245,7 @@ func (g *GKEOrchestrator) resolveXPKStyleAccelerator(job *orchestrator.JobDefini
 }
 
 func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobDefinition, topology, mappedLabel string) {
-	if job.VmsPerSlice <= 1 && topology != "" && strings.Contains(strings.ToLower(mappedLabel), "tpu") {
+	if job.VmsPerSlice <= 0 && topology != "" && strings.Contains(strings.ToLower(mappedLabel), "tpu") {
 		machineType := g.resolveMachineName(job.AcceleratorType)
 		chipsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
 		if err != nil {
@@ -287,6 +263,9 @@ func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobD
 			job.VmsPerSlice = totalChips / chipsPerVM
 			logging.Info("Dynamically determined vms_per_slice for %s: %d", topology, job.VmsPerSlice)
 		}
+	}
+	if job.VmsPerSlice <= 0 {
+		job.VmsPerSlice = 1
 	}
 }
 

@@ -128,14 +128,14 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 Here are the flags currently supported by `gcluster job submit`:
 
-* `-i, --image string`: Name of a pre-built container image to run (e.g., `my-project/my-image:tag`). Use this if your image is already pushed to a registry.
+* `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `us-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
 * `--base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
-* `-c, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will automatically look for a `Dockerfile` within this directory.
+* `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will automatically look for a `Dockerfile` within this directory.
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
 * `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'`). If empty, `gcluster job submit` will auto-discover the optimal accelerator available on the cluster nodes. It also supports XPK-style strings like `v6e-256` to request total chips; the tool will auto-discover the machine type and calculate `vms-per-slice` and `topology` automatically. (Optional)
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
-* `--cluster string`: Name of the GKE cluster to deploy the job to. (Required)
-* `--cluster-location string`: Location (Zone or Region) of the GKE cluster. (Required)
+* `-c, --cluster string`: Name of the GKE cluster to deploy the job to. (Required)
+* `-l, --location string`: Location (Zone or Region) of the GKE cluster. (Required)
 * `-p, --project string`: Google Cloud Project ID. If not provided, it will be inferred from your `gcloud` configuration.
 * `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
 * `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)

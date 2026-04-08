@@ -30,6 +30,7 @@ type MachineTypeCap struct {
 		Type  string `json:"guestAcceleratorType"`
 	} `json:"accelerators"`
 	GuestCpus int `json:"guestCpus"`
+	MemoryMb  int `json:"memoryMb"`
 }
 
 var acceleratorShorthandMap = map[string]string{
@@ -61,18 +62,18 @@ var acceleratorShorthandMap = map[string]string{
 	"gb200-4":          "a4x-highgpu-4g",
 
 	// TPU mappings
-	"v4-8":    "ct4p-hightpu-4t",
-	"v5p-1":   "ct5p-hightpu-1t",
-	"v5p-2":   "ct5p-hightpu-2t",
-	"v5p-4":   "ct5p-hightpu-4t",
-	"v5e-1":   "ct5lp-hightpu-1t",
-	"v5e-4":   "ct5lp-hightpu-4t",
-	"v5e-8":   "ct5lp-hightpu-8t",
-	"v6e-1":   "ct6e-standard-1t",
-	"v6e-4":   "ct6e-standard-4t",
-	"v6e-8":   "ct6e-standard-8t",
-	"tpu-v7":  "tpu7-standard-1t",
-	"tpu-v7x": "tpu7x-standard-4t",
+	"v4-8":  "ct4p-hightpu-4t",
+	"v5p-1": "ct5p-hightpu-1t",
+	"v5p-2": "ct5p-hightpu-2t",
+	"v5p-4": "ct5p-hightpu-4t",
+	"v5e-1": "ct5lp-hightpu-1t",
+	"v5e-4": "ct5lp-hightpu-4t",
+	"v5e-8": "ct5lp-hightpu-8t",
+	"v6e-1": "ct6e-standard-1t",
+	"v6e-4": "ct6e-standard-4t",
+	"v6e-8": "ct6e-standard-8t",
+	"tpu7":  "tpu7-standard-1t",
+	"tpu7x": "tpu7x-standard-4t",
 }
 
 func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, error) {
@@ -89,27 +90,62 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 
 	var lastErr error
 	for _, z := range zonesToTry {
-		count, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion) // Only retry if it was an explicit zone from user
+		cap, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion) // Only retry if it was an explicit zone from user
 		if err == nil {
-			logging.Info("Discovered machine capacity in zone %s: %d", z, count)
-			return count, nil
+			logging.Info("Discovered machine capacity in zone %s", z)
+			if len(cap.Accelerators) > 0 {
+				return cap.Accelerators[0].Count, nil
+			}
+			if cap.GuestCpus > 0 {
+				return cap.GuestCpus, nil
+			}
+			return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, z)
 		}
 		lastErr = err
 	}
 
 	if isRegion {
-		return 0, fmt.Errorf("GCE machine-types are zonal resources. Tried resolving capacity for %s via cluster zones %v but failed: %w. Please specify an exact Zone using --cluster-location to proceed.", machineType, zonesToTry, lastErr)
+		return 0, fmt.Errorf("failed to fetch machine capacity for %s: tried in all candidate zones %v but did not find machine type in any of them", machineType, zonesToTry)
 	}
-	return 0, lastErr
+	return 0, fmt.Errorf("failed to fetch machine capacity for %s in zone %s: %w", machineType, zone, lastErr)
 }
 
-func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string, shouldRetry bool) (int, error) {
+func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
+	if zone == "" {
+		return MachineTypeCap{}, fmt.Errorf("zone is required for machine capacity lookup")
+	}
+
+	isRegion := len(strings.Split(zone, "-")) < 3
+	zonesToTry := []string{zone}
+
+	if isRegion && len(g.clusterZones) > 0 {
+		zonesToTry = g.clusterZones
+	}
+
+	var lastErr error
+	for _, z := range zonesToTry {
+		cap, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion)
+		if err == nil {
+			logging.Info("Discovered machine capabilities in zone %s", z)
+			return cap, nil
+		}
+		lastErr = err
+	}
+
+	if isRegion {
+		return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: tried in all candidate zones %v but did not find machine type in any of them", machineType, zonesToTry)
+	}
+	return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s in zone %s: %w", machineType, zone, lastErr)
+}
+
+func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string, shouldRetry bool) (MachineTypeCap, error) {
 	maxRetries := 1
 	if shouldRetry {
 		maxRetries = 3
 	}
 
 	var result shell.CommandResult
+	var cap MachineTypeCap
 
 	for i := 0; i < maxRetries; i++ {
 		result = g.executor.ExecuteCommand("gcloud", "compute", "machine-types", "describe", machineType, "--zone="+zone, "--format=json")
@@ -123,23 +159,14 @@ func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string
 	}
 
 	if result.ExitCode != 0 {
-		return 0, fmt.Errorf("gcloud compute machine-types describe failed for zone %s: %s", zone, result.Stderr)
+		return cap, fmt.Errorf("gcloud compute machine-types describe failed for zone %s: %s", zone, result.Stderr)
 	}
 
-	var cap MachineTypeCap
 	if err := json.Unmarshal([]byte(result.Stdout), &cap); err != nil {
-		return 0, fmt.Errorf("failed to unmarshal machine capacity JSON: %w", err)
+		return cap, fmt.Errorf("failed to unmarshal machine capacity JSON: %w", err)
 	}
 
-	if len(cap.Accelerators) > 0 {
-		return cap.Accelerators[0].Count, nil
-	}
-
-	if cap.GuestCpus > 0 {
-		return cap.GuestCpus, nil
-	}
-
-	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
+	return cap, nil
 }
 
 func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, error) {

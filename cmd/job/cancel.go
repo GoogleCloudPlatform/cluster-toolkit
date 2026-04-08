@@ -24,27 +24,19 @@ import (
 
 var CancelJobCmd = &cobra.Command{
 	Use:          "cancel [job-name]",
-	Short:        "Cancel a job from the cluster.",
+	Short:        "Cancel a job in the cluster.",
 	Args:         cobra.ExactArgs(1),
 	RunE:         runCancelJob,
 	SilenceUsage: true,
-}
-
-func init() {
 }
 
 func runCancelJob(cmd *cobra.Command, args []string) error {
 	jobName := args[0]
 	logging.Info("Cancelling job %s...", jobName)
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.CancelOptions{
 		ClusterName:     clusterName,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 		ProjectID:       projectID,
 	}
 

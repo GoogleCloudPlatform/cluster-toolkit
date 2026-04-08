@@ -15,25 +15,51 @@
 package cluster
 
 import (
+	"fmt"
+	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator/gke"
+	"hpc-toolkit/pkg/shell"
+	"strings"
+
 	"github.com/spf13/cobra"
 )
 
 var (
-	clusterName     string
-	clusterLocation string
-	projectID       string
+	clusterName string
+	location    string
+	projectID   string
 )
+
+var gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+	return gke.NewGKEOrchestrator()
+}
+
+var orc *gke.GKEOrchestrator
 
 // ClusterCmd represents the base command for cluster-related operations
 var ClusterCmd = &cobra.Command{
 	Use:   "cluster",
 	Short: "[EXPERIMENTAL] Manage clusters and environments.",
 	Long:  `Discover, list, and introspect target clusters and environments. This feature is under active development.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		orc = gkeOrchestratorFactory()
+
+		if projectID == "" {
+			result := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
+			ambientProject := strings.TrimSpace(result.Stdout)
+
+			if result.ExitCode != 0 || ambientProject == "" {
+				return fmt.Errorf("no Google Cloud project specified. Please provide one via the '--project' flag or set a default project using 'gcloud config set project <PROJECT_ID>'")
+			}
+
+			projectID = ambientProject
+			logging.Info("Using ambient project ID: %s", projectID)
+		}
+		return nil
+	},
 }
 
 func init() {
-	ClusterCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "Name of the GKE cluster. Required for info, describe, volume.")
-	ClusterCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-location", "", "Location (region or zone) of the GKE cluster. Required for info, describe, volume.")
 	ClusterCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
 
 	ClusterCmd.AddCommand(ListCmd)

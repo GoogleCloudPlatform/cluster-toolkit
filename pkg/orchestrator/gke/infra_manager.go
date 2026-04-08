@@ -17,11 +17,15 @@ package gke
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -31,6 +35,11 @@ import (
 
 //go:embed templates/*
 var templatesFS embed.FS
+
+// defaultKueueVersion is the fallback version of Kueue to install.
+// ATTENTION: If you update this version, please also update the corresponding
+// default version in modules/management/kubectl-apply/variables.tf
+const defaultKueueVersion = "v0.13.3"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	if installed, err := g.isJobSetCRDInstalled(); err != nil {
@@ -49,15 +58,41 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	return g.installJobSetCRD(jobSetManifestsURL)
 }
 
-func (g *GKEOrchestrator) checkAndInstallKueue() error {
-	kueueInstalled, err := g.isKueueInstalled()
-	if err != nil {
-		return err
+func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
+	kueueCRDInstalled, _ := g.isKueueInstalled()
+	kueueDeploymentInstalled, _ := g.isKueueDeploymentInstalled()
+
+	currentVersion, _ := g.GetKueueVersion()
+
+	isBroken := g.checkKueueBroken(kueueCRDInstalled, kueueDeploymentInstalled)
+
+	targetVersion := version
+	if targetVersion == "" {
+		targetVersion = defaultKueueVersion
 	}
 
-	if !kueueInstalled {
-		logging.Info("Kueue not found. Installing Kueue...")
-		return g.installKueue()
+	needReinstall := isBroken
+	if currentVersion != "" && g.isVersionBelow(currentVersion, defaultKueueVersion) {
+		needReinstall = true
+		logging.Info("Current Kueue version %s is below default %s.", currentVersion, defaultKueueVersion)
+	}
+
+	if needReinstall {
+		promptMsg := fmt.Sprintf("Kueue installation is broken or version is below %s. We will be re-installing KUEUE using %s. Replying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", defaultKueueVersion, defaultKueueVersion)
+		if !shell.PromptYesNo(promptMsg) {
+			logging.Fatal("User declined to re-install Kueue. Exiting.")
+		}
+
+		logging.Info("Proceeding with clean re-installation of Kueue...")
+		if err := g.DeleteAllKueueResources(); err != nil {
+			return fmt.Errorf("failed to delete Kueue resources: %w", err)
+		}
+
+		if err := g.installKueue(targetVersion); err != nil {
+			return err
+		}
+	} else {
+		logging.Info("Kueue is already installed and healthy at version %s.", currentVersion)
 	}
 
 	priorityClassesInstalled, err := g.arePriorityClassesInstalled()
@@ -74,6 +109,69 @@ func (g *GKEOrchestrator) checkAndInstallKueue() error {
 	return nil
 }
 
+func (g *GKEOrchestrator) checkKueueBroken(crdInstalled, deployInstalled bool) bool {
+	if !crdInstalled || !deployInstalled {
+		return true
+	}
+	if err := g.waitForKueueWebhook(); err != nil {
+		logging.Warn("Kueue webhook health check failed: %v", err)
+		return true
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) isVersionBelow(current, target string) bool {
+	curMajor, curMinor, curPatch := parseVersion(current)
+	defMajor, defMinor, defPatch := parseVersion(target)
+
+	return curMajor < defMajor || (curMajor == defMajor && curMinor < defMinor) || (curMajor == defMajor && curMinor == defMinor && curPatch < defPatch)
+}
+
+func (g *GKEOrchestrator) DeleteKueueDeployment() error {
+	logging.Info("Deleting Kueue deployment...")
+	res := g.executor.ExecuteCommand("kubectl", "delete", "deployment", "kueue-controller-manager", "-n", "kueue-system", "--ignore-not-found")
+	if res.ExitCode != 0 {
+		return fmt.Errorf("failed to delete Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) DeleteAllKueueResources() error {
+	logging.Info("Deleting all Kueue resources and CRDs...")
+
+	crds := []string{
+		"admissionchecks.kueue.x-k8s.io",
+		"clusterqueues.kueue.x-k8s.io",
+		"cohorts.kueue.x-k8s.io",
+		"localqueues.kueue.x-k8s.io",
+		"multikueueclusters.kueue.x-k8s.io",
+		"multikueueconfigs.kueue.x-k8s.io",
+		"provisioningrequestconfigs.kueue.x-k8s.io",
+		"resourceflavors.kueue.x-k8s.io",
+		"topologies.kueue.x-k8s.io",
+		"workloadpriorityclasses.kueue.x-k8s.io",
+		"workloads.kueue.x-k8s.io",
+	}
+
+	for _, crd := range crds {
+		logging.Info("Deleting resources for CRD %s...", crd)
+		res := g.executor.ExecuteCommand("kubectl", "delete", crd, "--all", "--ignore-not-found")
+		if res.ExitCode != 0 {
+			logging.Warn("Failed to delete resources for CRD %s: %s", crd, res.Stderr)
+			// Continue with other CRDs even if one fails
+		}
+	}
+
+	logging.Info("Deleting Kueue CRDs...")
+	args := append([]string{"delete", "crd", "--ignore-not-found"}, crds...)
+	res := g.executor.ExecuteCommand("kubectl", args...)
+	if res.ExitCode != 0 {
+		return fmt.Errorf("failed to delete Kueue CRDs: %s\n%s", res.Stderr, res.Stdout)
+	}
+
+	return g.DeleteKueueDeployment()
+}
+
 func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 	logging.Info("Checking for Kueue installation...")
 	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "clusterqueues.kueue.x-k8s.io")
@@ -88,9 +186,39 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 	return false, fmt.Errorf("failed to check for Kueue CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
+func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
+	logging.Info("Checking for Kueue deployment...")
+	res := g.executor.ExecuteCommand("kubectl", "get", "deployment", "kueue-controller-manager", "-n", "kueue-system")
+	if res.ExitCode == 0 {
+		logging.Info("Kueue deployment found.")
+		return true, nil
+	}
+	if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
+		logging.Info("Kueue deployment not found.")
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "jsonpath={.spec.template.spec.containers[0].image}")
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("failed to get Kueue version: %s\n%s", res.Stderr, res.Stdout)
+	}
+	image := strings.TrimSpace(res.Stdout)
+	// The image string might be "registry.k8s.io/kueue/kueue:v0.6.3"
+	// We want to extract "v0.6.3"
+	parts := strings.Split(image, ":")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("unexpected image format for Kueue: %s", image)
+	}
+	version := parts[len(parts)-1]
+	return version, nil
+}
+
 func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
 	logging.Info("Checking for PriorityClass installation...")
-	priorityClasses := []string{"very-low", "low", "medium", "high"}
+	priorityClasses := []string{"very-low", "low", "medium", "high", "very-high"}
 	for _, pc := range priorityClasses {
 		res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", pc)
 		if res.ExitCode != 0 {
@@ -104,19 +232,29 @@ func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
 	return true, nil
 }
 
-func (g *GKEOrchestrator) installKueue() error {
-	logging.Info("Installing Kueue...")
-	kueueManifestsURL := "https://github.com/kubernetes-sigs/kueue/releases/download/v0.6.3/manifests.yaml"
-	manifestBytes, err := g.downloadJobSetManifests(kueueManifestsURL)
+func (g *GKEOrchestrator) installKueue(version string) error {
+	logging.Info("Installing Kueue version %s...", version)
+	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", version)
+	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
 	if err != nil {
 		return err
 	}
 
-	if err := g.applyJobSetManifests(manifestBytes); err != nil {
+	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := g.applyManifests(cleanedManifests, "jobset.yaml"); err != nil {
 		return err
 	}
 
 	logging.Info("Kueue components applied successfully.")
+
+	if err := g.waitForKueueWebhook(); err != nil {
+		return err
+	}
+
 	return g.installKueueResources()
 }
 
@@ -132,20 +270,16 @@ func (g *GKEOrchestrator) installKueueResources() error {
 	if err := priorityClassesTmpl.Execute(&priorityClassesBuf, nil); err != nil {
 		return fmt.Errorf("failed to execute priority_classes.tmpl template: %w", err)
 	}
-	if err := g.applyJobSetManifests(priorityClassesBuf.Bytes()); err != nil {
+	if err := g.applyManifests(priorityClassesBuf.Bytes(), "priority-classes.yaml"); err != nil {
 		return err
 	}
 
 	// Install ClusterQueue
-	clusterQueueTmpl, err := template.ParseFS(templatesFS, "templates/cluster_queue.tmpl")
+	clusterQueueBytes, err := g.renderClusterQueue()
 	if err != nil {
-		return fmt.Errorf("failed to parse cluster_queue.tmpl: %w", err)
+		return err
 	}
-	var clusterQueueBuf bytes.Buffer
-	if err := clusterQueueTmpl.Execute(&clusterQueueBuf, nil); err != nil {
-		return fmt.Errorf("failed to execute cluster_queue.tmpl template: %w", err)
-	}
-	if err := g.applyJobSetManifests(clusterQueueBuf.Bytes()); err != nil {
+	if err := g.applyManifests(clusterQueueBytes, "cluster-queue.yaml"); err != nil {
 		return err
 	}
 
@@ -158,7 +292,7 @@ func (g *GKEOrchestrator) installKueueResources() error {
 	if err := localQueueTmpl.Execute(&localQueueBuf, struct{ Namespace string }{"default"}); err != nil {
 		return fmt.Errorf("failed to execute local_queue.tmpl template: %w", err)
 	}
-	if err := g.applyJobSetManifests(localQueueBuf.Bytes()); err != nil {
+	if err := g.applyManifests(localQueueBuf.Bytes(), "local-queue.yaml"); err != nil {
 		return err
 	}
 
@@ -166,10 +300,99 @@ func (g *GKEOrchestrator) installKueueResources() error {
 	return nil
 }
 
+func (g *GKEOrchestrator) renderClusterQueue() ([]byte, error) {
+	var resourceGroups []map[string]interface{}
+
+	for name, fc := range g.capacity.Flavors {
+		var coveredResources []string
+		var resources []map[string]interface{}
+
+		if fc.CPUs > 0 {
+			coveredResources = append(coveredResources, "cpu")
+			resources = append(resources, map[string]interface{}{"name": "cpu", "nominalQuota": fc.CPUs})
+		}
+		if fc.MemoryGi > 0 {
+			coveredResources = append(coveredResources, "memory")
+			resources = append(resources, map[string]interface{}{"name": "memory", "nominalQuota": fmt.Sprintf("%dGi", fc.MemoryGi)})
+		}
+		if fc.GPUs > 0 {
+			coveredResources = append(coveredResources, "nvidia.com/gpu")
+			resources = append(resources, map[string]interface{}{"name": "nvidia.com/gpu", "nominalQuota": fc.GPUs})
+		}
+		if fc.TPUs > 0 {
+			coveredResources = append(coveredResources, "google.com/tpu")
+			resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
+		}
+
+		if len(coveredResources) > 0 {
+			resourceGroups = append(resourceGroups, map[string]interface{}{
+				"coveredResources": coveredResources,
+				"flavors": []map[string]interface{}{
+					{
+						"name":      name,
+						"resources": resources,
+					},
+				},
+			})
+		}
+	}
+
+	cqMap := map[string]interface{}{
+		"apiVersion": "kueue.x-k8s.io/v1beta1",
+		"kind":       "ClusterQueue",
+		"metadata": map[string]interface{}{
+			"name": "cluster-queue",
+		},
+		"spec": map[string]interface{}{
+			"namespaceSelector": map[string]interface{}{},
+			"queueingStrategy":  "BestEffortFIFO",
+			"resourceGroups":    resourceGroups,
+		},
+	}
+
+	cqBytes, err := yaml.Marshal(cqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal ClusterQueue to YAML: %w", err)
+	}
+
+	return cqBytes, nil
+}
+
+func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {
+	rfMap := map[string]interface{}{
+		"apiVersion": "kueue.x-k8s.io/v1beta1",
+		"kind":       "ResourceFlavor",
+		"metadata": map[string]interface{}{
+			"name": name,
+		},
+	}
+	if len(nodeLabels) > 0 {
+		rfMap["spec"] = map[string]interface{}{
+			"nodeLabels": nodeLabels,
+		}
+	}
+	return yaml.Marshal(rfMap)
+}
+
+func (g *GKEOrchestrator) EnsureResourceFlavors() error {
+	logging.Info("Ensuring Kueue ResourceFlavors exist...")
+	for name, fc := range g.capacity.Flavors {
+		logging.Info("Ensuring ResourceFlavor '%s'...", name)
+		rfBytes, err := g.renderResourceFlavor(name, fc.NodeLabels)
+		if err != nil {
+			return fmt.Errorf("failed to render ResourceFlavor %s: %w", name, err)
+		}
+		if err := g.applyManifests(rfBytes, "resource-flavor.yaml"); err != nil {
+			return fmt.Errorf("failed to apply ResourceFlavor %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	logging.Info("Installing/Fixing JobSet CRD and Webhook...")
 
-	manifestBytes, err := g.downloadJobSetManifests(jobSetManifestsURL)
+	manifestBytes, err := g.downloadManifests(jobSetManifestsURL)
 	if err != nil {
 		return err
 	}
@@ -179,7 +402,7 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 		return err
 	}
 
-	if err := g.applyJobSetManifests(cleanedManifests); err != nil {
+	if err := g.applyManifests(cleanedManifests, "kueue.yaml"); err != nil {
 		return err
 	}
 
@@ -188,25 +411,169 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	return g.waitForJobSetWebhook()
 }
 
+type k8sEndpointSliceList struct {
+	Items []struct {
+		Endpoints []struct {
+			Addresses  []string `json:"addresses"`
+			Conditions struct {
+				Ready bool `json:"ready"`
+			} `json:"conditions"`
+		} `json:"endpoints"`
+	} `json:"items"`
+}
+
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting for JobSet webhook service to be ready...")
-	cmd := shell.NewCommand("kubectl", "rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=300s")
-	res := cmd.Execute()
+	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/jobset-controller-manager", "-n", "jobset-system", "--timeout=600s")
 	if res.ExitCode != 0 {
 		return fmt.Errorf("jobset controller manager failed to become ready: %s\n%s", res.Stderr, res.Stdout)
 	}
 
 	logging.Info("Verifying JobSet webhook service endpoints...")
-	for i := 0; i < 100; i++ {
-		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpoints", "jobset-webhook-service", "-n", "jobset-system", "-o", "jsonpath={.subsets[*].addresses[*].ip}")
-		if cmdEndpoints.ExitCode == 0 && strings.TrimSpace(cmdEndpoints.Stdout) != "" {
-			logging.Info("JobSet webhook service endpoints are available.")
-			return nil
+	for i := 0; i < 40; i++ {
+		cmdEndpoints := g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=jobset-webhook-service", "-n", "jobset-system", "-o", "json")
+		if cmdEndpoints.ExitCode == 0 {
+			var eps k8sEndpointSliceList
+			if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
+				for _, item := range eps.Items {
+					for _, ep := range item.Endpoints {
+						if ep.Conditions.Ready && len(ep.Addresses) > 0 {
+							logging.Info("JobSet webhook service endpoints are available.")
+							return nil
+						}
+					}
+				}
+			}
 		}
-		g.executor.ExecuteCommand("sleep", "3")
+		time.Sleep(3 * time.Second)
 	}
 
 	return fmt.Errorf("timed out waiting for jobset-webhook-service endpoints to be available")
+}
+
+func parseVersion(v string) (int, int, int) {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.Split(v, ".")
+	major, _ := strconv.Atoi(parts[0])
+	minor := 0
+	patch := 0
+	if len(parts) > 1 {
+		minor, _ = strconv.Atoi(parts[1])
+	}
+	if len(parts) > 2 {
+		patch, _ = strconv.Atoi(parts[2])
+	}
+	return major, minor, patch
+}
+
+func (g *GKEOrchestrator) waitForKueueWebhook() error {
+	logging.Info("Waiting for Kueue webhook service to be ready...")
+	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", "--timeout=600s")
+	if res.ExitCode != 0 {
+		podDetails := g.getKueuePodDetails()
+		return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
+	}
+
+	version, err := g.GetKueueVersion()
+	if err != nil {
+		logging.Warn("Failed to get Kueue version, defaulting to Endpoints check: %v", err)
+		version = defaultKueueVersion // Fallback to older version behavior
+	}
+
+	major, minor, _ := parseVersion(version)
+	useEndpointSlice := major > 0 || (major == 0 && minor > 13)
+
+	logging.Info("Verifying Kueue webhook service endpoints using version %s...", version)
+	for i := 0; i < 40; i++ {
+		ready, err := g.checkKueueEndpoints(useEndpointSlice)
+		if err != nil {
+			return err
+		}
+		if ready {
+			logging.Info("Kueue webhook service endpoints are available.")
+			return nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+
+	return fmt.Errorf("timed out waiting for kueue-webhook-service endpoints to be available")
+}
+
+func (g *GKEOrchestrator) getKueuePodDetails() string {
+	podRes := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", "kueue-system", "-l", "control-plane=controller-manager", "-o", "json")
+	var podDetails string
+	if podRes.ExitCode == 0 {
+		var podList struct {
+			Items []struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+				Status struct {
+					ContainerStatuses []struct {
+						Name  string `json:"name"`
+						State struct {
+							Waiting struct {
+								Reason  string `json:"reason"`
+								Message string `json:"message"`
+							} `json:"waiting"`
+						} `json:"state"`
+					} `json:"containerStatuses"`
+				} `json:"status"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal([]byte(podRes.Stdout), &podList); err == nil {
+			for _, item := range podList.Items {
+				for _, cs := range item.Status.ContainerStatuses {
+					if cs.State.Waiting.Reason != "" {
+						podDetails += fmt.Sprintf("\n  - Pod %s: %s (%s)", item.Metadata.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+					}
+				}
+			}
+		}
+	}
+	return podDetails
+}
+
+func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, error) {
+	var cmdEndpoints shell.CommandResult
+	if useEndpointSlice {
+		cmdEndpoints = g.executor.ExecuteCommand("kubectl", "get", "endpointslice", "-l", "kubernetes.io/service-name=kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+	} else {
+		cmdEndpoints = g.executor.ExecuteCommand("kubectl", "get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
+	}
+
+	if cmdEndpoints.ExitCode != 0 {
+		return false, nil
+	}
+
+	if useEndpointSlice {
+		var eps k8sEndpointSliceList
+		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
+			for _, item := range eps.Items {
+				for _, ep := range item.Endpoints {
+					if ep.Conditions.Ready && len(ep.Addresses) > 0 {
+						return true, nil
+					}
+				}
+			}
+		}
+	} else {
+		var eps struct {
+			Subsets []struct {
+				Addresses []struct {
+					Ip string `json:"ip"`
+				} `json:"addresses"`
+			} `json:"subsets"`
+		}
+		if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err == nil {
+			for _, subset := range eps.Subsets {
+				if len(subset.Addresses) > 0 {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
@@ -223,28 +590,34 @@ func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
 	return false, fmt.Errorf("failed to check for JobSet CRD: %s\n%s", res.Stderr, res.Stdout)
 }
 
-func (g *GKEOrchestrator) downloadJobSetManifests(url string) ([]byte, error) {
-	logging.Info("Downloading JobSet manifests from %s", url)
-	client := &http.Client{Timeout: 10 * time.Second}
+func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
+	logging.Info("Downloading manifests from %s", url)
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download JobSet manifests: %w", err)
+		return nil, fmt.Errorf("failed to download manifests: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download JobSet manifests: received status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to download manifests: received status code %d", resp.StatusCode)
 	}
 
 	manifestBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read JobSet manifests: %w", err)
+		return nil, fmt.Errorf("failed to read manifests: %w", err)
 	}
 	return manifestBytes, nil
 }
 
 func (g *GKEOrchestrator) cleanJobSetManifests(manifestBytes []byte) ([]byte, error) {
 	logging.Info("Cleaning JobSet manifests (removing description fields)...")
+	return g.cleanAndProcessManifests(manifestBytes, func(data map[interface{}]interface{}) {
+		g.injectTolerationsAndLabels(data)
+	})
+}
+
+func (g *GKEOrchestrator) cleanAndProcessManifests(manifestBytes []byte, processFn func(map[interface{}]interface{})) ([]byte, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(manifestBytes))
 	var cleanedManifests bytes.Buffer
 
@@ -263,7 +636,9 @@ func (g *GKEOrchestrator) cleanJobSetManifests(manifestBytes []byte) ([]byte, er
 
 		if data, ok := doc.(map[interface{}]interface{}); ok {
 			g.removeDescriptionFields(data)
-			g.injectTolerationsAndLabels(data)
+			if processFn != nil {
+				processFn(data)
+			}
 			cleanedBytes, err := yaml.Marshal(data)
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal cleaned YAML: %w", err)
@@ -342,15 +717,30 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
-func (g *GKEOrchestrator) applyJobSetManifests(manifests []byte) error {
-	logging.Info("Applying JobSet manifests...")
-	cmd := shell.NewCommand("kubectl", "apply", "-f", "-")
-	cmd.SetInput(string(manifests))
-	res := cmd.Execute()
+func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
+	logging.Info("Applying manifests for %s...", filename)
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	stateDir := filepath.Join(homeDir, ".gcluster", "generated")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for generated manifests at %q. Please check your file system permissions for this path: %w", stateDir, err)
+	}
+
+	filePath := filepath.Join(stateDir, filename)
+	if err := os.WriteFile(filePath, manifests, 0644); err != nil {
+		return fmt.Errorf("failed to write manifests to %s: %w", filePath, err)
+	}
+	logging.Info("Manifests saved to %s", filePath)
+
+	res := g.executor.ExecuteCommand("kubectl", "apply", "-f", filePath)
 	if res.ExitCode != 0 {
 		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
 	}
-	logging.Info("JobSet manifests applied successfully.")
+	logging.Info("Manifests applied successfully.")
 	return nil
 }
 
@@ -370,4 +760,33 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 			}
 		}
 	}
+}
+
+// ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
+func (g *GKEOrchestrator) ValidateClusterState(workloadName string) error {
+	validators := []func() error{
+		g.checkClusterConnectivity,
+		func() error { return g.CheckAndInstallKueue("") },
+		g.checkAndInstallJobSetCRD,
+		func() error { return g.validateJobConflicts(workloadName) },
+	}
+
+	for _, validate := range validators {
+		if err := validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkClusterConnectivity verifies that we can connect to the cluster.
+// It uses a short timeout to fail fast if IP is blocked by authorized networks.
+func (g *GKEOrchestrator) checkClusterConnectivity() error {
+	logging.Info("Checking cluster connectivity...")
+	res := g.executor.ExecuteCommand("kubectl", "get", "namespace", "default", "--request-timeout=5s")
+	if res.ExitCode != 0 {
+		return fmt.Errorf("failed to connect to GKE cluster. Please verify your IP is allowed in the cluster's authorized networks or that you have correct network access. Error: %s", res.Stderr)
+	}
+	logging.Info("Cluster connectivity verified.")
+	return nil
 }

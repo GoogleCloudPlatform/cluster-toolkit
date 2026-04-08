@@ -20,7 +20,7 @@ import (
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
-	"hpc-toolkit/pkg/orchestrator/gke"
+
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,10 +62,6 @@ var (
 	pathways  orchestrator.PathwaysJobDefinition
 )
 
-var gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-	return gke.NewGKEOrchestrator()
-}
-
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
 	Short: "Submits a container image workload on a Gke cluster using JobSet.",
@@ -78,8 +74,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 	RunE: runSubmitCmd,
 
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		logging.Info("Running prerequisite checks for 'gcluster job submit'...")
-		err := EnsurePrerequisites(&projectID)
+		if err := validateImageFlags(); err != nil {
+			return err
+		}
+		err := ensurePrerequisites(&projectID)
 		if err != nil {
 			return fmt.Errorf("prerequisite checks failed for 'gcluster job submit'. Please ensure your gcloud configuration and cluster context are valid: %w", err)
 		}
@@ -103,9 +101,9 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 }
 
 func init() {
-	SubmitCmd.Flags().StringVarP(&imageName, "image", "i", "", "Name of the pre-built container image to run (e.g., my-project/my-image:tag).")
+	SubmitCmd.Flags().StringVarP(&imageName, "image", "i", "", "Name of the pre-built container image to run. Must include the full path including registry (e.g., us-docker.pkg.dev/my-project/my-repo/my-image:tag).")
 	SubmitCmd.Flags().StringVar(&baseImage, "base-image", "", "Name of the base image for Crane to build upon (e.g., python:3.9-slim). Requires --build-context.")
-	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "c", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
+	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "b", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
 	SubmitCmd.Flags().StringVarP(&commandToRun, "command", "e", "", "Command to execute in the container (e.g., 'python train.py'). Required.")
 	SubmitCmd.Flags().StringVarP(&acceleratorType, "accelerator", "a", "", "Type of accelerator to request (e.g., 'nvidia-tesla-a100'). If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().StringVarP(&outputManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
@@ -114,7 +112,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVar(&kueueQueueName, "kueue-queue", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
-	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 1, "Number of VMs (pods) per slice.")
+	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 0, "Number of VMs (pods) per slice. Defaults to auto-calculated value for TPUs.")
 	SubmitCmd.Flags().IntVar(&maxRestarts, "max-restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().IntVar(&ttlSecondsAfterFinished, "ttl", 3600, "Time (in seconds) to retain the JobSet after it finishes.")
 
@@ -148,14 +146,11 @@ func init() {
 
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("cluster")
+	_ = SubmitCmd.MarkFlagRequired("name")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	logging.Info("Executing gcluster job submit command...")
-
-	if err := validateImageFlags(); err != nil {
-		return err
-	}
 
 	affinity := map[string]string{}
 	if cpuAffinityStr != "" {
@@ -181,7 +176,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		OutputManifest:          outputManifest,
 		ProjectID:               projectID,
 		ClusterName:             clusterName,
-		ClusterLocation:         clusterLocation,
+		ClusterLocation:         location,
 		WorkloadName:            workloadName,
 		KueueQueueName:          kueueQueueName,
 		NumSlices:               numSlicesOrNodes,
@@ -206,11 +201,11 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := submitGKEJob(jobDef); err != nil {
-		return fmt.Errorf("failed to submit job to GKE cluster '%s' in location '%s': %w", clusterName, clusterLocation, err)
+		return fmt.Errorf("failed to submit job to GKE cluster '%s' in location '%s': %w", clusterName, location, err)
 	}
 
 	if outputManifest == "" {
-		printPantheonLinks(jobDef)
+		printConsoleLinks(jobDef)
 	}
 	return nil
 }
@@ -219,7 +214,7 @@ func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 	var vols []orchestrator.VolumeDefinition
 	for i, vStr := range vStrs {
 		idx := strings.LastIndex(vStr, ":")
-		if idx == -1 {
+		if idx <= 0 || idx == len(vStr)-1 {
 			return nil, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>", vStr)
 		}
 		src := vStr[:idx]
@@ -259,43 +254,42 @@ func validateImageFlags() error {
 }
 
 func submitGKEJob(jobDef orchestrator.JobDefinition) error {
-	gkeOrchestrator, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to initialize GKE orchestrator. Check if kubectl is configured and cluster '%s' is accessible: %v", jobDef.ClusterName, err)
-	}
-
 	if outputManifest == "" {
-		return gkeOrchestrator.SubmitJob(jobDef)
+		return orc.SubmitJob(jobDef)
 	}
 
-	fullImageName, err := gkeOrchestrator.BuildContainerImage(jobDef.ProjectID, jobDef.BaseImage, jobDef.BuildContext, jobDef.Platform, jobDef.ImageName)
+	fullImageName, err := orc.BuildContainerImage(jobDef)
 	if err != nil {
 		return fmt.Errorf("failed to build container image: %v", err)
 	}
 
 	var manifestContent string
 	if jobDef.IsPathwaysJob {
-		manifestContent, err = gkeOrchestrator.GeneratePathwaysManifest(jobDef, fullImageName)
+		manifestContent, err = orc.GeneratePathwaysManifest(jobDef, fullImageName)
 		if err != nil {
 			return fmt.Errorf("failed to generate pathways manifest: %v", err)
 		}
 	} else {
-		manifestOpts, profile, err := gkeOrchestrator.PrepareManifestOptions(jobDef, fullImageName)
+		manifestOpts, profile, err := orc.PrepareManifestOptions(jobDef, fullImageName)
 		if err != nil {
 			return fmt.Errorf("failed to prepare manifest options: %v", err)
 		}
-		manifestContent, err = gkeOrchestrator.GenerateGKEManifest(manifestOpts, profile)
+		manifestContent, err = orc.GenerateGKEManifest(manifestOpts, profile)
 
 		if err != nil {
 			return fmt.Errorf("failed to generate GKE manifest: %v", err)
 		}
 	}
-	return gkeOrchestrator.ApplyManifest(manifestContent, outputManifest, jobDef.WorkloadName)
+	return orc.ApplyManifest(manifestContent, outputManifest, jobDef.WorkloadName)
 }
 
-func printPantheonLinks(job orchestrator.JobDefinition) {
+func printConsoleLinks(job orchestrator.JobDefinition) {
+	jobName := job.WorkloadName + "-main-job-0"
+	if job.IsPathwaysJob {
+		jobName = job.WorkloadName + "-pathways-head-0"
+	}
 	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/default/%s/details?project=%s",
-		job.ClusterLocation, job.ClusterName, job.WorkloadName, job.ProjectID)
+		job.ClusterLocation, job.ClusterName, jobName, job.ProjectID)
 
 	logging.Info("Follow your workload details here: %s", gkeLink)
 

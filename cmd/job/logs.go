@@ -40,14 +40,9 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 	jobName := args[0]
 	logging.Info("Fetching logs for job %s...", jobName)
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.LogsOptions{
 		ClusterName:     clusterName,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 		ProjectID:       projectID,
 		Follow:          follow,
 	}

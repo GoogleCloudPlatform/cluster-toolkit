@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"hpc-toolkit/pkg/shell"
 	"testing"
 )
 
@@ -44,6 +45,16 @@ func TestResolveMachineName(t *testing.T) {
 			acceleratorType: "nvidia-l4",
 			wantMachineName: "nvidia-l4", // Default fallthrough if neither matches
 		},
+		{
+			name:            "TPU7 shorthand mapping",
+			acceleratorType: "tpu7",
+			wantMachineName: "tpu7-standard-1t",
+		},
+		{
+			name:            "TPU7x shorthand mapping",
+			acceleratorType: "tpu7x",
+			wantMachineName: "tpu7x-standard-4t",
+		},
 	}
 
 	g := &GKEOrchestrator{}
@@ -55,5 +66,33 @@ func TestResolveMachineName(t *testing.T) {
 				t.Errorf("resolveMachineName() = %v, want %v", got, tt.wantMachineName)
 			}
 		})
+	}
+}
+
+func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe tpu7 --zone=europe-west2-a": {
+			{ExitCode: 1, Stderr: "resource not found"},
+		},
+		"gcloud compute machine-types describe tpu7 --zone=europe-west2-c": {
+			{ExitCode: 1, Stderr: "resource not found"},
+		},
+		"gcloud compute machine-types describe tpu7 --zone=europe-west2-b": {
+			{ExitCode: 1, Stderr: "resource not found"},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	g := &GKEOrchestrator{executor: mockExec}
+	g.clusterZones = []string{"europe-west2-a", "europe-west2-c", "europe-west2-b"}
+
+	_, err := g.FetchMachineCapacity("tpu7", "europe-west2")
+
+	if err == nil {
+		t.Fatalf("Expected error, got nil")
+	}
+
+	expectedErrStr := "failed to fetch machine capacity for tpu7: tried in all candidate zones [europe-west2-a europe-west2-c europe-west2-b] but did not find machine type in any of them"
+	if err.Error() != expectedErrStr {
+		t.Errorf("Expected error %q, got %q", expectedErrStr, err.Error())
 	}
 }

@@ -16,6 +16,7 @@ package job
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
@@ -24,25 +25,28 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/oauth2/google"
 )
 
 const (
-	stateFileName  = "prereq_state.json"
-	stateDirName   = ".gcluster-job"
+	stateFileName  = "job_prereq_state.json"
+	stateDirName   = ".gcluster"
 	stateFreshness = 24 * time.Hour // State is considered fresh for 24 hours
 )
 
 // PrereqState holds the current state of prerequisite checks.
 type PrereqState struct {
-	GCloudSDKInstalled         bool      `json:"gcloud_sdk_installed"`
-	GCloudProjectConfigured    bool      `json:"gcloud_project_configured"`
-	GCloudAuthenticated        bool      `json:"gcloud_authenticated"`
-	ADCConfigured              bool      `json:"adc_configured"`
-	KubectlInstalled           bool      `json:"kubectl_installed"`
-	DockerCredsConfigured      bool      `json:"docker_creds_configured"`
-	ArtifactRegistryAPIEnabled bool      `json:"artifact_registry_api_enabled"`
-	LastCheckedProjectID       string    `json:"last_checked_project_id"`
-	LastCheckedTimestamp       time.Time `json:"last_checked_timestamp"`
+	GCloudSDKInstalled           bool      `json:"gcloud_sdk_installed"`
+	GCloudProjectConfigured      bool      `json:"gcloud_project_configured"`
+	GCloudAuthenticated          bool      `json:"gcloud_authenticated"`
+	ADCConfigured                bool      `json:"adc_configured"`
+	KubectlInstalled             bool      `json:"kubectl_installed"`
+	GKEGCloudAuthPluginInstalled bool      `json:"gke_gcloud_auth_plugin_installed"`
+	DockerCredsConfigured        bool      `json:"docker_creds_configured"`
+	ArtifactRegistryAPIEnabled   bool      `json:"artifact_registry_api_enabled"`
+	LastCheckedProjectID         string    `json:"last_checked_project_id"`
+	LastCheckedTimestamp         time.Time `json:"last_checked_timestamp"`
 }
 
 // stateFilePath returns the full path to the prerequisite state file.
@@ -74,6 +78,7 @@ func savePrereqState(state PrereqState) {
 
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		logging.Error("Failed to write prerequisite state to %s: %v", filePath, err)
+		return
 	}
 	logging.Info("Prerequisite state saved to %s", filePath)
 }
@@ -88,9 +93,7 @@ func loadPrereqState() PrereqState {
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			logging.Info("Prerequisite state file not found at %s. Starting with fresh state.", filePath)
-		} else {
+		if !os.IsNotExist(err) {
 			logging.Error("Failed to read prerequisite state from %s: %v", filePath, err)
 		}
 		return PrereqState{}
@@ -101,7 +104,6 @@ func loadPrereqState() PrereqState {
 		logging.Error("Failed to unmarshal prerequisite state from %s: %v. Starting with fresh state.", filePath, err)
 		return PrereqState{}
 	}
-	logging.Info("Prerequisite state loaded from %s", filePath)
 	return state
 }
 
@@ -109,66 +111,28 @@ func loadPrereqState() PrereqState {
 // or if the project ID has changed.
 func isStateStale(state PrereqState, currentProjectID string) bool {
 	if time.Since(state.LastCheckedTimestamp) > stateFreshness {
-		logging.Info("Prerequisite state is stale (older than %s). Re-running checks.", stateFreshness.String())
 		return true
 	}
 	if state.LastCheckedProjectID != currentProjectID {
-		logging.Info("Project ID changed from '%s' to '%s'. Re-running checks.", state.LastCheckedProjectID, currentProjectID)
 		return true
 	}
-	logging.Info("Prerequisite state is fresh for project %s.", currentProjectID)
 	return false
 }
 
 // ensureGCloudSDKInstalled checks if gcloud SDK is installed and available in PATH.
 func ensureGCloudSDKInstalled() error {
-	logging.Info("Checking for Google Cloud SDK installation...")
 	result := shell.ExecuteCommand("gcloud", "version")
 	if result.ExitCode != 0 {
 		logging.Error("Google Cloud SDK not found or not configured correctly. Please install it from https://cloud.google.com/sdk/docs/install and ensure it's in your PATH.")
 		return fmt.Errorf("gcloud SDK not found: %s", result.Stderr)
 	}
-	logging.Info("Google Cloud SDK is installed.")
 	return nil
 }
 
 // ensureGCloudProjectConfigured checks and configures the default gcloud project.
 func ensureGCloudProjectConfigured(projectID *string) error {
-	logging.Info("Checking Google Cloud project configuration...")
-	if *projectID == "" {
-		logging.Info("Google Cloud project ID not provided via --project flag.")
-		result := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
-		if result.ExitCode != 0 {
-			logging.Info("No default gcloud project configured.")
-		} else {
-			configuredProject := strings.TrimSpace(result.Stdout)
-			if configuredProject != "" {
-				logging.Info("Using project ID from gcloud configuration: %s", configuredProject)
-				*projectID = configuredProject
-				return nil
-			}
-		}
-
-		// Prompt user for project ID
-		fmt.Print("Please enter your Google Cloud Project ID: ")
-		reader := bufio.NewReader(os.Stdin)
-		inputProjectID, _ := reader.ReadString('\n')
-		inputProjectID = strings.TrimSpace(inputProjectID)
-
-		if inputProjectID == "" {
-			return fmt.Errorf("Google Cloud Project ID is required")
-		}
-
-		logging.Info("Setting gcloud default project to: %s", inputProjectID)
-		setResult := shell.ExecuteCommand("gcloud", "config", "set", "project", inputProjectID)
-		if setResult.ExitCode != 0 {
-			return fmt.Errorf("failed to set gcloud project to %s: %s", inputProjectID, setResult.Stderr)
-		}
-		*projectID = inputProjectID
-		logging.Info("Google Cloud project set to: %s", *projectID)
-	} else {
+	if *projectID != "" {
 		logging.Info("Using provided project ID: %s", *projectID)
-		// Ensure the provided projectID is actually set as current project, as many gcloud commands rely on this implicit value.
 		currentProjectResult := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
 		if currentProjectResult.ExitCode != 0 || strings.TrimSpace(currentProjectResult.Stdout) != *projectID {
 			logging.Info("Setting gcloud default project to provided project ID: %s", *projectID)
@@ -177,69 +141,158 @@ func ensureGCloudProjectConfigured(projectID *string) error {
 				return fmt.Errorf("failed to set gcloud project to %s: %s", *projectID, setResult.Stderr)
 			}
 		}
+		return nil
 	}
+
+	logging.Info("Google Cloud project ID not provided via --project flag.")
+	result := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
+	configuredProject := strings.TrimSpace(result.Stdout)
+	if result.ExitCode == 0 && configuredProject != "" {
+		logging.Info("Using project ID from gcloud configuration: %s", configuredProject)
+		*projectID = configuredProject
+		return nil
+	}
+
+	logging.Info("No default gcloud project configured.")
+
+	fmt.Print("Please enter your Google Cloud Project ID: ")
+	reader := bufio.NewReader(os.Stdin)
+	inputProjectID, _ := reader.ReadString('\n')
+	inputProjectID = strings.TrimSpace(inputProjectID)
+
+	if inputProjectID == "" {
+		return fmt.Errorf("Google Cloud Project ID is required")
+	}
+
+	logging.Info("Setting gcloud default project to: %s", inputProjectID)
+	setResult := shell.ExecuteCommand("gcloud", "config", "set", "project", inputProjectID)
+	if setResult.ExitCode != 0 {
+		return fmt.Errorf("failed to set gcloud project to %s: %s", inputProjectID, setResult.Stderr)
+	}
+	*projectID = inputProjectID
+	logging.Info("Google Cloud project set to: %s", *projectID)
+
 	return nil
 }
 
 // ensureGCloudAuthenticated checks if gcloud is authenticated.
 func ensureGCloudAuthenticated() error {
-	logging.Info("Checking gcloud user authentication...")
 	result := shell.ExecuteCommand("gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
 	if result.ExitCode != 0 || strings.TrimSpace(result.Stdout) == "" {
 		logging.Error("gcloud is not authenticated. Please run 'gcloud auth login' manually in your terminal to complete the authentication process.")
 		return fmt.Errorf("gcloud user authentication required")
-	} else {
-		logging.Info("gcloud is authenticated as: %s", strings.TrimSpace(result.Stdout))
 	}
 	return nil
 }
 
 // ensureApplicationDefaultCredentials checks and configures Application Default Credentials.
 func ensureApplicationDefaultCredentials() error {
-	logging.Info("Checking Application Default Credentials (ADC)...")
-	result := shell.ExecuteCommand("gcloud", "auth", "application-default", "print-access-token")
-	if result.ExitCode != 0 {
+	creds, err := google.FindDefaultCredentials(context.Background(), "https://www.googleapis.com/auth/cloud-platform")
+	if err != nil {
 		logging.Error("Application Default Credentials (ADC) are not configured. Please run 'gcloud auth application-default login' manually in your terminal to complete the authentication process.")
-		return fmt.Errorf("Application Default Credentials required")
-	} else {
-		logging.Info("Application Default Credentials are configured.")
+		return fmt.Errorf("Application Default Credentials required: %w", err)
 	}
+
+	// Force token retrieval to verify validity
+	_, err = creds.TokenSource.Token()
+	if err != nil {
+		logging.Error("Failed to retrieve valid token from ADC. Your credentials may have expired. Please run 'gcloud auth application-default login' manually in your terminal.")
+		return fmt.Errorf("ADC token invalid: %w", err)
+	}
+
 	return nil
 }
 
 // ensureKubectlInstalled checks and installs kubectl component.
-func ensureKubectlInstalled() error {
-	logging.Info("Checking kubectl installation...")
+func ensureKubectlInstalled(useAptFallback *bool) error {
 	result := shell.ExecuteCommand("kubectl", "version", "--client", "--output=json")
-	if result.ExitCode != 0 {
+	if result.ExitCode == 0 {
+		return nil
+	}
+
+	if !*useAptFallback {
 		logging.Info("kubectl not found. Attempting to install via gcloud components.")
-		if !askForConfirmation("Do you want to install 'kubectl' via 'gcloud components install kubectl'?") {
+		if !shell.PromptYesNo("Do you want to install 'kubectl' via 'gcloud components install kubectl'?") {
 			return fmt.Errorf("kubectl installation required but declined by user")
 		}
 
 		installResult := shell.ExecuteCommand("gcloud", "components", "install", "kubectl", "--quiet")
-		if installResult.ExitCode != 0 {
-			// Check if the error suggests apt-get
-			if strings.Contains(installResult.Stderr, "sudo apt-get install kubectl") ||
-				strings.Contains(installResult.Stderr, "component manager is disabled") {
-				logging.Error("gcloud components install kubectl failed: %s", installResult.Stderr)
-				if askForConfirmation("gcloud components install kubectl failed. Do you want to try 'sudo apt-get install kubectl' as a fallback?") {
-					aptInstallResult := shell.ExecuteCommand("sudo", "apt-get", "install", "kubectl", "--quiet")
-					if aptInstallResult.ExitCode != 0 {
-						return fmt.Errorf("failed to install kubectl via apt-get: %s", aptInstallResult.Stderr)
-					}
-					logging.Info("kubectl installed successfully via apt-get.")
-					return nil
-				}
+		if installResult.ExitCode == 0 {
+			logging.Info("kubectl installed successfully via gcloud components.")
+			return nil
+		}
+
+		logging.Error("gcloud components install kubectl failed: %s", installResult.Stderr)
+
+		if strings.Contains(installResult.Stderr, "sudo apt-get install kubectl") ||
+			strings.Contains(installResult.Stderr, "component manager is disabled") {
+
+			if !shell.PromptYesNo("gcloud components install kubectl failed. Do you want to try 'sudo apt-get install kubectl' as a fallback?") {
 				return fmt.Errorf("kubectl installation required but declined apt-get fallback by user")
 			}
+			*useAptFallback = true
+		} else {
 			return fmt.Errorf("failed to install kubectl via gcloud components: %s", installResult.Stderr)
 		}
-		logging.Info("kubectl installed successfully via gcloud components.")
-	} else {
-		logging.Info("kubectl is installed.")
 	}
-	return nil
+
+	if *useAptFallback {
+		logging.Info("Attempting to install kubectl via apt-get.")
+		aptInstallResult := shell.ExecuteCommand("sudo", "apt-get", "install", "kubectl", "--quiet")
+		if aptInstallResult.ExitCode != 0 {
+			return fmt.Errorf("failed to install kubectl via apt-get: %s", aptInstallResult.Stderr)
+		}
+		logging.Info("kubectl installed successfully via apt-get.")
+		return nil
+	}
+
+	return fmt.Errorf("failed to install kubectl")
+}
+
+func ensureGKEGCloudAuthPluginInstalled(useAptFallback *bool) error {
+	result := shell.ExecuteCommand("gke-gcloud-auth-plugin", "--version")
+	if result.ExitCode == 0 {
+		return nil
+	}
+
+	logging.Info("gke-gcloud-auth-plugin not found. Attempting to install.")
+
+	if !*useAptFallback {
+		if !shell.PromptYesNo("Do you want to install 'gke-gcloud-auth-plugin' via 'gcloud components install gke-gcloud-auth-plugin'?") {
+			return fmt.Errorf("gke-gcloud-auth-plugin installation required but declined by user")
+		}
+
+		installResult := shell.ExecuteCommand("gcloud", "components", "install", "gke-gcloud-auth-plugin", "--quiet")
+		if installResult.ExitCode == 0 {
+			logging.Info("gke-gcloud-auth-plugin installed successfully via gcloud components.")
+			return nil
+		}
+
+		logging.Error("gcloud components install gke-gcloud-auth-plugin failed: %s", installResult.Stderr)
+
+		if strings.Contains(installResult.Stderr, "sudo apt-get install") ||
+			strings.Contains(installResult.Stderr, "component manager is disabled") {
+
+			if !shell.PromptYesNo("gcloud components install gke-gcloud-auth-plugin failed. Do you want to try 'sudo apt-get install google-cloud-sdk-gke-gcloud-auth-plugin' as a fallback?") {
+				return fmt.Errorf("gke-gcloud-auth-plugin installation required but declined apt-get fallback by user")
+			}
+			*useAptFallback = true
+		} else {
+			return fmt.Errorf("failed to install gke-gcloud-auth-plugin via gcloud components: %s", installResult.Stderr)
+		}
+	}
+
+	if *useAptFallback {
+		logging.Info("Attempting to install gke-gcloud-auth-plugin via apt-get.")
+		aptInstallResult := shell.ExecuteCommand("sudo", "apt-get", "install", "google-cloud-sdk-gke-gcloud-auth-plugin", "--quiet")
+		if aptInstallResult.ExitCode != 0 {
+			return fmt.Errorf("failed to install gke-gcloud-auth-plugin via apt-get: %s", aptInstallResult.Stderr)
+		}
+		logging.Info("gke-gcloud-auth-plugin installed successfully via apt-get.")
+		return nil
+	}
+
+	return fmt.Errorf("failed to install gke-gcloud-auth-plugin")
 }
 
 // configureDockerCredentialHelper configures Docker to authenticate to Google Container Registry and Artifact Registry.
@@ -253,16 +306,12 @@ func configureDockerCredentialHelper() error {
 	if usCentral1Result.ExitCode != 0 {
 		return fmt.Errorf("failed to configure Docker for us-central1-docker.pkg.dev: %s", usCentral1Result.Stderr)
 	}
-	logging.Info("Docker credential helper configured for Google registries.")
 	return nil
 }
 
 // ensureArtifactRegistryAPIEnabled checks and enables the Artifact Registry API.
 func ensureArtifactRegistryAPIEnabled(projectID string) error {
-	if projectID == "" {
-		return fmt.Errorf("cannot check/enable Artifact Registry API: project ID is not set")
-	}
-	logging.Info("Checking Artifact Registry API status for project %s...", projectID)
+
 	result := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
 	if result.ExitCode != 0 {
 		return fmt.Errorf("failed to check Artifact Registry API status: %s", result.Stderr)
@@ -271,7 +320,7 @@ func ensureArtifactRegistryAPIEnabled(projectID string) error {
 	state := strings.TrimSpace(result.Stdout)
 	if state != "ENABLED" {
 		logging.Info("Artifact Registry API is not enabled for project %s. Attempting to enable it.", projectID)
-		if !askForConfirmation(fmt.Sprintf("Do you want to enable 'artifactregistry.googleapis.com' for project %s?", projectID)) {
+		if !shell.PromptYesNo(fmt.Sprintf("Do you want to enable 'artifactregistry.googleapis.com' for project %s?", projectID)) {
 			return fmt.Errorf("Artifact Registry API enabling required but declined by user")
 		}
 		enableResult := shell.ExecuteCommand("gcloud", "services", "enable", "artifactregistry.googleapis.com", "--project", projectID, "--quiet")
@@ -281,33 +330,6 @@ func ensureArtifactRegistryAPIEnabled(projectID string) error {
 		logging.Info("Artifact Registry API enabled successfully.")
 	} else {
 		logging.Info("Artifact Registry API is already enabled.")
-	}
-	return nil
-}
-
-// askForConfirmation prompts the user for a yes/no confirmation.
-func askForConfirmation(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Printf("%s (y/n): ", prompt)
-		response, _ := reader.ReadString('\n')
-		response = strings.ToLower(strings.TrimSpace(response))
-		if response == "y" || response == "yes" {
-			return true
-		} else if response == "n" || response == "no" {
-			return false
-		} else {
-			fmt.Println("Invalid input. Please enter 'y' or 'n'.")
-		}
-	}
-}
-
-func checkGCloudSDK(newState *PrereqState) error {
-	if !newState.GCloudSDKInstalled {
-		if err := ensureGCloudSDKInstalled(); err != nil {
-			return err
-		}
-		newState.GCloudSDKInstalled = true
 	}
 	return nil
 }
@@ -329,51 +351,19 @@ func checkGCloudProject(newState *PrereqState, projectID *string) error {
 	return nil
 }
 
-func checkGCloudAuthenticated(newState *PrereqState) error {
-	if !newState.GCloudAuthenticated {
-		if err := ensureGCloudAuthenticated(); err != nil {
+func checkAndConfigure(flag *bool, action func() error) error {
+	if !*flag {
+		if err := action(); err != nil {
 			return err
 		}
-		newState.GCloudAuthenticated = true
-	}
-	return nil
-}
-
-func checkADCConfigured(newState *PrereqState) error {
-	if !newState.ADCConfigured {
-		if err := ensureApplicationDefaultCredentials(); err != nil {
-			return err
-		}
-		newState.ADCConfigured = true
-	}
-	return nil
-}
-
-func checkKubectlInstalled(newState *PrereqState) error {
-	if !newState.KubectlInstalled {
-		if err := ensureKubectlInstalled(); err != nil {
-			return err
-		}
-		newState.KubectlInstalled = true
-	}
-	return nil
-}
-
-func checkDockerCredsConfigured(newState *PrereqState) error {
-	if !newState.DockerCredsConfigured {
-		if err := configureDockerCredentialHelper(); err != nil {
-			return err
-		}
-		newState.DockerCredsConfigured = true
+		*flag = true
 	}
 	return nil
 }
 
 func checkArtifactRegistryAPIEnabled(newState *PrereqState, projectID *string) error {
 	if !newState.ArtifactRegistryAPIEnabled {
-		if *projectID == "" {
-			return fmt.Errorf("project ID is not set after configuration, cannot enable Artifact Registry API")
-		}
+
 		if err := ensureArtifactRegistryAPIEnabled(*projectID); err != nil {
 			return err
 		}
@@ -382,52 +372,87 @@ func checkArtifactRegistryAPIEnabled(newState *PrereqState, projectID *string) e
 	return nil
 }
 
+func resolveProjectID(projectID *string) string {
+	if *projectID != "" {
+		return *projectID
+	}
+	projectResult := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
+	if projectResult.ExitCode == 0 {
+		return strings.TrimSpace(projectResult.Stdout)
+	}
+	return ""
+}
+
+func logPrereqStatus(state PrereqState) {
+	var found []string
+	if state.GCloudSDKInstalled {
+		found = append(found, "gcloud")
+	}
+	if state.KubectlInstalled {
+		found = append(found, "kubectl")
+	}
+	if state.ADCConfigured {
+		found = append(found, "ADC")
+	}
+
+	if len(found) > 0 {
+		logging.Info("%s are in place.", strings.Join(found, ", "))
+	}
+}
+
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
-func EnsurePrerequisites(projectID *string) error {
+func ensurePrerequisites(projectID *string) error {
 	if os.Getenv("GCLUSTER_SKIP_PREREQ_CHECKS") == "true" {
 		logging.Info("Skipping prerequisite checks due to GCLUSTER_SKIP_PREREQ_CHECKS environment variable.")
 		return nil
 	}
 
+	logging.Info("Running prerequisite checks for 'gcluster job submit'...")
+
 	state := loadPrereqState()
 	newState := state
 
-	var actualProjectID string
-	if *projectID != "" {
-		actualProjectID = *projectID
-	} else {
-		projectResult := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
-		if projectResult.ExitCode == 0 {
-			actualProjectID = strings.TrimSpace(projectResult.Stdout)
-		}
-	}
+	actualProjectID := resolveProjectID(projectID)
 
 	if isStateStale(state, actualProjectID) {
-		logging.Info("State is stale or project changed, re-running all prerequisite checks.")
 		newState = PrereqState{}
-	} else {
-		logging.Info("Prerequisite state is fresh, skipping already completed checks.")
 	}
 
-	checks := []func(*PrereqState, *string) error{
-		func(ns *PrereqState, pID *string) error { return checkGCloudSDK(ns) },
-		func(ns *PrereqState, pID *string) error { return checkGCloudProject(ns, pID) },
-		func(ns *PrereqState, pID *string) error { return checkGCloudAuthenticated(ns) },
-		func(ns *PrereqState, pID *string) error { return checkADCConfigured(ns) },
-		func(ns *PrereqState, pID *string) error { return checkKubectlInstalled(ns) },
-		func(ns *PrereqState, pID *string) error { return checkDockerCredsConfigured(ns) },
-		func(ns *PrereqState, pID *string) error { return checkArtifactRegistryAPIEnabled(ns, pID) },
-	}
+	var useAptFallback bool
 
-	for _, check := range checks {
-		if err := check(&newState, projectID); err != nil {
-			return err
-		}
+	if err := checkAndConfigure(&newState.GCloudSDKInstalled, ensureGCloudSDKInstalled); err != nil {
+		return err
+	}
+	if err := checkGCloudProject(&newState, projectID); err != nil {
+		return err
+	}
+	if err := checkAndConfigure(&newState.GCloudAuthenticated, ensureGCloudAuthenticated); err != nil {
+		return err
+	}
+	if err := checkAndConfigure(&newState.ADCConfigured, ensureApplicationDefaultCredentials); err != nil {
+		return err
+	}
+	if err := checkAndConfigure(&newState.KubectlInstalled, func() error {
+		return ensureKubectlInstalled(&useAptFallback)
+	}); err != nil {
+		return err
+	}
+	if err := checkAndConfigure(&newState.GKEGCloudAuthPluginInstalled, func() error {
+		return ensureGKEGCloudAuthPluginInstalled(&useAptFallback)
+	}); err != nil {
+		return err
+	}
+	if err := checkAndConfigure(&newState.DockerCredsConfigured, configureDockerCredentialHelper); err != nil {
+		return err
+	}
+	if err := checkArtifactRegistryAPIEnabled(&newState, projectID); err != nil {
+		return err
 	}
 
 	newState.LastCheckedTimestamp = time.Now()
 	newState.LastCheckedProjectID = *projectID
 	savePrereqState(newState)
+	logPrereqStatus(newState)
 
 	return nil
 }
