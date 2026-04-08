@@ -40,7 +40,7 @@ locals {
   default_sa_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
   sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
-  # additional VPCs enable multi networking 
+  # additional VPCs enable multi networking
   derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
@@ -64,8 +64,6 @@ locals {
     "WORKLOADS"
   ]
 }
-
-
 
 data "google_project" "project" {
   project_id = var.project_id
@@ -137,7 +135,10 @@ resource "google_container_cluster" "gke_cluster" {
   enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
-    enabled             = false
+    # Controls auto provisioning of node-pools
+    enabled = false
+
+    # Controls autoscaling algorithm of node-pools
     autoscaling_profile = var.autoscaling_profile
   }
 
@@ -260,13 +261,6 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
-  node_config {
-    shielded_instance_config {
-      enable_secure_boot          = var.system_node_pool_enable_secure_boot
-      enable_integrity_monitoring = true
-    }
-  }
-
   dynamic "node_pool_defaults" {
     for_each = var.enable_gcfs ? [1] : []
     content {
@@ -275,6 +269,13 @@ resource "google_container_cluster" "gke_cluster" {
           enabled = true
         }
       }
+    }
+  }
+
+  node_config {
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
     }
   }
 

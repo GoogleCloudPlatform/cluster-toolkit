@@ -41,7 +41,6 @@ locals {
     for k, v in local.accelerators_json.tpus : k => v.count
   }
 
-
   # Robustly extract the machine family prefix (e.g., "ct6e").
   tpu_machine_family   = local.is_tpu ? element(split("-", var.machine_type), 0) : ""
   tpu_accelerator_type = local.is_tpu ? lookup(local.tpu_accelerator_map, local.tpu_machine_family, null) : null
