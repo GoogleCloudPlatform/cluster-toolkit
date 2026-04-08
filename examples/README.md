@@ -702,7 +702,6 @@ To destroy the cluster,Run below command:
 ```
 
 [pfs-managed-lustre-slurm.yaml]: ./pfs-managed-lustre-slurm.yaml
-
 ### [rapid-storage-slurm.yaml] ![core-badge]
 
 This blueprint showcases the integration of several storage solutions:

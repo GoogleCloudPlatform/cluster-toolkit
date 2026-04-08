@@ -36,7 +36,8 @@ import (
 )
 
 const (
-	maxHintDist int = 3 // Maximum Levenshtein distance where we suggest a hint
+	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
+	latestToolkitVersion     = "v1.86.0"
 )
 
 // map[moved module path]replacing module path
@@ -84,6 +85,10 @@ func (g *Group) Clone() Group {
 		c.Modules[i] = m.Clone()
 	}
 	return c
+}
+
+func GetToolkitVersion() string {
+	return latestToolkitVersion
 }
 
 // ModuleIndex returns the index of the input module in the group

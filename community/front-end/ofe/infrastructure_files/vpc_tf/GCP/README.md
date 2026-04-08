@@ -16,7 +16,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.54 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 3.83 |
@@ -25,7 +25,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.54 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 3.83 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 3.0 |
@@ -37,7 +37,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_global_address) | resource |
 | [google_compute_firewall.firewall_allow_ssh](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_compute_firewall.firewall_internal](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
@@ -51,13 +51,13 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_project"></a> [project](#input\_project) | Project in which the VPC will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region where Cloud NAT and Cloud Router will be configured. | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | Name of the created VPC |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
