@@ -26,11 +26,11 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
-    family: $(vars.final_image_family)-u24
+    family: $(vars.final_image_family)
     project: $(vars.project_id)
   enable_login_public_ips: true
   enable_controller_public_ips: true
@@ -153,20 +153,44 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
+      - type: ansible-local
+        destination: update-gvnic.yml
+        content: |
+          ---
+          - name: Install updated gVNIC driver from GitHub
+            hosts: all
+            become: true
+            vars:
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+            - name: Download gVNIC package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install updated gVNIC
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |
           #!/bin/bash
           set -ex -o pipefail
-          # 1. Install the specific compatible versions without the virtual libnvsdm package
+          add-nvidia-repositories -y
+          apt update -y
           apt install -y \
               cuda-toolkit-12-8 \
               nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.3-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.3-1 \
-              datacenter-gpu-manager-4-core=1:4.5.3-1
+              datacenter-gpu-manager-4-cuda12=1:4.5.2-1 \
+              datacenter-gpu-manager-4-dev=1:4.5.2-1 \
+              datacenter-gpu-manager-4-core=1:4.5.2-1
 
-          # 2. Hold the packages to prevent accidental updates
+          # 2. Hold ALL components
           apt-mark hold \
               datacenter-gpu-manager-4-cuda12 \
               datacenter-gpu-manager-4-dev \
@@ -317,15 +341,6 @@ deployment_groups:
           apt-get install --assume-yes google-cloud-cli
           # Clean up the bash executable hash for subsequent steps using gsutil
           hash -r
-      - type: shell
-        destination: stop_packer_early.sh
-        content: |
-          #!/bin/bash
-          # Signal Packer to finish using the clean short hostname
-          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          LOG_DEST=`curl -s -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null`
-          if [ -n "\$LOG_DEST" ]; then rm -f "\$LOG_DEST"; fi
-          gcloud compute instances add-metadata `hostname -s` --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: slurm-build
   modules:

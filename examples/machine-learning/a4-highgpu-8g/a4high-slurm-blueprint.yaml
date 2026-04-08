@@ -152,77 +152,74 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-      - type: shell
-        destination: install-cuda-toolkit.sh
-        content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          apt update -y
-          apt install -y \
-              cuda-toolkit-12-8 \
-              nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.3-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.3-1 \
-              datacenter-gpu-manager-4-core=1:4.5.3-1
-
-          # 2. Hold the packages to prevent accidental updates
-          apt-mark hold \
-              datacenter-gpu-manager-4-cuda12 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
       - type: ansible-local
-        destination: configure_cuda_dcgm.yml
+        destination: install_cuda_and_dcgm.yml
         content: |
           ---
-          - name: CUDA and DGMA settings
+          - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
             vars:
-              enable_nvidia_dcgm: false
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
+              nvidia_packages:
+                - cuda-toolkit-13-0
+                - datacenter-gpu-manager-4-cuda13
+                - datacenter-gpu-manager-4-dev
+                - datacenter-gpu-manager-4-core
             tasks:
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
-            - name: Create nvidia-persistenced override directory
-              ansible.builtin.file:
-                path: /etc/systemd/system/nvidia-persistenced.service.d
-                state: directory
-                owner: root
-                group: root
-                mode: 0o755
-            - name: Configure nvidia-persistenced override
-              ansible.builtin.copy:
-                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
-                owner: root
-                group: root
-                mode: 0o644
-                content: |
-                  [Service]
-                  ExecStart=
-                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
-              notify: Reload SystemD
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: "{{ cuda_repo_url }}"
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install NVIDIA packages
+                ansible.builtin.apt:
+                  name: "{{ item }}"
+                  state: present
+                  allow_downgrade: yes
+                loop: "{{ nvidia_packages }}"
+
+              - name: Freeze NVIDIA packages
+                ansible.builtin.dpkg_selections:
+                  name: "{{ item }}"
+                  selection: hold
+                loop: "{{ nvidia_packages }}"
+
+              - name: Create nvidia-persistenced override directory
+                ansible.builtin.file:
+                  path: /etc/systemd/system/nvidia-persistenced.service.d
+                  state: directory
+                  mode: 0o755
+
+              - name: Configure nvidia-persistenced override
+                ansible.builtin.copy:
+                  dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                  mode: 0o644
+                  content: |
+                    [Service]
+                    ExecStart=
+                    ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+                notify: Reload SystemD
+
             handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
+              - name: Reload SystemD
+                ansible.builtin.systemd:
+                  daemon_reload: true
+
             post_tasks:
-            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
-              ansible.builtin.service:
-                name: nvidia-dcgm.service
-                state: stopped
-                enabled: "{{ enable_nvidia_dcgm }}"
-            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
-              ansible.builtin.service:
-                name: nvidia-persistenced.service
-                state: stopped
-                enabled: false
+              - name: Disable NVIDIA services by default (Slurm starts them on boot)
+                ansible.builtin.service:
+                  name: "{{ item }}"
+                  state: stopped
+                  enabled: false
+                loop:
+                  - nvidia-dcgm.service
+                  - nvidia-persistenced.service
 
       - type: ansible-local
         destination: install_ibverbs_utils.yml
@@ -475,6 +472,18 @@ deployment_groups:
       - $(gcs_training_data.mount_runner)
       - $(gcs_model_serving.client_install_runner)
       - $(gcs_model_serving.mount_runner)
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Fix Ubuntu 24.04 AppArmor restriction on unprivileged user namespaces
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            echo 0 > /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          # 2. Ensure /etc/hostname exists (required by enroot-mount)
+          if [ ! -f /etc/hostname ]; then
+            hostname > /etc/hostname
+          fi
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -492,9 +501,6 @@ deployment_groups:
             hosts: all
             become: true
             tasks:
-            - name: Update apt cache
-              ansible.builtin.apt:
-                update_cache: yes
             - name: Install Linux Modules Extra
               ansible.builtin.package:
                 name:
@@ -533,7 +539,7 @@ deployment_groups:
             - name: Install NCCL-GIB Plugin
               ansible.builtin.apt:
                 name: "nccl-gib=$(vars.nccl_gib_version)"
-                update_cache: true
+                update_cache: no
             - name: Freeze NCCL GIB Plugin
               ansible.builtin.dpkg_selections:
                 name: "nccl-gib"
