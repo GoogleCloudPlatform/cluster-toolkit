@@ -18,7 +18,7 @@ When prompted for project, use integration test project.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_external"></a> [external](#requirement\_external) | ~> 2.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
@@ -26,14 +26,14 @@ When prompted for project, use integration test project.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_external"></a> [external](#provider\_external) | ~> 2.3.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_daily_image_test_runner_schedule"></a> [daily\_image\_test\_runner\_schedule](#module\_daily\_image\_test\_runner\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_project_cleanup_filestore_schedule"></a> [daily\_project\_cleanup\_filestore\_schedule](#module\_daily\_project\_cleanup\_filestore\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_project_cleanup_schedule"></a> [daily\_project\_cleanup\_schedule](#module\_daily\_project\_cleanup\_schedule) | ./trigger-schedule | n/a |
@@ -44,7 +44,7 @@ When prompted for project, use integration test project.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_cloudbuild_trigger.daily_project_cleanup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_project_cleanup_filestore](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_project_cleanup_slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
@@ -65,7 +65,7 @@ When prompted for project, use integration test project.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
 | <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/cluster-toolkit"` | no |

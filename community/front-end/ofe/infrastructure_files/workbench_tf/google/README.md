@@ -16,7 +16,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.87.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.0 |
@@ -25,7 +25,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.87.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 2.0 |
 | <a name="provider_time"></a> [time](#provider\_time) | >= 0.7.2 |
@@ -33,7 +33,7 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_project_radlab_ds_analytics"></a> [project\_radlab\_ds\_analytics](#module\_project\_radlab\_ds\_analytics) | terraform-google-modules/project-factory/google | ~> 11.0 |
 | <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 3.0 |
 | <a name="module_waitforstartup"></a> [waitforstartup](#module\_waitforstartup) | ./wait-for-startup | n/a |
@@ -41,7 +41,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_instance_iam_member.oslogin_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_iam_member) | resource |
 | [google_notebooks_instance.ai_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/notebooks_instance) | resource |
 | [google_project_iam_member.sa_p_notebook_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
@@ -61,7 +61,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | Billing Account associated to the GCP Resources | `string` | `""` | no |
 | <a name="input_boot_disk_size_gb"></a> [boot\_disk\_size\_gb](#input\_boot\_disk\_size\_gb) | The size of the boot disk in GB attached to this instance | `number` | `100` | no |
 | <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Disk types for notebook instances | `string` | `"PD_SSD"` | no |
@@ -93,7 +93,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_deployment_id"></a> [deployment\_id](#output\_deployment\_id) | RADLab Module Deployment ID |
 | <a name="output_notebook_instance_name"></a> [notebook\_instance\_name](#output\_notebook\_instance\_name) | Notebook Instance Names |
 | <a name="output_notebook_proxy_uri"></a> [notebook\_proxy\_uri](#output\_notebook\_proxy\_uri) | Notebook Proxy URIs |

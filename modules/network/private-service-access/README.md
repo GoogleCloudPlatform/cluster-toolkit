@@ -74,7 +74,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.40 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -82,7 +82,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.40 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -93,7 +93,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_global_address) | resource |
 | [google_compute_network_peering_routes_config.private_vpc_peering_routes_gcnv](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network_peering_routes_config) | resource |
 | [google_service_networking_connection.private_vpc_connection](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_networking_connection) | resource |
@@ -102,7 +102,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_address"></a> [address](#input\_address) | The IP address or beginning of the address range allocated for the Private Service Access. | `string` | `null` | no |
 | <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | The policy to apply when deleting the Private Service Access. Leave empty or use ABANDON. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to supporting resources. Key-value pairs. | `map(string)` | n/a | yes |
@@ -114,7 +114,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_cidr_range"></a> [cidr\_range](#output\_cidr\_range) | CIDR range of the created google\_compute\_global\_address |
 | <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br/>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br/>blocks terraform actions until the VPC connection has been created. |
 | <a name="output_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#output\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection that was created by the service provider. |
