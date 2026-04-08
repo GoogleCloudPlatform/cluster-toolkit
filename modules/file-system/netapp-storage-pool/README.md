@@ -140,7 +140,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -148,7 +148,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.45.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -159,7 +159,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_netapp_storage_pool.netapp_storage_pool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/netapp_storage_pool) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [google_compute_network_peering.private_peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network_peering) | data source |
@@ -167,7 +167,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_active_directory_policy"></a> [active\_directory\_policy](#input\_active\_directory\_policy) | The ID of the Active Directory policy to apply to the storage pool in the format:<br/>`projects/<project_id>/locations/<location>/activeDirectoryPolicies/<policy_id>` | `string` | `null` | no |
 | <a name="input_allow_auto_tiering"></a> [allow\_auto\_tiering](#input\_allow\_auto\_tiering) | Whether to allow automatic tiering for the storage pool. | `bool` | `false` | no |
 | <a name="input_capacity_gib"></a> [capacity\_gib](#input\_capacity\_gib) | The capacity of the storage pool in GiB. | `number` | `2048` | no |
@@ -187,7 +187,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | Storage pool capacity in GiB. |
 | <a name="output_netapp_storage_pool_id"></a> [netapp\_storage\_pool\_id](#output\_netapp\_storage\_pool\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/storagePools/{{name}}` |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

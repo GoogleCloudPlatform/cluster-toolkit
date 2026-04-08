@@ -154,7 +154,7 @@ the network storage doc for a complete list of supported modules.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -172,7 +172,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g., nfs, lustre) | `string` | `"nfs"` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_managed_lustre_options"></a> [managed\_lustre\_options](#input\_managed\_lustre\_options) | Managed Lustre specific options:<br/>  gke\_support\_enabled (bool, default = false)<br/>Note: gke\_support\_enabled does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | <pre>object({<br/>    gke_support_enabled = optional(bool, false)<br/>  })</pre> | `{}` | no |
@@ -184,7 +184,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use file system. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner that mounts the file system. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a remote network storage to be mounted by fs-tab. |
