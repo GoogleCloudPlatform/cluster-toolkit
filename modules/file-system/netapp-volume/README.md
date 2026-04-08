@@ -148,14 +148,14 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.45.0 |
 
 ## Modules
@@ -165,13 +165,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_netapp_volume.netapp_volume](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/netapp_volume) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_capacity_gib"></a> [capacity\_gib](#input\_capacity\_gib) | The capacity of the volume in GiB. | `number` | `1024` | no |
 | <a name="input_description"></a> [description](#input\_description) | A description of the NetApp volume. | `string` | `""` | no |
 | <a name="input_export_policy_rules"></a> [export\_policy\_rules](#input\_export\_policy\_rules) | Define NFS export policy. | <pre>list(object({<br/>    allowed_clients = optional(string)<br/>    has_root_access = optional(bool, false)<br/>    access_type     = optional(string, "READ_WRITE")<br/>    nfsv3           = optional(bool)<br/>    nfsv4           = optional(bool)<br/>  }))</pre> | <pre>[<br/>  {<br/>    "access_type": "READ_WRITE",<br/>    "allowed_clients": "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",<br/>    "has_root_access": true<br/>  }<br/>]</pre> | no |
@@ -190,7 +190,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | Volume capacity in GiB. |
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
 | <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |

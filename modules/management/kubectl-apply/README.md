@@ -210,7 +210,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
@@ -221,7 +221,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 2.1 |
@@ -230,7 +230,7 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./helm_install | n/a |
 | <a name="module_install_asapd_lite"></a> [install\_asapd\_lite](#module\_install\_asapd\_lite) | ./helm_install | n/a |
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
@@ -243,7 +243,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [random_id.release_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [terraform_data.gib_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.initial_gib_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -256,7 +256,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
 | <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install              = optional(bool, false)<br/>    config_path          = optional(string, null)<br/>    config_template_vars = optional(map(any), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
