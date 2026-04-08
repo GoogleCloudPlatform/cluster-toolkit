@@ -586,9 +586,3 @@ variable "enable_slice_controller" {
   type        = bool
   default     = false
 }
-
-variable "enable_pathways_for_tpus" {
-  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
-  type        = bool
-  default     = false
-}
