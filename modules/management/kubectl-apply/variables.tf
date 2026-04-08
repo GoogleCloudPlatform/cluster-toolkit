@@ -111,6 +111,11 @@ variable "apply_manifests" {
     namespace        = optional(string, null)
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for m in var.apply_manifests : m.name == null || length(m.name) <= 44])
+    error_message = "The 'name' attribute in apply_manifests must not exceed 44 characters to ensure the final Helm release name fits within the 53-character limit."
+  }
 }
 
 

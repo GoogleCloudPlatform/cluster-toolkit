@@ -82,14 +82,20 @@ locals {
     (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
   }
 
-  # 4. Rebuild the map by populating the 'content' field for all manifests
-  processed_apply_manifests_map = tomap({
-    for index, manifest in local.enabled_manifests :
+  # Pre-calculate normalized names for each manifest
+  manifest_names = {
+    for index, manifest in local.enabled_manifests : index =>
     trim(replace(lower(
       (try(manifest.name, null) != null ? manifest.name :
         "${substr((manifest.source != null && manifest.source != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
       )
-      ), "/[^a-z0-9-]+/", "-"), "-") => {
+    ), "/[^a-z0-9-]+/", "-"), "-")
+  }
+
+  # 4. Rebuild the map by populating the 'content' field for all manifests
+  processed_apply_manifests_map = tomap({
+    for index, manifest in local.enabled_manifests :
+    local.manifest_names[index] => {
       content = (
         # Step A: Use the fetched body if it's a URL
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
