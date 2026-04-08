@@ -27,6 +27,8 @@ import (
 
 	"hpc-toolkit/pkg/shell"
 
+	"hpc-toolkit/pkg/logging"
+
 	"github.com/google/go-containerregistry/pkg/compression"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -35,7 +37,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/moby/patternmatcher"
 	"github.com/moby/patternmatcher/ignorefile"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -77,12 +78,12 @@ func BuildContainerImageFromBaseImage(
 	tagDatetime := time.Now().Format("2006-01-02-15-04-05") // YYYY-MM-DD-HH-MM-SS
 	imageName := fmt.Sprintf("gcr.io/%s/%s-runner:%s-%s", project, userName, tagRandomPrefix, tagDatetime)
 
-	logrus.Infof("Starting image build process for %s", imageName)
-	logrus.Infof("Base Image: %s", baseImage)
-	logrus.Infof("Script Directory: %s", scriptDir)
-	logrus.Infof("Target Platform: %s/%s", platform.OS, platform.Architecture) // Corrected
+	logging.Info("Starting image build process for %s", imageName)
+	logging.Info("Base Image: %s", baseImage)
+	logging.Info("Script Directory: %s", scriptDir)
+	logging.Info("Target Platform: %s/%s", platform.OS, platform.Architecture)
 
-	// 1. Create a tarball in a temporary file from the scriptDir, applying ignore patterns.
+	// Create a tarball in a temporary file from the scriptDir, applying ignore patterns.
 	tempTarballPath, err := createFilteredTar(scriptDir, ignoreMatcher)
 	if err != nil {
 		return "", fmt.Errorf("failed to create filtered tarball: %w", err)
@@ -91,11 +92,10 @@ func BuildContainerImageFromBaseImage(
 	defer func() {
 		if tempTarballPath != "" {
 			os.Remove(tempTarballPath)
-			logrus.Debugf("Cleaned up temporary tarball file: %s", tempTarballPath)
 		}
 	}()
 
-	// 2. Create a v1.Layer from the tarball.
+	// Create a v1.Layer from the tarball.
 	tarLayer, err := layerFromOpener(func() (io.ReadCloser, error) {
 		file, openErr := os.Open(tempTarballPath)
 		if openErr != nil {
@@ -107,42 +107,35 @@ func BuildContainerImageFromBaseImage(
 		return "", fmt.Errorf("failed to create layer from tarball: %w", err)
 	}
 
-	// 3. Pull the base image.
 	baseRef, err := name.ParseReference(baseImage)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse base image reference %q: %w", baseImage, err)
 	}
 
-	// Correctly pass a pointer to v1.Platform
-	baseImg, err := cranePull(baseRef.String(), crane.WithPlatform(&platform)) // Corrected, pass platform directly
+	baseImg, err := cranePull(baseRef.String(), crane.WithPlatform(&platform))
 	if err != nil {
 		return "", fmt.Errorf("failed to pull base image %q: %w", baseImage, err)
 	}
 
-	// 4. Append the new layer to the base image.
 	newImg, err := appendLayers(baseImg, tarLayer)
 	if err != nil {
 		return "", fmt.Errorf("failed to append layer: %w", err)
 	}
 
-	// 5. Optionally, set the image config (e.g., entrypoint, cmd) if needed.
-	// For crane mutate --append, typically only new layers are added.
-	// If the python script had specific config changes, they would need to be replicated here.
-
-	// 6. Push the new image.
+	// Push the new image.
 	imageRef, err := name.ParseReference(imageName)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse new image reference %q: %w", imageName, err)
 	}
 
-	logrus.Infof("Uploading Container Image to %s", imageName)
-	// Correctly pass a pointer to v1.Platform
-	err = cranePush(newImg, imageRef.String(), crane.WithPlatform(&platform)) // Corrected, pass platform directly
+	logging.Info("Uploading Container Image to %s", imageName)
+
+	err = cranePush(newImg, imageRef.String(), crane.WithPlatform(&platform))
 	if err != nil {
 		return "", fmt.Errorf("failed to push image %q: %w", imageName, err)
 	}
 
-	logrus.Infof("Image %s built and uploaded successfully.", imageName)
+	logging.Info("Image %s built and uploaded successfully.", imageName)
 	return imageName, nil
 }
 
@@ -176,7 +169,7 @@ func ReadDockerignorePatterns(dir string, defaultPatterns []string) (*patternmat
 			return nil, fmt.Errorf("failed to read .dockerignore file %q: %w", dockerignorePath, err)
 		}
 		patterns = append(patterns, filePatterns...)
-		logrus.Infof("Found %d patterns in .dockerignore at %q", len(filePatterns), dockerignorePath)
+		logging.Info("Found %d patterns in .dockerignore at %q", len(filePatterns), dockerignorePath)
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to stat .dockerignore file %q: %w", dockerignorePath, err)
 	}
@@ -257,17 +250,17 @@ func processTarEntry(tarWriter *tar.Writer, sourceDir string, ignoreMatcher *pat
 	return nil
 }
 
-func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMatcher) (string, error) { // Changed return type
+func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMatcher) (string, error) {
 	tmpFile, err := os.CreateTemp("", "gcluster-build-context-*.tar.gz")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file for tarball: %w", err)
 	}
-	defer tmpFile.Close() // Close tmpFile immediately after writing
+	defer tmpFile.Close()
 
 	gzipWriter := gzip.NewWriter(tmpFile)
 	tarWriter := tar.NewWriter(gzipWriter)
 
-	logrus.Infof("Creating filtered tar from %s to temporary file %s", sourceDir, tmpFile.Name())
+	logging.Info("Creating filtered tar from %s to temporary file %s", sourceDir, tmpFile.Name())
 
 	var walkErr error
 	defer func() {
@@ -285,9 +278,9 @@ func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMa
 	})
 
 	if walkErr != nil {
-		os.Remove(tmpFile.Name()) // Clean up temp file on error
-		return "", walkErr        // Return empty string and error
+		os.Remove(tmpFile.Name())
+		return "", walkErr
 	}
 
-	return tmpFile.Name(), nil // Return the path to the temporary file
+	return tmpFile.Name(), nil
 }

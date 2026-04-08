@@ -27,13 +27,10 @@ func TestListCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockClusterExecutor{})
-		return g, nil
+		return g
 	}
 
 	output, err := executeCommand(ClusterCmd, "list", "--project", "test-project")

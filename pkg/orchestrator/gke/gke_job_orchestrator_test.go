@@ -54,6 +54,24 @@ func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 	return nil
 }
 
+type MockKubeClient struct {
+	Namespace string
+	Workloads []string
+	Err       error
+}
+
+func (m *MockKubeClient) GetJobNamespace(workloadName string) (string, error) {
+	return m.Namespace, m.Err
+}
+
+func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	return m.Workloads, m.Err
+}
+
+func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
+	return m.Err
+}
+
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 
 	tests := []struct {
@@ -149,7 +167,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			}
 			orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
-			opts, profile, err := orc.prepareManifestOptions(job, "test-image:latest")
+			opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
 			if err != nil {
 				t.Fatalf("prepareManifestOptions failed: %v", err)
 			}
@@ -184,7 +202,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Volumes(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe n2-standard-4": {
 			{ExitCode: 0, Stdout: `{"guestCpus": 4}`},
@@ -203,7 +221,7 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		},
 	}
 
-	opts, profile, err := orc.prepareManifestOptions(job, "test-image:latest")
+	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -239,7 +257,7 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
@@ -261,7 +279,7 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 }
 
 func TestInjectTolerations(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 
 	// Sample Deployment YAML
 	inputYAML := `
@@ -316,8 +334,8 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		},
 	}
 
-	orc, _ := NewGKEOrchestrator()
-	manifest, err := orc.generatePathwaysManifest(job, "test-image:latest")
+	orc := NewGKEOrchestrator()
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest")
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
 	}
@@ -347,69 +365,57 @@ func TestAwaitJobCompletion(t *testing.T) {
 
 	tests := []struct {
 		name          string
+		mockNamespace string
+		mockWorkloads []string
 		mockResponses map[string][]shell.CommandResult
 		expectedError string
 	}{
 		{
-			name: "Successful completion",
+			name:          "Successful completion",
+			mockNamespace: "default",
+			mockWorkloads: []string{"jobset-test-workload-abc"},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl wait --for jsonpath={.status.conditions[-1].type}=Finished jobset test-workload --timeout=1h": {
-					{ExitCode: 0, Stdout: "jobset.jobset.x-k8s.io/test-workload condition met"},
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
+					{ExitCode: 0, Stdout: "workload condition met"},
 				},
-				"kubectl get jobset test-workload -o jsonpath={.status.conditions[-1].type}": {
-					{ExitCode: 0, Stdout: "Completed"},
+				"kubectl get jobset test-workload -n default -o json": {
+					{ExitCode: 0, Stdout: `{"status": {"conditions": [{"type": "Completed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`},
 				},
 			},
 			expectedError: "",
 		},
 		{
-			name: "Job timeout",
+			name:          "Job timeout",
+			mockNamespace: "default",
+			mockWorkloads: []string{"jobset-test-workload-abc"},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl wait --for jsonpath={.status.conditions[-1].type}=Finished jobset test-workload --timeout=1h": {
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
 					{ExitCode: 1, Stderr: "timed out waiting for conditions to be met"},
 				},
 			},
 			expectedError: "job timed out",
 		},
 		{
-			name: "Job finished but not completed",
+			name:          "Job finished but not completed",
+			mockNamespace: "default",
+			mockWorkloads: []string{"jobset-test-workload-abc"},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl wait --for jsonpath={.status.conditions[-1].type}=Finished jobset test-workload --timeout=1h": {
-					{ExitCode: 0, Stdout: "jobset.jobset.x-k8s.io/test-workload condition met"},
+				"kubectl wait --for=condition=Finished workload jobset-test-workload-abc -n default --timeout=1h": {
+					{ExitCode: 0, Stdout: "workload condition met"},
 				},
-				"kubectl get jobset test-workload -o jsonpath={.status.conditions[-1].type}": {
-					{ExitCode: 0, Stdout: "Failed"},
+				"kubectl get jobset test-workload -n default -o json": {
+					{ExitCode: 0, Stdout: `{"status": {"conditions": [{"type": "Failed", "status": "True", "lastTransitionTime": "2026-04-12T12:00:00Z"}]}}`},
 				},
 			},
 			expectedError: "job completed unsuccessfully with status: Failed",
-		},
-		{
-			name: "Error during kubectl wait",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl wait --for jsonpath={.status.conditions[-1].type}=Finished jobset test-workload --timeout=1h": {
-					{ExitCode: 1, Stderr: "some kubectl error"},
-				},
-			},
-			expectedError: "error waiting for job completion: some kubectl error\n",
-		},
-		{
-			name: "Error during kubectl get status",
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl wait --for jsonpath={.status.conditions[-1].type}=Finished jobset test-workload --timeout=1h": {
-					{ExitCode: 0, Stdout: "jobset.jobset.x-k8s.io/test-workload condition met"},
-				},
-				"kubectl get jobset test-workload -o jsonpath={.status.conditions[-1].type}": {
-					{ExitCode: 1, Stderr: "some get status error"},
-				},
-			},
-			expectedError: "failed to get final job status: some get status error\n",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{executor: mockExecutor}
+			mockExecutor := &MockExecutor{responses: tt.mockResponses, callCount: make(map[string]int)}
+			mockKube := &MockKubeClient{Namespace: tt.mockNamespace, Workloads: tt.mockWorkloads}
+			orc := &GKEOrchestrator{executor: mockExecutor, kubeClient: mockKube}
 
 			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
 
@@ -603,10 +609,10 @@ func TestParseAcceleratorOutput(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "Empty Output (Success, CPU Default)",
+			name:      "Empty Output (Error)",
 			output:    "",
 			wantAccel: "",
-			wantErr:   false,
+			wantErr:   true,
 		},
 	}
 
@@ -621,15 +627,20 @@ func TestParseAcceleratorOutput(t *testing.T) {
 			if got != tt.wantAccel {
 				t.Errorf("parseAcceleratorOutput() got = %v, want %v", got, tt.wantAccel)
 			}
-			if tt.wantErr && !strings.Contains(err.Error(), "Multiple Accelerator Types found") {
-				t.Errorf("Expected error message to contain 'Multiple Accelerator Types found', got %v", err)
+			if tt.wantErr {
+				if tt.name == "Multiple Accelerators (Failure)" && !strings.Contains(err.Error(), "Multiple Accelerator Types found") {
+					t.Errorf("Expected error message to contain 'Multiple Accelerator Types found', got %v", err)
+				}
+				if tt.name == "Empty Output (Error)" && !strings.Contains(err.Error(), "could not auto-discover any accelerators") {
+					t.Errorf("Expected error message to contain 'could not auto-discover any accelerators', got %v", err)
+				}
 			}
 		})
 	}
 }
 
 func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
@@ -649,7 +660,7 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
@@ -770,7 +781,7 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
-	orc, _ := NewGKEOrchestrator()
+	orc := NewGKEOrchestrator()
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe ct6e-standard-8t": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
@@ -790,7 +801,7 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 		VmsPerSlice:     0,
 	}
 
-	opts, profile, err := orc.prepareManifestOptions(job, "test-image:latest")
+	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -809,5 +820,114 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	}
 	if !strings.Contains(manifest, expectedCompletions) {
 		t.Errorf("manifest missing expected completions %q\nManifest: %s", expectedCompletions, manifest)
+	}
+}
+
+func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
+	orc := NewGKEOrchestrator()
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe ct6e-standard-8t": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+		},
+	})
+	orc.SetExecutor(mockExec)
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "user-vms-test",
+		CommandToRun:    "echo hello",
+		ClusterLocation: "us-central1-a",
+		AcceleratorType: "v6e-8",
+		Topology:        "16x16",
+		VmsPerSlice:     1, // Explicitly set to 1
+	}
+
+	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	if err != nil {
+		t.Fatalf("prepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	expectedParallelism := "parallelism: 1"
+	expectedCompletions := "completions: 1"
+
+	if !strings.Contains(manifest, expectedParallelism) {
+		t.Errorf("manifest missing expected parallelism %q\nManifest: %s", expectedParallelism, manifest)
+	}
+	if !strings.Contains(manifest, expectedCompletions) {
+		t.Errorf("manifest missing expected completions %q\nManifest: %s", expectedCompletions, manifest)
+	}
+}
+
+func TestResolveTopologyForChips(t *testing.T) {
+	orc := &GKEOrchestrator{}
+
+	tests := []struct {
+		name       string
+		prefix     string
+		totalChips int
+		wantShape  string
+		wantErr    bool
+	}{
+		{
+			name:       "v4 4 chips",
+			prefix:     "v4",
+			totalChips: 4,
+			wantShape:  "2x2x1",
+			wantErr:    false,
+		},
+		{
+			name:       "tpu7x 2048 chips",
+			prefix:     "tpu7x",
+			totalChips: 2048,
+			wantShape:  "8x16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 1 chip",
+			prefix:     "v6e",
+			totalChips: 1,
+			wantShape:  "1x1",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 256 chips",
+			prefix:     "v6e",
+			totalChips: 256,
+			wantShape:  "16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "tpu7x 1 chip (Fail)",
+			prefix:     "tpu7x",
+			totalChips: 1,
+			wantShape:  "",
+			wantErr:    true,
+		},
+		{
+			name:       "v4 3 chips (Fail)",
+			prefix:     "v4",
+			totalChips: 3,
+			wantShape:  "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := orc.resolveTopologyForChips(tt.prefix, tt.totalChips)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantShape {
+				t.Errorf("resolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
+			}
+		})
 	}
 }

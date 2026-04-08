@@ -49,13 +49,10 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockExecutorForTest{})
-		return g, nil
+		return g
 	}
 
 	// Reset flags before each test
@@ -68,7 +65,7 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 		"--image", "busybox",
 		"--command", "echo hello",
 		"--cluster", "test-cluster",
-		"--cluster-location", "us-central1-a",
+		"--location", "us-central1-a",
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--pathways-proxy-server-image", "proxy:latest",
@@ -116,13 +113,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockExecutorForTest{})
-		return g, nil
+		return g
 	}
 
 	// Reset flags before each test
@@ -134,7 +128,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--image", "busybox",
 		"--command", "echo hello",
 		"--cluster", "test-cluster",
-		"--cluster-location", "us-central1-a",
+		"--location", "us-central1-a",
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
 		"--accelerator", "n2-standard-4",
@@ -171,7 +165,7 @@ func resetSubmitCmdFlags() {
 	acceleratorType = ""
 	outputManifest = ""
 	clusterName = ""
-	clusterLocation = ""
+	location = ""
 	projectID = ""
 	workloadName = ""
 	kueueQueueName = ""

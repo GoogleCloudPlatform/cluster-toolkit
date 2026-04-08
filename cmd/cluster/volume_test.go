@@ -27,16 +27,13 @@ func TestVolumeCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockClusterExecutor{})
-		return g, nil
+		return g
 	}
 
-	output, err := executeCommand(ClusterCmd, "volume", "--cluster", "test-cluster", "--cluster-location", "us-central1-a", "--project", "test-project")
+	output, err := executeCommand(ClusterCmd, "volume", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 
 	if err != nil {
 		if !strings.Contains(err.Error(), "unhandled mock command") && !strings.Contains(err.Error(), "failed to get kubeconfig") && !strings.Contains(err.Error(), "invalid configuration") {

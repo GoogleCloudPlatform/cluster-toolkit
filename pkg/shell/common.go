@@ -196,3 +196,24 @@ Please select an option [d,a,s,c]: `)
 		}
 	}
 }
+
+// PromptYesNo prompts the user with a yes/no question.
+// It returns true if the user answers 'y' or 'yes' or just presses Enter.
+func PromptYesNo(prompt string) bool {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("%s [Y/n]: ", prompt)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			logging.Fatal("%v", err)
+		}
+		response = strings.ToLower(strings.TrimSpace(response))
+		if response == "" || response == "y" || response == "yes" {
+			return true
+		}
+		if response == "n" || response == "no" {
+			return false
+		}
+		fmt.Println("Invalid input. Please enter 'Y' or 'n'.")
+	}
+}

@@ -23,12 +23,12 @@ import (
 func TestInfoCmd_MissingFlags(t *testing.T) {
 	resetClusterCmdFlags()
 
-	_, err := executeCommand(ClusterCmd, "info")
+	_, err := executeCommand(ClusterCmd, "info", "--project", "test-project")
 	if err == nil {
 		t.Fatalf("expected error for missing flags, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "--cluster and --cluster-location are required") {
+	if !strings.Contains(err.Error(), `required flag(s) "cluster", "location" not set`) {
 		t.Errorf("unexpected error output: %v", err)
 	}
 }
@@ -40,16 +40,13 @@ func TestInfoCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-		g, err := gke.NewGKEOrchestrator()
-		if err != nil {
-			return nil, err
-		}
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockClusterExecutor{})
-		return g, nil
+		return g
 	}
 
-	output, err := executeCommand(ClusterCmd, "info", "--cluster", "test-cluster", "--cluster-location", "us-central1-a", "--project", "test-project")
+	output, err := executeCommand(ClusterCmd, "info", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 
 	if err != nil {
 		if !strings.Contains(err.Error(), "unhandled mock command") && !strings.Contains(err.Error(), "failed to get kubeconfig") && !strings.Contains(err.Error(), "invalid configuration") {

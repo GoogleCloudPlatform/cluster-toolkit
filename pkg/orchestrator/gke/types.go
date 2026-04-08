@@ -1,0 +1,169 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package gke
+
+import (
+	"fmt"
+	"hpc-toolkit/pkg/orchestrator"
+	"strings"
+)
+
+// Types for GetClusterInfo unmarshaling
+type gkeNodePool struct {
+	Name   string `json:"name"`
+	Config struct {
+		MachineType string `json:"machineType"`
+	} `json:"config"`
+	Count  int    `json:"count"`
+	Status string `json:"status"`
+}
+
+type gkeClusterDescribe struct {
+	Name      string        `json:"name"`
+	Location  string        `json:"location"`
+	NodePools []gkeNodePool `json:"nodePools"`
+}
+
+func (c gkeClusterDescribe) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Cluster Resource Summary for: %s\n", c.Name))
+	sb.WriteString(fmt.Sprintf("Location: %s\n", c.Location))
+	sb.WriteString("------------------------------------------\n")
+	for _, np := range c.NodePools {
+		sb.WriteString(fmt.Sprintf("NodePool: %s\n", np.Name))
+		sb.WriteString(fmt.Sprintf("  MachineType: %s\n", np.Config.MachineType))
+		if np.Count > 0 {
+			sb.WriteString(fmt.Sprintf("  Count: %d\n", np.Count))
+		}
+		sb.WriteString(fmt.Sprintf("  Status: %s\n", np.Status))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// Types for ListVolumes unmarshaling
+type gkePVC struct {
+	Metadata struct {
+		Name   string            `json:"name"`
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Spec struct {
+		StorageClassName *string `json:"storageClassName"`
+	} `json:"spec"`
+}
+
+type gkePVCList struct {
+	Items []gkePVC `json:"items"`
+}
+
+type JobProfile struct {
+	IsCPUMachine  bool
+	CapacityCount int
+}
+
+type ManifestOptions struct {
+	WorkloadName            string
+	FullImageName           string
+	CommandToRun            string
+	AcceleratorType         string
+	ResourcesString         string
+	ProjectID               string
+	ClusterName             string
+	ClusterLocation         string
+	KueueQueueName          string
+	NumSlices               int
+	VmsPerSlice             int
+	MaxRestarts             int
+	TtlSecondsAfterFinished int
+	NodeSelector            string
+	Affinity                string
+	PodFailurePolicy        string
+	ImagePullSecrets        string
+	ServiceAccountName      string
+	TopologyAnnotation      string
+	Topology                string
+	SchedulerName           string
+	Tolerations             string
+	AwaitJobCompletion      bool
+	PriorityClassName       string
+	VolumesYAML             string
+	VolumeMountsYAML        string
+	GCSFuseEnabled          bool
+	IsSuperSlicing          bool
+	IsCPUMachine            bool
+	Pathways                orchestrator.PathwaysJobDefinition
+	Verbose                 bool
+}
+
+type FlavorCapacity struct {
+	CPUs       int
+	MemoryGi   int
+	GPUs       int
+	TPUs       int
+	NodeLabels map[string]string
+}
+
+type ClusterCapacity struct {
+	CPUs     int
+	MemoryGi int
+	GPUs     int
+	TPUs     int
+	Flavors  map[string]FlavorCapacity
+}
+
+// Types for initializeJobSubmission unmarshaling
+
+type gkeAccelerator struct {
+	AcceleratorCount int    `json:"acceleratorCount"`
+	AcceleratorType  string `json:"acceleratorType"`
+}
+
+type gkeNodePoolConfig struct {
+	ServiceAccount string           `json:"serviceAccount"`
+	MachineType    string           `json:"machineType"`
+	Accelerators   []gkeAccelerator `json:"accelerators"`
+}
+
+type gkeAutoscaling struct {
+	Enabled      bool `json:"enabled"`
+	MinNodeCount int  `json:"minNodeCount"`
+	MaxNodeCount int  `json:"maxNodeCount"`
+}
+
+type gkeJobNodePool struct {
+	Name             string            `json:"name"`
+	Config           gkeNodePoolConfig `json:"config"`
+	InitialNodeCount int               `json:"initialNodeCount"`
+	Autoscaling      gkeAutoscaling    `json:"autoscaling"`
+}
+
+type gkeCluster struct {
+	Locations []string         `json:"locations"`
+	NodePools []gkeJobNodePool `json:"nodePools"`
+}
+
+// Types for JobSet status unmarshaling
+
+type JobSetCondition struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	LastTransitionTime string `json:"lastTransitionTime"`
+}
+
+type JobSetStatus struct {
+	Status struct {
+		Conditions []JobSetCondition `json:"conditions"`
+	} `json:"status"`
+}

@@ -32,7 +32,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hpc-toolkit/cmd/cluster"
-	"hpc-toolkit/cmd/job" // New import
+	"hpc-toolkit/cmd/job"
 )
 
 // Git references when use Makefile
@@ -70,7 +70,7 @@ func init() {
 	}
 
 	rootCmd.AddCommand(cluster.ClusterCmd)
-	rootCmd.AddCommand(job.JobCmd) // Add the new job command
+	rootCmd.AddCommand(job.JobCmd)
 }
 
 // Execute the root command

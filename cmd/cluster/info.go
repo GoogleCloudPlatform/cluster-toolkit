@@ -29,21 +29,20 @@ var InfoCmd = &cobra.Command{
 	SilenceUsage: true,
 }
 
+func init() {
+	InfoCmd.Flags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster. Required.")
+	InfoCmd.Flags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster. Required.")
+	_ = InfoCmd.MarkFlagRequired("cluster")
+	_ = InfoCmd.MarkFlagRequired("location")
+}
+
 func runClusterInfo(cmd *cobra.Command, args []string) error {
-	if clusterName == "" || clusterLocation == "" {
-		return fmt.Errorf("--cluster and --cluster-location are required for info")
-	}
 
 	logging.Info("Fetching cluster info for %s...", clusterName)
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.ListOptions{
 		ProjectID:       projectID,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 	}
 
 	info, err := orc.GetClusterInfo(clusterName, opts)

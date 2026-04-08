@@ -31,17 +31,17 @@ var VolumeCmd = &cobra.Command{
 	SilenceUsage: true,
 }
 
+func init() {
+	VolumeCmd.Flags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster.")
+	VolumeCmd.Flags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
+}
+
 func runListVolumes(cmd *cobra.Command, args []string) error {
 	logging.Info("Listing managed volumes...")
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.ListOptions{
 		ClusterName:     clusterName,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 		ProjectID:       projectID,
 	}
 
@@ -51,9 +51,9 @@ func runListVolumes(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tTYPE\tMOUNT_PATH\tCLUSTER")
+	fmt.Fprintln(w, "NAME\tTYPE\tCLUSTER")
 	for _, v := range volumes {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", v.Name, v.Type, v.MountPath, v.Cluster)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", v.Name, v.Type, v.Cluster)
 	}
 	w.Flush()
 	return nil

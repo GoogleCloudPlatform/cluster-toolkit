@@ -32,7 +32,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/viper v1.21.0
 	github.com/moby/patternmatcher v0.6.0
-	github.com/sirupsen/logrus v1.9.4
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
 	google.golang.org/api v0.256.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -109,6 +108,7 @@ require (
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/vbatts/tar-split v0.12.2 // indirect

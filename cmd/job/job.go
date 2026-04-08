@@ -15,29 +15,41 @@
 package job
 
 import (
+	"hpc-toolkit/pkg/orchestrator/gke"
+
 	"github.com/spf13/cobra"
 )
 
 var (
-	clusterName     string
-	clusterLocation string
-	projectID       string
+	clusterName string
+	location    string
+	projectID   string
 )
+
+var gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+	return gke.NewGKEOrchestrator()
+}
+
+var orc *gke.GKEOrchestrator
 
 // JobCmd represents the base command for job-related operations
 var JobCmd = &cobra.Command{
 	Use:   "job",
 	Short: "[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. Alpha version and not yet supported for production use.",
 	Long:  `[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. This is the alpha version of the feature and is under active development. The feature is not yet supported for production use.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		orc = gkeOrchestratorFactory()
+		return nil
+	},
 }
 
 func init() {
-	JobCmd.PersistentFlags().StringVar(&clusterName, "cluster", "", "Name of the GKE cluster. Required.")
-	JobCmd.PersistentFlags().StringVar(&clusterLocation, "cluster-location", "", "Location (region or zone) of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster. Required.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
 
 	_ = JobCmd.MarkPersistentFlagRequired("cluster")
-	_ = JobCmd.MarkPersistentFlagRequired("cluster-location")
+	_ = JobCmd.MarkPersistentFlagRequired("location")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)

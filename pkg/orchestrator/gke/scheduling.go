@@ -15,6 +15,8 @@
 package gke
 
 import (
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -88,20 +90,11 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 }
 
 func isTPU(acceleratorType string) bool {
-	if len(acceleratorType) > 3 && (acceleratorType[:3] == "tpu" || contains(acceleratorType, "tpu")) {
+	if strings.Contains(acceleratorType, "tpu") {
 		return true
 	}
 	if len(acceleratorType) >= 2 && acceleratorType[0] == 'v' {
 		if acceleratorType[1] >= '0' && acceleratorType[1] <= '9' {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i < len(s)-len(substr)+1; i++ {
-		if s[i:i+len(substr)] == substr {
 			return true
 		}
 	}

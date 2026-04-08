@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
-	"hpc-toolkit/pkg/orchestrator/gke"
 
 	"github.com/spf13/cobra"
 )
@@ -30,25 +29,20 @@ var DescribeCmd = &cobra.Command{
 	SilenceUsage: true,
 }
 
-var gkeOrchestratorFactory = func() (*gke.GKEOrchestrator, error) {
-	return gke.NewGKEOrchestrator()
+func init() {
+	DescribeCmd.Flags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster. Required.")
+	DescribeCmd.Flags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster. Required.")
+	_ = DescribeCmd.MarkFlagRequired("cluster")
+	_ = DescribeCmd.MarkFlagRequired("location")
 }
 
 func runClusterDescribe(cmd *cobra.Command, args []string) error {
-	if clusterName == "" || clusterLocation == "" {
-		return fmt.Errorf("--cluster and --cluster-location are required for describe")
-	}
 
 	logging.Info("Describing cluster %s...", clusterName)
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.ListOptions{
 		ProjectID:       projectID,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 	}
 
 	description, err := orc.DescribeEnvironment(clusterName, opts)

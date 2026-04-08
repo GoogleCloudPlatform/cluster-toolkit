@@ -127,10 +127,9 @@ type ClusterStatus struct {
 }
 
 type VolumeStatus struct {
-	Name      string
-	Type      string
-	MountPath string
-	Cluster   string
+	Name    string
+	Type    string
+	Cluster string
 }
 
 type ClusterOrchestrator interface {

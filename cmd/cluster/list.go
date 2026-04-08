@@ -34,11 +34,6 @@ var ListCmd = &cobra.Command{
 func runListClusters(cmd *cobra.Command, args []string) error {
 	logging.Info("Listing clusters...")
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.ListOptions{
 		ProjectID: projectID,
 	}

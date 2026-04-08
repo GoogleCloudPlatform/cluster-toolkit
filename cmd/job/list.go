@@ -30,28 +30,38 @@ var (
 )
 
 var ListWorkloadsCmd = &cobra.Command{
-	Use:          "list",
-	Short:        "List workloads (jobs) in the cluster.",
+	Use:   "list",
+	Short: "List workloads (jobs) in the cluster.",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if filterStatus != "" {
+			allowed := map[string]bool{
+				"Pending":   true,
+				"Running":   true,
+				"Succeeded": true,
+				"Failed":    true,
+				"Suspended": true,
+			}
+			if !allowed[filterStatus] {
+				return fmt.Errorf("invalid value for --status: %s. Allowed values are: Pending, Running, Succeeded, Failed, Suspended", filterStatus)
+			}
+		}
+		return nil
+	},
 	RunE:         runListWorkloads,
 	SilenceUsage: true,
 }
 
 func init() {
 	ListWorkloadsCmd.Flags().StringVar(&filterStatus, "status", "", "Filter jobs by status (e.g. Running, Failed, Succeeded).")
-	ListWorkloadsCmd.Flags().StringVar(&filterName, "name-contains", "", "Filter jobs by name.")
+	ListWorkloadsCmd.Flags().StringVar(&filterName, "name-contains", "", "Filter jobs by name containing the specified string.")
 }
 
 func runListWorkloads(cmd *cobra.Command, args []string) error {
 	logging.Info("Listing jobs...")
 
-	orc, err := gkeOrchestratorFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create orchestrator: %w", err)
-	}
-
 	opts := orchestrator.ListOptions{
 		ClusterName:     clusterName,
-		ClusterLocation: clusterLocation,
+		ClusterLocation: location,
 		ProjectID:       projectID,
 		Status:          filterStatus,
 		NameContains:    filterName,

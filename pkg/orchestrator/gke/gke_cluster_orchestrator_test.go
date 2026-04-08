@@ -23,13 +23,13 @@ import (
 
 func TestListEnvironments(t *testing.T) {
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud container clusters list": {
+		"gcloud container clusters list --project test-project": {
 			{ExitCode: 0, Stdout: `[{"name": "cluster-1", "location": "us-central1-a", "status": "RUNNING"}, {"name": "cluster-2", "location": "us-east1-b", "status": "STOPPED"}]`},
 		},
 	}
 	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
-	envs, err := orc.ListEnvironments(orchestrator.ListOptions{})
+	envs, err := orc.ListEnvironments(orchestrator.ListOptions{ProjectID: "test-project"})
 	if err != nil {
 		t.Fatalf("ListEnvironments failed: %v", err)
 	}
@@ -45,13 +45,13 @@ func TestListEnvironments(t *testing.T) {
 
 func TestGetClusterInfo(t *testing.T) {
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud container clusters describe cluster-1": {
-			{ExitCode: 0, Stdout: `{"nodePools": [{"name": "pool-1", "config": {"machineType": "n2-standard-4"}, "count": 2, "status": "RUNNING"}]}`},
+		"gcloud container clusters describe cluster-1 --location=us-central1-a --project test-project": {
+			{ExitCode: 0, Stdout: `{"name": "cluster-1", "location": "us-central1-a", "nodePools": [{"name": "pool-1", "config": {"machineType": "n2-standard-4"}, "count": 2, "status": "RUNNING"}]}`},
 		},
 	}
 	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
-	info, err := orc.GetClusterInfo("cluster-1", orchestrator.ListOptions{ClusterLocation: "us-central1-a"})
+	info, err := orc.GetClusterInfo("cluster-1", orchestrator.ListOptions{ClusterLocation: "us-central1-a", ProjectID: "test-project"})
 	if err != nil {
 		t.Fatalf("GetClusterInfo failed: %v", err)
 	}
@@ -66,13 +66,13 @@ func TestGetClusterInfo(t *testing.T) {
 
 func TestDescribeEnvironment(t *testing.T) {
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud container clusters describe cluster-1": {
+		"gcloud container clusters describe cluster-1 --location=us-central1-a --project test-project": {
 			{ExitCode: 0, Stdout: "yaml output of describe"},
 		},
 	}
 	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
-	desc, err := orc.DescribeEnvironment("cluster-1", orchestrator.ListOptions{ClusterLocation: "us-central1-a"})
+	desc, err := orc.DescribeEnvironment("cluster-1", orchestrator.ListOptions{ClusterLocation: "us-central1-a", ProjectID: "test-project"})
 	if err != nil {
 		t.Fatalf("DescribeEnvironment failed: %v", err)
 	}

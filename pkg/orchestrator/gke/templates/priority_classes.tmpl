@@ -43,3 +43,11 @@ metadata:
 value: 200
 globalDefault: false
 description: "User-defined priority class for high priority workloads."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: very-high
+value: 300
+globalDefault: false
+description: "User-defined priority class for very high priority workloads."
