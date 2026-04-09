@@ -118,9 +118,15 @@ func SaveToFirestore() error {
 
 // generateUniqueID creates a stable hash based on the machine and user
 func generateUniqueID() string {
-	host, _ := os.Hostname()
-	u, _ := user.Current()
-	rawID := fmt.Sprintf("%s-%s", host, u.Username)
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown-host"
+	}
+	username := "unknown-user"
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
+	rawID := fmt.Sprintf("%s-%s", host, username)
 
 	// Hash it to create a clean, fixed-length unique ID (to avoid PII)
 	hash := sha256.Sum256([]byte(rawID))
