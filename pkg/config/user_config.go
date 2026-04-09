@@ -104,7 +104,10 @@ func SaveToFirestore() error {
 		return err
 	}
 
-	settings := viper.AllSettings()
+	settings := map[string]any{
+		USER_ID_KEY:   viper.GetString(USER_ID_KEY),
+		TELEMETRY_KEY: viper.GetBool(TELEMETRY_KEY),
+	}
 
 	_, err = client.Collection(collectionName).Doc(userID).Set(ctx, settings)
 	if err != nil {
