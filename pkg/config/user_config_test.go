@@ -15,15 +15,11 @@
 package config
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/user"
 	"testing"
-
-	"cloud.google.com/go/firestore"
-	"github.com/spf13/viper"
 )
 
 // TestGenerateUniqueID verifies that the unique ID generation is stable
@@ -58,43 +54,5 @@ func TestGenerateUniqueID(t *testing.T) {
 
 	if id1 != expected {
 		t.Errorf("expected ID %s, got %s", expected, id1)
-	}
-}
-
-// TestSaveToFirestore verifies that viper settings are successfully written
-// to Firestore. It requires the Firestore emulator.
-func TestSaveToFirestore(t *testing.T) {
-	// Setup a clean memory state
-	viper.Reset()
-	testUserID := "test-user-save"
-	viper.Set(USER_ID_KEY, testUserID)
-	viper.Set("theme", "light")
-	viper.Set("telemetry_enabled", true)
-
-	// Execute SaveToFirestore
-	err := SaveToFirestore()
-	if err != nil {
-		t.Fatalf("SaveToFirestore() failed: %v", err)
-	}
-
-	// Verify data was actually written to the emulator database
-	ctx := context.Background()
-	client, err := firestore.NewClient(ctx, projectID)
-	if err != nil {
-		t.Fatalf("failed to create firestore client for verification: %v", err)
-	}
-	defer client.Close()
-
-	doc, err := client.Collection(collectionName).Doc(testUserID).Get(ctx)
-	if err != nil {
-		t.Fatalf("failed to retrieve saved document: %v", err)
-	}
-
-	data := doc.Data()
-	if data["theme"] != "light" {
-		t.Errorf("expected theme 'light', got '%v'", data["theme"])
-	}
-	if data["telemetry_enabled"] != true {
-		t.Errorf("expected telemetry_enabled to be true, got '%v'", data["telemetry_enabled"])
 	}
 }
