@@ -60,11 +60,12 @@ locals {
 
   # Common variables for all PVC templates
   common_pvc_vars = {
-    pv_name   = local.pv_name
-    pvc_name  = local.pvc_name
-    labels    = local.labels
-    capacity  = "${var.capacity_gib}Gi"
-    namespace = var.namespace
+    pv_name            = local.pv_name
+    pvc_name           = local.pvc_name
+    labels             = local.labels
+    capacity           = "${var.capacity_gib}Gi"
+    namespace          = var.namespace
+    storage_class_name = var.gcsfuse_storage_class_name
   }
 
   # Common variables for all PV templates
@@ -77,10 +78,11 @@ locals {
   # Variables for PV templates, merging common vars with type-specific ones.
   pv_template_vars = {
     gcs = merge(local.common_pv_vars, {
-      mount_options = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
-      bucket_name   = var.gcs_bucket_name
-      namespace     = var.namespace
-      pvc_name      = local.pvc_name
+      mount_options      = var.gcs_bucket_name != null ? [for opt in split(",", var.network_storage.mount_options) : opt if !contains(["defaults", "_netdev", "implicit_dirs"], opt)] : []
+      bucket_name        = var.gcs_bucket_name
+      namespace          = var.namespace
+      pvc_name           = local.pvc_name
+      storage_class_name = var.gcsfuse_storage_class_name
     })
     lustre = merge(local.common_pv_vars, {
       location        = var.lustre_id != null ? split("/", var.lustre_id)[3] : null
@@ -121,6 +123,10 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
+data "google_project" "project" {
+  project_id = split("/", var.cluster_id)[1]
+}
+
 data "google_client_config" "default" {}
 
 provider "kubectl" {
@@ -152,4 +158,11 @@ resource "kubectl_manifest" "pv" {
 resource "kubectl_manifest" "pvc" {
   yaml_body  = local.pvc_content
   depends_on = [kubectl_manifest.pv, kubectl_manifest.pvc_namespace]
+}
+
+resource "google_project_iam_member" "gcsfuse_agent_binding" {
+  count   = var.gcsfuse_storage_class_name != "" ? 1 : 0
+  project = split("/", var.cluster_id)[1]
+  role    = "projects/${split("/", var.cluster_id)[1]}/roles/gke.gcsfuse.profileUser"
+  member  = "serviceAccount:service-${data.google_project.project.number}@container-engine-robot.iam.gserviceaccount.com"
 }
