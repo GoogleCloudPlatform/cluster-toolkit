@@ -288,7 +288,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.41 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
@@ -297,7 +297,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.41 |
 | <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
@@ -309,7 +309,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_storage_bucket.configs_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [google_storage_bucket_object.scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
@@ -319,7 +319,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_ansible_virtualenv_path"></a> [ansible\_virtualenv\_path](#input\_ansible\_virtualenv\_path) | Virtual environment path in which to install Ansible | `string` | `"/usr/local/ghpc-venv"` | no |
 | <a name="input_bucket_viewers"></a> [bucket\_viewers](#input\_bucket\_viewers) | Additional service accounts or groups, users, and domains to which to grant read-only access to startup-script bucket (leave unset if using default Compute Engine service account) | `list(string)` | `[]` | no |
 | <a name="input_configure_ssh_host_patterns"></a> [configure\_ssh\_host\_patterns](#input\_configure\_ssh\_host\_patterns) | If specified, it will automate ssh configuration by:<br/>  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.<br/>  Ex: "hpc*", "hpc01*", "ml*"<br/>  - The first time users log-in, it will create ssh keys that are added to the authorized keys list<br/>  This requires a shared /home filesystem and relies on specifying the right prefix. | `list(string)` | `[]` | no |
@@ -348,7 +348,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_compute_startup_script"></a> [compute\_startup\_script](#output\_compute\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
 | <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | script to load and run all runners, as a string value. Targets the inputs for the slurm controller. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |

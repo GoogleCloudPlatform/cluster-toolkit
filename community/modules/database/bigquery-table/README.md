@@ -43,7 +43,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -51,7 +51,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -62,14 +62,14 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_bigquery_table.pbsb](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Dataset name to be used to create the new BQ Table | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the tables. Key-value pairs. | `map(string)` | n/a | yes |
@@ -80,7 +80,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_dataset_id"></a> [dataset\_id](#output\_dataset\_id) | ID of BQ dataset |
 | <a name="output_table_id"></a> [table\_id](#output\_table\_id) | ID of created BQ table |
 | <a name="output_table_name"></a> [table\_name](#output\_table\_name) | Name of created BQ table |

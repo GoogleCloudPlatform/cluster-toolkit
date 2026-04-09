@@ -50,6 +50,8 @@ vars:
   accelerator_type: nvidia-b200
   version_prefix: "1.33."
 
+  auto_monitoring_scope: "NONE"
+
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # # Managed Lustre is only supported in specific regions and zones
@@ -173,6 +175,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a4-net-0, workload_service_account]
     settings:
+      auto_monitoring_scope: $(vars.auto_monitoring_scope)
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []

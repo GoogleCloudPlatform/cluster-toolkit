@@ -16,14 +16,14 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.0.0 |
 
 ## Modules
@@ -33,13 +33,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_compute_network_attachment.self](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network_attachment) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_connection_preference"></a> [connection\_preference](#input\_connection\_preference) | The connection preference of service attachment. | `string` | `"ACCEPT_AUTOMATIC"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the resource. Provided by the client when the resource is created | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project in which the resource belongs. | `string` | n/a | yes |
@@ -49,6 +49,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | Server-defined URL for the resource. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
