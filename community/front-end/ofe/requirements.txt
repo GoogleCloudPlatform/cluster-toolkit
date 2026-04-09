@@ -38,7 +38,6 @@ google-cloud-core==2.5.1
 google-cloud-pubsub==2.36.0
 google-cloud-compute==1.47.0
 google-cloud-storage==3.10.1
-google-cloud-secret-manager==2.27.0
 google-crc32c==1.8.0
 google-resumable-media==2.8.2
 googleapis-common-protos==1.73.1
