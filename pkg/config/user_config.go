@@ -26,7 +26,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 
 	"github.com/spf13/viper"
-	_ "github.com/spf13/viper/remote"
 
 	"cloud.google.com/go/firestore"
 )
@@ -71,20 +70,17 @@ func InitUserConfig() error {
 
 // GetPersistentUserId returns the stored User ID from Viper config.
 func GetPersistentUserId() string {
-	_ = viper.ReadRemoteConfig()
 	return viper.GetString(USER_ID_KEY)
 
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
 func IsTelemetryEnabled() bool {
-	_ = viper.ReadRemoteConfig()
 	return viper.GetBool(TELEMETRY_KEY)
 }
 
 // SetTelemetry sets the telemetry preference for the user.
 func SetTelemetry(telemetry bool) {
-	_ = viper.ReadRemoteConfig()
 	viper.Set(TELEMETRY_KEY, telemetry)
 	err := SaveToFirestore()
 	if err != nil {
