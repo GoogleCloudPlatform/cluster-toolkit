@@ -132,11 +132,8 @@ You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-
 #### 1. Large Manifests and CRDs
 Helm stores the entire release state (including the generated manifests) as a standard Kubernetes Secret in the release namespace. Before storing the state, Helm runs the YAML through [GZIP compression and base64 encoding](https://helm.sh/docs/topics/kubernetes_apis/#:~:text=The%20manifest%20is,of%20the%20release.). This effectively raises the limit to ~1MB or more, allowing for the deployment of very large manifests and complex CRDs without requiring Server-Side Apply (SSA). This behaviour is guaranteed because the [Terraform Helm Provider](https://github.com/hashicorp/terraform-provider-helm) directly imports the official [Helm Go SDK](https://github.com/helm/helm/tree/main/pkg/action).
 
-#### 2. Helm-Release Suffixes
-To make releases more identifiable, the module generates deterministic Helm release names based on the following precedence hierarchy:
-* If you provide a `name` field in the `apply_manifests` list object, it will be used directly. Explicit names must be unique across the list.
-* If applying from a local file or URL, it extracts the file basename and removes common extensions like `.yaml`, `.yml`, and `.tftpl` (including combined extensions like `.yaml.tftpl`).
-* For raw content without a source or name, it falls back to using the module ID and a short hash: `${module_id}-raw-${hash}`.The result is truncated to 30 characters, and a short 7-character hash of the manifest configuration is appended to ensure uniqueness. This ensures the total length does not exceed Helm's 53-character limit.
+#### 2. Release Suffixes
+The module introduces a `random_id` to generate a unique 4-byte suffix for each Helm release (e.g., `manifest-apply-ceab0dfc-0`). This prevents name collisions when multiple module instances (e.g., `gke-cluster` and `gke-node-pool`) instantiate the `kubectl-apply` source simultaneously within the same blueprint. This ID is stored in the Terraform state, ensuring the release name remains stable across re-deployments.
 
 #### 3. Re-deployment Conflicts
 If a deployment fails, the `atomic = true` setting ensures that Helm automatically rolls back the release, preventing the cluster from being left in a "half-applied" state. If you encounter persistent conflicts during re-deployment due to immutable fields, you may need to manually delete the resource or the Helm release before re-applying.
@@ -219,6 +216,7 @@ limitations under the License.
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 | <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.1 |
 
 ## Providers
 
@@ -226,6 +224,7 @@ limitations under the License.
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | >= 2.1 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -245,6 +244,7 @@ limitations under the License.
 
 | Name | Type |
 | ---- | ---- |
+| [random_id.release_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [terraform_data.gib_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.initial_gib_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.jobset_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -257,7 +257,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    name             = optional(string, null)<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
+| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
 | <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install              = optional(bool, false)<br/>    config_path          = optional(string, null)<br/>    config_template_vars = optional(map(any), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>      max_unavailable   = optional(string, "50%")<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
@@ -265,7 +265,6 @@ limitations under the License.
 | <a name="input_gpu_operator"></a> [gpu\_operator](#input\_gpu\_operator) | Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v25.3.0")<br/>  })</pre> | `{}` | no |
 | <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "0.10.1")<br/>  })</pre> | `{}` | no |
 | <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config\_path to be applied right after kueue installation. If a template file provided, its variables can be set to config\_template\_vars. | <pre>object({<br/>    install                  = optional(bool, false)<br/>    version                  = optional(string, "0.13.3")<br/>    config_path              = optional(string, null)<br/>    config_template_vars     = optional(map(any), null)<br/>    enable_pathways_for_tpus = optional(bool, false)<br/>  })</pre> | `{}` | no |
-| <a name="input_module_id"></a> [module\_id](#input\_module\_id) | The ID of the module as defined in the blueprint. Injected by ghpc. | `string` | `"kubectl-apply"` | no |
 | <a name="input_nvidia_dra_driver"></a> [nvidia\_dra\_driver](#input\_nvidia\_dra\_driver) | Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes | <pre>object({<br/>    install          = optional(bool, false)<br/>    version          = optional(string, "v25.3.0")<br/>    accelerator_type = optional(string, "nvidia-gb200")<br/>  })</pre> | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |
 | <a name="input_system_node_pool_id"></a> [system\_node\_pool\_id](#input\_system\_node\_pool\_id) | The ID of the system node pool. Used to ensure the node pool remains active during Kueue uninstallation. | `string` | `null` | no |
