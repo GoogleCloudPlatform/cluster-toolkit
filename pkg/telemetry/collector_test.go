@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func TestNewCollector(t *testing.T) {
@@ -198,5 +199,52 @@ func TestGetLatencyMs(t *testing.T) {
 
 	if latency < 50 {
 		t.Errorf("getLatencyMs() expected >= 50ms, got %d ms", latency)
+	}
+}
+
+func TestGetClientInstallId(t *testing.T) {
+	// Ensure Viper is reset after all tests to prevent config leakage
+	defer viper.Reset()
+
+	tests := []struct {
+		name       string
+		mockConfig func()
+		want       string
+	}{
+		{
+			name: "returns valid client install id when set in config",
+			mockConfig: func() {
+				// Mocks the case where the CLI has already bootstrapped the config
+				// and saved a hashed persistent user_id.
+				viper.Set("user_id", "a1b2c3d4e5f6")
+			},
+			want: "a1b2c3d4e5f6",
+		},
+		{
+			name: "returns empty string when client install id is missing",
+			mockConfig: func() {
+				// Mocks the case where the config is missing or uninitialized.
+				viper.Set("user_id", "")
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset Viper state before each sub-test to ensure isolation
+			viper.Reset()
+
+			// Apply the mocked configuration for this specific test case
+			tt.mockConfig()
+
+			// Act
+			got := getClientInstallId()
+
+			// Assert
+			if got != tt.want {
+				t.Errorf("getClientInstallId() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
