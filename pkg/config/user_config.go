@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"time"
 
 	"hpc-toolkit/pkg/logging"
 
@@ -37,15 +38,18 @@ const (
 	collectionName string = "user_configs"
 )
 
+var fsClient *firestore.Client
+
 func InitUserConfig() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	userID := generateUniqueID()
 
-	client, err := firestore.NewClient(ctx, projectID)
+	client, err := getFirestoreClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create firestore client: %v", err)
+		return err
 	}
-	defer client.Close()
 
 	// Set local Viper defaults
 	viper.SetDefault(USER_ID_KEY, userID)
@@ -90,14 +94,15 @@ func SetTelemetry(telemetry bool) {
 
 // Save Viper state back to Firestore
 func SaveToFirestore() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	userID := viper.GetString(USER_ID_KEY)
 
-	client, err := firestore.NewClient(ctx, projectID)
+	client, err := getFirestoreClient(ctx)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
 
 	settings := viper.AllSettings()
 
@@ -117,4 +122,19 @@ func generateUniqueID() string {
 	// Hash it to create a clean, fixed-length unique ID (to avoid PII)
 	hash := sha256.Sum256([]byte(rawID))
 	return fmt.Sprintf("%x", hash)[:24]
+}
+
+// Helper function to initialize Firestore client
+func getFirestoreClient(ctx context.Context) (*firestore.Client, error) {
+	if fsClient != nil {
+		return fsClient, nil
+	}
+
+	client, err := firestore.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create firestore client: %w", err)
+	}
+
+	fsClient = client
+	return fsClient, nil
 }
