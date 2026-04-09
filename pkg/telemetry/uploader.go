@@ -29,7 +29,7 @@ func Flush(payload LogRequest) {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		logging.Error("Error marshalling Telemetry request JSON: %v\n", err)
+		logging.Error("Error marshalling Telemetry request JSON: %v", err)
 		return
 	}
 
@@ -43,7 +43,7 @@ func Flush(payload LogRequest) {
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))
 	if err != nil {
-		logging.Error("Error creating Telemetry request to Clearcut: %v\n", err)
+		logging.Error("Error creating Telemetry request to Clearcut: %v", err)
 		return
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("%v/%v", CLUSTER_TOOLKIT, config.GetToolkitVersion()))
@@ -52,7 +52,7 @@ func Flush(payload LogRequest) {
 	resp, err := client.Do(req)
 
 	if err != nil {
-		logging.Error("Error sending Telemetry request to Clearcut: %v\n", err)
+		logging.Error("Error sending Telemetry request to Clearcut: %v", err)
 		return
 	}
 	defer resp.Body.Close()
