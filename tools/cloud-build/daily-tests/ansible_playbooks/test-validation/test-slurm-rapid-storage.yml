@@ -56,10 +56,17 @@
   delay: 10
   changed_when: false
 
-- name: Install FIO
-  ansible.builtin.package:
-    name: fio
-    state: present
+- name: Ensure fio is installed (safe for all OS)
+  ansible.builtin.raw: |
+    if ! command -v fio >/dev/null 2>&1; then
+      if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -y && apt-get install -y fio
+      elif command -v yum >/dev/null 2>&1; then
+        yum install -y fio
+      elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y fio
+      fi
+    fi
   become: true
 
 - name: Run FIO test
