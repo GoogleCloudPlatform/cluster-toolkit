@@ -20,6 +20,8 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
+	"path"
+	"path/filepath"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -32,33 +34,49 @@ import (
 // getHCLInfo is wrapped by SourceReader interface which supports multiple
 // sources and stores remote modules locally, so the given source parameter to
 // getHCLInfo is only a local path.
-func getHCLInfo(source string) (ModuleInfo, error) {
-	var module *tfconfig.Module
-	ret := ModuleInfo{}
-
+func loadTFConfigModule(source string) (*tfconfig.Module, error) {
 	if sourcereader.IsEmbeddedPath(source) {
 		wrapFS := tfconfig.WrapFS(sourcereader.ModuleFS)
 		if !tfconfig.IsModuleDirOnFilesystem(wrapFS, source) {
-			return ret, fmt.Errorf("source is not a terraform or packer module: %s", source)
+			return nil, nil
 		}
-		module, _ = tfconfig.LoadModuleFromFilesystem(wrapFS, source)
-	} else {
-		fileInfo, err := os.Stat(source)
-		if os.IsNotExist(err) {
-			return ret, fmt.Errorf("source to module does not exist: %s", source)
+		mod, diags := tfconfig.LoadModuleFromFilesystem(wrapFS, source)
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("failed to load module from filesystem at %s: %v", source, diags)
 		}
-		if err != nil {
-			return ret, fmt.Errorf("failed to read source of module: %s", source)
-		}
-		if !fileInfo.IsDir() {
-			return ret, fmt.Errorf("source of module must be a directory: %s", source)
-		}
-		if !tfconfig.IsModuleDir(source) {
-			return ret, fmt.Errorf("source is not a terraform or packer module: %s", source)
-		}
-		module, _ = tfconfig.LoadModule(source)
+		return mod, nil
 	}
 
+	fileInfo, err := os.Stat(source)
+	if os.IsNotExist(err) {
+		return nil, fmt.Errorf("source to module does not exist: %s", source)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read source of module: %s", source)
+	}
+	if !fileInfo.IsDir() {
+		return nil, fmt.Errorf("source of module must be a directory: %s", source)
+	}
+	if !tfconfig.IsModuleDir(source) {
+		return nil, nil
+	}
+	mod, diags := tfconfig.LoadModule(source)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("failed to load module at %s: %v", source, diags)
+	}
+	return mod, nil
+}
+
+func getHCLInfo(source string) (ModuleInfo, error) {
+	module, err := loadTFConfigModule(source)
+	if err != nil {
+		return ModuleInfo{}, err
+	}
+	if module == nil {
+		return ModuleInfo{}, fmt.Errorf("source is not a terraform module: %s", source)
+	}
+
+	ret := ModuleInfo{}
 	var vars []VarInfo
 	var outs []OutputInfo
 	for _, v := range module.Variables {
@@ -156,4 +174,37 @@ func ReadHclAttributes(file string) (map[string]cty.Value, error) {
 	}
 
 	return a, nil
+}
+
+// GetLocalDependencies returns a list of local module paths that the module at 'source' depends on.
+// Paths returned are relative to the toolkit root if the module is embedded. For non-embedded modules,
+// paths are resolved relative to the input source path.
+func GetLocalDependencies(source string) ([]string, error) {
+	module, err := loadTFConfigModule(source)
+	if err != nil {
+		return nil, err
+	}
+	var isEmbedded = sourcereader.IsEmbeddedPath(source)
+
+	if module == nil {
+		return nil, nil // Return nil if it's not a Terraform module (e.g. Packer)
+	}
+
+	var dependencies []string
+	for _, call := range module.ModuleCalls {
+		if sourcereader.IsLocalPath(call.Source) {
+			var resolvedPath string
+			if isEmbedded {
+				resolvedPath = path.Join(source, call.Source)
+				if !sourcereader.IsEmbeddedPath(resolvedPath) {
+					return nil, fmt.Errorf("module %s escapes embedded directory: %s", source, resolvedPath)
+				}
+			} else {
+				resolvedPath = filepath.ToSlash(filepath.Join(source, call.Source))
+			}
+			dependencies = append(dependencies, resolvedPath)
+		}
+	}
+
+	return dependencies, nil
 }
