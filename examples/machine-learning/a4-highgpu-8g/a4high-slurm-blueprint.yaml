@@ -207,9 +207,9 @@ deployment_groups:
                 notify: Reload SystemD
 
             handlers:
-              - name: Reload SystemD
-                ansible.builtin.systemd:
-                  daemon_reload: true
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
 
             post_tasks:
               - name: Disable NVIDIA services by default (Slurm starts them on boot)
@@ -501,6 +501,9 @@ deployment_groups:
             hosts: all
             become: true
             tasks:
+            - name: Update apt cache
+              ansible.builtin.apt:
+                update_cache: yes
             - name: Install Linux Modules Extra
               ansible.builtin.package:
                 name:
@@ -539,7 +542,7 @@ deployment_groups:
             - name: Install NCCL-GIB Plugin
               ansible.builtin.apt:
                 name: "nccl-gib=$(vars.nccl_gib_version)"
-                update_cache: no
+                update_cache: true
             - name: Freeze NCCL GIB Plugin
               ansible.builtin.dpkg_selections:
                 name: "nccl-gib"
