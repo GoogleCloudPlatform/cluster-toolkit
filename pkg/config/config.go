@@ -300,6 +300,10 @@ type Blueprint struct {
 	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
 	// was explicitly present in the user's source (runtime-only, not serialized).
 	YamlCtx *YamlCtx `yaml:"-"`
+	// AddCreatorLabel indicates whether to add the creator label
+	AddCreatorLabel bool `yaml:"-"`
+	// CreatorUsername is the username to use for the creator label
+	CreatorUsername string `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {
