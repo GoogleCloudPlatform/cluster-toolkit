@@ -38,7 +38,7 @@ locals {
 
   # Project shared JSON into the expected format for tpu_chip_count_map (machine_type -> count)
   tpu_chip_count_map = {
-    for k, v in local.accelerators_json.tpus : k => v.count
+    for k, v in try(local.accelerators_json.tpus, {}) : k => v.count
   }
 
   # Robustly extract the machine family prefix (e.g., "ct6e").

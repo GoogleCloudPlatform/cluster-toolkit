@@ -27,6 +27,8 @@ import (
 
 var (
 	machineTypeCache sync.Map // map[string]*compute.MachineType
+	computeService   *compute.Service
+	computeOnce      sync.Once
 )
 
 func extractStringSetting(m *Module, bp Blueprint, key string) string {
@@ -112,23 +114,27 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
 	}
 
-	// Skip dummy project used in validation tests
-	if project == "invalid-project" {
-		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
-	}
-
 	cacheKey := fmt.Sprintf("%s/%s/%s", project, zone, machineType)
 	var mt *compute.MachineType
 
 	if cached, ok := machineTypeCache.Load(cacheKey); ok {
 		mt = cached.(*compute.MachineType)
 	} else {
-		s, err := compute.NewService(context.Background())
-		if err != nil {
-			return "", fmt.Errorf("failed to initialize compute service for machine_type=%s: %w", machineType, err)
+		var initErr error
+		computeOnce.Do(func() {
+			s, err := compute.NewService(context.Background())
+			if err != nil {
+				initErr = fmt.Errorf("failed to initialize compute service: %w", err)
+				return
+			}
+			computeService = s
+		})
+
+		if initErr != nil {
+			return "", initErr
 		}
 
-		res, err := s.MachineTypes.Get(project, zone, machineType).Do()
+		res, err := computeService.MachineTypes.Get(project, zone, machineType).Do()
 		if err != nil {
 			return "", fmt.Errorf("failed to get machine type info for machine_type=%s zone=%s project=%s: %w", machineType, zone, project, err)
 		}
@@ -166,6 +172,7 @@ func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string,
 
 	isTPU := strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")
 
+	// Note: GKE machine instances attach a single accelerator family type by default.
 	if len(mt.Accelerators) > 0 {
 		acc := mt.Accelerators[0]
 		if isTPU || strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
