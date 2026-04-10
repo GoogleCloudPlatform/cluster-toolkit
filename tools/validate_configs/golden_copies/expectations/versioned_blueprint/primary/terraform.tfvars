@@ -22,6 +22,7 @@ instance_image_custom = false
 
 labels = {
   ghpc_blueprint  = "versioned"
+  ghpc_creator    = "markapurams_google_com"
   ghpc_deployment = "golden_copy_deployment"
 }
 

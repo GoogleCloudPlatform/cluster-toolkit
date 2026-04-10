@@ -35,6 +35,7 @@ vars:
   instance_image_custom: false
   labels:
     ghpc_blueprint: versioned
+    ghpc_creator: markapurams_google_com
     ghpc_deployment: ((var.deployment_name))
   lustre_instance_id: lustre-instance
   project_id: invalid-project
@@ -48,14 +49,14 @@ deployment_groups:
     terraform_providers:
       google:
         source: hashicorp/google
-        version: '>= 6.9.0, <= 7.25.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
       google-beta:
         source: hashicorp/google-beta
-        version: '>= 6.9.0, <= 7.25.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))

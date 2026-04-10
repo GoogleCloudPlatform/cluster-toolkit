@@ -23,6 +23,7 @@ image_name = "((cat /dog))"
 labels = {
   brown           = "$(fox)"
   ghpc_blueprint  = "text_escape"
+  ghpc_creator    = "markapurams_google_com"
   ghpc_deployment = "golden_copy_deployment"
   ñred            = "ñblue"
 }

@@ -30,6 +30,7 @@ vars:
   labels: |-
     ((merge({
       ghpc_blueprint  = "text_escape"
+      ghpc_creator    = "markapurams_google_com"
       ghpc_deployment = var.deployment_name
       }, {
       ñred = "ñblue"

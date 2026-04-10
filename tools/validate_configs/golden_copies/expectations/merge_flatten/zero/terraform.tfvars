@@ -18,6 +18,7 @@ deployment_name = "golden_copy_deployment"
 
 labels = {
   ghpc_blueprint  = "merge_flatten"
+  ghpc_creator    = "markapurams_google_com"
   ghpc_deployment = "golden_copy_deployment"
 }
 

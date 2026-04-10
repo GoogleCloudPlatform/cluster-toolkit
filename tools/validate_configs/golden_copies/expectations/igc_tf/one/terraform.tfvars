@@ -20,6 +20,7 @@ deployment_name = "golden_copy_deployment"
 
 labels = {
   ghpc_blueprint  = "igc"
+  ghpc_creator    = "markapurams_google_com"
   ghpc_deployment = "golden_copy_deployment"
 }
 
