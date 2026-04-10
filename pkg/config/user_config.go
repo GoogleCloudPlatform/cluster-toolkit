@@ -21,9 +21,8 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"sync"
 	"time"
-
-	"hpc-toolkit/pkg/logging"
 
 	"github.com/spf13/viper"
 
@@ -37,7 +36,10 @@ const (
 	collectionName string = "user_configs"
 )
 
-var fsClient *firestore.Client
+var (
+	fsClient     *firestore.Client
+	fsClientOnce sync.Once // To guarantee exactly-once initialization
+)
 
 func InitUserConfig() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -80,12 +82,13 @@ func IsTelemetryEnabled() bool {
 }
 
 // SetTelemetry sets the telemetry preference for the user.
-func SetTelemetry(telemetry bool) {
+func SetTelemetry(telemetry bool) error {
 	viper.Set(TELEMETRY_KEY, telemetry)
 	err := SaveToFirestore()
 	if err != nil {
-		logging.Error("Failed to save state to Firestore: %v", err)
+		return fmt.Errorf("Failed to save state to Firestore: %v", err)
 	}
+	return nil
 }
 
 // Save Viper state back to Firestore
@@ -131,15 +134,26 @@ func generateUniqueID() string {
 
 // Helper function to initialize Firestore client
 func getFirestoreClient(ctx context.Context) (*firestore.Client, error) {
-	if fsClient != nil {
-		return fsClient, nil
-	}
+	var initErr error
 
-	client, err := firestore.NewClient(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create firestore client: %w", err)
-	}
+	// The block inside Do() will only be executed once globally even if multiple goroutines call it simultaneously.
+	fsClientOnce.Do(func() {
+		// If client already exists
+		if fsClient != nil {
+			return
+		}
 
-	fsClient = client
+		// Else create a new client
+		client, err := firestore.NewClient(ctx, projectID)
+		if err != nil {
+			initErr = err
+			return
+		}
+		fsClient = client
+	})
+
+	if initErr != nil {
+		return nil, initErr
+	}
 	return fsClient, nil
 }
