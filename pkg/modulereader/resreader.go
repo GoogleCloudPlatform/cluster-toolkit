@@ -22,7 +22,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
 	"github.com/zclconf/go-cty/cty"
@@ -141,15 +141,15 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	default:
 		pkgAddr, subDir := getter.SourceDirSubdir(source)
 		if cachedModPath, ok := modDownloadCache[pkgAddr]; ok {
-			modPath = path.Join(cachedModPath, subDir)
+			modPath = filepath.Join(cachedModPath, subDir)
 		} else {
 			tmpDir, err := os.MkdirTemp("", "module-*")
 			if err != nil {
 				return ModuleInfo{}, err
 			}
 
-			pkgPath := path.Join(tmpDir, "module")
-			modPath = path.Join(pkgPath, subDir)
+			pkgPath := filepath.Join(tmpDir, "module")
+			modPath = filepath.Join(pkgPath, subDir)
 			sourceReader := sourcereader.Factory(pkgAddr)
 			if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
 				if subDir != "" && kind == "packer" {

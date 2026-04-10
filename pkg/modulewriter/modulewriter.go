@@ -26,10 +26,10 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
@@ -263,71 +263,80 @@ func shortHash(s string) string {
 	return hex.EncodeToString(h[:])[:4]
 }
 
-func copyEmbeddedModules(base string) error {
-	r := sourcereader.EmbeddedSourceReader{}
-	for _, src := range []string{"modules", "community/modules"} {
-		dst := filepath.Join(base, "modules/embedded", src)
-		if err := os.MkdirAll(dst, 0755); err != nil {
-			return err
-		}
-		if err := r.CopyDir(src, dst); err != nil {
-			return err
+func copyModuleSource(src, dst string) error {
+	_, err := os.Stat(dst)
+	if err == nil {
+		return nil // Already exists
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check if module exists at %s: %w", dst, err)
+	}
+
+	reader := sourcereader.Factory(src)
+	if err := reader.GetModule(src, dst); err != nil {
+		return fmt.Errorf("failed to get module from %s to %s: %w", src, dst, err)
+	}
+
+	// remove .git directory if one exists; we do not want submodule
+	// git history in deployment directory
+	if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
+	for iMod := range modules {
+		mod := &modules[iMod]
+		if mod.Kind == config.TerraformKind {
+			if sourcereader.IsEmbeddedPath(mod.Source) || sourcereader.IsRemotePath(mod.Source) {
+				continue
+			}
 		}
 
+		var src, dst string
+		if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
+			src, _ = getter.SourceDirSubdir(mod.Source)
+			dst = filepath.Join(gPath, string(mod.ID))
+		} else {
+			deplSource, err := DeploymentSource(*mod)
+			if err != nil {
+				return err
+			}
+			src = mod.Source
+			dst = filepath.Join(gPath, deplSource)
+		}
+
+		if err := copyModuleSource(src, dst); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func copyGroupSources(gPath string, g config.Group) error {
-	var copyEmbedded = false
-	for iMod := range g.Modules {
-		mod := &g.Modules[iMod]
-		deplSource, err := DeploymentSource(*mod)
-		if err != nil {
-			return err
-		}
-
-		if mod.Kind == config.TerraformKind {
-			// some terraform modules do not require copying
-			if sourcereader.IsEmbeddedPath(mod.Source) {
-				copyEmbedded = true
-				continue // all embedded terraform modules fill be copied at once
-			}
-			if sourcereader.IsRemotePath(mod.Source) {
-				continue // will be downloaded by terraform
-			}
-		}
-
-		/* Copy source files */
-		var src, dst string
-
-		if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
-			src, _ = getter.SourceDirSubdir(mod.Source)
-			dst = filepath.Join(gPath, string(mod.ID))
-		} else {
-			src = mod.Source
-			dst = filepath.Join(gPath, deplSource)
-		}
-		if _, err := os.Stat(dst); err == nil {
-			continue
-		}
-		reader := sourcereader.Factory(src)
-		if err := reader.GetModule(src, dst); err != nil {
-			return fmt.Errorf("failed to get module from %s to %s: %w", src, dst, err)
-		}
-		// remove .git directory if one exists; we do not want submodule
-		// git history in deployment directory
-		if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
-			return err
-		}
+	// 1. Resolve dependencies for all modules in the group
+	sources := make([]string, 0, len(g.Modules))
+	for _, mod := range g.Modules {
+		sources = append(sources, mod.Source)
 	}
-	if copyEmbedded {
-		if err := copyEmbeddedModules(gPath); err != nil {
-			return fmt.Errorf("failed to copy embedded modules: %w", err)
+	resolvedDeps, err := modulereader.ResolveDependencies(sources)
+	if err != nil {
+		return fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+
+	// 2. Copy resolved embedded modules
+	for _, dep := range resolvedDeps {
+		if sourcereader.IsEmbeddedPath(dep) {
+			dst := filepath.Join(gPath, "modules", "embedded", dep)
+			if err := copyModuleSource(dep, dst); err != nil {
+				return err
+			}
 		}
 	}
 
-	return nil
+	// 3. Copy non-embedded modules
+	return copyNonEmbeddedModules(gPath, g.Modules)
 }
 
 // Prepares a deployment directory to be written to.
@@ -392,7 +401,7 @@ func prepArtifactsDir(artifactsDir string) error {
 		return err
 	}
 
-	artifactsWarningFile := path.Join(artifactsDir, artifactsWarningFilename)
+	artifactsWarningFile := filepath.Join(artifactsDir, artifactsWarningFilename)
 	f, err := os.Create(artifactsWarningFile)
 	if err != nil {
 		return err

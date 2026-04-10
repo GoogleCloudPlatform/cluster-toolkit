@@ -21,7 +21,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
-	"path"
 	"path/filepath"
 )
 
@@ -68,8 +67,8 @@ func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	modName := path.Base(source)
-	modPath := path.Join(tmpDir, modName)
+	modName := filepath.Base(source)
+	modPath := filepath.Join(tmpDir, modName)
 
 	sourceReader := sourcereader.Factory(source)
 	if err = sourceReader.GetModule(source, modPath); err != nil {
