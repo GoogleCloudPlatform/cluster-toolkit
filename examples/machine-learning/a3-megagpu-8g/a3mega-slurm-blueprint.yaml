@@ -35,7 +35,7 @@ vars:
   enable_login_public_ips: true
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd
-  build_slurm_from_git_ref: 6.12.1
+  build_slurm_from_git_ref: 6.10.10
   #Provisioning models (set to true or fill in reservation name, pick only one)
   a3mega_reservation_name: ""  # supply reservation name
   a3mega_dws_flex_enabled: false
@@ -267,7 +267,7 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -ex -o pipefail
-          
+
           # 1. Add Artifact Registry apt repo driver repo
           echo "deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main" > /etc/apt/sources.list.d/artifact-registry.list
           apt-get update
@@ -275,27 +275,27 @@ deployment_groups:
 
           # 2. Now add the ar+https repo
           echo "deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main" > /etc/apt/sources.list.d/gpudirect-tcpxo.list
-          
+
           # 3. Install dependencies
           apt-get update
           apt-get install -y dkms
-          
+
           # 3. Download package
           mkdir -p /tmp/dmabuf_pkg
           cd /tmp/dmabuf_pkg
           apt-get update # Update again to make sure we see the new repo
           apt-get download dmabuf-import-helper
-          
+
           # 4. Extract package
           dpkg -x *.deb .
-          
+
           # 5. Move source to /usr/src
           rm -rf /usr/src/dmabuf-import-helper-1.1
           mv usr/src/dmabuf-import-helper-1.1 /usr/src/
-          
+
           # 6. Apply fix for kernel 6.17
           sed -i 's/MODULE_IMPORT_NS(DMA_BUF)/MODULE_IMPORT_NS("DMA_BUF")/' /usr/src/dmabuf-import-helper-1.1/import-helper.c
-          
+
           # 7. Build and install via DKMS
           dkms add -m dmabuf-import-helper -v 1.1
           dkms build -m dmabuf-import-helper -v 1.1
