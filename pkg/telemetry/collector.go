@@ -82,7 +82,11 @@ func getCommandName(cmd *cobra.Command) string {
 }
 
 func getCmdFlags(cmd *cobra.Command) string {
-	flags := make([]string, 0)
+	numFlags := cmd.Flags().NFlag()
+	if numFlags == 0 {
+		return ""
+	}
+	flags := make([]string, 0, numFlags)
 	cmd.Flags().Visit(func(f *pflag.Flag) {
 		flags = append(flags, f.Name)
 	})
