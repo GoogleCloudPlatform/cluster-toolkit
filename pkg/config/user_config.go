@@ -73,7 +73,6 @@ func InitUserConfig() error {
 // GetPersistentUserId returns the stored User ID from Viper config.
 func GetPersistentUserId() string {
 	return viper.GetString(USER_ID_KEY)
-
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
