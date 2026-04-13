@@ -16,14 +16,14 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 
 ## Modules
@@ -33,13 +33,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_network_peering.peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network_peering) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_export_custom_routes"></a> [export\_custom\_routes](#input\_export\_custom\_routes) | (Optional) Whether to export the custom routes to the peer network. Defaults to false. | `bool` | `null` | no |
 | <a name="input_import_custom_routes"></a> [import\_custom\_routes](#input\_import\_custom\_routes) | (Optional) Whether to import the custom routes from the peer network. Defaults to false. | `bool` | `null` | no |
 | <a name="input_import_subnet_routes_with_public_ip"></a> [import\_subnet\_routes\_with\_public\_ip](#input\_import\_subnet\_routes\_with\_public\_ip) | (Optional) Whether subnet routes with public IP range are imported. | `bool` | `null` | no |
@@ -51,6 +51,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_peering_name"></a> [peering\_name](#output\_peering\_name) | Name of the peering. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
