@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/oauth2/google"
 )
 
@@ -130,7 +131,7 @@ func ensureGCloudSDKInstalled() error {
 }
 
 // ensureGCloudProjectConfigured checks and configures the default gcloud project.
-func ensureGCloudProjectConfigured(projectID *string) error {
+func ensureGCloudProjectConfigured(cmd *cobra.Command, projectID *string) error {
 	if *projectID != "" {
 		logging.Info("Using provided project ID: %s", *projectID)
 		currentProjectResult := shell.ExecuteCommand("gcloud", "config", "get-value", "project")
@@ -155,8 +156,8 @@ func ensureGCloudProjectConfigured(projectID *string) error {
 
 	logging.Info("No default gcloud project configured.")
 
-	fmt.Print("Please enter your Google Cloud Project ID: ")
-	reader := bufio.NewReader(os.Stdin)
+	cmd.Print("Please enter your Google Cloud Project ID: ")
+	reader := bufio.NewReader(cmd.InOrStdin())
 	inputProjectID, _ := reader.ReadString('\n')
 	inputProjectID = strings.TrimSpace(inputProjectID)
 
@@ -232,7 +233,7 @@ func ensureKubectlInstalled(useAptFallback *bool) error {
 			}
 			*useAptFallback = true
 		} else {
-			return fmt.Errorf("failed to install kubectl via gcloud components: %s", installResult.Stderr)
+			return fmt.Errorf("failed to install kubectl via gcloud components. Please install kubectl manually for your platform. Error: %s", installResult.Stderr)
 		}
 	}
 
@@ -278,7 +279,7 @@ func ensureGKEGCloudAuthPluginInstalled(useAptFallback *bool) error {
 			}
 			*useAptFallback = true
 		} else {
-			return fmt.Errorf("failed to install gke-gcloud-auth-plugin via gcloud components: %s", installResult.Stderr)
+			return fmt.Errorf("failed to install gke-gcloud-auth-plugin via gcloud components. Please install it manually for your platform. Error: %s", installResult.Stderr)
 		}
 	}
 
@@ -334,9 +335,9 @@ func ensureArtifactRegistryAPIEnabled(projectID string) error {
 	return nil
 }
 
-func checkGCloudProject(newState *PrereqState, projectID *string) error {
+func checkGCloudProject(cmd *cobra.Command, newState *PrereqState, projectID *string) error {
 	if !newState.GCloudProjectConfigured {
-		if err := ensureGCloudProjectConfigured(projectID); err != nil {
+		if err := ensureGCloudProjectConfigured(cmd, projectID); err != nil {
 			return err
 		}
 		newState.GCloudProjectConfigured = true
@@ -344,7 +345,7 @@ func checkGCloudProject(newState *PrereqState, projectID *string) error {
 		if *projectID == "" && newState.LastCheckedProjectID != "" {
 			*projectID = newState.LastCheckedProjectID
 		}
-		if err := ensureGCloudProjectConfigured(projectID); err != nil {
+		if err := ensureGCloudProjectConfigured(cmd, projectID); err != nil {
 			return err
 		}
 	}
@@ -401,7 +402,7 @@ func logPrereqStatus(state PrereqState) {
 }
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
-func ensurePrerequisites(projectID *string) error {
+func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
 	if os.Getenv("GCLUSTER_SKIP_PREREQ_CHECKS") == "true" {
 		logging.Info("Skipping prerequisite checks due to GCLUSTER_SKIP_PREREQ_CHECKS environment variable.")
 		return nil
@@ -423,7 +424,7 @@ func ensurePrerequisites(projectID *string) error {
 	if err := checkAndConfigure(&newState.GCloudSDKInstalled, ensureGCloudSDKInstalled); err != nil {
 		return err
 	}
-	if err := checkGCloudProject(&newState, projectID); err != nil {
+	if err := checkGCloudProject(cmd, &newState, projectID); err != nil {
 		return err
 	}
 	if err := checkAndConfigure(&newState.GCloudAuthenticated, ensureGCloudAuthenticated); err != nil {

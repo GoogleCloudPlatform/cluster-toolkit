@@ -16,9 +16,23 @@ package job
 
 import (
 	"hpc-toolkit/pkg/orchestrator/gke"
+	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
 )
+
+type mockLogsExecutor struct{}
+
+func (m *mockLogsExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	if name == "kubectl" && len(args) > 0 && args[0] == "logs" {
+		return shell.CommandResult{ExitCode: 0, Stdout: "mock logs output"}
+	}
+	return shell.CommandResult{ExitCode: 0}
+}
+
+func (m *mockLogsExecutor) ExecuteCommandStream(name string, args ...string) error {
+	return nil
+}
 
 func TestLogsCmd_Success(t *testing.T) {
 	resetSubmitCmdFlags() // Reset shared flags
@@ -29,7 +43,7 @@ func TestLogsCmd_Success(t *testing.T) {
 
 	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
 		g := gke.NewGKEOrchestrator()
-		g.SetExecutor(&mockCancelExecutor{}) // Use the mock from cancel_test.go if available
+		g.SetExecutor(&mockLogsExecutor{})
 		g.SetKubeClient(&mockKubeClient{namespace: "default"})
 		return g
 	}
@@ -43,5 +57,9 @@ func TestLogsCmd_Success(t *testing.T) {
 			!strings.Contains(err.Error(), "gke-gcloud-auth-plugin not found") {
 			t.Fatalf("unexpected error: %v, output: %s", err, output)
 		}
+	}
+
+	if !strings.Contains(output, "mock logs output") {
+		t.Errorf("expected output to contain 'mock logs output', got %q", output)
 	}
 }

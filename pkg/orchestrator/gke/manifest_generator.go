@@ -94,7 +94,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) string
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
-	if err := g.resolveXPKStyleAccelerator(&job); err != nil {
+	if err := g.resolveAcceleratorShorthand(&job); err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
 
@@ -190,7 +190,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	return opts, profile, nil
 }
 
-func (g *GKEOrchestrator) resolveXPKStyleAccelerator(job *orchestrator.JobDefinition) error {
+func (g *GKEOrchestrator) resolveAcceleratorShorthand(job *orchestrator.JobDefinition) error {
 	if job.AcceleratorType == "" {
 		return nil
 	}
@@ -213,7 +213,7 @@ func (g *GKEOrchestrator) resolveXPKStyleAccelerator(job *orchestrator.JobDefini
 		return nil
 	}
 
-	logging.Info("Detected XPK-style accelerator request: %s", job.AcceleratorType)
+	logging.Info("Detected accelerator shorthand request: %s", job.AcceleratorType)
 
 	machineType, err := g.queryMachineType()
 	if err != nil {

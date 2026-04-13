@@ -132,7 +132,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will automatically look for a `Dockerfile` within this directory.
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
-* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'`). If empty, `gcluster job submit` will auto-discover the optimal accelerator available on the cluster nodes. It also supports XPK-style strings like `v6e-256` to request total chips; the tool will auto-discover the machine type and calculate `vms-per-slice` and `topology` automatically. (Optional)
+* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
 * `-c, --cluster string`: Name of the GKE cluster to deploy the job to. (Required)
 * `-l, --location string`: Location (Zone or Region) of the GKE cluster. (Required)
@@ -153,7 +153,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 ### Unified Job Submission
 
-Because `gcluster job submit` features auto-discovery, you can use the exact same command to deploy to a standard CPU cluster (like `hpc-gke`) or an accelerated GPU/TPU cluster (like `gke-a3-megagpu`). The orchestrator will automatically query the Kubernetes cluster API to discover the installed Node Accelerators and Kueue Queues, injecting the exact `nvidia.com/gpu` limits your hardware requires.
+By specifying the `--accelerator` flag, you can use the exact same command to deploy to a standard CPU cluster (using machine type like `n2-standard-32`) or an accelerated GPU/TPU cluster (using accelerator type like `nvidia-l4`). The orchestrator will calculate the necessary resource requests and limits based on the specified accelerator or machine type.
 
 * **Submit the Job:**
 
@@ -161,11 +161,12 @@ Because `gcluster job submit` features auto-discovery, you can use the exact sam
     ./gcluster job submit \
       --project <YOUR_GCP_PROJECT_ID> \
       --cluster my-test-cluster \
-      --cluster-location us-central1 \
+      --location us-central1 \
       --base-image python:3.9-slim \
       --build-context job_details \
       --command "python app.py" \
-      --name my-python-app-job
+      --name my-python-app-job \
+      --accelerator n2-standard-32
     ```
 
     *Replace `<YOUR_GCP_PROJECT_ID>` with your actual GCP Project ID.*

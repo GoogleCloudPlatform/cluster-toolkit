@@ -52,6 +52,6 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get logs: %w", err)
 	}
 
-	fmt.Println(output)
+	cmd.Println(output)
 	return nil
 }

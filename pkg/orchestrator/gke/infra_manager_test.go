@@ -30,10 +30,8 @@ func TestRenderClusterQueue(t *testing.T) {
 					MemoryGi: 400,
 				},
 				"flavor-gpu-test": {
+					CPUs: 10, // Share CPU
 					GPUs: 10,
-				},
-				"flavor-tpu-test": {
-					TPUs: 20,
 				},
 			},
 		},
@@ -56,8 +54,49 @@ func TestRenderClusterQueue(t *testing.T) {
 	if !strings.Contains(output, "nominalQuota: 10") {
 		t.Errorf("expected nominalQuota: 10 for GPU, got %s", output)
 	}
-	if !strings.Contains(output, "nominalQuota: 20") {
-		t.Errorf("expected nominalQuota: 20 for TPU, got %s", output)
+
+	// Verify single resource group
+	count := strings.Count(output, "coveredResources:")
+	if count != 1 {
+		t.Errorf("expected 1 coveredResources block, got %d. Output: %s", count, output)
+	}
+}
+
+func TestRenderClusterQueue_Pathways(t *testing.T) {
+	orc := &GKEOrchestrator{
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"flavor-default": {
+					CPUs:     100,
+					MemoryGi: 400,
+				},
+				"cpu-user": { // Pathways flavor
+					CPUs:     480,
+					MemoryGi: 2000,
+				},
+			},
+		},
+	}
+
+	bytes, err := orc.renderClusterQueue()
+	if err != nil {
+		t.Fatalf("renderClusterQueue failed: %v", err)
+	}
+
+	output := string(bytes)
+
+	// Verify quotas are rendered correctly
+	if !strings.Contains(output, "nominalQuota: 100") {
+		t.Errorf("expected nominalQuota: 100 for CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 480") {
+		t.Errorf("expected nominalQuota: 480 for CPU, got %s", output)
+	}
+
+	// Verify TWO resource groups
+	count := strings.Count(output, "coveredResources:")
+	if count != 2 {
+		t.Errorf("expected 2 coveredResources blocks for Pathways case, got %d. Output: %s", count, output)
 	}
 }
 

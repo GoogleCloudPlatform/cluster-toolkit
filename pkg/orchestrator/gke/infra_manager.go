@@ -64,35 +64,37 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 
 	currentVersion, _ := g.GetKueueVersion()
 
-	isBroken := g.checkKueueBroken(kueueCRDInstalled, kueueDeploymentInstalled)
-
 	targetVersion := version
 	if targetVersion == "" {
 		targetVersion = defaultKueueVersion
 	}
 
-	needReinstall := isBroken
+	needReinstall := false
+
+	// 1. Minimum version check for KUEUE
 	if currentVersion != "" && g.isVersionBelow(currentVersion, defaultKueueVersion) {
 		needReinstall = true
 		logging.Info("Current Kueue version %s is below default %s.", currentVersion, defaultKueueVersion)
 	}
 
+	// 2. Check if basic installation is missing
+	if !needReinstall && (!kueueCRDInstalled || !kueueDeploymentInstalled) {
+		needReinstall = true
+		logging.Info("Kueue installation is incomplete (CRD or Deployment missing).")
+	}
+
+	// 3. Check if webhook is healthy (only if not already deciding to reinstall)
+	if !needReinstall {
+		if err := g.waitForKueueWebhook(); err != nil {
+			needReinstall = true
+			logging.Info("Kueue webhook health check failed. Treating as broken.")
+		}
+	}
+
 	if needReinstall {
-		promptMsg := fmt.Sprintf("Kueue installation is broken or version is below %s. We will be re-installing KUEUE using %s. Replying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", defaultKueueVersion, defaultKueueVersion)
-		if !shell.PromptYesNo(promptMsg) {
-			logging.Fatal("User declined to re-install Kueue. Exiting.")
-		}
-
-		logging.Info("Proceeding with clean re-installation of Kueue...")
-		if err := g.DeleteAllKueueResources(); err != nil {
-			return fmt.Errorf("failed to delete Kueue resources: %w", err)
-		}
-
-		if err := g.installKueue(targetVersion); err != nil {
+		if err := g.handleKueueReinstallation(targetVersion); err != nil {
 			return err
 		}
-	} else {
-		logging.Info("Kueue is already installed and healthy at version %s.", currentVersion)
 	}
 
 	priorityClassesInstalled, err := g.arePriorityClassesInstalled()
@@ -109,15 +111,18 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkKueueBroken(crdInstalled, deployInstalled bool) bool {
-	if !crdInstalled || !deployInstalled {
-		return true
+func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string) error {
+	promptMsg := fmt.Sprintf("Kueue installation is broken or version is below %s. We will be re-installing KUEUE using %s. Replying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", defaultKueueVersion, targetVersion)
+	if !shell.PromptYesNo(promptMsg) {
+		logging.Fatal("User declined to re-install Kueue. Exiting.")
 	}
-	if err := g.waitForKueueWebhook(); err != nil {
-		logging.Warn("Kueue webhook health check failed: %v", err)
-		return true
+
+	logging.Info("Proceeding with clean re-installation of Kueue...")
+	if err := g.DeleteAllKueueResources(); err != nil {
+		return fmt.Errorf("failed to delete Kueue resources: %w", err)
 	}
-	return false
+
+	return g.installKueue(targetVersion)
 }
 
 func (g *GKEOrchestrator) isVersionBelow(current, target string) bool {
@@ -173,7 +178,6 @@ func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 }
 
 func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
-	logging.Info("Checking for Kueue installation...")
 	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "clusterqueues.kueue.x-k8s.io")
 	if res.ExitCode == 0 {
 		logging.Info("Kueue CRD found.")
@@ -187,7 +191,6 @@ func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
 }
 
 func (g *GKEOrchestrator) isKueueDeploymentInstalled() (bool, error) {
-	logging.Info("Checking for Kueue deployment...")
 	res := g.executor.ExecuteCommand("kubectl", "get", "deployment", "kueue-controller-manager", "-n", "kueue-system")
 	if res.ExitCode == 0 {
 		logging.Info("Kueue deployment found.")
@@ -217,7 +220,6 @@ func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
 }
 
 func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
-	logging.Info("Checking for PriorityClass installation...")
 	priorityClasses := []string{"very-low", "low", "medium", "high", "very-high"}
 	for _, pc := range priorityClasses {
 		res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", pc)
@@ -301,40 +303,49 @@ func (g *GKEOrchestrator) installKueueResources() error {
 }
 
 func (g *GKEOrchestrator) renderClusterQueue() ([]byte, error) {
-	var resourceGroups []map[string]interface{}
+	var mainFlavors []map[string]interface{}
+	mainCoveredResourcesMap := make(map[string]bool)
+
+	var pathwaysFlavors []map[string]interface{}
+	pathwaysCoveredResourcesMap := make(map[string]bool)
 
 	for name, fc := range g.capacity.Flavors {
-		var coveredResources []string
-		var resources []map[string]interface{}
+		resources, isPathways := g.buildFlavorResources(name, fc, mainCoveredResourcesMap, pathwaysCoveredResourcesMap)
+		if len(resources) > 0 {
+			flavor := map[string]interface{}{
+				"name":      name,
+				"resources": resources,
+			}
+			if isPathways {
+				pathwaysFlavors = append(pathwaysFlavors, flavor)
+			} else {
+				mainFlavors = append(mainFlavors, flavor)
+			}
+		}
+	}
 
-		if fc.CPUs > 0 {
-			coveredResources = append(coveredResources, "cpu")
-			resources = append(resources, map[string]interface{}{"name": "cpu", "nominalQuota": fc.CPUs})
-		}
-		if fc.MemoryGi > 0 {
-			coveredResources = append(coveredResources, "memory")
-			resources = append(resources, map[string]interface{}{"name": "memory", "nominalQuota": fmt.Sprintf("%dGi", fc.MemoryGi)})
-		}
-		if fc.GPUs > 0 {
-			coveredResources = append(coveredResources, "nvidia.com/gpu")
-			resources = append(resources, map[string]interface{}{"name": "nvidia.com/gpu", "nominalQuota": fc.GPUs})
-		}
-		if fc.TPUs > 0 {
-			coveredResources = append(coveredResources, "google.com/tpu")
-			resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
-		}
+	var resourceGroups []map[string]interface{}
 
-		if len(coveredResources) > 0 {
-			resourceGroups = append(resourceGroups, map[string]interface{}{
-				"coveredResources": coveredResources,
-				"flavors": []map[string]interface{}{
-					{
-						"name":      name,
-						"resources": resources,
-					},
-				},
-			})
-		}
+	var mainCoveredResources []string
+	for res := range mainCoveredResourcesMap {
+		mainCoveredResources = append(mainCoveredResources, res)
+	}
+	if len(mainCoveredResources) > 0 {
+		resourceGroups = append(resourceGroups, map[string]interface{}{
+			"coveredResources": mainCoveredResources,
+			"flavors":          mainFlavors,
+		})
+	}
+
+	var pathwaysCoveredResources []string
+	for res := range pathwaysCoveredResourcesMap {
+		pathwaysCoveredResources = append(pathwaysCoveredResources, res)
+	}
+	if len(pathwaysCoveredResources) > 0 {
+		resourceGroups = append(resourceGroups, map[string]interface{}{
+			"coveredResources": pathwaysCoveredResources,
+			"flavors":          pathwaysFlavors,
+		})
 	}
 
 	cqMap := map[string]interface{}{
@@ -356,6 +367,38 @@ func (g *GKEOrchestrator) renderClusterQueue() ([]byte, error) {
 	}
 
 	return cqBytes, nil
+}
+
+func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, mainCovered, pathwaysCovered map[string]bool) ([]map[string]interface{}, bool) {
+	var resources []map[string]interface{}
+	isPathways := (name == "cpu-user")
+
+	if fc.CPUs > 0 {
+		if isPathways {
+			pathwaysCovered["cpu"] = true
+		} else {
+			mainCovered["cpu"] = true
+		}
+		resources = append(resources, map[string]interface{}{"name": "cpu", "nominalQuota": fc.CPUs})
+	}
+	if fc.MemoryGi > 0 {
+		if isPathways {
+			pathwaysCovered["memory"] = true
+		} else {
+			mainCovered["memory"] = true
+		}
+		resources = append(resources, map[string]interface{}{"name": "memory", "nominalQuota": fmt.Sprintf("%dGi", fc.MemoryGi)})
+	}
+	if fc.GPUs > 0 {
+		mainCovered["nvidia.com/gpu"] = true
+		resources = append(resources, map[string]interface{}{"name": "nvidia.com/gpu", "nominalQuota": fc.GPUs})
+	}
+	if fc.TPUs > 0 {
+		mainCovered["google.com/tpu"] = true
+		resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
+	}
+
+	return resources, isPathways
 }
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {
@@ -467,7 +510,6 @@ func parseVersion(v string) (int, int, int) {
 }
 
 func (g *GKEOrchestrator) waitForKueueWebhook() error {
-	logging.Info("Waiting for Kueue webhook service to be ready...")
 	res := g.executor.ExecuteCommand("kubectl", "rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", "--timeout=600s")
 	if res.ExitCode != 0 {
 		podDetails := g.getKueuePodDetails()
@@ -483,7 +525,6 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 	major, minor, _ := parseVersion(version)
 	useEndpointSlice := major > 0 || (major == 0 && minor > 13)
 
-	logging.Info("Verifying Kueue webhook service endpoints using version %s...", version)
 	for i := 0; i < 40; i++ {
 		ready, err := g.checkKueueEndpoints(useEndpointSlice)
 		if err != nil {
@@ -577,10 +618,8 @@ func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, erro
 }
 
 func (g *GKEOrchestrator) isJobSetCRDInstalled() (bool, error) {
-	logging.Info("Checking for JobSet CRD installation...")
 	res := g.executor.ExecuteCommand("kubectl", "get", "crd", "jobsets.jobset.x-k8s.io")
 	if res.ExitCode == 0 {
-		logging.Info("JobSet CRD already installed.")
 		return true, nil
 	}
 	if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
@@ -763,12 +802,12 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 }
 
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
-func (g *GKEOrchestrator) ValidateClusterState(workloadName string) error {
+func (g *GKEOrchestrator) ValidateClusterState(workloadName string, clusterName string, clusterLocation string, projectID string) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
 		func() error { return g.CheckAndInstallKueue("") },
 		g.checkAndInstallJobSetCRD,
-		func() error { return g.validateJobConflicts(workloadName) },
+		func() error { return g.validateJobConflicts(workloadName, clusterName, clusterLocation, projectID) },
 	}
 
 	for _, validate := range validators {

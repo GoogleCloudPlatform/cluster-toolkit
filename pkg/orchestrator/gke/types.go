@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 	"strings"
@@ -126,8 +127,8 @@ type ClusterCapacity struct {
 // Types for initializeJobSubmission unmarshaling
 
 type gkeAccelerator struct {
-	AcceleratorCount int    `json:"acceleratorCount"`
-	AcceleratorType  string `json:"acceleratorType"`
+	AcceleratorCount json.Number `json:"acceleratorCount"`
+	AcceleratorType  string      `json:"acceleratorType"`
 }
 
 type gkeNodePoolConfig struct {
