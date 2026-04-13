@@ -15,6 +15,8 @@
 
 set -e -o pipefail
 
+export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+
 run_test() {
 	example=$1
 	if [ -n "$2" ]; then

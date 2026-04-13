@@ -439,7 +439,7 @@ variable "reservation_name" {
 }
 
 variable "machine_configs" {
-  description = "JSON text containing the definition of GKE machine types and counts"
+  description = "JSON text containing the definition of GCE machine types and counts"
   type        = string
   default     = "{}"
 }

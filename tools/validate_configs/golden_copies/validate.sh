@@ -15,6 +15,8 @@
 
 set -e
 
+export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+
 run_test() {
 	bp=$1
 	gc=$2

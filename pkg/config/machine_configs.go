@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -108,6 +109,10 @@ func parseTPUCount(machineType string) int {
 }
 
 func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
+	if mockData := os.Getenv("GHPC_MOCK_MACHINE_CONFIG"); mockData != "" {
+		return mockData, nil
+	}
+
 	machineType, zone, project := extractMachineParams(m, bp)
 
 	if machineType == "" || zone == "" || project == "" {
