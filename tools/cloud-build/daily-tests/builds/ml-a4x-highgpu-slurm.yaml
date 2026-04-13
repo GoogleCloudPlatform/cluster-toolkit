@@ -65,6 +65,10 @@ steps:
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
     sed -i -e '/- id: a4x-slurm-net-0/,/- id: a4x-slurm-net-1/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
+    # Adding this as filestore APIs are not available on us-west8-a. Should be removed once reservation is moved or updated to non us-west8-a region
+    sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
+    sed -i '/- homefs/d' $${BLUEPRINT}
+    sed -i '/filestore_ip_range:/d' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
