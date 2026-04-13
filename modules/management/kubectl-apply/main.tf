@@ -280,15 +280,13 @@ module "install_jobset" {
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
     var.jobset.controller_cpu_limit != null || var.jobset.controller_memory_limit != null ? yamlencode({
-      controllerManager = {
-        manager = {
-          resources = {
-            limits = {
-              for k, v in {
-                cpu    = var.jobset.controller_cpu_limit
-                memory = var.jobset.controller_memory_limit
-              } : k => v if v != null
-            }
+      controller = {
+        resources = {
+          limits = {
+            for k, v in {
+              cpu    = var.jobset.controller_cpu_limit
+              memory = var.jobset.controller_memory_limit
+            } : k => v if v != null
           }
         }
       }
