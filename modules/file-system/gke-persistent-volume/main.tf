@@ -20,6 +20,11 @@ locals {
 }
 
 locals {
+  # Extract project ID from cluster ID
+  project_id = split("/", var.cluster_id)[1]
+}
+
+locals {
   # Flags indicating which storage type is active based on input variables.
   storage_type_active = {
     gcs       = var.gcs_bucket_name != null
@@ -78,7 +83,7 @@ locals {
   # Variables for PV templates, merging common vars with type-specific ones.
   pv_template_vars = {
     gcs = merge(local.common_pv_vars, {
-      mount_options      = var.gcs_bucket_name != null ? [for opt in split(",", var.network_storage.mount_options) : opt if !contains(["defaults", "_netdev", "implicit_dirs"], opt)] : []
+      mount_options      = var.gcs_bucket_name != null ? [for opt in split(",", var.network_storage.mount_options) : opt if !contains(["defaults", "_netdev"], opt) && !(opt == "implicit_dirs" && var.gcsfuse_storage_class_name != "" && var.gcsfuse_storage_class_name != null)] : []
       bucket_name        = var.gcs_bucket_name
       namespace          = var.namespace
       pvc_name           = local.pvc_name
@@ -161,8 +166,8 @@ resource "kubectl_manifest" "pvc" {
 }
 
 resource "google_project_iam_member" "gcsfuse_agent_binding" {
-  count   = var.gcsfuse_storage_class_name != "" ? 1 : 0
-  project = split("/", var.cluster_id)[1]
-  role    = "projects/${split("/", var.cluster_id)[1]}/roles/gke.gcsfuse.profileUser"
+  count   = var.gcsfuse_storage_class_name != null ? 1 : 0
+  project = local.project_id
+  role    = "projects/${local.project_id}/roles/gke.gcsfuse.profileUser"
   member  = "serviceAccount:service-${data.google_project.project.number}@container-engine-robot.iam.gserviceaccount.com"
 }
