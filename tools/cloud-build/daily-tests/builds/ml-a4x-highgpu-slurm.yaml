@@ -16,12 +16,10 @@
 tags:
 - slurm6
 - m.filestore
-- m.multivpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.service-account
 - m.startup-script
 - m.vpc
 - m.custom-image
