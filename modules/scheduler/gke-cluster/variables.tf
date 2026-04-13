@@ -261,7 +261,7 @@ variable "system_node_pool_node_count" {
 variable "system_node_pool_machine_type" {
   description = "Machine type for the system node pool."
   type        = string
-  default     = "n4-standard-4"
+  default     = "e2-standard-4"
 }
 
 variable "system_node_pool_disk_size_gb" {
@@ -562,6 +562,18 @@ variable "enable_inference_gateway" {
   default     = false
 }
 
+variable "auto_monitoring_scope" {
+  description = <<-EOT
+  Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.
+  For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring
+  EOT
+  type        = string
+  default     = "NONE"
+  validation {
+    condition     = contains(["ALL", "NONE"], var.auto_monitoring_scope)
+    error_message = "auto_monitoring_scope can only be ALL or NONE."
+  }
+}
 variable "enable_pathways_for_tpus" {
   description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
   type        = bool

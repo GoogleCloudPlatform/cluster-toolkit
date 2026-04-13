@@ -28,3 +28,36 @@ resource "terraform_data" "feature_guard" {
   }
 }
 ```
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+
+## Providers
+
+No providers.
+
+## Modules
+
+No modules.
+
+## Resources
+
+No resources.
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_current_version"></a> [current\_version](#input\_current\_version) | The version string to evaluate (e.g. 1.35.2-gke, v0.15.2, sha256-123). | `string` | n/a | yes |
+| <a name="input_minimum_version"></a> [minimum\_version](#input\_minimum\_version) | The minimum required version (e.g. 1.35.0). | `string` | n/a | yes |
+
+## Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_is_greater_than_or_equal"></a> [is\_greater\_than\_or\_equal](#output\_is\_greater\_than\_or\_equal) | True if the version meets the minimum requirement, or if the version is a non-standard custom string (fail-open). |
+| <a name="output_is_valid_semver"></a> [is\_valid\_semver](#output\_is\_valid\_semver) | True if both versions could be parsed into major.minor semantic logic. |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -1,5 +1,5 @@
 > [!WARNING]
-> This module is deprecated and will be removed on October 31, 2026. The
+> This module is deprecated and will be removed on August 31, 2026. The
 > recommended replacement is the
 > [GCP Managed Lustre module](../managed-lustre/README.md)
 
@@ -145,7 +145,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.13.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
@@ -154,7 +154,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.13.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
@@ -166,7 +166,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/parallelstore_instance) | resource |
 | [null_resource.hydration](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
@@ -174,7 +174,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_daos_agent_config"></a> [daos\_agent\_config](#input\_daos\_agent\_config) | Additional configuration to be added to daos\_config.yml | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
 | <a name="input_dfuse_environment"></a> [dfuse\_environment](#input\_dfuse\_environment) | Additional environment variables for DFuse process | `map(string)` | `{}` | no |
@@ -195,7 +195,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions to monitor import-data operation from GCS bucket to parallelstore. |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a parallelstore instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

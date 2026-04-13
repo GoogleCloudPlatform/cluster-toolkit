@@ -50,14 +50,7 @@ vars:
   accelerator_type: nvidia-b200
   version_prefix: "1.33."
 
-  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
-  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
-
-  permissions_file_staged_path: $(ghpc_stage("./chs-permissions.yaml.tftpl"))
-  chs_output_bucket_name: chs-result
-  chs_pvc_claim_name: chs-output-pvc
-  chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
-  chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
+  auto_monitoring_scope: "NONE"
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -182,6 +175,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a4-net-0, workload_service_account]
     settings:
+      auto_monitoring_scope: $(vars.auto_monitoring_scope)
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
@@ -301,29 +295,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a4-cluster]
     settings:
-      apply_manifests:
-      - source: $(vars.permissions_file_staged_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-      - source: $(vars.chs_pvc_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          pvc_name: $(vars.chs_pvc_claim_name)
-          access_mode: ReadWriteOnce
-          capacity: 1Gi
-          storage_class_name: standard-rwo
-      - source: $(vars.chs_cronjob_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-          region: $(vars.region)
-          machine_type: a4-highgpu-8g
-          gcs_bucket: $(vars.chs_output_bucket_name)
-          gcs_pvc: $(vars.chs_pvc_claim_name)
-          cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)

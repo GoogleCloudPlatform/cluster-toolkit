@@ -24,6 +24,7 @@ network: "{{ deployment_name }}-net-0"
 remote_node: "{{ deployment_name }}-remote-node-0"
 static_node_count: 2
 instance_type: a4
+scheduler: "gke"
 accelerator_type: nvidia-b200
 num_gpus: 16
 k8s_service_account_name: workload-identity-k8s-sa
@@ -43,3 +44,4 @@ post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a4.yml
 - test-validation/test-gke-kueue-config.yml
+- test-validation/test-chs.yml
