@@ -32,7 +32,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.25.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.27.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
