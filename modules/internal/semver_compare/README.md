@@ -1,8 +1,24 @@
+<!--
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Semver Compare Module
 
 This internal module securely performs a semantic version comparison (major.minor.patch) between a target version and a required minimum version.
 
-It safely parses inputs using native Terraform `regex()`. It evaluates up to four hierarchical components: `major`, `minor`, `patch`, and an optional GKE build number (`-gke.X`). It explicitly ignores any other suffixes (e.g., `-beta`, `+build123`) that follow the parsed components. 
+It safely parses inputs using native Terraform `regex()`. It evaluates up to four hierarchical components: `major`, `minor`, `patch`, and an optional GKE build number (`-gke.X`). It explicitly ignores any other suffixes (e.g., `-beta`, `+build123`) that follow the parsed components.
 
 Critically, this module implements **fail-open validation**: if the provided `current_version` cannot be resolved to a standard 3-integer format (for example, if a user specifies a Github branch name like `my-custom-feature` or a commit SHA `sha256-4c4892`), the output `is_greater_than_or_equal` evaluates to `true`. This protects the Cluster Toolkit from inadvertently blocking advanced users running fully custom artifacts.
 
@@ -28,6 +44,7 @@ resource "terraform_data" "feature_guard" {
   }
 }
 ```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
