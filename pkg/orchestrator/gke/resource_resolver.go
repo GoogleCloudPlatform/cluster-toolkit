@@ -77,42 +77,30 @@ var acceleratorShorthandMap = map[string]string{
 }
 
 func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, error) {
-	if zone == "" {
-		return 0, fmt.Errorf("zone is required for machine capacity lookup")
+	cap, err := g.FetchMachineCapabilities(machineType, zone)
+	if err != nil {
+		return 0, err
 	}
 
-	isRegion := len(strings.Split(zone, "-")) < 3
-	zonesToTry := []string{zone}
-
-	if isRegion && len(g.clusterZones) > 0 {
-		zonesToTry = g.clusterZones
+	if len(cap.Accelerators) > 0 {
+		return cap.Accelerators[0].Count, nil
 	}
-
-	var lastErr error
-	for _, z := range zonesToTry {
-		cap, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion) // Only retry if it was an explicit zone from user
-		if err == nil {
-			logging.Info("Discovered machine capacity in zone %s", z)
-			if len(cap.Accelerators) > 0 {
-				return cap.Accelerators[0].Count, nil
-			}
-			if cap.GuestCpus > 0 {
-				return cap.GuestCpus, nil
-			}
-			return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, z)
-		}
-		lastErr = err
+	if cap.GuestCpus > 0 {
+		return cap.GuestCpus, nil
 	}
-
-	if isRegion {
-		return 0, fmt.Errorf("failed to fetch machine capacity for %s: tried in all candidate zones %v but did not find machine type in any of them", machineType, zonesToTry)
-	}
-	return 0, fmt.Errorf("failed to fetch machine capacity for %s in zone %s: %w", machineType, zone, lastErr)
+	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
 
 func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
 	if zone == "" {
 		return MachineTypeCap{}, fmt.Errorf("zone is required for machine capacity lookup")
+	}
+
+	cacheKey := machineType + ":" + zone
+	if g.machineCapCache != nil {
+		if cap, ok := g.machineCapCache[cacheKey]; ok {
+			return cap, nil
+		}
 	}
 
 	isRegion := len(strings.Split(zone, "-")) < 3
@@ -127,6 +115,13 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 		cap, err := g.fetchCapacityForZoneWithRetry(machineType, z, !isRegion)
 		if err == nil {
 			logging.Info("Discovered machine capabilities in zone %s", z)
+			if g.machineCapCache == nil {
+				g.machineCapCache = make(map[string]MachineTypeCap)
+			}
+			g.machineCapCache[cacheKey] = cap
+			// Also cache for the specific zone that succeeded
+			specificKey := machineType + ":" + z
+			g.machineCapCache[specificKey] = cap
 			return cap, nil
 		}
 		lastErr = err
@@ -236,10 +231,6 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 		return "", "", "", "4", nil
 	}
 
-	if opts.AcceleratorType == "" {
-		return "", "", "", "", fmt.Errorf("--accelerator (machine type) is required for submission to determine resource limits (XPK strict enforcement)")
-	}
-
 	return "", "", "", "", fmt.Errorf("could not determine resource limits for %s", opts.AcceleratorType)
 }
 
@@ -285,6 +276,12 @@ func (g *GKEOrchestrator) calculateCPUMachineResourceLimits(opts ManifestOptions
 }
 
 func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) string {
+	if g.acceleratorToMachineType != nil {
+		if machineType, exists := g.acceleratorToMachineType[strings.ToLower(acceleratorType)]; exists {
+			return machineType
+		}
+	}
+
 	if mappedName, exists := acceleratorShorthandMap[acceleratorType]; exists {
 		return mappedName
 	}

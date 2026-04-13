@@ -69,6 +69,22 @@ func TestResolveMachineName(t *testing.T) {
 	}
 }
 
+func TestResolveMachineName_Dynamic(t *testing.T) {
+	g := NewGKEOrchestrator()
+	g.acceleratorToMachineType["nvidia-gb300"] = "a4-highgpu-8g"
+
+	got := g.resolveMachineName("nvidia-gb300")
+	if got != "a4-highgpu-8g" {
+		t.Errorf("resolveMachineName() = %v, want %v", got, "a4-highgpu-8g")
+	}
+
+	// Test case insensitivity
+	got = g.resolveMachineName("Nvidia-GB300")
+	if got != "a4-highgpu-8g" {
+		t.Errorf("resolveMachineName() case insensitive = %v, want %v", got, "a4-highgpu-8g")
+	}
+}
+
 func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 	mockResponses := map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe tpu7 --zone=europe-west2-a": {
@@ -91,8 +107,45 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 		t.Fatalf("Expected error, got nil")
 	}
 
-	expectedErrStr := "failed to fetch machine capacity for tpu7: tried in all candidate zones [europe-west2-a europe-west2-c europe-west2-b] but did not find machine type in any of them"
+	expectedErrStr := "failed to fetch machine capabilities for tpu7: tried in all candidate zones [europe-west2-a europe-west2-c europe-west2-b] but did not find machine type in any of them"
 	if err.Error() != expectedErrStr {
 		t.Errorf("Expected error %q, got %q", expectedErrStr, err.Error())
+	}
+}
+
+func TestFetchMachineCapabilities_Caching(t *testing.T) {
+	cmd := "gcloud compute machine-types describe n2-standard-32 --zone=us-east5-b --format=json"
+	mockResponses := map[string][]shell.CommandResult{
+		cmd: {
+			{ExitCode: 0, Stdout: `{"guestCpus": 32, "memoryMb": 131072}`},
+		},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	g := &GKEOrchestrator{
+		executor:        mockExec,
+		machineCapCache: make(map[string]MachineTypeCap),
+	}
+
+	// First call - should hit mock executor
+	cap1, err := g.FetchMachineCapabilities("n2-standard-32", "us-east5-b")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+	if cap1.GuestCpus != 32 {
+		t.Errorf("cap1.GuestCpus = %d, want 32", cap1.GuestCpus)
+	}
+
+	// Second call - should hit cache
+	cap2, err := g.FetchMachineCapabilities("n2-standard-32", "us-east5-b")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed on second call: %v", err)
+	}
+	if cap2.GuestCpus != 32 {
+		t.Errorf("cap2.GuestCpus = %d, want 32", cap2.GuestCpus)
+	}
+
+	// Verify call count
+	if mockExec.callCount[cmd] != 1 {
+		t.Errorf("mockExec.callCount[%q] = %d, want 1", cmd, mockExec.callCount[cmd])
 	}
 }

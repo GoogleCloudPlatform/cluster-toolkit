@@ -589,56 +589,6 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 	}
 }
 
-func TestParseAcceleratorOutput(t *testing.T) {
-	tests := []struct {
-		name      string
-		output    string
-		wantAccel string
-		wantErr   bool
-	}{
-		{
-			name:      "Single Accelerator (Success)",
-			output:    "nvidia-l4",
-			wantAccel: "nvidia-l4",
-			wantErr:   false,
-		},
-		{
-			name:      "Multiple Accelerators (Failure)",
-			output:    "nvidia-l4\ntpu-v6e-slice",
-			wantAccel: "",
-			wantErr:   true,
-		},
-		{
-			name:      "Empty Output (Error)",
-			output:    "",
-			wantAccel: "",
-			wantErr:   true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{}
-			got, err := orc.parseAcceleratorOutput(tt.output)
-
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseAcceleratorOutput() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.wantAccel {
-				t.Errorf("parseAcceleratorOutput() got = %v, want %v", got, tt.wantAccel)
-			}
-			if tt.wantErr {
-				if tt.name == "Multiple Accelerators (Failure)" && !strings.Contains(err.Error(), "Multiple Accelerator Types found") {
-					t.Errorf("Expected error message to contain 'Multiple Accelerator Types found', got %v", err)
-				}
-				if tt.name == "Empty Output (Error)" && !strings.Contains(err.Error(), "could not auto-discover any accelerators") {
-					t.Errorf("Expected error message to contain 'could not auto-discover any accelerators', got %v", err)
-				}
-			}
-		})
-	}
-}
-
 func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 	orc := NewGKEOrchestrator()
 	opts := ManifestOptions{
@@ -775,6 +725,115 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 			}
 			if gotCompletionTime != tt.wantCompletionTime {
 				t.Errorf("parseJobStatus() gotCompletionTime = %v, want %v", gotCompletionTime, tt.wantCompletionTime)
+			}
+		})
+	}
+}
+
+func TestParseKueueWorkloadStatus(t *testing.T) {
+	g := &GKEOrchestrator{}
+
+	tests := []struct {
+		name       string
+		obj        map[string]interface{}
+		wantStatus string
+	}{
+		{
+			name: "Admitted",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Admitted",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-13T07:00:00Z",
+						},
+					},
+				},
+			},
+			wantStatus: "Admitted",
+		},
+		{
+			name: "QuotaReserved",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "QuotaReserved",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-13T07:00:00Z",
+						},
+					},
+				},
+			},
+			wantStatus: "QuotaReserved",
+		},
+		{
+			name: "Evicted",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Evicted",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-13T07:00:00Z",
+						},
+					},
+				},
+			},
+			wantStatus: "Evicted",
+		},
+		{
+			name: "LatestConditionTakesPrecedence",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "QuotaReserved",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-13T07:00:00Z",
+						},
+						map[string]interface{}{
+							"type":               "Admitted",
+							"status":             "True",
+							"lastTransitionTime": "2026-04-13T07:05:00Z",
+						},
+					},
+				},
+			},
+			wantStatus: "Admitted",
+		},
+		{
+			name: "UnknownIfNoTrueConditions",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{
+							"type":               "Admitted",
+							"status":             "False",
+							"lastTransitionTime": "2026-04-13T07:05:00Z",
+						},
+					},
+				},
+			},
+			wantStatus: "Unknown",
+		},
+		{
+			name: "UnknownIfNoConditions",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{},
+				},
+			},
+			wantStatus: "Unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := g.parseKueueWorkloadStatus(tt.obj)
+			if got != tt.wantStatus {
+				t.Errorf("parseKueueWorkloadStatus() = %v, want %v", got, tt.wantStatus)
 			}
 		})
 	}

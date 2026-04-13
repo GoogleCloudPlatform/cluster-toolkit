@@ -122,17 +122,21 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 }
 
 type GKEOrchestrator struct {
-	executor     Executor
-	clusterZones []string
-	nodePoolSAs  []string
-	capacity     ClusterCapacity
-	dynClient    dynamic.Interface
-	kubeClient   KubeClient
+	executor                 Executor
+	clusterZones             []string
+	nodePoolSAs              []string
+	capacity                 ClusterCapacity
+	dynClient                dynamic.Interface
+	kubeClient               KubeClient
+	acceleratorToMachineType map[string]string
+	machineCapCache          map[string]MachineTypeCap
 }
 
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
-		executor: &DefaultExecutor{},
+		executor:                 &DefaultExecutor{},
+		acceleratorToMachineType: make(map[string]string),
+		machineCapCache:          make(map[string]MachineTypeCap),
 	}
 }
 
@@ -148,6 +152,8 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 	g.kubeClient = c
 }
 
+// SubmitJob submits a job to the GKE cluster. It processes the job definition,
+// creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	logging.Info("Starting gcluster job submit workflow...")
 
@@ -171,7 +177,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 	g.grantNodePoolImagePullPermission(job)
 
-	if err := g.validateJobConflicts(job.WorkloadName); err != nil {
+	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
 	}
 
@@ -209,13 +215,16 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	return nil
 }
 
-func (g *GKEOrchestrator) validateJobConflicts(workloadName string) error {
+func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
 	status, err := g.getJobStatus(workloadName)
 	if err != nil {
 		return err
 	}
 	if status != "" {
-		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName)
+		if projectID != "" {
+			return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
+		}
+		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation)
 	}
 	return nil
 }
@@ -311,8 +320,8 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 		return err
 	}
 
-	// Centralized Cluster Validation (FAIL FAST)
-	if err := g.ValidateClusterState(job.WorkloadName); err != nil {
+	// Centralized Cluster Validation
+	if err := g.ValidateClusterState(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
 	}
 
@@ -391,16 +400,11 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	memMb = cap.MemoryMb * nodeCount
 
 	flavor = "flavor-default"
-	for _, acc := range np.Config.Accelerators {
-		count := acc.AcceleratorCount
-		if strings.Contains(strings.ToLower(acc.AcceleratorType), "tpu") {
-			tpus += count * nodeCount
-			flavor = "flavor-" + strings.ToLower(acc.AcceleratorType)
-			nodeLabels["cloud.google.com/gke-tpu-accelerator"] = acc.AcceleratorType
-		} else if strings.Contains(strings.ToLower(acc.AcceleratorType), "nvidia") || strings.Contains(strings.ToLower(acc.AcceleratorType), "gpu") {
-			gpus += count * nodeCount
-			flavor = "flavor-" + strings.ToLower(acc.AcceleratorType)
-			nodeLabels["cloud.google.com/gke-accelerator"] = acc.AcceleratorType
+	if len(np.Config.Accelerators) > 0 {
+		var err error
+		gpus, tpus, flavor, nodeLabels, err = g.processAccelerators(np.Config.Accelerators, nodeCount, np.Config.MachineType)
+		if err != nil {
+			return 0, 0, 0, 0, "flavor-default", nodeLabels, sa, fmt.Errorf("in node pool %s: %w", np.Name, err)
 		}
 	}
 
@@ -416,9 +420,40 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 			flavor = "flavor-" + strings.ToLower(accType)
 			nodeLabels["cloud.google.com/gke-accelerator"] = accType
 		}
+		if g.acceleratorToMachineType == nil {
+			g.acceleratorToMachineType = make(map[string]string)
+		}
+		g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
 	}
 
 	return cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, nil
+}
+
+func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nodeCount int, machineType string) (gpus, tpus int, flavor string, nodeLabels map[string]string, err error) {
+	nodeLabels = make(map[string]string)
+	flavor = "flavor-default"
+
+	for _, acc := range accelerators {
+		count64, err := acc.AcceleratorCount.Int64()
+		if err != nil {
+			return 0, 0, "flavor-default", nodeLabels, fmt.Errorf("invalid acceleratorCount %q: %w", acc.AcceleratorCount, err)
+		}
+		count := int(count64)
+		if strings.Contains(strings.ToLower(acc.AcceleratorType), "tpu") {
+			tpus += count * nodeCount
+			flavor = "flavor-" + strings.ToLower(acc.AcceleratorType)
+			nodeLabels["cloud.google.com/gke-tpu-accelerator"] = acc.AcceleratorType
+		} else if strings.Contains(strings.ToLower(acc.AcceleratorType), "nvidia") || strings.Contains(strings.ToLower(acc.AcceleratorType), "gpu") {
+			gpus += count * nodeCount
+			flavor = "flavor-" + strings.ToLower(acc.AcceleratorType)
+			nodeLabels["cloud.google.com/gke-accelerator"] = acc.AcceleratorType
+		}
+		if g.acceleratorToMachineType == nil {
+			g.acceleratorToMachineType = make(map[string]string)
+		}
+		g.acceleratorToMachineType[strings.ToLower(acc.AcceleratorType)] = machineType
+	}
+	return gpus, tpus, flavor, nodeLabels, nil
 }
 
 func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefinition) error {
@@ -429,22 +464,13 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	}
 	job.KueueQueueName = localQueue
 
-	logging.Info("Ensuring Kueue ResourceFlavors exist...")
 	if err := g.EnsureResourceFlavors(); err != nil {
 		logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
 	}
 
-	logging.Info("Ensuring Kueue ClusterQueue covers all requested resources...")
 	if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
 		logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
 	}
-
-	accelType, err := g.resolveAcceleratorType(job.AcceleratorType)
-	if err != nil {
-		logging.Info("Warning: Failed to auto-discover Accelerator Type: %v. Assuming CPU-only.", err)
-		accelType = ""
-	}
-	job.AcceleratorType = accelType
 
 	return nil
 }
@@ -478,7 +504,6 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) erro
 		return fmt.Errorf("failed to patch clusterqueue: %s", res.Stderr)
 	}
 
-	logging.Info("ClusterQueue successfully updated.")
 	return nil
 }
 
@@ -565,8 +590,6 @@ func (g *GKEOrchestrator) grantNodePoolImagePullPermission(job orchestrator.JobD
 		return
 	}
 
-	logging.Info("Ensuring node pool service accounts have artifactregistry.reader role...")
-
 	seen := make(map[string]bool)
 
 	for _, sa := range g.nodePoolSAs {
@@ -591,7 +614,6 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 		return requestedQueueName, nil
 	}
 
-	logging.Info("Auto-discovering Kueue LocalQueue...")
 	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", "default", "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("failed to query LocalQueues: %s", res.Stderr)
@@ -611,51 +633,6 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 
 	logging.Info("Warning: Multiple LocalQueues found (%v). Defaulting to the first one: %s", queues, queues[0])
 	return queues[0], nil
-}
-
-func (g *GKEOrchestrator) resolveAcceleratorType(requested string) (string, error) {
-	if requested != "" {
-		logging.Info("Using provided Accelerator Type: %s", requested)
-		return requested, nil
-	}
-
-	logging.Info("Auto-discovering Accelerator Type...")
-
-	output, err := g.queryAcceleratorLabels()
-	if err != nil {
-		return "", err
-	}
-
-	if output == "" {
-		return "", fmt.Errorf("could not auto-discover any accelerators on this cluster. Please specify --accelerator or use 'cpu' for CPU-only workloads")
-	}
-
-	return g.parseAcceleratorOutput(output)
-}
-
-func (g *GKEOrchestrator) queryAcceleratorLabels() (string, error) {
-	queries := []struct {
-		resource string
-		jsonPath string
-	}{
-		{"resourceflavors.kueue.x-k8s.io", "{range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-accelerator}{\"\\n\"}{end}"},
-		{"resourceflavors.kueue.x-k8s.io", "{range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-accelerator}{\"\\n\"}{end}"},
-		{"nodes", "{range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-accelerator}{\"\\n\"}{end}"},
-		{"nodes", "{range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-accelerator}{\"\\n\"}{end}"},
-	}
-
-	for _, q := range queries {
-		res := g.executor.ExecuteCommand("kubectl", "get", q.resource, "-o", "jsonpath="+q.jsonPath)
-
-		if res.ExitCode == 0 {
-			output := strings.TrimSpace(res.Stdout)
-			if output != "" {
-				return output, nil
-			}
-		}
-	}
-
-	return "", nil
 }
 
 func (g *GKEOrchestrator) queryMachineType() (string, error) {
@@ -711,36 +688,6 @@ func (g *GKEOrchestrator) resolveTopologyForChips(prefix string, totalChips int)
 	}
 
 	return "", fmt.Errorf("could not find a valid topology shape for %d chips with prefix %s", totalChips, prefix)
-}
-
-func (g *GKEOrchestrator) parseAcceleratorOutput(output string) (string, error) {
-	accelerators := make(map[string]bool)
-	for _, acc := range strings.Split(output, "\n") {
-		acc = strings.TrimSpace(acc)
-		if acc != "" {
-			accelerators[acc] = true
-		}
-	}
-
-	if len(accelerators) == 0 {
-		return "", fmt.Errorf("could not auto-discover any accelerators on this cluster. Please specify --accelerator or use 'cpu' for CPU-only workloads")
-	}
-
-	if len(accelerators) == 1 {
-		for acc := range accelerators {
-			logging.Info("Auto-discovered Accelerator Type: %s", acc)
-			return acc, nil
-		}
-	}
-
-	var sb strings.Builder
-	sb.WriteString("Multiple Accelerator Types found on the cluster. Please specify which one you want to use with --accelerator.\n\n")
-	sb.WriteString(fmt.Sprintf("%-30s\n", "ACCELERATOR TYPE"))
-	sb.WriteString(fmt.Sprintf("%-30s\n", "----------------"))
-	for acc := range accelerators {
-		sb.WriteString(fmt.Sprintf("%-30s\n", acc))
-	}
-	return "", fmt.Errorf("%s", sb.String())
 }
 
 func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, clusterName string, clusterLocation string) (string, error) {
@@ -1240,6 +1187,64 @@ func (g *GKEOrchestrator) getCurrentNamespace() (string, error) {
 	return ns, nil
 }
 
+func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
+	gvrWl := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta2", Resource: "workloads"}
+	listOptsWl := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
+	}
+	wlList, err := client.Resource(gvrWl).Namespace(ns).List(context.TODO(), listOptsWl)
+	if err != nil {
+		return "", err
+	}
+	if len(wlList.Items) > 0 {
+		wlObj := wlList.Items[0]
+		return g.parseKueueWorkloadStatus(wlObj.Object), nil
+	}
+	return "", nil
+}
+
+func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns string, workloadName string) (string, error) {
+	gvrPod := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	listOpts := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
+	}
+	podList, err := client.Resource(gvrPod).Namespace(ns).List(context.TODO(), listOpts)
+	if err != nil {
+		return "", err
+	}
+
+	if len(podList.Items) == 0 {
+		return "Pending", nil
+	}
+
+	allPending := true
+	atLeastOneRunning := false
+
+	for _, p := range podList.Items {
+		podStatus, ok := p.Object["status"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		phase, _ := podStatus["phase"].(string)
+		if phase == "Running" {
+			atLeastOneRunning = true
+			allPending = false
+			break
+		}
+		if phase != "Pending" {
+			allPending = false
+		}
+	}
+
+	if allPending {
+		return "Pending", nil
+	}
+	if atLeastOneRunning {
+		return "Running", nil
+	}
+	return "Running", nil // Fallback if mixed and JobSet says Running
+}
+
 func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 	client, err := g.getDynamicClient()
 	if err != nil {
@@ -1260,8 +1265,65 @@ func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 		return "", err
 	}
 
+	metadata, ok := obj.Object["metadata"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("failed to get JobSet metadata")
+	}
+	uid, _ := metadata["uid"].(string)
+
+	wlStatus, err := g.getKueueWorkloadStatus(client, ns, uid)
+	if err == nil && (wlStatus == "QuotaReserved" || wlStatus == "Evicted") {
+		return wlStatus, nil
+	}
+
 	status, _ := g.parseJobStatus(obj.Object)
+
+	if status == "Running" {
+		podStatus, err := g.getPodAggregatedStatus(client, ns, name)
+		if err != nil {
+			return status, nil // Fall back to JobSet status
+		}
+		return podStatus, nil
+	}
+
 	return status, nil
+}
+
+func (g *GKEOrchestrator) parseKueueWorkloadStatus(obj map[string]interface{}) string {
+	status, ok := obj["status"].(map[string]interface{})
+	if !ok {
+		return "Unknown"
+	}
+	conditions, ok := status["conditions"].([]interface{})
+	if !ok || len(conditions) == 0 {
+		return "Unknown"
+	}
+
+	var latestCondition map[string]interface{}
+	var latestTime string
+
+	for _, c := range conditions {
+		cond, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		condStatus, _ := cond["status"].(string)
+		if condStatus != "True" {
+			continue
+		}
+		transitionTime, _ := cond["lastTransitionTime"].(string)
+		if latestTime == "" || transitionTime > latestTime {
+			latestTime = transitionTime
+			latestCondition = cond
+		}
+	}
+
+	if latestCondition != nil {
+		cType, _ := latestCondition["type"].(string)
+		return cType
+	}
+
+	return "Unknown"
 }
 
 func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, error) {
@@ -1319,6 +1381,8 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 	return string(b)
 }
 
+// ListJobs retrieves a list of jobs in the GKE cluster.
+// It filters jobs based on the provided ListOptions.
 func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
 	logging.Info("Listing jobs in cluster '%s'...", opts.ClusterName)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
@@ -1366,11 +1430,18 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 	return jobs, nil
 }
 
+// CancelJob deletes a job from the GKE cluster by name.
+// Jobs are filtered via cluster name and location provided through CancelOptions.
 func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
 	logging.Info("Deleting job '%s' in cluster '%s'...", name, opts.ClusterName)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return err
 	}
+
+	if _, err := g.getDynamicClient(); err != nil {
+		return fmt.Errorf("failed to initialize k8s client: %w", err)
+	}
+
 	// Find the job to get its namespace
 	foundNamespace, err := g.kubeClient.GetJobNamespace(name)
 	if err != nil {
@@ -1390,6 +1461,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	return nil
 }
 
+// GetJobLogs fetches the logs for a specific job in the GKE cluster.
 func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
 	logging.Info("Fetching logs for job '%s' in cluster '%s'...", name, opts.ClusterName)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
@@ -1439,6 +1511,12 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 }
 
 func (g *GKEOrchestrator) getJobNamespace(name string) (string, error) {
+	if g.kubeClient == nil {
+		_, err := g.getDynamicClient()
+		if err != nil {
+			return "", fmt.Errorf("failed to get dynamic client: %w", err)
+		}
+	}
 	return g.kubeClient.GetJobNamespace(name)
 }
 

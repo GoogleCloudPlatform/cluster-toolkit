@@ -50,6 +50,6 @@ func runClusterInfo(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get cluster info: %w", err)
 	}
 
-	fmt.Println(info)
+	cmd.Println(info)
 	return nil
 }

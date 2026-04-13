@@ -77,7 +77,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validateImageFlags(); err != nil {
 			return err
 		}
-		err := ensurePrerequisites(&projectID)
+		err := ensurePrerequisites(cmd, &projectID)
 		if err != nil {
 			return fmt.Errorf("prerequisite checks failed for 'gcluster job submit'. Please ensure your gcloud configuration and cluster context are valid: %w", err)
 		}
@@ -147,6 +147,7 @@ func init() {
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("cluster")
 	_ = SubmitCmd.MarkFlagRequired("name")
+	_ = SubmitCmd.MarkFlagRequired("accelerator")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
