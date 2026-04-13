@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -39,6 +40,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -77,6 +79,14 @@ func getCommandName(cmd *cobra.Command) string {
 	} else {
 		return strings.TrimPrefix(path, "gcluster ")
 	}
+}
+
+func getCmdFlags(cmd *cobra.Command) string {
+	flags := make([]string, 0)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags = append(flags, f.Name)
+	})
+	return strings.Join(flags, ",")
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
