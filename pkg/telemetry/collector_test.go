@@ -285,7 +285,7 @@ func TestGetCmdFlags(t *testing.T) {
 				// Define a flag but do not set it
 				cmd.Flags().Bool("force", false, "Force execution")
 			},
-			expected: "", // Adjust based on whether your function returns empty string or "[]" for no flags
+			expected: "",
 		},
 		{
 			name: "Single flag set",
@@ -295,7 +295,7 @@ func TestGetCmdFlags(t *testing.T) {
 				// Simulate user passing --force
 				_ = cmd.Flags().Set("force", "true")
 			},
-			expected: "force", // Adjust formatting to match your actual return value (e.g. "--force" or "force=true")
+			expected: "force",
 		},
 		{
 			name: "Multiple flags set",
