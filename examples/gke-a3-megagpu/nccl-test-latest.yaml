@@ -237,6 +237,7 @@ spec:
     - name: LD_LIBRARY_PATH
       value: /usr/local/nvidia/lib64
   - name: nccl-test
+   # Note: This version matches nccl_tcpxo_version in examples/gke-a3-megagpu/gke-a3-megagpu.yaml
     image: us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpxo/nccl-plugin-gpudirecttcpx-dev:v1.0.15
     imagePullPolicy: Always
     #      securityContext:
