@@ -14,3 +14,11 @@ metadata:
   name: ss-kueue-operator
 spec:
   controllerName: accelerator.gke.io/slice
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: "cluster-queue"
+spec:
+  admissionChecks:
+  - ss-kueue-operator

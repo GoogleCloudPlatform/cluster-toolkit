@@ -50,18 +50,25 @@ locals {
   cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
   other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
   merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
+  merged_cluster_queues_with_lists = {
+    for name, cqs in local.merged_cluster_queues : name => {
+      base_cq          = cqs[0]
+      resource_groups  = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
+      admission_checks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
+    }
+  }
   final_cluster_queues = [
-    for name, cqs in local.merged_cluster_queues : {
-      apiVersion = cqs[0].apiVersion
-      kind       = cqs[0].kind
-      metadata   = cqs[0].metadata
+    for name, data in local.merged_cluster_queues_with_lists : {
+      apiVersion = data.base_cq.apiVersion
+      kind       = data.base_cq.kind
+      metadata   = data.base_cq.metadata
       spec = merge(
-        try(cqs[0].spec, {}),
+        try(data.base_cq.spec, {}),
         {
-          resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
+          resourceGroups = data.resource_groups
         },
-        length(compact(concat(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]), var.kueue.enable_slice_controller ? ["ss-kueue-operator"] : []))) > 0 ? {
-          admissionChecks = distinct(compact(concat(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]), var.kueue.enable_slice_controller ? ["ss-kueue-operator"] : [])))
+        length(data.admission_checks) > 0 ? {
+          admissionChecks = data.admission_checks
         } : {}
       )
     }
