@@ -4,8 +4,9 @@ metadata:
   name: ${try(super_slice_topology_name, "super-slice-topology")}
 spec:
   levels:
-  - nodeLabel: cloud.google.com/gke-nodepool
-  - nodeLabel: topology.kubernetes.io/zone
+  - nodeLabel: cloud.google.com/gce-topology-block
+  - nodeLabel: cloud.google.com/gke-tpu-partition-4x4x4-id
+  - nodeLabel: kubernetes.io/hostname
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: AdmissionCheck
