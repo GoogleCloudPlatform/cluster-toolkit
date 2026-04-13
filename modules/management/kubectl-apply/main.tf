@@ -45,33 +45,24 @@ locals {
     ) : ""
   )
 
-  kueue_docs        = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
-  parsed_kueue_docs = [for doc in [for d in local.kueue_docs : try(yamldecode(d), null)] : doc if doc != null]
-  cluster_queues    = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
-  other_docs        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
-  merged_cluster_queues = {
-    for cq in local.cluster_queues : cq.metadata.name => cq...
-    if try(cq.metadata.name, null) != null
-  }
+  kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
+  parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
+  cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
+  other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
+  merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
   final_cluster_queues = [
     for name, cqs in local.merged_cluster_queues : {
       apiVersion = cqs[0].apiVersion
       kind       = cqs[0].kind
       metadata   = cqs[0].metadata
-      # Combines multiple specs from identical ClusterQueues.
-      # Utilizes distinct/compact/flatten to safely aggregate admissionChecks natively, while 
-      # unpacking (...) dynamically appends the admissionChecks payload to the parent 
-      # map without destroying unrelated surrounding map keys (e.g. `cohort`).
       spec = merge(
-        concat(
-          [for cq in cqs : try(cq.spec, {})],
-          [length(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]))) > 0 ? {
-            admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
-          } : {}],
-          [length(compact(flatten([for cq in cqs : try(cq.spec.resourceGroups, [])]))) > 0 ? {
-            resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
-          } : {}]
-        )...
+        try(cqs[0].spec, {}),
+        {
+          resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
+        },
+        length(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]))) > 0 ? {
+          admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
+        } : {}
       )
     }
   ]
@@ -145,12 +136,12 @@ locals {
     }
   })
 
-  install_kueue             = var.kueue.install
-  install_jobset            = var.jobset.install
-  install_gpu_operator      = var.gpu_operator.install
-  install_nvidia_dra_driver = var.nvidia_dra_driver.install
-  install_gib               = var.gib.install
-  install_asapd_lite        = var.asapd_lite.install
+  install_kueue             = try(var.kueue.install, false)
+  install_jobset            = try(var.jobset.install, false)
+  install_gpu_operator      = try(var.gpu_operator.install, false)
+  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  install_gib               = try(var.gib.install, false)
+  install_asapd_lite        = try(var.asapd_lite.install, false)
 }
 
 data "http" "manifest_from_url" {
@@ -286,16 +277,9 @@ module "install_jobset" {
   chart_version    = var.jobset.version
   namespace        = "jobset-system"
   create_namespace = true
-  values_yaml = compact([
-    file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_cpu_limit != null || var.jobset.controller_memory_limit != null ? yamlencode({
-      controller = {
-        resources = {
-          limits = { for k, v in { cpu = var.jobset.controller_cpu_limit, memory = var.jobset.controller_memory_limit } : k => v if v != null }
-        }
-      }
-    }) : ""
-  ])
+  values_yaml = [
+    file("${path.module}/jobset/jobset-helm-values.yaml")
+  ]
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 
