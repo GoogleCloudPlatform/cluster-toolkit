@@ -52,7 +52,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -62,7 +62,7 @@ No providers.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_instances"></a> [instances](#module\_instances) | ../../../../modules/compute/vm-instance | n/a |
 
@@ -73,7 +73,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.<br/>See `name_prefix` for further details on resource naming behavior. | `bool` | `false` | no |
 | <a name="input_auto_delete_boot_disk"></a> [auto\_delete\_boot\_disk](#input\_auto\_delete\_boot\_disk) | Controls if boot disk should be auto-deleted when instance is deleted. | `bool` | `true` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Tier 1 bandwidth increases the maximum egress bandwidth for VMs.<br/>  Using the `tier_1_enabled` setting will enable both gVNIC and TIER\_1 higher bandwidth networking.<br/>  Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER\_1.<br/>  Note that TIER\_1 only works with specific machine families & shapes and must be using an image th<br/>at supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-v<br/>m-with-high-bandwidth-configuration) for more details. | `string` | `"not_enabled"` | no |
@@ -107,7 +107,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | Name of the first instance created, if any. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | script to load and run all runners, as a string value. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
