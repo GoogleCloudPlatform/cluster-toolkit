@@ -60,8 +60,8 @@ locals {
         {
           resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
         },
-        length(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]))) > 0 ? {
-          admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
+        length(compact(concat(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]), var.kueue.enable_slice_controller ? ["ss-kueue-operator"] : []))) > 0 ? {
+          admissionChecks = distinct(compact(concat(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])]), var.kueue.enable_slice_controller ? ["ss-kueue-operator"] : [])))
         } : {}
       )
     }
@@ -277,9 +277,23 @@ module "install_jobset" {
   chart_version    = var.jobset.version
   namespace        = "jobset-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/jobset/jobset-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/jobset/jobset-helm-values.yaml"),
+    var.jobset.controller_cpu_limit != null || var.jobset.controller_memory_limit != null ? yamlencode({
+      controllerManager = {
+        manager = {
+          resources = {
+            limits = {
+              for k, v in {
+                cpu    = var.jobset.controller_cpu_limit
+                memory = var.jobset.controller_memory_limit
+              } : k => v if v != null
+            }
+          }
+        }
+      }
+    }) : ""
+  ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 
