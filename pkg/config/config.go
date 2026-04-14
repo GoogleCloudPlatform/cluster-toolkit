@@ -961,3 +961,12 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	}
 	return NewDict(res), nil
 }
+
+// GetAllModules returns a slice of all modules defined in the blueprint.
+func GetAllModules(bp *Blueprint) []Module {
+	var modules []Module
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		modules = append(modules, *m)
+	})
+	return modules
+}

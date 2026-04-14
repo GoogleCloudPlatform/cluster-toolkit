@@ -22,6 +22,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/zclconf/go-cty/cty"
+)
+
+var (
+	machineTypeModulePattern = ".*modules.compute.*"
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -41,6 +46,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	defer c.mu.Unlock()
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
@@ -93,6 +99,41 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getMachineType(bp config.Blueprint) string {
+	machine_types := make([]string, 0)
+	modules := getModulesWithPattern(machineTypeModulePattern, bp)
+
+	for _, m := range modules {
+		if m.Settings.Has("machine_type") {
+			machine_type := m.Settings.Get("machine_type")
+
+			// Evaluate the value to resolve expressions like $(vars.machine_type)
+			evaluated_type, err := bp.Eval(machine_type)
+
+			// Some module outputs or references carry cty marks, so we unmark them safely before use.
+			if err == nil {
+				unmarked_type, _ := evaluated_type.Unmark()
+
+				if !unmarked_type.IsNull() && unmarked_type.Type() == cty.String {
+					machine_types = append(machine_types, unmarked_type.AsString())
+				}
+			}
+		}
+		// For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
+		if m.Settings.Has("node_type") {
+			node_type := m.Settings.Get("node_type")
+			evaluated_node_type, err := bp.Eval(node_type)
+			if err == nil {
+				unmarked_node_type, _ := evaluated_node_type.Unmark()
+				if !unmarked_node_type.IsNull() && unmarked_node_type.Type() == cty.String {
+					machine_types = append(machine_types, unmarked_node_type.AsString())
+				}
+			}
+		}
+	}
+	return strings.Join(machine_types, ",")
 }
 
 func getRegion(bp config.Blueprint) string {
