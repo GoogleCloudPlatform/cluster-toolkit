@@ -24,18 +24,18 @@ locals {
       super_slice_topology_name      = "super-slice-topology"
       super_slice_cluster_queue_name = "cluster-queue"
     }) : "",
-    var.kueue.enable_pathways_for_tpus ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
       pathways_cpu_quota     = 480
       pathways_memory_quota  = "2000G"
     }) : "",
     var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || length(coalesce(var.kueue.config_template_vars, {})) > 0 ?
-      templatefile(var.kueue.config_path, coalesce(var.kueue.config_template_vars, {})) :
+      endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
+      templatefile(var.kueue.config_path, var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}) :
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && ((var.kueue.config_path != null && var.kueue.config_path != "") || var.kueue.enable_slice_controller || var.kueue.enable_pathways_for_tpus)
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false) || try(var.kueue.enable_slice_controller, false))
 
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
