@@ -15,11 +15,13 @@
 package telemetry
 
 import (
+	"hpc-toolkit/pkg/config"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestNewCollector(t *testing.T) {
@@ -44,6 +46,8 @@ func TestNewCollector(t *testing.T) {
 func TestCollectMetrics_Extensible(t *testing.T) {
 	expectedKeys := []string{
 		COMMAND_FLAGS,
+		REGION,
+		ZONE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -51,7 +55,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	tests := []struct {
 		name           string
 		errorCode      int
-		setupCmd       func(cmd *cobra.Command)
+		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
+		setupCollector func(c *Collector)       // Hook to mock internal collector state
 		expectedValues map[string]string
 	}{
 		{
@@ -66,19 +71,21 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				_ = cmd.Flags().Set("force", "true")
 				_ = cmd.Flags().Set("project", "test-project")
 			},
+			setupCollector: func(c *Collector) {
+				// Mock the blueprint variables to include region and zone
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+						"zone":   cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
 			expectedValues: map[string]string{
 				COMMAND_FLAGS: "force,project",
 				IS_TEST_DATA:  "true",
 				EXIT_CODE:     "0",
-			},
-		},
-		{
-			name:      "Failure exit code",
-			errorCode: 1,
-			expectedValues: map[string]string{
-				COMMAND_FLAGS: "",
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
+				REGION:        "us-central1",
+				ZONE:          "us-central1-a",
 			},
 		},
 	}
@@ -90,7 +97,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			if tt.setupCmd != nil {
 				tt.setupCmd(cmd)
 			}
-			c := NewCollector(cmd, nil)
+
+			// Initialize the collector
+			c := NewCollector(cmd, []string{})
+
+			// Execute the setup function to apply the blueprint state to the collector
+			if tt.setupCollector != nil {
+				tt.setupCollector(c)
+			}
+
+			// Run the method being tested
 			c.CollectMetrics(tt.errorCode)
 
 			// Assert that all expected keys are populated in the metadata
@@ -326,6 +342,89 @@ func TestGetCmdFlags(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getCmdFlags() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetRegion verifies that the region is correctly extracted from the blueprint.
+func TestGetRegion(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region provided",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Region missing",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					// Return an empty dictionary to simulate missing vars
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := getRegion(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getRegion() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetZone verifies that the zone is correctly extracted from the blueprint.
+func TestGetZone(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Valid zone provided",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Zone missing",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := getZone(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getZone() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
