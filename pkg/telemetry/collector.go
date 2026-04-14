@@ -22,7 +22,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/zclconf/go-cty/cty"
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -97,25 +96,11 @@ func getCmdFlags(cmd *cobra.Command) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef("region").AsValue())
-	if err == nil {
-		region, _ := val.Unmark()
-		if !region.IsNull() && region.Type() == cty.String {
-			return region.AsString()
-		}
-	}
-	return ""
+	return getKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef("zone").AsValue())
-	if err == nil {
-		zone, _ := val.Unmark()
-		if !zone.IsNull() && zone.Type() == cty.String {
-			return zone.AsString()
-		}
-	}
-	return ""
+	return getKeyFromBlueprint("zone", bp)
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
