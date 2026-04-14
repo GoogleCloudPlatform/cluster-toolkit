@@ -127,8 +127,9 @@ variable "kueue" {
     config_path              = optional(string, null)
     config_template_vars     = optional(map(any), null)
     enable_slice_controller  = optional(bool, false)
-    controller_cpu_limit     = optional(string, null)
-    controller_memory_limit  = optional(string, null)
+    controller_replicas      = optional(number, null)
+    controller_cpu           = optional(string, null)
+    controller_memory        = optional(string, null)
     enable_pathways_for_tpus = optional(bool, false)
   })
   default = {}
@@ -145,8 +146,9 @@ variable "jobset" {
   type = object({
     install                 = optional(bool, false)
     version                 = optional(string, "0.10.1")
-    controller_cpu_limit    = optional(string, null)
-    controller_memory_limit = optional(string, null)
+    controller_replicas     = optional(number, null)
+    controller_cpu          = optional(string, null)
+    controller_memory       = optional(string, null)
   })
   default = {}
 }

@@ -216,31 +216,27 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    var.kueue.enable_slice_controller || var.kueue.controller_cpu_limit != null || var.kueue.controller_memory_limit != null ? yamlencode({
-      controllerManager = merge(
-        var.kueue.enable_slice_controller ? { replicas = 3 } : {},
-        {
-          manager = {
-            resources = merge(
-              {
-                limits = {
-                  for k, v in {
-                    cpu    = var.kueue.enable_slice_controller ? coalesce(var.kueue.controller_cpu_limit, "16") : var.kueue.controller_cpu_limit
-                    memory = var.kueue.enable_slice_controller ? coalesce(var.kueue.controller_memory_limit, "64Gi") : var.kueue.controller_memory_limit
-                  } : k => v if v != null
-                }
-              },
-              var.kueue.enable_slice_controller ? {
-                requests = {
-                  cpu    = coalesce(var.kueue.controller_cpu_limit, "16")
-                  memory = coalesce(var.kueue.controller_memory_limit, "64Gi")
-                }
-              } : {}
-            )
+    var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || try(var.kueue.enable_slice_controller, false) ? yamlencode({
+      controllerManager = {
+        replicas = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (try(var.kueue.enable_slice_controller, false) ? 3 : 1)
+        manager = {
+          resources = {
+            limits = {
+              for k, v in {
+                cpu    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "16" : null)
+                memory = var.kueue.controller_memory != null ? var.kueue.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "64Gi" : null)
+              } : k => v if v != null
+            }
+            requests = {
+              for k, v in {
+                cpu    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "16" : null)
+                memory = var.kueue.controller_memory != null ? var.kueue.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "64Gi" : null)
+              } : k => v if v != null
+            }
           }
         }
-      )
-    }) : ""
+      }
+    }) : "" 
   ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
@@ -290,18 +286,27 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_cpu_limit != null || var.jobset.controller_memory_limit != null ? yamlencode({
+    var.jobset.controller_replicas != null || var.jobset.controller_cpu != null || var.jobset.controller_memory != null || try(var.kueue.enable_slice_controller, false) ? yamlencode({
+      controllerManager = {
+        replicas = var.jobset.controller_replicas != null ? var.jobset.controller_replicas : (try(var.kueue.enable_slice_controller, false) ? 1 : null)
+      }
       controller = {
         resources = {
           limits = {
             for k, v in {
-              cpu    = var.jobset.controller_cpu_limit
-              memory = var.jobset.controller_memory_limit
+              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "1" : null)
+              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "4096Mi" : null)
+            } : k => v if v != null
+          }
+          requests = {
+            for k, v in {
+              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "1" : null)
+              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "4096Mi" : null)
             } : k => v if v != null
           }
         }
       }
-    }) : ""
+    }) : "" 
   ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
