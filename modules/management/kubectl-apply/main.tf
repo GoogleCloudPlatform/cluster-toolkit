@@ -236,7 +236,7 @@ module "install_kueue" {
           }
         }
       }
-    }) : "" 
+    }) : ""
   ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
@@ -306,7 +306,7 @@ module "install_jobset" {
           }
         }
       }
-    }) : "" 
+    }) : ""
   ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }

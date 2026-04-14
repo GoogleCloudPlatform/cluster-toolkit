@@ -52,7 +52,7 @@ module "vpc" {
   region          = "us-central1"
   deployment_name = "test-ss"
   subnetwork_name = "gke-subnet"
-  
+
   secondary_ranges = {
     "gke-subnet" = [
       {
@@ -74,13 +74,13 @@ module "gke_cluster" {
   region          = "us-central1"
   zone            = "us-central1-c"
   deployment_name = "test-ss"
-  
+
   network_id           = module.vpc.network_id
   subnetwork_self_link = module.vpc.subnetwork_self_link
 
   pods_ip_range_name     = "pods"
   services_ip_range_name = "services"
-  
+
   enable_private_endpoint = false
   master_authorized_networks = [
     {
@@ -101,13 +101,13 @@ module "kubectl_apply" {
     install                 = true
     enable_slice_controller = true
     version                 = "0.15.2"
-    controller_cpu    = "1"
-    controller_memory = "1Gi"
+    controller_cpu          = "1"
+    controller_memory       = "1Gi"
   }
-  
+
   jobset = {
-    install                 = true
-    version                 = "0.10.1"
+    install           = true
+    version           = "0.10.1"
     controller_cpu    = "1"
     controller_memory = "1Gi"
   }
