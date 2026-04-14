@@ -294,14 +294,14 @@ module "install_jobset" {
         resources = {
           limits = {
             for k, v in {
-              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "1" : null)
-              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "4096Mi" : null)
+              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "4" : null)
+              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "16Gi" : null)
             } : k => v if v != null
           }
           requests = {
             for k, v in {
-              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "1" : null)
-              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "4096Mi" : null)
+              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "4" : null)
+              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "16Gi" : null)
             } : k => v if v != null
           }
         }
