@@ -21,7 +21,8 @@ locals {
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   kueue_config_content = join("\n---\n", compact([
     var.kueue.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
-      super_slice_topology_name = "super-slice-topology"
+      super_slice_topology_name      = "super-slice-topology"
+      super_slice_cluster_queue_name = "cluster-queue"
     }) : "",
     var.kueue.enable_pathways_for_tpus ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
@@ -247,6 +248,9 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+# Sleep for 15 seconds after Kueue installation to allow the Kubernetes API server
+# enough time to fully register the newly created Custom Resource Definitions (CRDs)
+# before we attempt to create instances of them (e.g. ClusterQueue, Topology).
 resource "time_sleep" "wait_for_kueue_crd" {
   count           = local.install_kueue ? 1 : 0
   depends_on      = [module.install_kueue]

@@ -18,7 +18,7 @@ spec:
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ClusterQueue
 metadata:
-  name: "cluster-queue"
+  name: ${try(super_slice_cluster_queue_name, "cluster-queue")}
 spec:
   admissionChecks:
   - ss-kueue-operator

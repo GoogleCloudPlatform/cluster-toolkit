@@ -574,6 +574,7 @@ variable "auto_monitoring_scope" {
     error_message = "auto_monitoring_scope can only be ALL or NONE."
   }
 }
+
 variable "enable_pathways_for_tpus" {
   description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
   type        = bool
