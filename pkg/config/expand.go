@@ -168,6 +168,19 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	if err := expandHardwareSettings(bp, m); err != nil {
 		return err
 	}
+
+	// Inject machine_configs if supported by the module
+	for _, input := range m.InfoOrDie().Inputs {
+		if input.Name == "machine_configs" {
+			cfgJson, err := getMachineConfigJSON(m, bp)
+			if err != nil {
+				return err
+			}
+			m.Settings = m.Settings.With("machine_configs", cty.StringVal(cfgJson))
+			break
+		}
+	}
+
 	return validateModuleInputs(mp, *m, bp)
 }
 

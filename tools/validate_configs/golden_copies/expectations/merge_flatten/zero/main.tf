@@ -50,6 +50,7 @@ module "first-vm" {
   labels = merge(var.labels, {
     green = "sleeves"
   })
+  machine_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
   network_storage = flatten([module.first-fs.network_storage])
   project_id      = var.project_id
   region          = var.region
@@ -60,6 +61,7 @@ module "second-vm" {
   source          = "./modules/embedded/modules/compute/vm-instance"
   deployment_name = var.deployment_name
   labels          = var.labels
+  machine_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
   network_storage = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
   project_id      = var.project_id
   region          = var.region
