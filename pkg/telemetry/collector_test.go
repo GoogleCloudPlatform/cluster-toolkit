@@ -44,6 +44,7 @@ func TestNewCollector(t *testing.T) {
 // Future metrics can be seamlessly verified by adding keys to `expectedKeys`
 // and values to `expectedValues`.
 func TestCollectMetrics_Extensible(t *testing.T) {
+	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
 		REGION,
@@ -86,6 +87,26 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				EXIT_CODE:     "0",
 				REGION:        "us-central1",
 				ZONE:          "us-central1-a",
+			},
+		},
+		{
+			name:      "Failure exit code with missing region and zone",
+			errorCode: 1, // Simulating a failure
+			setupCmd: func(cmd *cobra.Command) {
+				// No flags set for this test case
+			},
+			setupCollector: func(c *Collector) {
+				// Blueprint with empty vars to simulate missing region and zone
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			expectedValues: map[string]string{
+				IS_TEST_DATA:  "true",
+				EXIT_CODE:     "1", // Verify failure code is captured
+				COMMAND_FLAGS: "",  // Verify empty flags
+				REGION:        "",  // Verify missing region
+				ZONE:          "",  // Verify missing zone
 			},
 		},
 	}
