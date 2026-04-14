@@ -28,7 +28,7 @@ locals {
   install_gib               = try(var.gib.install, false)
   install_asapd_lite        = try(var.asapd_lite.install, false)
 
-  enable_slice_controller = try(var.kueue.enable_slice_controller, false)
+  enable_slice_controller = var.kueue.enable_slice_controller
   kueue_cpu               = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? "16" : null)
   kueue_memory            = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? "64Gi" : null)
   kueue_replicas          = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? 3 : 1)
@@ -44,7 +44,7 @@ locals {
       super_slice_topology_name      = "super-slice-topology"
       super_slice_cluster_queue_name = "cluster-queue"
     }) : "",
-    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+    var.kueue.enable_pathways_for_tpus ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
       pathways_cpu_quota     = 480
       pathways_memory_quota  = "2000G"
@@ -55,7 +55,7 @@ locals {
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false) || local.enable_slice_controller)
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || var.kueue.enable_pathways_for_tpus || local.enable_slice_controller)
 
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
@@ -300,9 +300,9 @@ module "install_jobset" {
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
     local.jobset_custom_resources ? yamlencode({
-      controllerManager = {
+      controllerManager = { for k, v in {
         replicas = local.jobset_replicas
-      }
+      } : k => v if v != null }
       controller = {
         resources = {
           limits = {
