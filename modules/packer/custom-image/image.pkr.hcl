@@ -24,6 +24,9 @@ locals {
   # construct vm image name for use when getting logs
   instance_name = "packer-${substr(uuidv4(), 0, 6)}"
 
+  # construct custom compute endpoint URL if version is provided
+  compute_endpoint_url = var.compute_endpoint_version != null ? "https://www.googleapis.com/compute/${var.compute_endpoint_version}/" : null
+
   # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
   shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
   ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
@@ -88,9 +91,7 @@ locals {
   enable_secure_boot          = var.enable_shielded_vm && var.shielded_instance_config.enable_secure_boot
   enable_vtpm                 = var.enable_shielded_vm && var.shielded_instance_config.enable_vtpm
 
-  image_licenses = [
-    "projects/click-to-deploy-images/global/licenses/hpc-toolkit-vm-image"
-  ]
+
 }
 
 source "googlecompute" "toolkit_image" {
@@ -102,6 +103,7 @@ source "googlecompute" "toolkit_image" {
   instance_name               = local.instance_name
   machine_type                = var.machine_type
   accelerator_type            = local.accelerator_type
+  region                      = var.region
   accelerator_count           = var.accelerator_count
   on_host_maintenance         = local.on_host_maintenance
   disk_size                   = var.disk_size
@@ -132,7 +134,11 @@ source "googlecompute" "toolkit_image" {
   enable_secure_boot          = local.enable_secure_boot
   enable_vtpm                 = local.enable_vtpm
   enable_integrity_monitoring = local.enable_integrity_monitoring
-  image_licenses              = local.image_licenses
+  image_licenses              = var.image_licenses
+
+  custom_endpoints = local.compute_endpoint_url != null ? {
+    "compute" = local.compute_endpoint_url
+  } : {}
 }
 
 build {
@@ -202,6 +208,9 @@ build {
     ]
     inline_shebang = "/bin/bash -e"
     inline = [
+      "if [[ -n \"${var.gcloud_path_override}\" ]]; then",
+      "  export PATH=\"${var.gcloud_path_override}:\\$PATH\"",
+      "fi",
       "type -P gcloud > /dev/null || exit 0",
       "INST_ID=$(gcloud compute instances describe $INST_NAME --project $PRJ_ID --format=\"value(id)\" --zone=$ZONE)",
       "echo 'Error building image try checking logs:'",
