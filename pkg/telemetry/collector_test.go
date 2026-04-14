@@ -42,44 +42,68 @@ func TestNewCollector(t *testing.T) {
 // Future metrics can be seamlessly verified by adding keys to `expectedKeys`
 // and values to `expectedValues`.
 func TestCollectMetrics_Extensible(t *testing.T) {
+	expectedKeys := []string{
+		COMMAND_FLAGS,
+		IS_TEST_DATA,
+		EXIT_CODE,
+	}
+
 	tests := []struct {
 		name           string
 		errorCode      int
-		expectedKeys   []string
+		setupCmd       func(cmd *cobra.Command)
 		expectedValues map[string]string
 	}{
 		{
-			name:         "Success exit code",
-			errorCode:    0,
-			expectedKeys: []string{IS_TEST_DATA, EXIT_CODE},
+			name:      "Success exit code",
+			errorCode: 0,
+			setupCmd: func(cmd *cobra.Command) {
+				// Define dummy flags for the mock command
+				cmd.Flags().Bool("force", false, "Force execution")
+				cmd.Flags().String("project", "", "GCP Project")
+
+				// Simulate the user providing these flags at runtime
+				_ = cmd.Flags().Set("force", "true")
+				_ = cmd.Flags().Set("project", "test-project")
+			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA: "true",
-				EXIT_CODE:    "0",
+				COMMAND_FLAGS: "force,project",
+				IS_TEST_DATA:  "true",
+				EXIT_CODE:     "0",
 			},
 		},
 		{
-			name:         "Failure exit code",
-			errorCode:    1,
-			expectedKeys: []string{IS_TEST_DATA, EXIT_CODE},
+			name:      "Failure exit code",
+			errorCode: 1,
 			expectedValues: map[string]string{
-				IS_TEST_DATA: "true",
-				EXIT_CODE:    "1",
+				COMMAND_FLAGS: "",
+				IS_TEST_DATA:  "true",
+				EXIT_CODE:     "1",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewCollector(nil, nil)
+			cmd := &cobra.Command{Use: "mock"}
+			// Execute the setup function to apply flags to the command
+			if tt.setupCmd != nil {
+				tt.setupCmd(cmd)
+			}
+			c := NewCollector(cmd, nil)
 			c.CollectMetrics(tt.errorCode)
 
-			for _, key := range tt.expectedKeys {
-				val, exists := c.metadata[key]
-				if !exists {
-					t.Errorf("CollectMetrics() missing expected metric key: %s", key)
+			// Assert that all expected keys are populated in the metadata
+			for _, key := range expectedKeys {
+				if _, exists := c.metadata[key]; !exists {
+					t.Errorf("Expected key %q missing from metadata", key)
 				}
-				if expectedVal, ok := tt.expectedValues[key]; ok && val != expectedVal {
-					t.Errorf("CollectMetrics() metric %s = %v, want %v", key, val, expectedVal)
+			}
+
+			// Assert that the specifically expected values match
+			for key, expectedVal := range tt.expectedValues {
+				if actualVal, exists := c.metadata[key]; !exists || actualVal != expectedVal {
+					t.Errorf("For key %q, expected value %q, got %q", key, expectedVal, actualVal)
 				}
 			}
 		})
@@ -244,6 +268,64 @@ func TestGetClientInstallId(t *testing.T) {
 			// Assert
 			if got != tt.want {
 				t.Errorf("getClientInstallId() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetCmdFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupCmd func(cmd *cobra.Command)
+		expected string
+	}{
+		{
+			name: "No flags set",
+			setupCmd: func(cmd *cobra.Command) {
+				// Define a flag but do not set it
+				cmd.Flags().Bool("force", false, "Force execution")
+			},
+			expected: "",
+		},
+		{
+			name: "Single flag set",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("force", false, "Force execution")
+
+				// Simulate user passing --force
+				_ = cmd.Flags().Set("force", "true")
+			},
+			expected: "force",
+		},
+		{
+			name: "Multiple flags set",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("force", false, "Force execution")
+				cmd.Flags().String("project", "", "GCP Project")
+				cmd.Flags().Int("retries", 3, "Number of retries")
+
+				// Simulate user passing --force and --project
+				_ = cmd.Flags().Set("force", "true")
+				_ = cmd.Flags().Set("project", "test-project")
+				// Leave "retries" unset to ensure it isn't collected
+			},
+			// pflag typically stores flags in alphabetical order, but adjust if your function sorts them differently
+			expected: "force,project",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "mock"}
+
+			if tt.setupCmd != nil {
+				tt.setupCmd(cmd)
+			}
+
+			actual := getCmdFlags(cmd)
+
+			if actual != tt.expected {
+				t.Errorf("getCmdFlags() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
