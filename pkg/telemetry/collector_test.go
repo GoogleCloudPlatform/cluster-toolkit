@@ -45,7 +45,7 @@ func TestNewCollector(t *testing.T) {
 // and values to `expectedValues`.
 func TestCollectMetrics_Extensible(t *testing.T) {
 	// Define all expected metric keys from types.go
-	allExpectedKeys := []string{
+	expectedKeys := []string{
 		COMMAND_FLAGS,
 		MACHINE_TYPE,
 		REGION,
@@ -59,11 +59,10 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		errorCode      int
 		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
 		setupCollector func(c *Collector)       // Hook to mock internal collector state
-		expectedKeys   []string
 		expectedValues map[string]string
 	}{
 		{
-			name:      "Success exit code with custom flags, region, zone, and machine type",
+			name:      "Success exit code",
 			errorCode: 0,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
@@ -98,7 +97,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 					},
 				}
 			},
-			expectedKeys: allExpectedKeys,
 			expectedValues: map[string]string{
 				IS_TEST_DATA:  "true",
 				EXIT_CODE:     "0",
@@ -121,7 +119,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 					Groups: []config.Group{},
 				}
 			},
-			expectedKeys: allExpectedKeys,
 			expectedValues: map[string]string{
 				IS_TEST_DATA:  "true",
 				EXIT_CODE:     "1",
@@ -154,7 +151,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			c.CollectMetrics(tt.errorCode)
 
 			// Assert that all expected keys are populated in the metadata
-			for _, key := range tt.expectedKeys {
+			for _, key := range expectedKeys {
 				if _, exists := c.metadata[key]; !exists {
 					t.Errorf("Expected key %q missing from metadata", key)
 				}
