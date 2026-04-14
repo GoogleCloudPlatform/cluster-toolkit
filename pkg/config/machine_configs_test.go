@@ -16,7 +16,6 @@ package config
 
 import (
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -119,8 +118,7 @@ func TestExtractProject(t *testing.T) {
 	}
 }
 
-func TestBuildOutputConfigJSON(t *testing.T) {
-	// CPU only
+func TestBuildOutputConfigJSON_CPU(t *testing.T) {
 	mt1 := &compute.MachineType{GuestCpus: 4}
 	got1, err := buildOutputConfigJSON("n1-standard-4", mt1)
 	if err != nil {
@@ -133,8 +131,9 @@ func TestBuildOutputConfigJSON(t *testing.T) {
 	if out1.CPUs["n1-standard-4"].Count != 4 {
 		t.Errorf("expected 4 CPUs, got %v", out1.CPUs["n1-standard-4"].Count)
 	}
+}
 
-	// GPU
+func TestBuildOutputConfigJSON_GPU(t *testing.T) {
 	mt2 := &compute.MachineType{
 		GuestCpus: 8,
 		Accelerators: []*compute.MachineTypeAccelerators{
@@ -152,8 +151,9 @@ func TestBuildOutputConfigJSON(t *testing.T) {
 	if out2.GPUs["n1-standard-8"].Count != 2 || out2.GPUs["n1-standard-8"].Type != "nvidia-tesla-t4" {
 		t.Errorf("expected 2 nvidia-tesla-t4 GPUs, got %+v", out2.GPUs["n1-standard-8"])
 	}
+}
 
-	// TPU via Accelerators
+func TestBuildOutputConfigJSON_TPU(t *testing.T) {
 	mt3 := &compute.MachineType{
 		GuestCpus: 8,
 		Accelerators: []*compute.MachineTypeAccelerators{
@@ -173,10 +173,24 @@ func TestBuildOutputConfigJSON(t *testing.T) {
 	}
 }
 
+func TestBuildOutputConfigJSON_TPUFallback(t *testing.T) {
+	mt4 := &compute.MachineType{GuestCpus: 4}
+	got4, err := buildOutputConfigJSON("ct5p-hbm-2t", mt4)
+	if err != nil {
+		t.Fatalf("buildOutputConfigJSON failed: %v", err)
+	}
+	var out4 outputConfig
+	if err := json.Unmarshal([]byte(got4), &out4); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+	if out4.TPUs["ct5p-hbm-2t"].Count != 2 {
+		t.Errorf("expected 2 TPUs from ct5p-hbm-2t fallback, got %v", out4.TPUs["ct5p-hbm-2t"].Count)
+	}
+}
+
 func TestGetMachineConfigJSON(t *testing.T) {
 	// Test mock data path
-	os.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"mocked": true}`)
-	defer os.Unsetenv("GHPC_MOCK_MACHINE_CONFIG")
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"mocked": true}`)
 
 	bp := Blueprint{}
 	m := Module{}
@@ -191,6 +205,7 @@ func TestGetMachineConfigJSON(t *testing.T) {
 }
 
 func TestGetMachineConfigJSON_EmptyParams(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", "")
 	bp := Blueprint{}
 	m := Module{}
 
@@ -198,7 +213,12 @@ func TestGetMachineConfigJSON_EmptyParams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getMachineConfigJSON failed: %v", err)
 	}
-	if got != `{"gpus": {}, "tpus": {}, "cpus": {}}` {
-		t.Errorf("expected empty config JSON, got %v", got)
+
+	var out outputConfig
+	if err := json.Unmarshal([]byte(got), &out); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+	if len(out.CPUs) != 0 || len(out.GPUs) != 0 || len(out.TPUs) != 0 {
+		t.Errorf("expected empty config, got %+v", out)
 	}
 }
