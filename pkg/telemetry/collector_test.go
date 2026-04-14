@@ -368,15 +368,17 @@ func TestGetCmdFlags(t *testing.T) {
 	}
 }
 
-// TestGetRegion verifies that the region is correctly extracted from the blueprint.
-func TestGetRegion(t *testing.T) {
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
 	tests := []struct {
 		name     string
+		key      string
 		setupBp  func() config.Blueprint
 		expected string
 	}{
 		{
-			name: "Valid region provided",
+			name: "Valid region",
+			key:  "region",
 			setupBp: func() config.Blueprint {
 				return config.Blueprint{
 					Vars: config.NewDict(map[string]cty.Value{
@@ -387,38 +389,8 @@ func TestGetRegion(t *testing.T) {
 			expected: "us-central1",
 		},
 		{
-			name: "Region missing",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					// Return an empty dictionary to simulate missing vars
-					Vars: config.NewDict(map[string]cty.Value{}),
-				}
-			},
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bp := tt.setupBp()
-			actual := getRegion(bp)
-
-			if actual != tt.expected {
-				t.Errorf("getRegion() = %q, want %q", actual, tt.expected)
-			}
-		})
-	}
-}
-
-// TestGetZone verifies that the zone is correctly extracted from the blueprint.
-func TestGetZone(t *testing.T) {
-	tests := []struct {
-		name     string
-		setupBp  func() config.Blueprint
-		expected string
-	}{
-		{
-			name: "Valid zone provided",
+			name: "Valid zone",
+			key:  "zone",
 			setupBp: func() config.Blueprint {
 				return config.Blueprint{
 					Vars: config.NewDict(map[string]cty.Value{
@@ -429,7 +401,8 @@ func TestGetZone(t *testing.T) {
 			expected: "us-central1-a",
 		},
 		{
-			name: "Zone missing",
+			name: "Missing key",
+			key:  "zone",
 			setupBp: func() config.Blueprint {
 				return config.Blueprint{
 					Vars: config.NewDict(map[string]cty.Value{}),
@@ -442,10 +415,10 @@ func TestGetZone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bp := tt.setupBp()
-			actual := getZone(bp)
+			actual := getKeyFromBlueprint(tt.key, bp)
 
 			if actual != tt.expected {
-				t.Errorf("getZone() = %q, want %q", actual, tt.expected)
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
 			}
 		})
 	}
