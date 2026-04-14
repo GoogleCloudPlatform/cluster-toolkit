@@ -19,8 +19,28 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+
+
+  install_kueue             = try(var.kueue.install, false)
+  install_jobset            = try(var.jobset.install, false)
+  install_gpu_operator      = try(var.gpu_operator.install, false)
+  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  install_gib               = try(var.gib.install, false)
+  install_asapd_lite        = try(var.asapd_lite.install, false)
+
+  enable_slice_controller = try(var.kueue.enable_slice_controller, false)
+  kueue_cpu               = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? "16" : null)
+  kueue_memory            = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? "64Gi" : null)
+  kueue_replicas          = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? 3 : 1)
+  kueue_custom_resources  = var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || local.enable_slice_controller
+
+  jobset_cpu              = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (local.enable_slice_controller ? "4" : null)
+  jobset_memory           = var.jobset.controller_memory != null ? var.jobset.controller_memory : (local.enable_slice_controller ? "16Gi" : null)
+  jobset_replicas         = var.jobset.controller_replicas != null ? var.jobset.controller_replicas : (local.enable_slice_controller ? 1 : null)
+  jobset_custom_resources = var.jobset.controller_replicas != null || var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slice_controller
+
   kueue_config_content = join("\n---\n", compact([
-    var.kueue.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
+    local.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
       super_slice_topology_name      = "super-slice-topology"
       super_slice_cluster_queue_name = "cluster-queue"
     }) : "",
@@ -35,7 +55,7 @@ locals {
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false) || try(var.kueue.enable_slice_controller, false))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false) || local.enable_slice_controller)
 
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
@@ -143,13 +163,6 @@ locals {
       namespace        = manifest.namespace
     }
   })
-
-  install_kueue             = try(var.kueue.install, false)
-  install_jobset            = try(var.jobset.install, false)
-  install_gpu_operator      = try(var.gpu_operator.install, false)
-  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
-  install_gib               = try(var.gib.install, false)
-  install_asapd_lite        = try(var.asapd_lite.install, false)
 }
 
 data "http" "manifest_from_url" {
@@ -197,7 +210,7 @@ resource "terraform_data" "kueue_slice_controller_version_check" {
   count = local.install_kueue ? 1 : 0
   lifecycle {
     precondition {
-      condition     = !var.kueue.enable_slice_controller || module.super_slicing_kueue_version_check.is_greater_than_or_equal
+      condition     = !local.enable_slice_controller || module.super_slicing_kueue_version_check.is_greater_than_or_equal
       error_message = "Kueue super-slicing requires Kueue version >= 0.15.2."
     }
   }
@@ -216,21 +229,21 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || try(var.kueue.enable_slice_controller, false) ? yamlencode({
+    local.kueue_custom_resources ? yamlencode({
       controllerManager = {
-        replicas = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (try(var.kueue.enable_slice_controller, false) ? 3 : 1)
+        replicas = local.kueue_replicas
         manager = {
           resources = {
             limits = {
               for k, v in {
-                cpu    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "16" : null)
-                memory = var.kueue.controller_memory != null ? var.kueue.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "64Gi" : null)
+                cpu    = local.kueue_cpu
+                memory = local.kueue_memory
               } : k => v if v != null
             }
             requests = {
               for k, v in {
-                cpu    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "16" : null)
-                memory = var.kueue.controller_memory != null ? var.kueue.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "64Gi" : null)
+                cpu    = local.kueue_cpu
+                memory = local.kueue_memory
               } : k => v if v != null
             }
           }
@@ -286,22 +299,22 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_replicas != null || var.jobset.controller_cpu != null || var.jobset.controller_memory != null || try(var.kueue.enable_slice_controller, false) ? yamlencode({
+    local.jobset_custom_resources ? yamlencode({
       controllerManager = {
-        replicas = var.jobset.controller_replicas != null ? var.jobset.controller_replicas : (try(var.kueue.enable_slice_controller, false) ? 1 : null)
+        replicas = local.jobset_replicas
       }
       controller = {
         resources = {
           limits = {
             for k, v in {
-              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "4" : null)
-              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "16Gi" : null)
+              cpu    = local.jobset_cpu
+              memory = local.jobset_memory
             } : k => v if v != null
           }
           requests = {
             for k, v in {
-              cpu    = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (try(var.kueue.enable_slice_controller, false) ? "4" : null)
-              memory = var.jobset.controller_memory != null ? var.jobset.controller_memory : (try(var.kueue.enable_slice_controller, false) ? "16Gi" : null)
+              cpu    = local.jobset_cpu
+              memory = local.jobset_memory
             } : k => v if v != null
           }
         }
