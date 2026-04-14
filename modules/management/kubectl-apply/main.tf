@@ -31,13 +31,12 @@ locals {
   enable_slice_controller = var.kueue.enable_slice_controller
   kueue_cpu               = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? "16" : null)
   kueue_memory            = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? "64Gi" : null)
-  kueue_replicas          = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? 3 : 1)
+  kueue_replicas          = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? 3 : null)
   kueue_custom_resources  = var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || local.enable_slice_controller
 
   jobset_cpu              = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (local.enable_slice_controller ? "4" : null)
   jobset_memory           = var.jobset.controller_memory != null ? var.jobset.controller_memory : (local.enable_slice_controller ? "16Gi" : null)
-  jobset_replicas         = var.jobset.controller_replicas != null ? var.jobset.controller_replicas : (local.enable_slice_controller ? 1 : null)
-  jobset_custom_resources = var.jobset.controller_replicas != null || var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slice_controller
+  jobset_custom_resources = var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slice_controller
 
   kueue_config_content = join("\n---\n", compact([
     local.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
@@ -230,25 +229,27 @@ module "install_kueue" {
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
     local.kueue_custom_resources ? yamlencode({
-      controllerManager = {
-        replicas = local.kueue_replicas
-        manager = {
-          resources = {
-            limits = {
-              for k, v in {
-                cpu    = local.kueue_cpu
-                memory = local.kueue_memory
-              } : k => v if v != null
-            }
-            requests = {
-              for k, v in {
-                cpu    = local.kueue_cpu
-                memory = local.kueue_memory
-              } : k => v if v != null
+      controllerManager = merge(
+        { for k, v in { replicas = local.kueue_replicas } : k => v if v != null },
+        {
+          manager = {
+            resources = {
+              limits = {
+                for k, v in {
+                  cpu    = local.kueue_cpu
+                  memory = local.kueue_memory
+                } : k => v if v != null
+              }
+              requests = {
+                for k, v in {
+                  cpu    = local.kueue_cpu
+                  memory = local.kueue_memory
+                } : k => v if v != null
+              }
             }
           }
         }
-      }
+      )
     }) : ""
   ])
 
@@ -300,9 +301,6 @@ module "install_jobset" {
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
     local.jobset_custom_resources ? yamlencode({
-      controllerManager = { for k, v in {
-        replicas = local.jobset_replicas
-      } : k => v if v != null }
       controller = {
         resources = {
           limits = {
