@@ -51,6 +51,7 @@ run_test() {
 	${GHPC_PATH} create -l ERROR \
 		--skip-validators="${VALIDATORS_TO_SKIP}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
+		--add-creator-label=false \
 		"${tmpdir}"/"${bpFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${bpFile}"
