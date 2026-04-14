@@ -41,10 +41,13 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 }
 
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
 	modules := make([]config.Module, 0)
 	for _, m := range config.GetAllModules(&bp) {
-		matched, _ := regexp.Match(pattern, []byte(m.Source))
-		if matched {
+		if re.MatchString(m.Source) {
 			modules = append(modules, m)
 		}
 	}
