@@ -41,6 +41,8 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	defer c.mu.Unlock()
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[REGION] = getRegion(c.blueprint)
+	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -91,6 +93,14 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getRegion(bp config.Blueprint) string {
+	return getKeyFromBlueprint("region", bp)
+}
+
+func getZone(bp config.Blueprint) string {
+	return getKeyFromBlueprint("zone", bp)
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

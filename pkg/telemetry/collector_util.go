@@ -16,6 +16,8 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+
+	"github.com/zclconf/go-cty/cty"
 )
 
 func getBlueprint(args []string) config.Blueprint {
@@ -35,4 +37,16 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 		})
 	}
 	return eventMetadata
+}
+
+func getKeyFromBlueprint(key string, bp config.Blueprint) string {
+	val, err := bp.Eval(config.GlobalRef(key).AsValue())
+	if err != nil {
+		return ""
+	}
+	v, _ := val.Unmark()
+	if !v.IsNull() && v.Type() == cty.String {
+		return v.AsString()
+	}
+	return ""
 }

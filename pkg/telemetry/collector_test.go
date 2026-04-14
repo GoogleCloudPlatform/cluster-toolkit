@@ -15,11 +15,13 @@
 package telemetry
 
 import (
+	"hpc-toolkit/pkg/config"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestNewCollector(t *testing.T) {
@@ -42,8 +44,11 @@ func TestNewCollector(t *testing.T) {
 // Future metrics can be seamlessly verified by adding keys to `expectedKeys`
 // and values to `expectedValues`.
 func TestCollectMetrics_Extensible(t *testing.T) {
+	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
+		REGION,
+		ZONE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -51,7 +56,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	tests := []struct {
 		name           string
 		errorCode      int
-		setupCmd       func(cmd *cobra.Command)
+		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
+		setupCollector func(c *Collector)       // Hook to mock internal collector state
 		expectedValues map[string]string
 	}{
 		{
@@ -66,19 +72,41 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				_ = cmd.Flags().Set("force", "true")
 				_ = cmd.Flags().Set("project", "test-project")
 			},
+			setupCollector: func(c *Collector) {
+				// Mock the blueprint variables to include region and zone
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+						"zone":   cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
 			expectedValues: map[string]string{
 				COMMAND_FLAGS: "force,project",
 				IS_TEST_DATA:  "true",
 				EXIT_CODE:     "0",
+				REGION:        "us-central1",
+				ZONE:          "us-central1-a",
 			},
 		},
 		{
-			name:      "Failure exit code",
-			errorCode: 1,
+			name:      "Failure exit code with missing region and zone",
+			errorCode: 1, // Simulating a failure
+			setupCmd: func(cmd *cobra.Command) {
+				// No flags set for this test case
+			},
+			setupCollector: func(c *Collector) {
+				// Blueprint with empty vars to simulate missing region and zone
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
 			expectedValues: map[string]string{
-				COMMAND_FLAGS: "",
 				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
+				EXIT_CODE:     "1", // Verify failure code is captured
+				COMMAND_FLAGS: "",  // Verify empty flags
+				REGION:        "",  // Verify missing region
+				ZONE:          "",  // Verify missing zone
 			},
 		},
 	}
@@ -90,7 +118,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			if tt.setupCmd != nil {
 				tt.setupCmd(cmd)
 			}
-			c := NewCollector(cmd, nil)
+
+			// Initialize the collector
+			c := NewCollector(cmd, []string{})
+
+			// Execute the setup function to apply the blueprint state to the collector
+			if tt.setupCollector != nil {
+				tt.setupCollector(c)
+			}
+
+			// Run the method being tested
 			c.CollectMetrics(tt.errorCode)
 
 			// Assert that all expected keys are populated in the metadata
@@ -326,6 +363,62 @@ func TestGetCmdFlags(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getCmdFlags() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region",
+			key:  "region",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Valid zone",
+			key:  "zone",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Missing key",
+			key:  "zone",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := getKeyFromBlueprint(tt.key, bp)
+
+			if actual != tt.expected {
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
 			}
 		})
 	}
