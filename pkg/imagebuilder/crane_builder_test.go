@@ -331,25 +331,25 @@ func TestBuildContainerImageFromBaseImage_Success(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	matcher, _ := patternmatcher.New([]string{})
-	got, err := BuildContainerImageFromBaseImage("test-project", "ubuntu", tempDir, "linux/amd64", matcher)
+	got, err := BuildContainerImageFromBaseImage("test-project", "us-central1", "ubuntu", tempDir, "linux/amd64", matcher)
 	if err != nil {
 		t.Fatalf("BuildContainerImageFromBaseImage() error = %v", err)
 	}
 
-	if !strings.Contains(got, "gcr.io/test-project/") {
-		t.Errorf("expected imageName to contain gcr.io/test-project/, got %s", got)
+	if !strings.Contains(got, "us-central1-docker.pkg.dev/test-project/gcluster/") {
+		t.Errorf("expected imageName to contain us-central1-docker.pkg.dev/test-project/gcluster/, got %s", got)
 	}
 }
 
 func TestBuildContainerImageFromBaseImage_PlatformError(t *testing.T) {
-	_, err := BuildContainerImageFromBaseImage("test-project", "ubuntu", "", "invalid-platform", nil)
+	_, err := BuildContainerImageFromBaseImage("test-project", "us-central1", "ubuntu", "", "invalid-platform", nil)
 	if err == nil {
 		t.Error("expected error for invalid platform, got nil")
 	}
 }
 
 func TestBuildContainerImageFromBaseImage_ParseReferenceError(t *testing.T) {
-	_, err := BuildContainerImageFromBaseImage("test-project", "!!invalid!!", "", "linux/amd64", nil)
+	_, err := BuildContainerImageFromBaseImage("test-project", "us-central1", "!!invalid!!", "", "linux/amd64", nil)
 	if err == nil {
 		t.Error("expected error for invalid base image, got nil")
 	}

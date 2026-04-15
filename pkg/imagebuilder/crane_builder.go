@@ -59,6 +59,7 @@ const (
 // to a base Docker image.
 func BuildContainerImageFromBaseImage(
 	project string,
+	location string,
 	baseImage string,
 	scriptDir string,
 	platformStr string,
@@ -71,12 +72,19 @@ func BuildContainerImageFromBaseImage(
 
 	userName := os.Getenv("USER")
 	if userName == "" {
-		userName = "unknown"
+		userName = "defaultName"
 	}
+
+	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
+	if repoName == "" {
+		repoName = "gcluster"
+	}
+
+	region := extractRegion(location)
 
 	tagRandomPrefix := shell.RandomString(4)
 	tagDatetime := time.Now().Format("2006-01-02-15-04-05") // YYYY-MM-DD-HH-MM-SS
-	imageName := fmt.Sprintf("gcr.io/%s/%s-runner:%s-%s", project, userName, tagRandomPrefix, tagDatetime)
+	imageName := fmt.Sprintf("%s-docker.pkg.dev/%s/%s/%s-runner:%s-%s", region, project, repoName, strings.ToLower(userName), tagRandomPrefix, tagDatetime)
 
 	logging.Info("Starting image build process for %s", imageName)
 	logging.Info("Base Image: %s", baseImage)
@@ -283,4 +291,12 @@ func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMa
 	}
 
 	return tmpFile.Name(), nil
+}
+
+func extractRegion(location string) string {
+	parts := strings.Split(location, "-")
+	if len(parts) == 3 {
+		return parts[0] + "-" + parts[1]
+	}
+	return location
 }

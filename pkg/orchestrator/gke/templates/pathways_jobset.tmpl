@@ -25,6 +25,8 @@ spec:
               gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
             containers:
             - name: pathways-proxy
@@ -85,6 +87,8 @@ spec:
             annotations:
               gke-gcsfuse/volumes: "true"
           spec:
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
             containers:
             - name: pathways-worker
@@ -114,3 +118,15 @@ spec:
               emptyDir:
                 medium: Memory
 {{.VolumesYAML}}
+{{- if .NodeSelector }}
+            nodeSelector:
+{{.NodeSelector}}
+{{- end }}
+{{- if .Affinity }}
+            affinity:
+{{.Affinity}}
+{{- end }}
+{{- if .Tolerations }}
+            tolerations:
+{{.Tolerations}}
+{{- end }}
