@@ -17,7 +17,6 @@ package telemetry
 import (
 	"bufio"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
 	"os"
 	"os/exec"
 	"strings"
@@ -61,7 +60,6 @@ func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
-		logging.Error("failed to open /etc/os-release: %v", err)
 		return ""
 	}
 	defer f.Close()
@@ -90,7 +88,6 @@ func getLinuxVersion() string {
 func getMacVersion() string {
 	out, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
-		logging.Error("sw_vers failed: %v", err)
 		return ""
 	}
 	return strings.TrimSpace(string(out))
@@ -101,7 +98,6 @@ func getWindowsVersion() string {
 	cmd := exec.Command("cmd", "/c", "ver")
 	out, err := cmd.Output()
 	if err != nil {
-		logging.Error("ver failed: %v", err)
 		return ""
 	}
 	return strings.TrimSpace(string(out))
