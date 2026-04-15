@@ -110,5 +110,5 @@ func parseOsReleaseField(line string) string {
 	if len(parts) != 2 {
 		return ""
 	}
-	return strings.Trim(parts[1], `"`)
+	return strings.Trim(parts[1], "'\"")
 }
