@@ -1040,7 +1040,7 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 			logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
 			return true, count, nil
 		}
-	} else if job.ClusterLocation == "" {
+	} else if job.ClusterLocation == "" && job.AcceleratorType != "" {
 		logging.Warn("Zone is empty for machine type %s. Contextually treating it as a CPU machine for dry-run.", job.AcceleratorType)
 		return true, 1, nil
 	}
