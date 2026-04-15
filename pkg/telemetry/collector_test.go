@@ -448,17 +448,17 @@ func TestOSSpecificVersionMethods(t *testing.T) {
 	macVer := getMacVersion()
 	winVer := getWindowsVersion()
 
-	if runtime.GOOS != "linux" && linuxVer != "" {
+	if runtime.GOOS != "linux" && linuxVer != "Linux (unknown version)" {
 		// Note: On rare occasions (like WSL or specific Mac setups), /etc/os-release
 		// might exist, so we use Logf instead of Errorf to avoid flaky tests.
 		t.Logf("Unexpected linux version string on %s: %s", runtime.GOOS, linuxVer)
 	}
 
-	if runtime.GOOS != "darwin" && macVer != "" {
+	if runtime.GOOS != "darwin" && macVer != "Darwin (unknown version)" {
 		t.Errorf("getMacVersion() = %q on %s, want empty string", macVer, runtime.GOOS)
 	}
 
-	if runtime.GOOS != "windows" && winVer != "" {
+	if runtime.GOOS != "windows" && winVer != "Windows (unknown version)" {
 		t.Errorf("getWindowsVersion() = %q on %s, want empty string", winVer, runtime.GOOS)
 	}
 }

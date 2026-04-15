@@ -60,7 +60,7 @@ func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
-		return ""
+		return "Linux (unknown version)"
 	}
 	defer f.Close()
 
@@ -88,7 +88,7 @@ func getLinuxVersion() string {
 func getMacVersion() string {
 	out, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
-		return ""
+		return "Darwin (unknown version)"
 	}
 	return strings.TrimSpace(string(out))
 }
@@ -98,7 +98,7 @@ func getWindowsVersion() string {
 	cmd := exec.Command("cmd", "/c", "ver")
 	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		return "Windows (unknown version)"
 	}
 	return strings.TrimSpace(string(out))
 }
