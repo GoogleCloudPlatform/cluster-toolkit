@@ -28,14 +28,19 @@ locals {
   install_gib               = try(var.gib.install, false)
   install_asapd_lite        = try(var.asapd_lite.install, false)
 
-  enable_slice_controller = var.kueue.enable_slice_controller
-  kueue_cpu               = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? "16" : null)
-  kueue_memory            = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? "64Gi" : null)
-  kueue_replicas          = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? 3 : null)
-  kueue_custom_resources  = var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || local.enable_slice_controller
+  enable_slice_controller      = var.kueue.enable_slice_controller
+  kueue_super_slicing_cpu      = "16"
+  kueue_super_slicing_memory   = "64Gi"
+  kueue_super_slicing_replicas = 3
+  jobset_super_slicing_cpu     = "4"
+  jobset_super_slicing_memory  = "16Gi"
+  kueue_cpu                    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? local.kueue_super_slicing_cpu : null)
+  kueue_memory                 = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? local.kueue_super_slicing_memory : null)
+  kueue_replicas               = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? local.kueue_super_slicing_replicas : null)
+  kueue_custom_resources       = var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || local.enable_slice_controller
 
-  jobset_cpu              = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (local.enable_slice_controller ? "4" : null)
-  jobset_memory           = var.jobset.controller_memory != null ? var.jobset.controller_memory : (local.enable_slice_controller ? "16Gi" : null)
+  jobset_cpu              = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (local.enable_slice_controller ? local.jobset_super_slicing_cpu : null)
+  jobset_memory           = var.jobset.controller_memory != null ? var.jobset.controller_memory : (local.enable_slice_controller ? local.jobset_super_slicing_memory : null)
   jobset_custom_resources = var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slice_controller
 
   kueue_config_content = join("\n---\n", compact([
@@ -230,7 +235,7 @@ module "install_kueue" {
     file("${path.module}/kueue/kueue-helm-values.yaml"),
     local.kueue_custom_resources ? yamlencode({
       controllerManager = merge(
-        { for k, v in { replicas = local.kueue_replicas } : k => v if v != null },
+        local.kueue_replicas != null ? { replicas = local.kueue_replicas } : {},
         {
           manager = {
             resources = {
