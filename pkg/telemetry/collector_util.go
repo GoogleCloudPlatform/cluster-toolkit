@@ -53,9 +53,14 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
+var (
+	execCommand  = exec.Command
+	execLookPath = exec.LookPath
+)
+
 // isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
 func isGoogleCloudAccount() bool {
-	cmd := exec.Command("gcloud", "config", "get-value", "account")
+	cmd := execCommand("gcloud", "config", "get-value", "account")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
@@ -67,10 +72,10 @@ func isGoogleCloudAccount() bool {
 
 // hasProdAccess checks for the presence of internal developer binaries.
 func hasProdAccess() bool {
-	if _, err := exec.LookPath("gcert"); err == nil {
+	if _, err := execLookPath("gcert"); err == nil {
 		return true
 	}
-	if _, err := exec.LookPath("prodaccess"); err == nil {
+	if _, err := execLookPath("prodaccess"); err == nil {
 		return true
 	}
 
