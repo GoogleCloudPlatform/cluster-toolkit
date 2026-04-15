@@ -174,7 +174,7 @@ func resetSubmitCmdFlags() {
 	maxRestarts = 1
 	ttlSecondsAfterFinished = 3600
 	placementPolicy = ""
-	nodeSelector = nil
+	nodeConstraint = nil
 	cpuAffinityStr = ""
 	restartOnExitCodes = nil
 	imagePullSecrets = ""

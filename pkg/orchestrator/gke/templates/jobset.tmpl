@@ -50,7 +50,11 @@ spec:
               containers:
               - name: workload-container
                 image: {{.FullImageName}}
-{{.CommandToRun}}
+                command:
+                {{- range .Command }}
+                - {{ printf "%q" . }}
+                {{- end }}
+{{.ResourcesYAML}}
                 volumeMounts:
                 - name: temp-storage
                   mountPath: /mnt/data

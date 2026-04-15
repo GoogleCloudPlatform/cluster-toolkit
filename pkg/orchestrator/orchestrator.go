@@ -62,7 +62,7 @@ type JobDefinition struct {
 	TtlSecondsAfterFinished int
 
 	PlacementPolicy    string
-	NodeSelector       map[string]string
+	NodeConstraint     map[string]string
 	Affinity           map[string]string
 	PodFailurePolicy   map[string]interface{}
 	RestartOnExitCodes []int

@@ -16,7 +16,6 @@ package gke
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -49,21 +48,13 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	}
 
 	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
-	var jsonBuf bytes.Buffer
-	enc := json.NewEncoder(&jsonBuf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(cmdSlice); err != nil {
-		return "", fmt.Errorf("failed to marshal command: %w", err)
-	}
-	trimmedCmdBytes := bytes.TrimSpace(jsonBuf.Bytes())
-	updatedCommand := fmt.Sprintf("                command: %s\n%s", string(trimmedCmdBytes), resourcesString)
 
 	tmpl, err := template.ParseFS(templatesFS, "templates/jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse jobset template: %w", err)
 	}
 
-	data := g.prepareJobSetTemplateData(opts, updatedCommand)
+	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString)
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -239,7 +230,7 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, er
 func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefinition, mappedLabel string) (SchedulingOptions, bool, error) {
 	schedOpts := SchedulingOptions{
 		PlacementPolicy:    job.PlacementPolicy,
-		NodeAffinityLabels: job.NodeSelector,
+		NodeAffinityLabels: job.NodeConstraint,
 		Topology:           job.Topology,
 		Scheduler:          job.GKEScheduler,
 	}
