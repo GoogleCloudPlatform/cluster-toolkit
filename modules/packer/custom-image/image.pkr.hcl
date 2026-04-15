@@ -91,7 +91,8 @@ locals {
   enable_secure_boot          = var.enable_shielded_vm && var.shielded_instance_config.enable_secure_boot
   enable_vtpm                 = var.enable_shielded_vm && var.shielded_instance_config.enable_vtpm
 
-
+  override_gcloud_path = var.gcloud_path_override == null ? "" : var.gcloud_path_override
+  compute_version = var.compute_endpoint_version == null ? "" : var.compute_endpoint_version
 }
 
 source "googlecompute" "toolkit_image" {
@@ -208,8 +209,11 @@ build {
     ]
     inline_shebang = "/bin/bash -e"
     inline = [
-      "if [[ -n \"${var.gcloud_path_override}\" ]]; then",
-      "  export PATH=\"${var.gcloud_path_override}:\\$PATH\"",
+      "if [[ -n \"${local.override_gcloud_path}\" ]]; then",
+      "  export PATH=\"${local.override_gcloud_path}:\\$PATH\"",
+      "fi",
+      "if [[ -n \"${local.compute_version}\" ]]; then",
+      "  export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE=\"https://www.googleapis.com/compute/${local.compute_version}/\"",
       "fi",
       "type -P gcloud > /dev/null || exit 0",
       "INST_ID=$(gcloud compute instances describe $INST_NAME --project $PRJ_ID --format=\"value(id)\" --zone=$ZONE)",
