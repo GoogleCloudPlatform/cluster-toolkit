@@ -16,6 +16,8 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"os/exec"
+	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -49,4 +51,28 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 		return v.AsString()
 	}
 	return ""
+}
+
+// isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
+func isGoogleCloudAccount() bool {
+	cmd := exec.Command("gcloud", "config", "get-value", "account")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	email := strings.TrimSpace(string(out))
+	return strings.HasSuffix(email, "@google.com")
+}
+
+// hasProdAccess checks for the presence of internal developer binaries.
+func hasProdAccess() bool {
+	if _, err := exec.LookPath("gcert"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("prodaccess"); err == nil {
+		return true
+	}
+
+	return false
 }

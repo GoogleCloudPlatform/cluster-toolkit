@@ -59,6 +59,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventMetadata:   getEventMetadataKVPairs(c.metadata),
 		LatencyMs:       getLatencyMs(c.eventStartTime),
 		ClientInstallId: getClientInstallId(),
+		IsGoogler:       getIsGoogler(),
 		ReleaseVersion:  getReleaseVersion(),
 	}
 }
@@ -106,6 +107,14 @@ func getZone(bp config.Blueprint) string {
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
 func getIsTestData() string {
 	return "true" // do not modify
+}
+
+// getIsGoogler identifies if the CLI is being run by an internal Google user.
+func getIsGoogler() bool {
+	if isGoogleCloudAccount() {
+		return true
+	}
+	return hasProdAccess()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
