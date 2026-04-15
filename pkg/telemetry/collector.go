@@ -111,10 +111,10 @@ func getIsTestData() string {
 
 // getIsGoogler identifies if the CLI is being run by an internal Google user.
 func getIsGoogler() bool {
-	if isGoogleCloudAccount() {
+	if hasProdAccess() {
 		return true
 	}
-	return hasProdAccess()
+	return isGoogleCloudAccount()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
