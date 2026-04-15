@@ -42,7 +42,7 @@ var (
 	ttlSecondsAfterFinished int
 
 	placementPolicy string
-	nodeSelector    map[string]string
+	nodeConstraint  map[string]string
 
 	cpuAffinityStr     string
 	restartOnExitCodes []int
@@ -117,7 +117,7 @@ func init() {
 	SubmitCmd.Flags().IntVar(&ttlSecondsAfterFinished, "ttl", 3600, "Time (in seconds) to retain the JobSet after it finishes.")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
-	SubmitCmd.Flags().StringToStringVar(&nodeSelector, "machine-label", nil, "Key=value pairs for node labels to target specific machine types.")
+	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
 	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images.")
@@ -185,7 +185,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		MaxRestarts:             maxRestarts,
 		TtlSecondsAfterFinished: ttlSecondsAfterFinished,
 		PlacementPolicy:         placementPolicy,
-		NodeSelector:            nodeSelector,
+		NodeConstraint:          nodeConstraint,
 		Affinity:                affinity,
 		RestartOnExitCodes:      restartOnExitCodes,
 		ImagePullSecrets:        imagePullSecrets,

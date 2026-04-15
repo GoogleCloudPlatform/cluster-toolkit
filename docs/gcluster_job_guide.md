@@ -109,7 +109,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 Here are the flags currently supported by `gcluster job submit`:
 
 * `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `us-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
-* `--base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
+* `-B, --base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
 * `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
@@ -160,7 +160,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
     This command will:
     1. Verify/install the JobSet CRD on your cluster.
     2. Auto-discover the Kueue LocalQueue name from the cluster.
-    3. Auto-discover the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
+    3. Use the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
     4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
     5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
 
@@ -219,19 +219,20 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
 Try running a job with advanced scheduling options.
 
-**Example 1: Target Specific Nodes (Machine Label)**
-Use `--machine-label` to target specific hardware (e.g., C2 nodes).
+**Example 1: Target Specific Nodes (Node Constraint)**
+Use `--node-constraint` to target specific hardware (e.g., C2 nodes). This maps to node labels in GKE and aligns with SLURM's `--constraint` flag for future compatibility.
 
 ```bash
 ./gcluster job submit \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1 \
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE> \
+  --name my-machine-job \
+  --command "python app.py" \
+  --accelerator c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
-  --name my-machine-job \
-  --machine-label "node.kubernetes.io/instance-type=c2-standard-60"
+  --node-constraint "node.kubernetes.io/instance-type=c2-standard-60"
 ```
 
 **Example 2: Use Placement Policy**
@@ -326,13 +327,18 @@ Request a specific TPU slice topology using `--topology`.
 ```
 
 **Example 2: Scheduler Selection**
-Use a specific scheduler (e.g., `gke.io/topology-aware-auto`) using `--scheduler`.
+Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-scheduler`.
 
 ```bash
 ./gcluster job submit \
-  ... \
+  --project <YOUR_GCP_PROJECT_ID> \
+  --cluster my-test-cluster \
+  --cluster-location us-central1 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --command "python app.py" \
   --name my-scheduler-job \
-  --scheduler gke.io/topology-aware-auto
+  --gke-scheduler gke.io/topology-aware-auto
 ```
 
 ## 9. Sophisticated Workloads: MaxText Llama3.1-8B (TPU v6e)

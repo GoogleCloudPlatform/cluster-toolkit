@@ -951,7 +951,7 @@ func isTPUFallback(mapped string) bool {
 	return strings.Contains(lower, "tpu") || (len(lower) >= 2 && lower[0] == 'v' && lower[1] >= '0' && lower[1] <= '9')
 }
 
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, updatedCommand string) interface{} {
+func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string) interface{} {
 	return struct {
 		WorkloadName            string
 		KueueQueueName          string
@@ -960,7 +960,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, update
 		NumSlices               int
 		VmsPerSlice             int
 		FullImageName           string
-		CommandToRun            string
+		Command                 []string
+		ResourcesYAML           string
 		AcceleratorTypeLabel    string
 		NodeSelector            string
 		Affinity                string
@@ -984,7 +985,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, update
 		NumSlices:               opts.NumSlices,
 		VmsPerSlice:             opts.VmsPerSlice,
 		FullImageName:           opts.FullImageName,
-		CommandToRun:            updatedCommand,
+		Command:                 command,
+		ResourcesYAML:           resourcesYAML,
 		AcceleratorTypeLabel:    g.GenerateGKENodeSelectorLabel(opts.AcceleratorType),
 		NodeSelector:            opts.NodeSelector,
 		Affinity:                opts.Affinity,
@@ -1031,18 +1033,13 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 		return false, 0, nil
 	}
 
-	if job.ClusterLocation != "" {
-		count, err := g.FetchMachineCapacity(job.AcceleratorType, job.ClusterLocation)
-		if err != nil {
-			return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.AcceleratorType, err)
-		}
-		if count > 0 {
-			logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
-			return true, count, nil
-		}
-	} else if job.ClusterLocation == "" && job.AcceleratorType != "" {
-		logging.Warn("Zone is empty for machine type %s. Contextually treating it as a CPU machine for dry-run.", job.AcceleratorType)
-		return true, 1, nil
+	count, err := g.FetchMachineCapacity(job.AcceleratorType, job.ClusterLocation)
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.AcceleratorType, err)
+	}
+	if count > 0 {
+		logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
+		return true, count, nil
 	}
 	return false, 0, nil
 }
@@ -1067,10 +1064,6 @@ func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
 }
 
 func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition) (bool, int, error) {
-	if job.ClusterLocation == "" {
-		return false, 0, nil
-	}
-
 	for _, np := range g.clusterDesc.NodePools {
 		if np.Config.MachineType == job.AcceleratorType {
 			cap, err := g.FetchMachineCapabilities(np.Config.MachineType, job.ClusterLocation)

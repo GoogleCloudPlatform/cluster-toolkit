@@ -142,8 +142,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
 		},
 		{
-			name:            "Uniform CPU Machine via Accelerator Flag (Empty Zone / Strict Fail)",
-			acceleratorType: "n2-standard-4",
+			name:            "Uniform CPU Machine via Accelerator Flag",
+			acceleratorType: "n2-standard-2",
 			cpuLimit:        "",
 			memoryLimit:     "",
 			wantLabels:      []string{},
@@ -159,25 +159,27 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				WorkloadName:    "test-workload",
 				CommandToRun:    "echo hello",
 				AcceleratorType: tt.acceleratorType,
+				ClusterLocation: "us-central1",
 			}
 
 			mockResponses := map[string][]shell.CommandResult{
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 			}
 			orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
 			opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
-			if err != nil {
-				t.Fatalf("prepareManifestOptions failed: %v", err)
+			var manifest string
+			if err == nil {
+				manifest, err = orc.GenerateGKEManifest(opts, profile)
 			}
 
-			manifest, err := orc.GenerateGKEManifest(opts, profile)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("GenerateGKEManifest returned error %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("Manifest generation failed with error %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
-				return // Continue to next test case if error was expected and received!
+				return
 			}
 
 			for _, want := range tt.wantLabels {
@@ -272,10 +274,13 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	// We expect the command to be properly escaped in the JSON/YAML array syntax used in the manifest
-	expectedSubStr := `command: ["/bin/bash","-c","python -c \"print('hello')\" && echo \"world\""]`
+	// We expect the command to be properly rendered as a YAML list
+	expectedSubStr := `                command:
+                - "/bin/bash"
+                - "-c"
+                - "python -c \"print('hello')\" && echo \"world\""`
 	if !strings.Contains(manifest, expectedSubStr) {
-		t.Errorf("manifest command string is not properly escaped.\nExpected substring: %s\nActual manifest section:\n%s", expectedSubStr, manifest)
+		t.Errorf("manifest command string is not properly rendered as a YAML list.\nExpected substring:\n%s\nActual manifest:\n%s", expectedSubStr, manifest)
 	}
 }
 
@@ -324,9 +329,11 @@ spec:
 
 func TestGeneratePathwaysManifest(t *testing.T) {
 	job := orchestrator.JobDefinition{
-		WorkloadName: "pathways-test",
-		CommandToRun: "echo hello",
-		NumSlices:    2,
+		WorkloadName:    "pathways-test",
+		CommandToRun:    "echo hello",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		AcceleratorType: "n2-standard-2",
 		Pathways: orchestrator.PathwaysJobDefinition{
 			ProxyServerImage: "proxy:latest",
 			ServerImage:      "server:latest",
@@ -335,7 +342,11 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		},
 	}
 
-	orc := NewGKEOrchestrator()
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool"}}
 	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest")
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)

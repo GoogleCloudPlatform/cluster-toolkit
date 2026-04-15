@@ -166,7 +166,7 @@ func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string
 
 func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, error) {
 	// Return false immediately if not using TPUs.
-	if opts.AcceleratorType == "" || !strings.Contains(strings.ToLower(opts.AcceleratorType), "tpu") {
+	if !strings.Contains(strings.ToLower(opts.AcceleratorType), "tpu") {
 		return false, nil
 	}
 
@@ -231,16 +231,6 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 }
 
 func (g *GKEOrchestrator) calculateLimitsFromGCP(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, shouldFallback bool, err error) {
-	if opts.AcceleratorType == "" {
-		return "", "", "", "", true, nil
-	}
-
-	if opts.ClusterLocation == "" {
-		if !strings.Contains(strings.ToLower(mapped), "nvidia") && !isTPUFallback(mapped) {
-			return "", "", "", "", false, fmt.Errorf("cluster location (zone/region) is required to determine if %s is a CPU machine", opts.AcceleratorType)
-		}
-		return "", "", "", "", true, nil
-	}
 
 	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
 	if err == nil {
