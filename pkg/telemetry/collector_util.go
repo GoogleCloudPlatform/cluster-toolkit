@@ -15,7 +15,12 @@
 package telemetry
 
 import (
+	"bufio"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -49,4 +54,64 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 		return v.AsString()
 	}
 	return ""
+}
+
+// getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
+func getLinuxVersion() string {
+	// Standard way to identify Linux distribution version
+	f, err := os.Open("/etc/os-release")
+	if err != nil {
+		logging.Error("failed to open /etc/os-release: %v", err)
+		return ""
+	}
+	defer f.Close()
+
+	var prettyName, versionID string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			prettyName = parseOsReleaseField(line)
+		} else if strings.HasPrefix(line, "VERSION_ID=") {
+			versionID = parseOsReleaseField(line)
+		}
+	}
+
+	if prettyName != "" {
+		return prettyName
+	}
+	if versionID != "" {
+		return versionID
+	}
+	return "Linux (unknown version)"
+}
+
+// getMacVersion uses sw_vers to get the macOS product version.
+func getMacVersion() string {
+	out, err := exec.Command("sw_vers", "-productVersion").Output()
+	if err != nil {
+		logging.Error("sw_vers failed: %v", err)
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// getWindowsVersion uses the ver command to get the Windows version.
+func getWindowsVersion() string {
+	cmd := exec.Command("cmd", "/c", "ver")
+	out, err := cmd.Output()
+	if err != nil {
+		logging.Error("ver failed: %v", err)
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// parseOsReleaseField helper to clean up quotes from /etc/os-release values
+func parseOsReleaseField(line string) string {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.Trim(parts[1], `"`)
 }
