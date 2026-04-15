@@ -77,7 +77,7 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 	if acceleratorType == "" {
 		return nil
 	}
-	if isTPU(acceleratorType) {
+	if IsTPU(acceleratorType) {
 		return []corev1.Toleration{
 			{
 				Key:      "google.com/tpu",
@@ -89,7 +89,7 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 	return nil
 }
 
-func isTPU(acceleratorType string) bool {
+func IsTPU(acceleratorType string) bool {
 	if strings.Contains(acceleratorType, "tpu") {
 		return true
 	}

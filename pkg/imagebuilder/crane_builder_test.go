@@ -354,3 +354,71 @@ func TestBuildContainerImageFromBaseImage_ParseReferenceError(t *testing.T) {
 		t.Error("expected error for invalid base image, got nil")
 	}
 }
+
+func TestCreateFilteredTar_Symlink(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tar-symlink-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	targetPath := filepath.Join(tempDir, "target.txt")
+	if err := os.WriteFile(targetPath, []byte("target content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	linkPath := filepath.Join(tempDir, "link.txt")
+	if err := os.Symlink("target.txt", linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	matcher, err := patternmatcher.New([]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tarPath, err := createFilteredTar(tempDir, matcher)
+	if err != nil {
+		t.Fatalf("createFilteredTar() error = %v", err)
+	}
+	defer os.Remove(tarPath)
+
+	f, err := os.Open(tarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+	if !findSymlinkInTar(t, tr, "link.txt", "target.txt") {
+		t.Error("link.txt not found or invalid in tarball")
+	}
+}
+
+func findSymlinkInTar(t *testing.T, tr *tar.Reader, linkName, expectedTarget string) bool {
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Name == linkName {
+			if header.Typeflag != tar.TypeSymlink {
+				t.Errorf("expected %s to be symlink, got %v", linkName, header.Typeflag)
+			}
+			if header.Linkname != expectedTarget {
+				t.Errorf("expected symlink target to be %q, got %q", expectedTarget, header.Linkname)
+			}
+			return true
+		}
+	}
+	return false
+}

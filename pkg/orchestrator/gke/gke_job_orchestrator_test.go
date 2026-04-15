@@ -147,9 +147,9 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			cpuLimit:        "",
 			memoryLimit:     "",
 			wantLabels:      []string{},
-			wantLimits:      []string{},
-			dontWantLimits:  []string{},
-			wantErr:         true, // Expect failure if zone is empty!
+			wantLimits:      []string{"cpu: 1"},
+			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
+			wantErr:         false,
 		},
 	}
 
@@ -204,8 +204,8 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 func TestGenerateGKEManifest_Volumes(t *testing.T) {
 	orc := NewGKEOrchestrator()
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-4": {
-			{ExitCode: 0, Stdout: `{"guestCpus": 4}`},
+		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`},
 		},
 	})
 	orc.SetExecutor(mockExec)
@@ -226,6 +226,7 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
 
+	opts.AcceleratorType = "n2-standard-4"
 	manifest, err := orc.GenerateGKEManifest(opts, profile)
 
 	if err != nil {
@@ -988,5 +989,151 @@ func TestResolveTopologyForChips(t *testing.T) {
 				t.Errorf("resolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
 			}
 		})
+	}
+}
+
+func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
+	responses := map[string][]shell.CommandResult{
+		"kubectl get localqueue default-queue -n default": {
+			{ExitCode: 1, Stderr: "Error from server (NotFound): localqueues.kueue.x-k8s.io \"default-queue\" not found"},
+		},
+		"kubectl apply -f": {
+			{ExitCode: 0, Stdout: "resourceflavor.kueue.x-k8s.io/flavor-default created"},
+			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/cluster-queue created"},
+			{ExitCode: 0, Stdout: "localqueue.kueue.x-k8s.io/default-queue created"},
+		},
+		"kubectl get localqueue default-queue -n default -o jsonpath={.spec.clusterQueue}": {
+			{ExitCode: 0, Stdout: "cluster-queue"},
+		},
+		"kubectl get clusterqueue cluster-queue -o json": {
+			{ExitCode: 0, Stdout: "{\"apiVersion\":\"kueue.x-k8s.io/v1beta1\",\"kind\":\"ClusterQueue\",\"spec\":{\"resourceGroups\":[{\"coveredResources\":[\"cpu\"]}]}}"},
+		},
+		"kubectl patch clusterqueue cluster-queue": {
+			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/cluster-queue patched"},
+		},
+	}
+
+	mockExec := NewMockExecutor(responses)
+	orc := &GKEOrchestrator{
+		executor: mockExec,
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"flavor-default": {CPUs: 30},
+			},
+		},
+	}
+
+	job := &orchestrator.JobDefinition{
+		KueueQueueName: "default-queue",
+	}
+
+	err := orc.configureClusterEnvironment(job)
+	if err != nil {
+		t.Fatalf("configureClusterEnvironment failed: %v", err)
+	}
+
+	// Verify calls
+	if mockExec.callCount["kubectl apply -f"] != 3 {
+		t.Errorf("Expected 3 calls to kubectl apply -f, got %d", mockExec.callCount["kubectl apply -f"])
+	}
+}
+
+func TestResolveKueueQueue(t *testing.T) {
+	tests := []struct {
+		name          string
+		requestedName string
+		kubectlOutput string
+		wantName      string
+		wantErr       bool
+	}{
+		{
+			name:          "User requested name",
+			requestedName: "custom-q",
+			kubectlOutput: "",
+			wantName:      "custom-q",
+			wantErr:       false,
+		},
+		{
+			name:          "No queues found, fallback to multislice-queue",
+			requestedName: "",
+			kubectlOutput: "",
+			wantName:      "multislice-queue",
+			wantErr:       false,
+		},
+		{
+			name:          "Single queue found, auto-discover",
+			requestedName: "",
+			kubectlOutput: "queue-1",
+			wantName:      "queue-1",
+			wantErr:       false,
+		},
+		{
+			name:          "Multiple queues found, hard fail",
+			requestedName: "",
+			kubectlOutput: "queue-1 queue-2",
+			wantName:      "",
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			responses := map[string][]shell.CommandResult{
+				"kubectl get localqueue -n default -o jsonpath={.items[*].metadata.name}": {
+					{ExitCode: 0, Stdout: tt.kubectlOutput},
+				},
+			}
+			mockExec := NewMockExecutor(responses)
+			orc := &GKEOrchestrator{executor: mockExec}
+
+			got, err := orc.resolveKueueQueue(tt.requestedName)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveKueueQueue() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantName {
+				t.Errorf("resolveKueueQueue() got = %v, want %v", got, tt.wantName)
+			}
+		})
+	}
+}
+
+func TestGPUTopologyAwareScheduling(t *testing.T) {
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "gpu-test-job",
+		AcceleratorType: "nvidia-tesla-a100",
+		GKEScheduler:    "gke.io/topology-aware-auto",
+		NumSlices:       1,
+		VmsPerSlice:     1,
+	}
+
+	orc := NewGKEOrchestrator()
+	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool"}}
+
+	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	if opts.SchedulingGates == "" {
+		t.Errorf("Expected SchedulingGates to be populated, got empty string")
+	}
+
+	if opts.SchedulerName != "" {
+		t.Errorf("Expected SchedulerName to be empty, got %v", opts.SchedulerName)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	if !strings.Contains(manifest, "schedulingGates:") {
+		t.Errorf("Rendered manifest does not contain schedulingGates")
+	}
+	if !strings.Contains(manifest, "gke.io/topology-aware-auto-gpu-test-job") {
+		t.Errorf("Rendered manifest does not contain correct gate name")
+	}
+	if strings.Contains(manifest, "schedulerName: gke.io/topology-aware-auto") {
+		t.Errorf("Rendered manifest unexpectedly contains schedulerName")
 	}
 }

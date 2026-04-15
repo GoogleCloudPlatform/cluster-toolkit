@@ -18,8 +18,42 @@ import (
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"strings"
+
+	"k8s.io/client-go/dynamic"
 )
+
+type Executor interface {
+	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandStream(name string, args ...string) error
+}
+
+// KubeClient defines the interface for specific Kubernetes API operations needed by the orchestrator.
+type KubeClient interface {
+	GetJobNamespace(workloadName string) (string, error)
+	ListWorkloads(namespace string, workloadName string) ([]string, error)
+	DeleteJobSet(namespace string, name string) error
+}
+
+// DefaultKubeClient implements KubeClient using the actual dynamic client.
+type DefaultKubeClient struct {
+	dynClient dynamic.Interface
+}
+
+type DefaultExecutor struct{}
+
+type GKEOrchestrator struct {
+	executor                 Executor
+	clusterZones             []string
+	nodePoolSAs              []string
+	capacity                 ClusterCapacity
+	clusterDesc              gkeCluster
+	dynClient                dynamic.Interface
+	kubeClient               KubeClient
+	acceleratorToMachineType map[string]string
+	machineCapCache          map[string]MachineTypeCap
+}
 
 // Types for GetClusterInfo unmarshaling
 type gkeNodePool struct {
@@ -96,6 +130,7 @@ type ManifestOptions struct {
 	TopologyAnnotation      string
 	Topology                string
 	SchedulerName           string
+	SchedulingGates         string
 	Tolerations             string
 	AwaitJobCompletion      bool
 	PriorityClassName       string

@@ -35,7 +35,7 @@ When you run `gcluster job submit` for the first time, or if its cached state is
 * **Artifact Registry Repository:** Assumes a repository named `gcluster` (or specified by `GCLUSTER_IMAGE_REPO`) exists in the cluster's region. The tool will grant read permissions to the node pool service account on this specific repository.
 * **Kueue Installation:** Checks if Kueue is installed on the cluster. If not, it automatically installs Kueue and configures necessary resources like PriorityClasses, ClusterQueue, and LocalQueue.
 
-**State Persistence:** To avoid redundant checks, `gcluster job submit` saves the successful prerequisite status in `~/.gcluster-job/prereq_state.json`. Checks will only be re-run if this state is older than 24 hours or if you specify a different GCP project.
+**State Persistence:** To avoid redundant checks, `gcluster job submit` saves the successful prerequisite status in `~/.gcluster/job_prereq_state.json`. Checks will only be re-run if this state is older than 24 hours or if you specify a different GCP project.
 
 ## 2. Clone the Repository
 
@@ -119,7 +119,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-p, --project string`: Google Cloud Project ID. If not provided, it will be inferred from your `gcloud` configuration.
 * `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
 * `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
-* `--kueue-queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
+* `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
 * `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
 * `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
 * `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
@@ -161,7 +161,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
     1. Verify/install the JobSet CRD on your cluster.
     2. Auto-discover the Kueue LocalQueue name from the cluster.
     3. Auto-discover the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
-    4. Build a container image from `job_details/Dockerfile` using `python:3.9-slim` as the base, and push it to Artifact Registry.
+    4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
     5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
 
 ### 7.1 Example: Submit Job with Persistent Storage (Mounting Bucket)
@@ -270,7 +270,7 @@ Use `--image-pull-secret` and `--service-account` for secure jobs.
 ```
 
 **Example 5: Explicit Kueue Queue Selection**
-Use `--kueue-queue` to submit the job to a specific Kueue LocalQueue.
+Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
 ./gcluster job submit \
@@ -281,7 +281,7 @@ Use `--kueue-queue` to submit the job to a specific Kueue LocalQueue.
   --build-context job_details \
   --command "python app.py" \
   --name my-kueue-job \
-  --kueue-queue "my-local-queue"
+  --queue "my-local-queue"
 ```
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)

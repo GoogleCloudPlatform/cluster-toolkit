@@ -180,7 +180,7 @@ func resetSubmitCmdFlags() {
 	imagePullSecrets = ""
 	serviceAccountName = ""
 	topology = ""
-	scheduler = ""
+	gkeScheduler = ""
 	platform = "linux/amd64"
 	awaitJobCompletion = false
 	priorityClassName = "medium"

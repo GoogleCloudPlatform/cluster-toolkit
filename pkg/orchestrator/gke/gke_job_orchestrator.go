@@ -39,98 +39,14 @@ import (
 	k8syaml "sigs.k8s.io/yaml"
 )
 
-type Executor interface {
-	ExecuteCommand(name string, args ...string) shell.CommandResult
-	ExecuteCommandStream(name string, args ...string) error
-}
+const (
+	defaultClusterQueue = "default-queue"
+	defaultLocalQueue   = "multislice-queue"
 
-// KubeClient defines the interface for specific Kubernetes API operations needed by the orchestrator.
-type KubeClient interface {
-	GetJobNamespace(workloadName string) (string, error)
-	ListWorkloads(namespace string, workloadName string) ([]string, error)
-	DeleteJobSet(namespace string, name string) error
-}
-
-// DefaultKubeClient implements KubeClient using the actual dynamic client.
-type DefaultKubeClient struct {
-	dynClient dynamic.Interface
-}
-
-func (d *DefaultKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	optsSelector := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
-	}
-	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
-	if err != nil {
-		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", workloadName, err)
-	}
-
-	if len(list.Items) == 1 {
-		return list.Items[0].GetNamespace(), nil
-	} else if len(list.Items) > 1 {
-		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces. Please specify a single job", workloadName)
-	}
-	return "", fmt.Errorf("jobset %s not found in any namespace", workloadName)
-}
-
-func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	return d.dynClient.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-}
-
-func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
-	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta1", Resource: "workloads"}
-	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list workloads in namespace %s: %w", namespace, err)
-	}
-
-	var matchedWorkloads []string
-	for _, item := range workloadList.Items {
-		ownerRefs := item.GetOwnerReferences()
-		for _, ref := range ownerRefs {
-			if ref.Kind == "JobSet" && ref.Name == workloadName {
-				matchedWorkloads = append(matchedWorkloads, item.GetName())
-				break
-			}
-		}
-	}
-
-	if len(matchedWorkloads) == 0 {
-		// Fallback to name search
-		for _, item := range workloadList.Items {
-			if strings.Contains(item.GetName(), "jobset-"+workloadName) {
-				matchedWorkloads = append(matchedWorkloads, item.GetName())
-			}
-		}
-	}
-	return matchedWorkloads, nil
-}
-
-type DefaultExecutor struct{}
-
-func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	return shell.ExecuteCommand(name, args...)
-}
-
-func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-type GKEOrchestrator struct {
-	executor                 Executor
-	clusterZones             []string
-	nodePoolSAs              []string
-	capacity                 ClusterCapacity
-	dynClient                dynamic.Interface
-	kubeClient               KubeClient
-	acceleratorToMachineType map[string]string
-	machineCapCache          map[string]MachineTypeCap
-}
+	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+	defaultPathwaysGCSLocation = "gs://cloud-pathways-staging/tmp"
+)
 
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
@@ -223,9 +139,6 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 		return err
 	}
 	if status != "" {
-		if projectID != "" {
-			return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
-		}
 		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation)
 	}
 	return nil
@@ -234,17 +147,17 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string) (string, error) {
 	// Set default values for Pathways-specific fields if not provided
 	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
+		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
 	}
 	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+		job.Pathways.ServerImage = defaultPathwaysServerImage
 	}
 	if job.Pathways.WorkerImage == "" {
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 	if job.Pathways.GCSLocation == "" {
-		job.Pathways.GCSLocation = "gs://cloud-pathways-staging/tmp"
+		job.Pathways.GCSLocation = defaultPathwaysGCSLocation
 	}
 
 	tmpl, err := template.ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
@@ -252,12 +165,19 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
 
-	opts, _, err := g.PrepareManifestOptions(job, fullImageName)
+	opts, profile, err := g.PrepareManifestOptions(job, fullImageName)
 	if err != nil {
 		return "", err
 	}
 
 	opts.Pathways = job.Pathways
+
+	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
+	if err == nil {
+		opts.ResourcesString = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+	} else {
+		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
+	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, opts); err != nil {
@@ -477,6 +397,47 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	return nil
 }
 
+func (g *GKEOrchestrator) checkLocalQueueExists(name string) (bool, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", name, "-n", "default")
+	if res.ExitCode == 0 {
+		return true, nil
+	}
+	if strings.Contains(res.Stderr, "NotFound") || strings.Contains(res.Stderr, "not found") {
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check localqueue status: %s", res.Stderr)
+}
+
+func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
+	logging.Info("Creating default ClusterQueue and LocalQueue...")
+
+	// Render and apply ClusterQueue
+	clusterQueueBytes, err := g.renderClusterQueue(defaultClusterQueue)
+	if err != nil {
+		return fmt.Errorf("failed to render clusterqueue: %w", err)
+	}
+	if err := g.applyManifests(clusterQueueBytes, "cluster-queue.yaml"); err != nil {
+		return fmt.Errorf("failed to apply clusterqueue: %w", err)
+	}
+
+	// Render and apply LocalQueue using raw string to avoid template dependency issues
+	localQueueManifest := fmt.Sprintf(`apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: %s
+  namespace: default
+spec:
+  clusterQueue: %s
+`, localQueueName, defaultClusterQueue)
+
+	if err := g.applyManifests([]byte(localQueueManifest), "local-queue.yaml"); err != nil {
+		return fmt.Errorf("failed to apply localqueue: %w", err)
+	}
+
+	logging.Info("Default queues created successfully.")
+	return nil
+}
+
 func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) error {
 	cqName, err := g.getClusterQueueName(localQueueName)
 	if err != nil {
@@ -495,7 +456,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) erro
 
 	if isEmpty {
 		logging.Info("ClusterQueue '%s' is empty. Applying calculated capacity...", cqName)
-		clusterQueueBytes, err := g.renderClusterQueue()
+		clusterQueueBytes, err := g.renderClusterQueue(cqName)
 		if err != nil {
 			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
 		}
@@ -640,8 +601,8 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 
 	output := strings.TrimSpace(res.Stdout)
 	if output == "" {
-		logging.Info("No LocalQueues found. Defaulting to 'default-queue'.")
-		return "default-queue", nil
+		logging.Info("No LocalQueues found. Defaulting to '%s'.", defaultLocalQueue)
+		return defaultLocalQueue, nil
 	}
 
 	queues := strings.Fields(output)
@@ -650,8 +611,7 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 		return queues[0], nil
 	}
 
-	logging.Info("Warning: Multiple LocalQueues found (%v). Defaulting to the first one: %s", queues, queues[0])
-	return queues[0], nil
+	return "", fmt.Errorf("multiple LocalQueues found (%v). Please specify which one to use using --queue flag", queues)
 }
 
 func (g *GKEOrchestrator) queryMachineType() (string, error) {
@@ -1009,6 +969,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, update
 		ServiceAccountName      string
 		TopologyAnnotation      string
 		SchedulerName           string
+		SchedulingGates         string
 		Tolerations             string
 		PriorityClassName       string
 		VolumesYAML             string
@@ -1032,6 +993,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, update
 		ServiceAccountName:      opts.ServiceAccountName,
 		TopologyAnnotation:      opts.TopologyAnnotation,
 		SchedulerName:           opts.SchedulerName,
+		SchedulingGates:         opts.SchedulingGates,
 		Tolerations:             opts.Tolerations,
 		PriorityClassName:       opts.PriorityClassName,
 		VolumesYAML:             opts.VolumesYAML,
@@ -1069,7 +1031,7 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 		return false, 0, nil
 	}
 
-	if job.ClusterLocation != "" && job.AcceleratorType != "" {
+	if job.ClusterLocation != "" {
 		count, err := g.FetchMachineCapacity(job.AcceleratorType, job.ClusterLocation)
 		if err != nil {
 			return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.AcceleratorType, err)
@@ -1078,9 +1040,49 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 			logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
 			return true, count, nil
 		}
-	} else if job.ClusterLocation == "" && job.AcceleratorType != "" {
+	} else if job.ClusterLocation == "" {
 		logging.Warn("Zone is empty for machine type %s. Contextually treating it as a CPU machine for dry-run.", job.AcceleratorType)
 		return true, 1, nil
+	}
+	return false, 0, nil
+}
+
+func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
+	if _, exists := acceleratorShorthandMap[accelType]; exists {
+		return true
+	}
+
+	for _, realMachine := range acceleratorShorthandMap {
+		if accelType == realMachine {
+			return true
+		}
+	}
+
+	mapped := g.GenerateGKENodeSelectorLabel(accelType)
+	if strings.Contains(strings.ToLower(mapped), "nvidia") || isTPUFallback(mapped) {
+		return true
+	}
+
+	return false
+}
+
+func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition) (bool, int, error) {
+	if job.ClusterLocation == "" {
+		return false, 0, nil
+	}
+
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Config.MachineType == job.AcceleratorType {
+			cap, err := g.FetchMachineCapabilities(np.Config.MachineType, job.ClusterLocation)
+			if err == nil {
+				guestCpus := cap.GuestCpus
+				if np.Config.AdvancedMachineFeatures.ThreadsPerCore == "1" && !strings.HasPrefix(np.Config.MachineType, "t2a") {
+					guestCpus = guestCpus / 2
+				}
+				logging.Info("Dynamically determined %s is a CPU-only machine from cluster desc, capacity: %d", job.AcceleratorType, guestCpus)
+				return true, guestCpus, nil
+			}
+		}
 	}
 	return false, 0, nil
 }
@@ -1156,7 +1158,6 @@ func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr,
 		return
 	}
 
-	// Try to get top-level completionTime
 	if compTime, ok := statusMap["completionTime"].(string); ok && compTime != "" {
 		completionTime = compTime
 	}
@@ -1262,7 +1263,7 @@ func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns st
 	if atLeastOneRunning {
 		return "Running", nil
 	}
-	return "Running", nil // Fallback if mixed and JobSet says Running
+	return "Running", nil
 }
 
 func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
@@ -1648,7 +1649,7 @@ func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string) (string, e
 
 	var targetWorkloadName string
 	if len(matchedWorkloads) > 0 {
-		targetWorkloadName = matchedWorkloads[len(matchedWorkloads)-1] // Take the last one to match previous behavior
+		targetWorkloadName = matchedWorkloads[len(matchedWorkloads)-1]
 	}
 
 	if targetWorkloadName == "" {
@@ -1731,4 +1732,67 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string) string {
 		}
 	}
 	return ""
+}
+
+func (d *DefaultKubeClient) GetJobNamespace(workloadName string) (string, error) {
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+	optsSelector := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
+	}
+	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
+	if err != nil {
+		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", workloadName, err)
+	}
+
+	if len(list.Items) == 1 {
+		return list.Items[0].GetNamespace(), nil
+	} else if len(list.Items) > 1 {
+		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces. Please specify a single job", workloadName)
+	}
+	return "", fmt.Errorf("jobset %s not found in any namespace", workloadName)
+}
+
+func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+	return d.dynClient.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+}
+
+func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta1", Resource: "workloads"}
+	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workloads in namespace %s: %w", namespace, err)
+	}
+
+	var matchedWorkloads []string
+	for _, item := range workloadList.Items {
+		ownerRefs := item.GetOwnerReferences()
+		for _, ref := range ownerRefs {
+			if ref.Kind == "JobSet" && ref.Name == workloadName {
+				matchedWorkloads = append(matchedWorkloads, item.GetName())
+				break
+			}
+		}
+	}
+
+	if len(matchedWorkloads) == 0 {
+		// Fallback to name search
+		for _, item := range workloadList.Items {
+			if strings.Contains(item.GetName(), "jobset-"+workloadName) {
+				matchedWorkloads = append(matchedWorkloads, item.GetName())
+			}
+		}
+	}
+	return matchedWorkloads, nil
+}
+
+func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	return shell.ExecuteCommand(name, args...)
+}
+
+func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

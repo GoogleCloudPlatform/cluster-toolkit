@@ -70,21 +70,10 @@ func BuildContainerImageFromBaseImage(
 		return "", err
 	}
 
-	userName := os.Getenv("USER")
-	if userName == "" {
-		userName = "defaultName"
+	imageName, err := generateImageName(project, location)
+	if err != nil {
+		return "", err
 	}
-
-	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
-	if repoName == "" {
-		repoName = "gcluster"
-	}
-
-	region := extractRegion(location)
-
-	tagRandomPrefix := shell.RandomString(4)
-	tagDatetime := time.Now().Format("2006-01-02-15-04-05") // YYYY-MM-DD-HH-MM-SS
-	imageName := fmt.Sprintf("%s-docker.pkg.dev/%s/%s/%s-runner:%s-%s", region, project, repoName, strings.ToLower(userName), tagRandomPrefix, tagDatetime)
 
 	logging.Info("Starting image build process for %s", imageName)
 	logging.Info("Base Image: %s", baseImage)
@@ -145,6 +134,27 @@ func BuildContainerImageFromBaseImage(
 
 	logging.Info("Image %s built and uploaded successfully.", imageName)
 	return imageName, nil
+}
+
+func generateImageName(project, location string) (string, error) {
+	userName := os.Getenv("USER")
+	if userName == "" {
+		userName = "defaultName"
+	}
+
+	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
+	if repoName == "" {
+		repoName = "gcluster"
+	}
+
+	region := extractRegion(location)
+
+	tagRandomPrefix, err := shell.RandomString(4)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random prefix for image tag: %w", err)
+	}
+	tagDatetime := time.Now().Format("2006-01-02-15-04-05") // YYYY-MM-DD-HH-MM-SS
+	return fmt.Sprintf("%s-docker.pkg.dev/%s/%s/%s-runner:%s-%s", region, project, repoName, strings.ToLower(userName), tagRandomPrefix, tagDatetime), nil
 }
 
 // parsePlatform converts a platform string (e.g., "linux/amd64") into a v1.Platform struct.
@@ -241,7 +251,16 @@ func processTarEntry(tarWriter *tar.Writer, sourceDir string, ignoreMatcher *pat
 		return fmt.Errorf("failed to get info for %q: %w", path, err)
 	}
 
-	header, err := tar.FileInfoHeader(info, relPath)
+	var linkTarget string
+	if info.Mode()&os.ModeSymlink != 0 {
+		var errLink error
+		linkTarget, errLink = os.Readlink(path)
+		if errLink != nil {
+			return fmt.Errorf("failed to read link for %q: %w", path, errLink)
+		}
+	}
+
+	header, err := tar.FileInfoHeader(info, linkTarget)
 	if err != nil {
 		return fmt.Errorf("failed to create tar header for %q: %w", path, err)
 	}
@@ -258,10 +277,10 @@ func processTarEntry(tarWriter *tar.Writer, sourceDir string, ignoreMatcher *pat
 	return nil
 }
 
-func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMatcher) (string, error) {
-	tmpFile, err := os.CreateTemp("", "gcluster-build-context-*.tar.gz")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file for tarball: %w", err)
+func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMatcher) (tarPath string, err error) {
+	tmpFile, tmpErr := os.CreateTemp("", "gcluster-build-context-*.tar.gz")
+	if tmpErr != nil {
+		return "", fmt.Errorf("failed to create temporary file for tarball: %w", tmpErr)
 	}
 	defer tmpFile.Close()
 
@@ -270,24 +289,23 @@ func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMa
 
 	logging.Info("Creating filtered tar from %s to temporary file %s", sourceDir, tmpFile.Name())
 
-	var walkErr error
 	defer func() {
 		// Ensure tar and gzip writers are closed to flush any buffered data
-		if closeErr := tarWriter.Close(); closeErr != nil && walkErr == nil {
-			walkErr = fmt.Errorf("failed to close tar writer: %w", closeErr)
+		if closeErr := tarWriter.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close tar writer: %w", closeErr)
 		}
-		if closeErr := gzipWriter.Close(); closeErr != nil && walkErr == nil {
-			walkErr = fmt.Errorf("failed to close gzip writer: %w", closeErr)
+		if closeErr := gzipWriter.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close gzip writer: %w", closeErr)
 		}
 	}()
 
-	walkErr = filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
-		return processTarEntry(tarWriter, sourceDir, ignoreMatcher, path, d, err)
+	err = filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, walkDirErr error) error {
+		return processTarEntry(tarWriter, sourceDir, ignoreMatcher, path, d, walkDirErr)
 	})
 
-	if walkErr != nil {
+	if err != nil {
 		os.Remove(tmpFile.Name())
-		return "", walkErr
+		return "", err
 	}
 
 	return tmpFile.Name(), nil

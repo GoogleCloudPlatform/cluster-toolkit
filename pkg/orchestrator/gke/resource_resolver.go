@@ -204,37 +204,6 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
-	mapped := g.GenerateGKENodeSelectorLabel(opts.AcceleratorType)
-
-	if opts.AcceleratorType != "" {
-		if opts.ClusterLocation == "" {
-			if !strings.Contains(strings.ToLower(mapped), "nvidia") && !isTPUFallback(mapped) {
-				return "", "", "", "", fmt.Errorf("cluster location (zone/region) is required to determine if %s is a CPU machine", opts.AcceleratorType)
-			}
-			// Let it fall through to the hardcoded GPU/TPU fallbacks below!
-		} else {
-			cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
-			if err != nil {
-				return "", "", "", "", err
-			}
-			if cpuLim != "" || memLim != "" || gpuLim != "" || tpuLim != "" {
-				return cpuLim, memLim, gpuLim, tpuLim, nil
-			}
-		}
-
-	}
-
-	if strings.Contains(strings.ToLower(mapped), "nvidia") {
-		return "", "", "1", "", nil
-	}
-	if isTPUFallback(mapped) {
-		return "", "", "", "4", nil
-	}
-
-	return "", "", "", "", fmt.Errorf("could not determine resource limits for %s", opts.AcceleratorType)
-}
-
-func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
 		cpuLim, err := g.calculateCPUMachineResourceLimits(opts, profile)
 		if err != nil {
@@ -243,6 +212,55 @@ func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions
 		return cpuLim, "", "", "", nil
 	}
 
+	mapped := g.GenerateGKENodeSelectorLabel(opts.AcceleratorType)
+
+	cpuLim, memLim, gpuLim, tpuLim, shouldFallback, err := g.calculateLimitsFromGCP(opts, profile, mapped)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if !shouldFallback {
+		return cpuLim, memLim, gpuLim, tpuLim, nil
+	}
+
+	cpuLim, memLim, gpuLim, tpuLim = g.calculateFallbackLimits(mapped)
+	if cpuLim != "" || memLim != "" || gpuLim != "" || tpuLim != "" {
+		return cpuLim, memLim, gpuLim, tpuLim, nil
+	}
+
+	return "", "", "", "", fmt.Errorf("could not determine resource limits for %s", opts.AcceleratorType)
+}
+
+func (g *GKEOrchestrator) calculateLimitsFromGCP(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, shouldFallback bool, err error) {
+	if opts.AcceleratorType == "" {
+		return "", "", "", "", true, nil
+	}
+
+	if opts.ClusterLocation == "" {
+		if !strings.Contains(strings.ToLower(mapped), "nvidia") && !isTPUFallback(mapped) {
+			return "", "", "", "", false, fmt.Errorf("cluster location (zone/region) is required to determine if %s is a CPU machine", opts.AcceleratorType)
+		}
+		return "", "", "", "", true, nil
+	}
+
+	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
+	if err == nil {
+		return cpuLim, memLim, gpuLim, tpuLim, false, nil
+	}
+	logging.Warn("Cluster resolution failed for %s: %v. Falling back to hardcoded defaults.", opts.AcceleratorType, err)
+	return "", "", "", "", true, nil
+}
+
+func (g *GKEOrchestrator) calculateFallbackLimits(mapped string) (cpu, mem, gpu, tpu string) {
+	if strings.Contains(strings.ToLower(mapped), "nvidia") {
+		return "", "", "1", ""
+	}
+	if isTPUFallback(mapped) {
+		return "", "", "", "4"
+	}
+	return "", "", "", ""
+}
+
+func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
 	machineName := g.resolveMachineName(opts.AcceleratorType)
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)

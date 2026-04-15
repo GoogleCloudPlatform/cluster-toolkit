@@ -49,7 +49,7 @@ var (
 	imagePullSecrets   string
 	serviceAccountName string
 	topology           string
-	scheduler          string
+	gkeScheduler       string
 	platform           string
 
 	awaitJobCompletion bool
@@ -64,8 +64,8 @@ var (
 
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submits a container image workload on a Gke cluster using JobSet.",
-	Long: `The 'submit' command deploys a container image as a workload (Kubernetes JobSet)
+	Short: "Submits a workload on a GKE cluster using JobSet.",
+	Long: `The 'submit' command deploys a workload (Kubernetes JobSet)
 on a GKE cluster, integrated with Kueue. Image can be pre-built (--image)
 or built on-the-fly using Crane (--base-image with --build-context).
 
@@ -102,15 +102,15 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 
 func init() {
 	SubmitCmd.Flags().StringVarP(&imageName, "image", "i", "", "Name of the pre-built container image to run. Must include the full path including registry (e.g., us-docker.pkg.dev/my-project/my-repo/my-image:tag).")
-	SubmitCmd.Flags().StringVar(&baseImage, "base-image", "", "Name of the base image for Crane to build upon (e.g., python:3.9-slim). Requires --build-context.")
+	SubmitCmd.Flags().StringVarP(&baseImage, "base-image", "B", "", "Name of the base image for Crane to build upon (e.g., python:3.9-slim). Requires --build-context.")
 	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "b", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
 	SubmitCmd.Flags().StringVarP(&commandToRun, "command", "e", "", "Command to execute in the container (e.g., 'python train.py'). Required.")
-	SubmitCmd.Flags().StringVarP(&acceleratorType, "accelerator", "a", "", "Type of accelerator to request (e.g., 'nvidia-tesla-a100'). If empty, it will be auto-discovered.")
+	SubmitCmd.Flags().StringVarP(&acceleratorType, "accelerator", "a", "", "Type of accelerator to request (e.g., 'nvidia-tesla-a100').")
 	SubmitCmd.Flags().StringVarP(&outputManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
-	SubmitCmd.Flags().StringVar(&kueueQueueName, "kueue-queue", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
+	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
 	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 0, "Number of VMs (pods) per slice. Defaults to auto-calculated value for TPUs.")
 	SubmitCmd.Flags().IntVar(&maxRestarts, "max-restarts", 1, "Maximum number of restarts for the JobSet before failing.")
@@ -123,7 +123,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images.")
 	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Service account name for the pods.")
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
-	SubmitCmd.Flags().StringVar(&scheduler, "scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
+	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
@@ -191,7 +191,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		ImagePullSecrets:        imagePullSecrets,
 		ServiceAccountName:      serviceAccountName,
 		Topology:                topology,
-		Scheduler:               scheduler,
+		GKEScheduler:            gkeScheduler,
 		AwaitJobCompletion:      awaitJobCompletion,
 		Timeout:                 timeoutStr,
 		PriorityClassName:       priorityClassName,
