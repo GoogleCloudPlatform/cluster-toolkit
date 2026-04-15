@@ -115,6 +115,10 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    /mnt/localssd/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/enroot
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -491,10 +495,10 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH     ${HOME}/.enroot
-          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
-          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
-          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
-          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/enroot
       - type: ansible-local
         destination: nccl_plugin.yml
         content: |
@@ -655,7 +659,24 @@ deployment_groups:
   - id: controller_startup
     source: modules/scripts/startup-script
     settings:
+      local_ssd_filesystem:
+        mountpoint: $(vars.local_ssd_mountpoint)
+        permissions: "1777"
       runners:
+      - type: shell
+        destination: ensure_mnt_localssd_permissions.sh
+        content: |
+          #!/bin/bash
+          mkdir -p /mnt/localssd
+          chmod 1777 /mnt/localssd
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    /mnt/localssd/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/enroot
       - type: shell
         destination: stage_scripts.sh
         content: |
