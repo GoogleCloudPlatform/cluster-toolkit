@@ -70,6 +70,7 @@ func getLinuxVersion() string {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "PRETTY_NAME=") {
 			prettyName = parseOsReleaseField(line)
+			break
 		} else if strings.HasPrefix(line, "VERSION_ID=") {
 			versionID = parseOsReleaseField(line)
 		}
