@@ -60,7 +60,7 @@ var (
 
 // isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
 func isGoogleCloudAccount() bool {
-	cmd := execCommand("gcloud", "config", "get-value", "account")
+	cmd := execCommand("gcloud", "config", "get-value", "account", "--quiet")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
