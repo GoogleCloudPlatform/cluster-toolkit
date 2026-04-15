@@ -123,7 +123,7 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
-    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go
+    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
     version                  = optional(string, "0.17.1")
     install                  = optional(bool, false)
     config_path              = optional(string, null)

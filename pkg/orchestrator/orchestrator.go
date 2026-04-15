@@ -70,7 +70,7 @@ type JobDefinition struct {
 	ImagePullSecrets   string
 	ServiceAccountName string
 	Topology           string
-	Scheduler          string
+	GKEScheduler       string
 	AwaitJobCompletion bool
 	Timeout            string
 	PriorityClassName  string

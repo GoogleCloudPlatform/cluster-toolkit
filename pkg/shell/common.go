@@ -19,10 +19,10 @@ package shell
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,10 +101,12 @@ var ExecuteCommand = func(name string, args ...string) CommandResult {
 }
 
 // RandomString generates a random string of a given length.
-func RandomString(length int) string {
-	b := make([]byte, length)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)[:length]
+func RandomString(length int) (string, error) {
+	b := make([]byte, (length+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random string: %w", err)
+	}
+	return fmt.Sprintf("%x", b)[:length], nil
 }
 
 // ValidateDeploymentDirectory ensures that the deployment directory structure

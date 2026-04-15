@@ -99,11 +99,13 @@ spec:
                 {{- if .Pathways.WorkerArgs}}
                 - {{.Pathways.WorkerArgs}}
                 {{- end}}
+{{.ResourcesString}}
               volumeMounts:
               - name: dshm
                 mountPath: /dev/shm
             - name: workload-container
               image: {{.FullImageName}}
+{{.ResourcesString}}
               command:
               - "/bin/bash"
               - "-c"

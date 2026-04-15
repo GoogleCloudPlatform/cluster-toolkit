@@ -38,7 +38,7 @@ var templatesFS embed.FS
 
 // defaultKueueVersion is the fallback version of Kueue to install.
 // ATTENTION: If you update this version, please also update the corresponding
-// default version in modules/management/kubectl-apply/variables.tf
+// default version in modules/management/kubectl-apply/variables.tf.
 const defaultKueueVersion = "v0.13.3"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
@@ -71,28 +71,30 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 
 	needReinstall := false
 
+	var reinstallReason string
+
 	// 1. Minimum version check for KUEUE
-	if currentVersion != "" && g.isVersionBelow(currentVersion, defaultKueueVersion) {
+	if currentVersion != "" && g.isVersionBelow(currentVersion, targetVersion) {
 		needReinstall = true
-		logging.Info("Current Kueue version %s is below default %s.", currentVersion, defaultKueueVersion)
+		reinstallReason = fmt.Sprintf("Current Kueue version %s is below target %s.", currentVersion, targetVersion)
 	}
 
 	// 2. Check if basic installation is missing
 	if !needReinstall && (!kueueCRDInstalled || !kueueDeploymentInstalled) {
 		needReinstall = true
-		logging.Info("Kueue installation is incomplete (CRD or Deployment missing).")
+		reinstallReason = "Kueue installation is incomplete (CRD or Deployment missing)."
 	}
 
 	// 3. Check if webhook is healthy (only if not already deciding to reinstall)
 	if !needReinstall {
 		if err := g.waitForKueueWebhook(); err != nil {
 			needReinstall = true
-			logging.Info("Kueue webhook health check failed. Treating as broken.")
+			reinstallReason = "Kueue webhook health check failed. Treating as broken."
 		}
 	}
 
 	if needReinstall {
-		if err := g.handleKueueReinstallation(targetVersion); err != nil {
+		if err := g.handleKueueReinstallation(targetVersion, reinstallReason); err != nil {
 			return err
 		}
 	}
@@ -104,15 +106,15 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 
 	if !priorityClassesInstalled {
 		logging.Info("Required PriorityClasses not found. Installing them...")
-		return g.installKueueResources()
+		return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 	}
 
 	logging.Info("Kueue and required PriorityClasses are already installed.")
 	return nil
 }
 
-func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string) error {
-	promptMsg := fmt.Sprintf("Kueue installation is broken or version is below %s. We will be re-installing KUEUE using %s. Replying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", defaultKueueVersion, targetVersion)
+func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
+	promptMsg := fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
 	if !shell.PromptYesNo(promptMsg) {
 		logging.Fatal("User declined to re-install Kueue. Exiting.")
 	}
@@ -257,10 +259,10 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 		return err
 	}
 
-	return g.installKueueResources()
+	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 }
 
-func (g *GKEOrchestrator) installKueueResources() error {
+func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
 	logging.Info("Installing Kueue resources (PriorityClasses, ClusterQueue, LocalQueue)...")
 
 	// Install PriorityClasses
@@ -277,7 +279,7 @@ func (g *GKEOrchestrator) installKueueResources() error {
 	}
 
 	// Install ClusterQueue
-	clusterQueueBytes, err := g.renderClusterQueue()
+	clusterQueueBytes, err := g.renderClusterQueue(cqName)
 	if err != nil {
 		return err
 	}
@@ -291,7 +293,11 @@ func (g *GKEOrchestrator) installKueueResources() error {
 		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
 	}
 	var localQueueBuf bytes.Buffer
-	if err := localQueueTmpl.Execute(&localQueueBuf, struct{ Namespace string }{"default"}); err != nil {
+	if err := localQueueTmpl.Execute(&localQueueBuf, struct {
+		Namespace        string
+		LocalQueueName   string
+		ClusterQueueName string
+	}{"default", lqName, cqName}); err != nil {
 		return fmt.Errorf("failed to execute local_queue.tmpl template: %w", err)
 	}
 	if err := g.applyManifests(localQueueBuf.Bytes(), "local-queue.yaml"); err != nil {
@@ -302,7 +308,7 @@ func (g *GKEOrchestrator) installKueueResources() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) renderClusterQueue() ([]byte, error) {
+func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	var mainFlavors []map[string]interface{}
 	mainCoveredResourcesMap := make(map[string]bool)
 
@@ -352,7 +358,7 @@ func (g *GKEOrchestrator) renderClusterQueue() ([]byte, error) {
 		"apiVersion": "kueue.x-k8s.io/v1beta1",
 		"kind":       "ClusterQueue",
 		"metadata": map[string]interface{}{
-			"name": "cluster-queue",
+			"name": name,
 		},
 		"spec": map[string]interface{}{
 			"namespaceSelector": map[string]interface{}{},

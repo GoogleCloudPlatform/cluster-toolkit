@@ -120,3 +120,13 @@ func (s *MySuite) TestValidateDeploymentDirectory(c *C) {
 	os.Remove(filepath.Join(dir, string(groups[0].Name)))
 	c.Assert(ValidateDeploymentDirectory(groups, dir), NotNil)
 }
+
+func (s *MySuite) TestRandomString(c *C) {
+	res, err := RandomString(10)
+	c.Assert(err, IsNil)
+	c.Assert(len(res), Equals, 10)
+
+	res2, err := RandomString(10)
+	c.Assert(err, IsNil)
+	c.Assert(res, Not(Equals), res2)
+}

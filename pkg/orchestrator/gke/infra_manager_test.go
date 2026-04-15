@@ -37,7 +37,7 @@ func TestRenderClusterQueue(t *testing.T) {
 		},
 	}
 
-	bytes, err := orc.renderClusterQueue()
+	bytes, err := orc.renderClusterQueue("cluster-queue")
 	if err != nil {
 		t.Fatalf("renderClusterQueue failed: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 		},
 	}
 
-	bytes, err := orc.renderClusterQueue()
+	bytes, err := orc.renderClusterQueue("cluster-queue")
 	if err != nil {
 		t.Fatalf("renderClusterQueue failed: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRenderClusterQueue_Empty(t *testing.T) {
 		capacity: ClusterCapacity{}, // Empty
 	}
 
-	bytes, err := orc.renderClusterQueue()
+	bytes, err := orc.renderClusterQueue("cluster-queue")
 	if err != nil {
 		t.Fatalf("renderClusterQueue failed: %v", err)
 	}

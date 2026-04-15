@@ -98,57 +98,14 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		return ManifestOptions{}, JobProfile{}, err
 	}
 
-	schedOpts := SchedulingOptions{
-		PlacementPolicy:    job.PlacementPolicy,
-		NodeAffinityLabels: job.NodeSelector,
-		Topology:           job.Topology,
-		Scheduler:          job.Scheduler,
-	}
-
 	mappedLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
-	topology, err := g.resolveTopology(job.Topology, mappedLabel, job.ClusterName, job.ClusterLocation)
+
+	schedOpts, isSuperSlicing, err := g.resolveSchedulingAndTopology(&job, mappedLabel)
 	if err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
-	schedOpts.Topology = topology
-
-	g.dynamicallyCalculateVmsPerSlice(&job, topology, mappedLabel)
-
-	isSuperSlicing, _ := g.verifySuperSlicingActive(ManifestOptions{
-		ClusterName:     job.ClusterName,
-		ClusterLocation: job.ClusterLocation,
-		AcceleratorType: job.AcceleratorType,
-	})
 
 	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-
-	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isSuperSlicing, isCPUMachine)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-
-	affinityStr, err := g.buildAffinity(schedOpts)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-
-	podFailurePolicyStr, err := g.generatePodFailurePolicy(job.RestartOnExitCodes)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-	podFailurePolicyStr = g.indentYaml(podFailurePolicyStr, 12)
-
-	imagePullSecretsStr := g.generateImagePullSecrets(job.ImagePullSecrets)
-	if imagePullSecretsStr != "" {
-		imagePullSecretsStr = g.indentYaml(imagePullSecretsStr, 16)
-	}
-
-	topologyAnnotationStr := g.buildTopologyAnnotation(schedOpts.Topology)
-
-	tolerationsStr, err := g.resolveTolerations(job.AcceleratorType)
 	if err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
@@ -166,25 +123,23 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		VmsPerSlice:             job.VmsPerSlice,
 		MaxRestarts:             job.MaxRestarts,
 		TtlSecondsAfterFinished: job.TtlSecondsAfterFinished,
-		NodeSelector:            nodeSelectorStr,
-		Affinity:                affinityStr,
-		PodFailurePolicy:        podFailurePolicyStr,
-		ImagePullSecrets:        imagePullSecretsStr,
 		ServiceAccountName:      job.ServiceAccountName,
-		TopologyAnnotation:      topologyAnnotationStr,
-		SchedulerName:           job.Scheduler,
-		Tolerations:             tolerationsStr,
+		SchedulerName:           job.GKEScheduler,
 		AwaitJobCompletion:      job.AwaitJobCompletion,
 		PriorityClassName:       job.PriorityClassName,
 		Topology:                schedOpts.Topology,
 		Verbose:                 job.Verbose,
 	}
 
+	if err := g.fillManifestStrings(&opts, schedOpts, job, isSuperSlicing, isCPUMachine); err != nil {
+		return ManifestOptions{}, JobProfile{}, err
+	}
+
 	g.addVolumeOptions(&opts, job.Volumes)
 
-	profile := JobProfile{
-		IsCPUMachine:  isCPUMachine,
-		CapacityCount: capacity,
+	profile, err := g.resolveResourcesAndGates(&opts, isCPUMachine, capacity, job)
+	if err != nil {
+		return ManifestOptions{}, JobProfile{}, err
 	}
 
 	return opts, profile, nil
@@ -279,4 +234,90 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, er
 		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
 	}
 	return g.indentYaml(string(b), 16), nil
+}
+
+func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefinition, mappedLabel string) (SchedulingOptions, bool, error) {
+	schedOpts := SchedulingOptions{
+		PlacementPolicy:    job.PlacementPolicy,
+		NodeAffinityLabels: job.NodeSelector,
+		Topology:           job.Topology,
+		Scheduler:          job.GKEScheduler,
+	}
+
+	topology, err := g.resolveTopology(job.Topology, mappedLabel, job.ClusterName, job.ClusterLocation)
+	if err != nil {
+		return SchedulingOptions{}, false, err
+	}
+	schedOpts.Topology = topology
+
+	g.dynamicallyCalculateVmsPerSlice(job, topology, mappedLabel)
+
+	isSuperSlicing, _ := g.verifySuperSlicingActive(ManifestOptions{
+		ClusterName:     job.ClusterName,
+		ClusterLocation: job.ClusterLocation,
+		AcceleratorType: job.AcceleratorType,
+	})
+
+	return schedOpts, isSuperSlicing, nil
+}
+
+func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isSuperSlicing, isCPUMachine bool) error {
+	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isSuperSlicing, isCPUMachine)
+	if err != nil {
+		return err
+	}
+	opts.NodeSelector = nodeSelectorStr
+
+	affinityStr, err := g.buildAffinity(schedOpts)
+	if err != nil {
+		return err
+	}
+	opts.Affinity = affinityStr
+
+	podFailurePolicyStr, err := g.generatePodFailurePolicy(job.RestartOnExitCodes)
+	if err != nil {
+		return err
+	}
+	opts.PodFailurePolicy = g.indentYaml(podFailurePolicyStr, 12)
+
+	imagePullSecretsStr := g.generateImagePullSecrets(job.ImagePullSecrets)
+	if imagePullSecretsStr != "" {
+		opts.ImagePullSecrets = g.indentYaml(imagePullSecretsStr, 16)
+	}
+
+	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology)
+
+	tolerationsStr, err := g.resolveTolerations(job.AcceleratorType)
+	if err != nil {
+		return err
+	}
+	opts.Tolerations = tolerationsStr
+
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
+	isGPU := !isCPUMachine && !IsTPU(job.AcceleratorType)
+	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
+		opts.SchedulingGates = g.indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
+		opts.SchedulerName = ""
+	}
+
+	profile := JobProfile{
+		IsCPUMachine:  isCPUMachine,
+		CapacityCount: capacity,
+	}
+
+	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(*opts, profile)
+	if err != nil {
+		logging.Warn("Warning: failed to calculate resource limits: %v", err)
+	} else {
+		if opts.AcceleratorType != "" && gpuLimit == "" && tpuLimit == "" {
+			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
+			opts.AcceleratorType = ""
+		}
+		opts.ResourcesString = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+	}
+
+	return profile, nil
 }

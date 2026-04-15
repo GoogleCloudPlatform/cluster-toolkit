@@ -158,7 +158,10 @@ func ensureGCloudProjectConfigured(cmd *cobra.Command, projectID *string) error 
 
 	cmd.Print("Please enter your Google Cloud Project ID: ")
 	reader := bufio.NewReader(cmd.InOrStdin())
-	inputProjectID, _ := reader.ReadString('\n')
+	inputProjectID, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read project ID from input: %w", err)
+	}
 	inputProjectID = strings.TrimSpace(inputProjectID)
 
 	if inputProjectID == "" {

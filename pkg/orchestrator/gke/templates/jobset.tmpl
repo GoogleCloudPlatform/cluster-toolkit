@@ -40,6 +40,9 @@ spec:
 {{- if .SchedulerName }}
               schedulerName: {{.SchedulerName}}
 {{- end }}
+{{- if .SchedulingGates }}
+{{.SchedulingGates}}
+{{- end }}
 {{- if .PriorityClassName }}
               priorityClassName: {{.PriorityClassName}}
 {{- end }}
