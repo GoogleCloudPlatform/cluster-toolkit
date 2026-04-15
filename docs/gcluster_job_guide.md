@@ -32,6 +32,7 @@ When you run `gcluster job submit` for the first time, or if its cached state is
   * If `gcloud components install kubectl` fails (e.g., component manager disabled), it will offer to install `kubectl` via `sudo apt-get install kubectl` (for Debian/Ubuntu systems).
 * **Container Credential Helper:** Configures Docker to authenticate to Google Container Registry and Artifact Registry.
 * **Artifact Registry API:** Ensures `artifactregistry.googleapis.com` is enabled for your project, enabling it automatically if necessary.
+* **Artifact Registry Repository:** Assumes a repository named `gcluster` (or specified by `GCLUSTER_IMAGE_REPO`) exists in the cluster's region. The tool will grant read permissions to the node pool service account on this specific repository.
 * **Kueue Installation:** Checks if Kueue is installed on the cluster. If not, it automatically installs Kueue and configures necessary resources like PriorityClasses, ClusterQueue, and LocalQueue.
 
 **State Persistence:** To avoid redundant checks, `gcluster job submit` saves the successful prerequisite status in `~/.gcluster-job/prereq_state.json`. Checks will only be re-run if this state is older than 24 hours or if you specify a different GCP project.
@@ -57,31 +58,7 @@ This command compiles the Go source code, including the `gcluster job submit` co
 
 ## 4. Prepare Sample Application Code
 
-Create a directory named `job_details` and place the following files inside it. This will serve as your build context for the job.
-
-### `cluster-toolkit/job_details/Dockerfile`
-
-```dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app.py .
-
-CMD ["python", "app.py"]
-```
-
-### `cluster-toolkit/job_details/requirements.txt`
-
-(This file can be empty for this simple example, or list any Python dependencies.)
-
-```text
-# No specific requirements for this example
-```
+Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. Crane will package all files in this directory and add them to the image.
 
 ### `cluster-toolkit/job_details/app.py`
 
@@ -90,6 +67,9 @@ CMD ["python", "app.py"]
 print("Hello from the gcluster job submit application!")
 print("This is a sample application running on GKE.")
 ```
+
+> [!NOTE]
+> Crane does not execute a Dockerfile. It simply copies the contents of the build context directory into the image. If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 5. Deploy a GKE Cluster
 
@@ -130,7 +110,7 @@ Here are the flags currently supported by `gcluster job submit`:
 
 * `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `us-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
 * `--base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
-* `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will automatically look for a `Dockerfile` within this directory.
+* `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
 * `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
@@ -149,7 +129,13 @@ Here are the flags currently supported by `gcluster job submit`:
 
 ## 7. Submit the Sample Job with `gcluster job submit`
 
-Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image using Crane and push it to Artifact Registry (or Container Registry) in your project.
+Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image using Crane and push it to Artifact Registry in your project.
+
+> [!IMPORTANT]
+> The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/gcluster/<user>-runner:<tag>`.
+
+* The **repository** defaults to `gcluster`. You can override this by setting the `GCLUSTER_IMAGE_REPO` environment variable. The repository **must exist** before submitting the job.
+* The fallback username will be `defaultName` if the `USER` environment variable is not set.
 
 ### Unified Job Submission
 

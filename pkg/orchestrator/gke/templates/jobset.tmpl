@@ -35,6 +35,8 @@ spec:
 {{- end }}
 {{- end }}
             spec:
+              hostNetwork: true
+              dnsPolicy: ClusterFirstWithHostNet
 {{- if .SchedulerName }}
               schedulerName: {{.SchedulerName}}
 {{- end }}

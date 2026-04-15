@@ -175,7 +175,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	g.grantNodePoolImagePullPermission(job)
+	if err := g.grantNodePoolImagePullPermission(job); err != nil {
+		return err
+	}
 
 	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
@@ -491,20 +493,19 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) erro
 		return nil
 	}
 
-	logging.Info("Patching ClusterQueue '%s' to include CPU and Memory quotas...", cqName)
-	patch := `[
-		{"op": "add", "path": "/spec/resourceGroups/0/coveredResources/-", "value": "cpu"},
-		{"op": "add", "path": "/spec/resourceGroups/0/coveredResources/-", "value": "memory"},
-		{"op": "add", "path": "/spec/resourceGroups/0/flavors/0/resources/-", "value": {"name": "cpu", "nominalQuota": "2000"}},
-		{"op": "add", "path": "/spec/resourceGroups/0/flavors/0/resources/-", "value": {"name": "memory", "nominalQuota": "20000Gi"}}
-	]`
-
-	res := g.executor.ExecuteCommand("kubectl", "patch", "clusterqueue", cqName, "--type", "json", "-p", patch)
-	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to patch clusterqueue: %s", res.Stderr)
+	if isEmpty {
+		logging.Info("ClusterQueue '%s' is empty. Applying calculated capacity...", cqName)
+		clusterQueueBytes, err := g.renderClusterQueue()
+		if err != nil {
+			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
+		}
+		if err := g.applyManifests(clusterQueueBytes, "cluster-queue.yaml"); err != nil {
+			return fmt.Errorf("failed to apply clusterqueue with new capacity: %w", err)
+		}
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("clusterQueue '%s' does not cover required resources (CPU and Memory). Please configure it manually to include quotas for 'cpu' and 'memory' resources.", cqName)
 }
 
 func (g *GKEOrchestrator) getClusterQueueName(localQueueName string) (string, error) {
@@ -584,28 +585,46 @@ func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) 
 	return projectID, nil
 }
 
-func (g *GKEOrchestrator) grantNodePoolImagePullPermission(job orchestrator.JobDefinition) {
+func (g *GKEOrchestrator) grantNodePoolImagePullPermission(job orchestrator.JobDefinition) error {
 	if len(g.nodePoolSAs) == 0 {
 		logging.Info("No custom node pool service accounts found to grant Artifact Registry permissions.")
-		return
+		return nil
 	}
+
+	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
+	if repoName == "" {
+		repoName = "gcluster"
+	}
+
+	region := extractRegion(job.ClusterLocation)
 
 	seen := make(map[string]bool)
 
 	for _, sa := range g.nodePoolSAs {
 		if !seen[sa] {
 			seen[sa] = true
-			logging.Info("Adding roles/artifactregistry.reader to service account %s on project %s...", sa, job.ProjectID)
-			iamRes := g.executor.ExecuteCommand("gcloud", "projects", "add-iam-policy-binding", job.ProjectID,
+			logging.Info("Adding roles/artifactregistry.reader to service account %s on repository %s in project %s...", sa, repoName, job.ProjectID)
+			iamRes := g.executor.ExecuteCommand("gcloud", "artifacts", "repositories", "add-iam-policy-binding", repoName,
+				"--location", region,
+				"--project", job.ProjectID,
 				"--member", "serviceAccount:"+sa,
 				"--role", "roles/artifactregistry.reader",
-				"--condition=None",
 			)
 			if iamRes.ExitCode != 0 {
-				logging.Info("Warning: Failed to add Artifact Registry reader IAM binding for service account %s: %s", sa, iamRes.Stderr)
+				return fmt.Errorf("failed to add Artifact Registry reader IAM binding for service account %s: %s", sa, iamRes.Stderr)
 			}
 		}
 	}
+	return nil
+}
+
+func extractRegion(location string) string {
+	parts := strings.Split(location, "-")
+	if len(parts) == 3 {
+		// likely a zone, return region (first two parts)
+		return parts[0] + "-" + parts[1]
+	}
+	return location
 }
 
 func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, error) {
@@ -902,6 +921,7 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 
 		fullImageName, err := imagebuilder.BuildContainerImageFromBaseImage(
 			job.ProjectID,
+			job.ClusterLocation,
 			job.BaseImage,
 			job.BuildContext,
 			job.Platform,
