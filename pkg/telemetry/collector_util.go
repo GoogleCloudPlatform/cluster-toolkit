@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"regexp"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -37,6 +38,20 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 		})
 	}
 	return eventMetadata
+}
+
+func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
+	modules := make([]config.Module, 0)
+	for _, m := range config.GetAllModules(&bp) {
+		if re.MatchString(m.Source) {
+			modules = append(modules, m)
+		}
+	}
+	return modules
 }
 
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {
