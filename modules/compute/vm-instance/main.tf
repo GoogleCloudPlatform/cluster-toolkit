@@ -24,7 +24,7 @@ module "gpu" {
 
   machine_type      = var.machine_type
   guest_accelerator = var.guest_accelerator
-  machine_configs   = var.machine_configs
+  machine_configs   = jsonencode(var.machine_configs)
 }
 
 locals {
