@@ -25,7 +25,6 @@ tags:
 - gke
 - m.cloud-storage-bucket
 - m.gke-persistent-volume
-- m.pre-existing-network-storage
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
