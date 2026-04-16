@@ -102,38 +102,38 @@ func getCmdFlags(cmd *cobra.Command) string {
 }
 
 func getMachineType(bp config.Blueprint) string {
-	machine_types := make([]string, 0)
+	machineTypes := make([]string, 0)
 	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 
 	for _, m := range modules {
 		if m.Settings.Has("machine_type") {
-			machine_type := m.Settings.Get("machine_type")
+			machineType := m.Settings.Get("machine_type")
 
 			// Evaluate the value to resolve expressions like $(vars.machine_type)
-			evaluated_type, err := bp.Eval(machine_type)
+			evaluatedMachineType, err := bp.Eval(machineType)
 
 			// Some module outputs or references carry cty marks, so we unmark them safely before use.
 			if err == nil {
-				unmarked_type, _ := evaluated_type.Unmark()
+				unmarkedMachineType, _ := evaluatedMachineType.Unmark()
 
-				if !unmarked_type.IsNull() && unmarked_type.Type() == cty.String {
-					machine_types = append(machine_types, unmarked_type.AsString())
+				if !unmarkedMachineType.IsNull() && unmarkedMachineType.Type() == cty.String {
+					machineTypes = append(machineTypes, unmarkedMachineType.AsString())
 				}
 			}
 		}
 		// For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
 		if m.Settings.Has("node_type") {
-			node_type := m.Settings.Get("node_type")
-			evaluated_node_type, err := bp.Eval(node_type)
+			nodeType := m.Settings.Get("node_type")
+			evaluatedNodeType, err := bp.Eval(nodeType)
 			if err == nil {
-				unmarked_node_type, _ := evaluated_node_type.Unmark()
-				if !unmarked_node_type.IsNull() && unmarked_node_type.Type() == cty.String {
-					machine_types = append(machine_types, unmarked_node_type.AsString())
+				unmarkedNodeType, _ := evaluatedNodeType.Unmark()
+				if !unmarkedNodeType.IsNull() && unmarkedNodeType.Type() == cty.String {
+					machineTypes = append(machineTypes, unmarkedNodeType.AsString())
 				}
 			}
 		}
 	}
-	return strings.Join(machine_types, ",")
+	return strings.Join(machineTypes, ",")
 }
 
 func getRegion(bp config.Blueprint) string {
