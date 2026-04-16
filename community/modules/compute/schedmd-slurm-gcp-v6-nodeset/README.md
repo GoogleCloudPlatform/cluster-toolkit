@@ -164,34 +164,34 @@ modules. For support with the underlying modules, see the instructions in the
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.11 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 5.11 |
 
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_accelerator_topology"></a> [accelerator\_topology](#input\_accelerator\_topology) | Specifies the shape of the Accelerator (GPU/TPU) slice. | `string` | `null` | no |
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | Configurations of additional disks to be included on the partition nodes. | <pre>list(object({<br/>    disk_name                           = optional(string)<br/>    device_name                         = optional(string)<br/>    disk_size_gb                        = optional(number)<br/>    disk_type                           = optional(string)<br/>    disk_labels                         = optional(map(string))<br/>    auto_delete                         = optional(bool)<br/>    boot                                = optional(bool)<br/>    disk_resource_manager_tags          = optional(map(string))<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
@@ -226,6 +226,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_instance_properties"></a> [instance\_properties](#input\_instance\_properties) | Override the instance properties. Used to test features not supported by Slurm GCP,<br/>recommended for advanced usage only.<br/>See https://cloud.google.com/compute/docs/reference/rest/v1/regionInstances/bulkInsert<br/>If any sub-field (e.g. scheduling) is set, it will override the values computed by<br/>SlurmGCP and ignoring values of provided vars. | `any` | `null` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | DEPRECATED: Instance template can not be specified for compute nodes. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to partition compute instances. Key-value pairs. | `map(string)` | `{}` | no |
+| <a name="input_machine_configs"></a> [machine\_configs](#input\_machine\_configs) | JSON text containing the definition of GCE machine types and counts | `string` | `"{}"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Compute Platform machine type to use for this partition compute nodes. | `string` | `"c2-standard-60"` | no |
 | <a name="input_maintenance_interval"></a> [maintenance\_interval](#input\_maintenance\_interval) | Sets the maintenance interval for instances in this nodeset.<br/>See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#maintenance_interval. | `string` | `null` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
@@ -257,6 +258,6 @@ modules. For support with the underlying modules, see the instructions in the
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_nodeset"></a> [nodeset](#output\_nodeset) | Details of the nodeset. Typically used as input to `schedmd-slurm-gcp-v6-partition`. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -400,3 +400,9 @@ variable "network_storage" {
   }))
   default = []
 }
+
+variable "machine_configs" {
+  description = "JSON text containing the definition of GCE machine types and counts"
+  type        = string
+  default     = "{}"
+}
