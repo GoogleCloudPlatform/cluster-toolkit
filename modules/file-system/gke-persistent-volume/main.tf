@@ -20,11 +20,6 @@ locals {
 }
 
 locals {
-  # Extract project ID from cluster ID
-  project_id = split("/", var.cluster_id)[1]
-}
-
-locals {
   # Flags indicating which storage type is active based on input variables.
   storage_type_active = {
     gcs       = var.gcs_bucket_name != null
@@ -128,10 +123,6 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-data "google_project" "project" {
-  project_id = split("/", var.cluster_id)[1]
-}
-
 data "google_client_config" "default" {}
 
 provider "kubectl" {
@@ -163,11 +154,4 @@ resource "kubectl_manifest" "pv" {
 resource "kubectl_manifest" "pvc" {
   yaml_body  = local.pvc_content
   depends_on = [kubectl_manifest.pv, kubectl_manifest.pvc_namespace]
-}
-
-resource "google_project_iam_member" "gcsfuse_agent_binding" {
-  count   = var.gcsfuse_storage_class_name != null ? 1 : 0
-  project = local.project_id
-  role    = "projects/${local.project_id}/roles/gke.gcsfuse.profileUser"
-  member  = "serviceAccount:service-${data.google_project.project.number}@container-engine-robot.iam.gserviceaccount.com"
 }

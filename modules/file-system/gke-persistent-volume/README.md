@@ -144,7 +144,13 @@ resource "google_project_iam_custom_role" "gcsfuse_profile_user" {
 }
 ```
 
-The `gke-persistent-volume` module will automatically handle binding this role to the GKE service agent if `gcsfuse_storage_class_name` is provided.
+Once created, the role must be bound to the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`).
+
+```bash
+gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
+  --member="serviceAccount:service-<YOUR_PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com" \
+  --role="projects/<YOUR_PROJECT_ID>/roles/gke.gcsfuse.profileUser"
+```
 
 ### Connecting Via Use
 
@@ -207,13 +213,11 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
-| [google_project_iam_member.gcsfuse_agent_binding](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [kubectl_manifest.pv](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc_namespace](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
-| [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
