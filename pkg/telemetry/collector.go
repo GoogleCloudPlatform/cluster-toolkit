@@ -22,7 +22,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/zclconf/go-cty/cty"
 )
 
 var (
@@ -106,32 +105,8 @@ func getMachineType(bp config.Blueprint) string {
 	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 
 	for _, m := range modules {
-		if m.Settings.Has("machine_type") {
-			machineType := m.Settings.Get("machine_type")
-
-			// Evaluate the value to resolve expressions like $(vars.machine_type)
-			evaluatedMachineType, err := bp.Eval(machineType)
-
-			// Some module outputs or references carry cty marks, so we unmark them safely before use.
-			if err == nil {
-				unmarkedMachineType, _ := evaluatedMachineType.Unmark()
-
-				if !unmarkedMachineType.IsNull() && unmarkedMachineType.Type() == cty.String {
-					machineTypes = append(machineTypes, unmarkedMachineType.AsString())
-				}
-			}
-		}
-		// For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
-		if m.Settings.Has("node_type") {
-			nodeType := m.Settings.Get("node_type")
-			evaluatedNodeType, err := bp.Eval(nodeType)
-			if err == nil {
-				unmarkedNodeType, _ := evaluatedNodeType.Unmark()
-				if !unmarkedNodeType.IsNull() && unmarkedNodeType.Type() == cty.String {
-					machineTypes = append(machineTypes, unmarkedNodeType.AsString())
-				}
-			}
-		}
+		machineTypes = appendIfNotEmpty(machineTypes, evaluateFromModule("machine_type", m, bp))
+		machineTypes = appendIfNotEmpty(machineTypes, evaluateFromModule("node_type", m, bp)) // For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
 	}
 	return strings.Join(machineTypes, ",")
 }

@@ -65,3 +65,28 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	}
 	return ""
 }
+
+func evaluateFromModule(key string, module config.Module, bp config.Blueprint) string {
+	if module.Settings.Has(key) {
+		keyValue := module.Settings.Get(key)
+
+		// Evaluate the value to resolve expressions like $(vars.key)
+		evaluatedKey, err := bp.Eval(keyValue)
+
+		// Some module outputs or references carry cty marks, so we unmark them safely before use.
+		if err == nil {
+			unmarkedKey, _ := evaluatedKey.Unmark()
+			if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+				return unmarkedKey.AsString()
+			}
+		}
+	}
+	return ""
+}
+
+func appendIfNotEmpty(arr []string, new string) []string {
+	if new != "" {
+		arr = append(arr, new)
+	}
+	return arr
+}
