@@ -63,7 +63,7 @@ modules. For support with the underlying modules, see the instructions in the
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -81,7 +81,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_exclusive"></a> [exclusive](#input\_exclusive) | Exclusive job access to nodes. When set to true nodes execute single job and are deleted<br/>after job exits. If set to false, multiple jobs can be scheduled on one node. | `bool` | `true` | no |
 | <a name="input_is_default"></a> [is\_default](#input\_is\_default) | Sets this partition as the default partition by updating the partition\_conf.<br/>If "Default" is already set in partition\_conf, this variable will have no effect. | `bool` | `false` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | DEPRECATED | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
@@ -97,7 +97,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_nodeset"></a> [nodeset](#output\_nodeset) | Details of a nodesets in this partition |
 | <a name="output_nodeset_dyn"></a> [nodeset\_dyn](#output\_nodeset\_dyn) | Details of a dynamic nodesets in this partition |
 | <a name="output_nodeset_tpu"></a> [nodeset\_tpu](#output\_nodeset\_tpu) | Details of a TPU nodesets in this partition |
