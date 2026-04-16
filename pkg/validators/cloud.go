@@ -19,12 +19,15 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"regexp"
 	"strings"
 
 	"golang.org/x/exp/maps"
+	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
+	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	serviceusage "google.golang.org/api/serviceusage/v1"
 )
@@ -494,4 +497,85 @@ func testMachineTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) 
 // testDiskTypeInZoneAvailability automatically validates disk types in modules
 func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) error {
 	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
+}
+
+// TestGCSFuseIAMRoleExists checks if the custom IAM role 'gke.gcsfuse.profileUser' exists.
+func TestGCSFuseIAMRoleExists(projectID string) error {
+	ctx := context.Background()
+	s, err := iam.NewService(ctx)
+	if err != nil {
+		return handleClientError(err)
+	}
+
+	roleName := fmt.Sprintf("projects/%s/roles/gke.gcsfuse.profileUser", projectID)
+	_, err = s.Projects.Roles.Get(roleName).Do()
+	if err != nil {
+		var herr *googleapi.Error
+		if errors.As(err, &herr) && herr.Code == 404 {
+			return config.HintError{
+				Err: fmt.Errorf("custom IAM role 'gke.gcsfuse.profileUser' was not found in project %s", projectID),
+				Hint: "GCS Fuse CSI Storage Profiles require this custom IAM role.\n" +
+					"Please refer to modules/file-system/gke-persistent-volume/README.md for instructions.",
+			}
+		}
+		// If 403 or other API issue, issue warning but do not block (maybe user just cannot read it)
+		logging.Error("WARNING: Could not check IAM role %s: %v. Proceeding.", roleName, err)
+		return nil
+	}
+
+	// Optional Check: Validate IAM Binding for the GKE Service Agent
+	checkGCSFuseIAMBinding(ctx, projectID, roleName)
+
+	return nil
+}
+
+func checkGCSFuseIAMBinding(ctx context.Context, projectID string, roleName string) {
+	crmService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		logging.Error("WARNING: Could not initialize Cloud Resource Manager service: %v. Skipping IAM binding check.", err)
+		return
+	}
+
+	project, err := crmService.Projects.Get(projectID).Do()
+	if err != nil {
+		logging.Error("WARNING: Could not fetch project number for %s: %v. Skipping IAM binding check.", projectID, err)
+		return
+	}
+
+	policy, err := crmService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		logging.Error("WARNING: Could not fetch IAM policy for %s: %v. Skipping IAM binding check.", projectID, err)
+		return
+	}
+
+	agentMember := fmt.Sprintf("serviceAccount:service-%d@container-engine-robot.iam.gserviceaccount.com", project.ProjectNumber)
+	roleGranted := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == roleName || binding.Role == fmt.Sprintf("projects/%s/roles/gke.gcsfuse.profileUser", projectID) {
+			for _, member := range binding.Members {
+				if member == agentMember {
+					roleGranted = true
+					break
+				}
+			}
+		}
+	}
+
+	if !roleGranted {
+		logging.Error("\n[!] WARNING: GKE Service Agent (%s) does not appear to have the custom role '%s' assigned.", agentMember, roleName)
+		logging.Error("    This might cause GCS Fuse CSI drivers to fail at runtime.")
+		logging.Error("    Refer to modules/file-system/gke-persistent-volume/README.md to manually bind permissions.\n")
+	}
+}
+
+func testGCSFuseIAMRoleExists(bp config.Blueprint, inputs config.Dict) error {
+	if err := checkInputs(inputs, []string{"project_id"}); err != nil {
+		return err
+	}
+	m, err := inputsAsStrings(inputs)
+	if err != nil {
+		return err
+	}
+	return TestGCSFuseIAMRoleExists(m["project_id"])
 }
