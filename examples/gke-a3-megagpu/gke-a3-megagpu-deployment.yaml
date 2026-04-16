@@ -34,7 +34,8 @@ vars:
   zone:
 
   # Cidr block containing the IP of the machine calling terraform.
-  # The following line must be updated for this example to work.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
   # The number of nodes to be created
