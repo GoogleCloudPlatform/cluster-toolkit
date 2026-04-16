@@ -102,6 +102,7 @@ variable "cluster_id" {
 variable "apply_manifests" {
   description = "A list of manifests to apply to the GKE cluster using helm_install. For more details on the underlying deployment mechanism, see the [helm_install module](helm_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
   type = list(object({
+    name             = optional(string, null)
     enable           = optional(bool, true)
     content          = optional(string, null)
     source           = optional(string, null)
@@ -110,6 +111,11 @@ variable "apply_manifests" {
     namespace        = optional(string, null)
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for m in var.apply_manifests : m.name == null || length(m.name) <= 44])
+    error_message = "The 'name' attribute in apply_manifests must not exceed 44 characters to ensure the final Helm release name fits within the 53-character limit."
+  }
 }
 
 
@@ -207,4 +213,10 @@ variable "asapd_lite" {
     config_template_vars = optional(map(any), {})
   })
   default = {}
+}
+
+variable "module_id" {
+  description = "The ID of the module as defined in the blueprint. Injected by ghpc."
+  type        = string
+  default     = "kubectl-apply" # Fallback if run manually
 }

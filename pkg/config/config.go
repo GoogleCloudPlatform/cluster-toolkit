@@ -36,7 +36,8 @@ import (
 )
 
 const (
-	maxHintDist int = 3 // Maximum Levenshtein distance where we suggest a hint
+	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
+	latestToolkitVersion     = "v1.88.0"
 )
 
 // map[moved module path]replacing module path
@@ -84,6 +85,10 @@ func (g *Group) Clone() Group {
 		c.Modules[i] = m.Clone()
 	}
 	return c
+}
+
+func GetToolkitVersion() string {
+	return latestToolkitVersion
 }
 
 // ModuleIndex returns the index of the input module in the group
@@ -295,6 +300,10 @@ type Blueprint struct {
 	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
 	// was explicitly present in the user's source (runtime-only, not serialized).
 	YamlCtx *YamlCtx `yaml:"-"`
+	// AddCreatorLabel indicates whether to add the creator label
+	AddCreatorLabel bool `yaml:"-"`
+	// CreatorUsername is the username to use for the creator label
+	CreatorUsername string `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {

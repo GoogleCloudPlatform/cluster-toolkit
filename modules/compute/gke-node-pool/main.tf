@@ -32,6 +32,7 @@ module "gpu" {
 
   machine_type      = var.machine_type
   guest_accelerator = var.guest_accelerator
+  machine_configs   = var.machine_configs
 }
 
 locals {
@@ -76,6 +77,7 @@ module "tpu" {
 
   machine_type     = var.machine_type
   placement_policy = var.placement_policy
+  machine_configs  = var.machine_configs
 }
 
 
