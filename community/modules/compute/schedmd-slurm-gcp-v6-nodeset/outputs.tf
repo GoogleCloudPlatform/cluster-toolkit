@@ -38,7 +38,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = (var.accelerator_topology == null) || length(local.guest_accelerator) == 0 || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
+    condition     = (var.accelerator_topology == null) || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
     error_message = "accelerator_topology must be divisible by number of gpus in machine."
   }
 
