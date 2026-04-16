@@ -604,6 +604,9 @@ deployment_groups:
       node_count_dynamic_max: 0
       enable_placement: true
       accelerator_topology: 1x72
+      guest_accelerator:
+      - type: nvidia-gb200
+        count: 4
       disk_type: hyperdisk-balanced
       instance_image_custom: true
       on_host_maintenance: TERMINATE
