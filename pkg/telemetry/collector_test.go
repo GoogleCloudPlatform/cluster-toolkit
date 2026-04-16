@@ -489,6 +489,13 @@ func TestGetMachineType(t *testing.T) {
 									}),
 								},
 								{
+									ID:     config.ModuleID("lcontroller_node"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("n2-standard-2"),
+									}),
+								},
+								{
 									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/gke-node-pool",
 									Settings: config.NewDict(map[string]cty.Value{
