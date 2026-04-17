@@ -1,0 +1,50 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Create python virtual env for a tool
+  become: yes
+  hosts: localhost
+  vars:
+    virtualenv_path: ${virtualenv_path}
+  tasks:
+  - name: Install dependencies through system package manager
+    ansible.builtin.package:
+      name:
+      - python3
+      - python3-pip
+      - git
+    register: package
+    changed_when: package.changed
+    retries: 5
+    delay: 10
+    until: package is success
+
+  - name: Create virtualenv for tool
+    # Python 3.6 is minimum we wish to support due to ease of installation on
+    # CentOS 7 and Rocky Linux 8. pip 21.3.1 is the *maximum* version of pip
+    # supported by 3.6. Additionally, recent versions of pip are necessary for
+    # proper dependency resolution of real-world problems with google-cloud-*
+    # (and third-party) Python packages (20.3+ probably effective minimum).
+    ansible.builtin.pip:
+      name: pip>=21.3.1
+      virtualenv: "{{ virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv
+
+  - name: Add google-cloud-storage to virtualenv
+    ansible.builtin.pip:
+      name: google-cloud-storage
+      virtualenv: "{{ virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv

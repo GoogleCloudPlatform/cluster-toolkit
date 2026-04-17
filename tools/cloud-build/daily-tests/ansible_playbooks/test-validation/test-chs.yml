@@ -63,7 +63,7 @@
       ansible.builtin.git:
         repo: "{{ chs_repo }}"
         dest: "{{ chs_temp_dir.path }}"
-        version: main
+        version: release
         accept_hostkey: true
       async: 120
       poll: 10

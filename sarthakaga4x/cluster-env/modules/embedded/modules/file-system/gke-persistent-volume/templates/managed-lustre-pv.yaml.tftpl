@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${pv_name}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+spec:
+  storageClassName: ""
+  capacity:
+    storage: ${capacity}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  claimRef:
+    namespace: ${namespace}
+    name: ${pvc_name}
+  csi:
+    driver: lustre.csi.storage.gke.io
+    volumeHandle: "${project}/${location}/${instance_name}/default-pool/default-container"
+    volumeAttributes:
+      ip: ${server_ip}
+      filesystem: ${filesystem_name}

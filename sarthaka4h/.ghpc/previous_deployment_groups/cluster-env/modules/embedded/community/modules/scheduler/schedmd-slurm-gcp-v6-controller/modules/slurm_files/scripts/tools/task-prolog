@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Main TaskProlog Script
+# This script executes all *.sh scripts found in /slurm/custom_scripts/task_prolog.d/
+#
+# slurm.conf configuration:
+# TaskProlog=/slurm/scripts/tools/task-prolog
+
+# Directory containing the individual task prolog scripts
+PROLOG_D_DIR="/slurm/custom_scripts/task_prolog.d"
+
+# --- Output Handling for TaskProlog ---
+# Slurm's TaskProlog can interpret specific stdout lines:
+# - "export NAME=value" : Sets an environment variable for the task.
+# - "unset NAME"         : Unsets an environment variable for the task.
+# - "print message"      : Prints a message to the task's standard output.
+#
+# This wrapper script will concatenate the stdout of all sub-scripts.
+# If sub-scripts need to set/unset environment variables or print messages
+# for the task, they should output the appropriate "export", "unset", or "print"
+# commands to their own stdout.
+
+# --- Error Handling ---
+# If any script in PROLOG_D_DIR exits with a non-zero status,
+# this main script will also exit with a non-zero status.
+# This will typically cause the task to fail.
+set -e  # Exit immediately if a command exits with a non-zero status.
+
+# Check if the directory exists
+if [[ ! -d "$PROLOG_D_DIR" ]]; then
+  # Log in task stdout and exit if the directory is missing. All jobs will be failed.
+  echo "print TaskProlog Error: Directory '$PROLOG_D_DIR' not found. Check Slurm configuration."
+  exit 1
+fi
+
+# Find and execute all *.sh scripts in the directory
+# Scripts will be executed in reverse alphabetical order of their filenames.
+find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while IFS= read -r -d $'\0' script; do
+  if [[ -x "$script" ]]; then
+    # Execute the script. Its stdout will be captured by this wrapper.
+    # Its stderr will also be passed through.
+    # If a sub-script exits with an error, 'set -e' will cause this wrapper to exit.
+    "$script"
+  else
+    # Log a warning in task stdout if a *.sh file is found but is not executable
+    echo "print TaskProlog Warning: Script '$script' is not executable and will be skipped."
+  fi
+done
+
+# Check if any scripts were found and executed
+if [[ $(find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" | wc -l) -eq 0 ]]; then
+  # Log in task stdout if no scripts were found to execute
+  echo "print TaskProlog Info: No executable *.sh scripts found in $PROLOG_D_DIR."
+fi
+
+# Exit with 0 if all scripts were successful (or no scripts to run and not treated as error)
+exit 0

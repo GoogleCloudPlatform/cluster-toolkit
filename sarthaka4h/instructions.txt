@@ -1,0 +1,60 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'image-env' was successfully created in directory sarthaka4h/image-env
+To deploy, run the following commands:
+
+terraform -chdir=sarthaka4h/image-env init
+terraform -chdir=sarthaka4h/image-env validate
+terraform -chdir=sarthaka4h/image-env apply
+gcluster export-outputs sarthaka4h/image-env
+
+Packer group was successfully created in directory sarthaka4h/image
+To deploy, run the following commands:
+
+gcluster import-inputs sarthaka4h/image
+cd sarthaka4h/image/slurm-a4high-image
+packer init .
+packer validate .
+packer build .
+cd -
+
+Terraform group 'cluster-env' was successfully created in directory sarthaka4h/cluster-env
+To deploy, run the following commands:
+
+gcluster import-inputs sarthaka4h/cluster-env
+terraform -chdir=sarthaka4h/cluster-env init
+terraform -chdir=sarthaka4h/cluster-env validate
+terraform -chdir=sarthaka4h/cluster-env apply
+gcluster export-outputs sarthaka4h/cluster-env
+
+Terraform group 'cluster' was successfully created in directory sarthaka4h/cluster
+To deploy, run the following commands:
+
+gcluster import-inputs sarthaka4h/cluster
+terraform -chdir=sarthaka4h/cluster init
+terraform -chdir=sarthaka4h/cluster validate
+terraform -chdir=sarthaka4h/cluster apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy sarthaka4h
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=sarthaka4h/cluster destroy
+terraform -chdir=sarthaka4h/cluster-env destroy
+terraform -chdir=sarthaka4h/image-env destroy
+
+Please browse to the Cloud Console to remove VM images produced by Packer.
+If this file is present, the names of images can be read from it:
+
+sarthaka4h/image/slurm-a4high-image/packer-manifest.json
+
+https://console.cloud.google.com/compute/images

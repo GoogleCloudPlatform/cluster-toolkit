@@ -1,0 +1,70 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# this file is managed by the Cluster Toolkit; do not edit it manually
+# override settings with a higher priority (last lexically) named file
+# https://htcondor.readthedocs.io/en/latest/admin-manual/introduction-to-configuration.html?#ordered-evaluation-to-set-the-configuration
+
+use role:${htcondor_role}
+CONDOR_HOST = ${join(",", central_manager_ips)}
+
+SPOOL = ${spool_dir}
+SCHEDD_INTERVAL = 30
+TRUST_UID_DOMAIN = True
+SUBMIT_ATTRS = RunAsOwner
+RunAsOwner = True
+
+# When a job matches to a machine, add machine attributes to the job for
+# condor_history (e.g. VM Instance ID)
+use feature:JobsHaveInstanceIDs
+SYSTEM_JOB_MACHINE_ATTRS = $(SYSTEM_JOB_MACHINE_ATTRS) \
+  CloudVMType CloudZone CloudInterruptible
+SYSTEM_JOB_MACHINE_ATTRS_HISTORY_LENGTH = 10
+
+# Add Cloud attributes to SchedD ClassAd
+use feature:ScheddCronOneShot(cloud, $(LIBEXEC)/common-cloud-attributes-google.py)
+SCHEDD_CRON_cloud_PREFIX = Cloud
+
+# aid the user by automatically using RequireSpot in their Requirements, unless
+# the user has explicitly used CloudInterruptible
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) SPOT
+JOB_TRANSFORM_SPOT @=end
+  REQUIREMENTS ! isUndefined(RequireSpot) && ! unresolved(Requirements, "^CloudInterruptible$")
+  SET Requirements ($(MY.Requirements)) && (CloudInterruptible is My.RequireSpot)
+@end
+
+# help the user by enforcing that RequireSpot is undefined or a boolean
+SUBMIT_REQUIREMENT_NAMES = $(SUBMIT_REQUIREMENT_NAMES) SPOT
+SUBMIT_REQUIREMENT_SPOT = isUndefined(RequireSpot) || isBoolean(RequireSpot)
+SUBMIT_REQUIREMENT_SPOT_REASON = "If +RequireSpot is defined, it must be either True or False"
+
+%{ if length(mig_ids) > 0 ~}
+MIG_IDS = "${join(" ", mig_ids)}"
+MIG_ID_LIST = split($(MIG_IDS))
+%{ if default_mig_id != "" ~}
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) ID_DEFAULT
+JOB_TRANSFORM_ID_DEFAULT @=end
+  DEFAULT RequireId "${default_mig_id}"
+@end
+%{ endif ~}
+SUBMIT_REQUIREMENT_NAMES = $(SUBMIT_REQUIREMENT_NAMES) MIGID
+SUBMIT_REQUIREMENT_MIGID = !isUndefined(RequireId) && member(RequireId, $(MIG_ID_LIST))
+SUBMIT_REQUIREMENT_MIGID_REASON = strcat("Jobs must set +RequireId to one of following values surrounded by quotation marks:\n", $(MIG_IDS))
+
+JOB_TRANSFORM_NAMES = $(JOB_TRANSFORM_NAMES) MIGID
+JOB_TRANSFORM_MIGID @=end
+  REQUIREMENTS ! isUndefined(RequireId) && ! unresolved(Requirements, "^CloudCreatedBy$")
+  SET Requirements ($(MY.Requirements)) && regexp(strcat("/", My.RequireId, "$"), CloudCreatedBy)
+@end
+%{ endif ~}

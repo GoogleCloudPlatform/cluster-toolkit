@@ -1,0 +1,31 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# this file is managed by the Cluster Toolkit; do not edit it manually
+# override settings with a higher priority (last lexically) named file
+# https://htcondor.readthedocs.io/en/latest/admin-manual/introduction-to-configuration.html?#ordered-evaluation-to-set-the-configuration
+
+use role:get_htcondor_central_manager
+CONDOR_HOST = $(IPV4_ADDRESS)
+
+# Central Manager configuration settings
+# https://htcondor.readthedocs.io/en/23.0/admin-manual/configuration-macros.html#condor-collector-configuration-file-entries
+# https://htcondor.readthedocs.io/en/23.0/admin-manual/configuration-macros.html#condor-negotiator-configuration-file-entries
+# set classad lifetime (expiration) to ~5x the update interval for all daemons
+# defaults to 900s
+CLASSAD_LIFETIME = 180
+COLLECTOR_UPDATE_INTERVAL = 30
+NEGOTIATOR_UPDATE_INTERVAL = 30
+NEGOTIATOR_DEPTH_FIRST = True
+NEGOTIATOR_UPDATE_AFTER_CYCLE = True

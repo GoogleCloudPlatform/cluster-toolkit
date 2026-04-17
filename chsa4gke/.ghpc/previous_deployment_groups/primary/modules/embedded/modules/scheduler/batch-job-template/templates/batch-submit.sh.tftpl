@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e -o pipefail
+GCLOUD_MAJOR_VERSION=$(gcloud --version | head -n 1 | awk '{print $NF}' | cut -f1 --delimiter=.)
+if [ $((GCLOUD_MAJOR_VERSION >= 461)) ]; then
+    gcloud batch jobs submit ${submit_job_id} --project=${project} --location=${location} --config=${config}
+    echo "batch job ${submit_job_id} successfully submitted"
+else
+    echo "gcloud must be updated to version 461.0.0 or later."
+    exit 1
+fi

@@ -1,0 +1,60 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'image-env' was successfully created in directory sarthakaga4x/image-env
+To deploy, run the following commands:
+
+terraform -chdir=sarthakaga4x/image-env init
+terraform -chdir=sarthakaga4x/image-env validate
+terraform -chdir=sarthakaga4x/image-env apply
+gcluster export-outputs sarthakaga4x/image-env
+
+Packer group was successfully created in directory sarthakaga4x/image
+To deploy, run the following commands:
+
+gcluster import-inputs sarthakaga4x/image
+cd sarthakaga4x/image/slurm-a4xhigh-image
+packer init .
+packer validate .
+packer build .
+cd -
+
+Terraform group 'cluster-env' was successfully created in directory sarthakaga4x/cluster-env
+To deploy, run the following commands:
+
+gcluster import-inputs sarthakaga4x/cluster-env
+terraform -chdir=sarthakaga4x/cluster-env init
+terraform -chdir=sarthakaga4x/cluster-env validate
+terraform -chdir=sarthakaga4x/cluster-env apply
+gcluster export-outputs sarthakaga4x/cluster-env
+
+Terraform group 'cluster' was successfully created in directory sarthakaga4x/cluster
+To deploy, run the following commands:
+
+gcluster import-inputs sarthakaga4x/cluster
+terraform -chdir=sarthakaga4x/cluster init
+terraform -chdir=sarthakaga4x/cluster validate
+terraform -chdir=sarthakaga4x/cluster apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy sarthakaga4x
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=sarthakaga4x/cluster destroy
+terraform -chdir=sarthakaga4x/cluster-env destroy
+terraform -chdir=sarthakaga4x/image-env destroy
+
+Please browse to the Cloud Console to remove VM images produced by Packer.
+If this file is present, the names of images can be read from it:
+
+sarthakaga4x/image/slurm-a4xhigh-image/packer-manifest.json
+
+https://console.cloud.google.com/compute/images

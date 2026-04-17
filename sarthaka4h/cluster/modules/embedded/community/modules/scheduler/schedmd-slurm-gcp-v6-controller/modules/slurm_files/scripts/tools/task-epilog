@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Main TaskEpilog Script
+# This script executes all *.sh scripts found in /slurm/custom_scripts/task_epilog.d/
+#
+# slurm.conf configuration:
+# TaskEpilog=/slurm/scripts/tools/task-epilog
+
+# Directory containing the individual task epilog scripts
+EPILOG_D_DIR="/slurm/custom_scripts/task_epilog.d"
+
+# --- Output Handling for TaskEpilog ---
+# The stdout and stderr of this script (and the sub-scripts it calls)
+# are typically captured by Slurm and written to the job's output/error file
+# or a separate Slurm log, depending on configuration.
+# Unlike TaskProlog, stdout is not typically parsed for special commands
+# like 'export' or 'print' to affect the (now finished) task's environment.
+#
+# --- Error Handling ---
+# If any script in EPILOG_D_DIR exits with a non-zero status,
+# this main script will also exit with a non-zero status.
+# Slurm will log this. Depending on Slurm's configuration,
+# frequent epilog failures might lead to node issues or alerts.
+set -e  # Exit immediately if a command exits with a non-zero status.
+
+# Check if the directory exists
+if [[ ! -d "$EPILOG_D_DIR" ]]; then
+  # Log in task stdout and exit if the directory is missing. This likely indicates a configuration error.
+  echo "print TaskEpilog Error: Directory '$EPILOG_D_DIR' not found. Check Slurm configuration."
+  exit 1
+fi
+
+# Find and execute all *.sh scripts in the directory
+# Scripts will be executed in reverse alphabetical order of their filenames.
+find "$EPILOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while IFS= read -r -d $'\0' script; do
+  if [[ -x "$script" ]]; then
+    # Execute the script. Its stdout will be captured by this wrapper.
+    # Its stderr will also be passed through.
+    # If a sub-script exits with an error, 'set -e' will cause this wrapper to exit.
+    "$script"
+  else
+    # Log in task stdout a warning if a *.sh file is found but is not executable
+    echo "print TaskEpilog Warning: Script '$script' is not executable and will be skipped."
+  fi
+done
+
+# Check if any scripts were found and executed
+if [[ $(find "$EPILOG_D_DIR" -maxdepth 1 -type f -name "*.sh" | wc -l) -eq 0 ]]; then
+  # Log in task stdout if no scripts were found to execute
+  echo "print TaskEpilog Info: No executable *.sh scripts found in $EPILOG_D_DIR."
+fi
+
+# Exit with 0 if all scripts were successful (or no scripts to run and not treated as error)
+exit 0

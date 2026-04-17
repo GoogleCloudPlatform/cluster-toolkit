@@ -1,0 +1,53 @@
+taskGroups:
+    - taskSpec:
+        runnables:
+        %{~ if synchronized ~}
+        - barrier:
+            name: "wait-for-node-startup"
+        %{~ endif ~}
+        %{~ for runnable in runnables ~}
+        - script:
+            text: ${indent(12, chomp(yamlencode(runnable.script)))}
+        %{~ if synchronized ~}
+        - barrier:
+            name: "wait-for-script-to-complete"
+        %{~ endif ~}
+        %{~ endfor ~}
+        %{~ if length(nfs_volumes) > 0 ~}
+        volumes:
+        %{~ for index, vol in nfs_volumes ~}
+        - nfs:
+            server: "${vol.server_ip}"
+            remotePath: "${vol.remote_mount}"
+          %{~ if vol.mount_options != "" && vol.mount_options != null ~}
+          mountOptions: "${vol.mount_options}"
+          %{~ endif ~}
+          mountPath: "${vol.local_mount}"
+        %{~ endfor ~}
+        %{~ endif ~}
+      taskCount: ${task_count}
+      %{~ if tasks_per_node != null ~}
+      taskCountPerNode: ${tasks_per_node}
+      %{~ endif ~}
+      requireHostsFile: ${require_hosts_file}
+      permissiveSsh: ${permissive_ssh}
+%{~ if instance_template != null }
+allocationPolicy:
+    instances:
+    - instanceTemplate: "${instance_template}"
+%{~ endif }
+%{~ if log_policy == "CLOUD_LOGGING" }
+logsPolicy:
+    destination: "CLOUD_LOGGING"
+%{ endif }
+%{~ if log_policy == "PATH" }
+logsPolicy:
+    destination: "PATH"
+    logsPath: ## Add logging path here
+%{ endif }
+%{~ if length(labels) > 0 ~}
+labels:
+%{ for k, v in labels ~}
+    ${k}: "${v}"
+%{ endfor }
+%{~ endif ~}

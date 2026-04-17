@@ -1,0 +1,696 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: a4high-slurm
+ghpc_version: v1.74.0-101-g13fe9fd93-dirty
+vars:
+  a4h_cluster_size: 2
+  a4h_dws_flex_enabled: false
+  a4h_enable_spot_vm: false
+  a4h_reservation_name: nvidia-b200-6w3fzhkundrsy
+  base_image:
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
+    project: ubuntu-os-accelerator-images
+  base_network_name: ((var.deployment_name))
+  benchmark_dir: ((ghpc_stage("system_benchmarks")))
+  build_slurm_from_git_ref: 6.10.6
+  deployment_name: sarthaka4h
+  disk_size_gb: 100
+  filestore_ip_range: 192.168.32.0/24
+  image_build_machine_type: n2-standard-16
+  instance_image:
+    family: (("${var.deployment_name}-u22"))
+    project: ((var.project_id))
+  labels:
+    ghpc_blueprint: a4high-slurm
+    ghpc_deployment: ((var.deployment_name))
+  libnccl_version: 2.27.5-1+cuda12.9
+  local_ssd_mountpoint: /mnt/localssd
+  nccl_gib_version: 1.1.0
+  net0_range: 192.168.0.0/19
+  net1_range: 192.168.64.0/18
+  project_id: hpc-toolkit-gsc
+  rdma_net_range: 192.168.128.0/18
+  region: us-central1
+  zone: us-central1-b
+deployment_groups:
+  - group: image-env
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: sarthakag-test
+        prefix: (("a4high-slurm/${var.deployment_name}/image-env"))
+    terraform_providers:
+      google:
+        source: hashicorp/google
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+      google-beta:
+        source: hashicorp/google-beta
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+    modules:
+      - source: modules/network/vpc
+        kind: terraform
+        id: slurm-image-network
+        outputs:
+          - name: subnetwork_name
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          network_name: (("${var.base_network_name}-net"))
+          project_id: ((var.project_id))
+          region: ((var.region))
+      - source: modules/scripts/startup-script
+        kind: terraform
+        id: slurm-build-script
+        outputs:
+          - name: startup_script
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          docker:
+            enabled: true
+            world_writable: true
+          enable_gpu_network_wait_online: true
+          install_ansible: true
+          labels: ((var.labels))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          runners:
+            - content: |
+                Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+                Pin: version 1.17.7-1
+                Pin-Priority: 100
+              destination: /etc/apt/preferences.d/block-broken-nvidia-container
+              type: data
+            - content: |
+                ---
+                - name: Hold nvidia packages
+                  hosts: all
+                  become: true
+                  vars:
+                    nvidia_packages_to_hold:
+                    - libnvidia-cfg1-*-server
+                    - libnvidia-compute-*-server
+                    - libnvidia-nscq-*
+                    - nvidia-compute-utils-*-server
+                    - nvidia-fabricmanager-*
+                    - nvidia-utils-*-server
+                    - nvidia-imex-*
+                  tasks:
+                  - name: Hold nvidia packages
+                    ansible.builtin.command:
+                      argv:
+                      - apt-mark
+                      - hold
+                      - "{{ item }}"
+                    loop: "{{ nvidia_packages_to_hold }}"
+              destination: hold-nvidia-packages.yml
+              type: ansible-local
+            - content: |
+                {
+                  "reboot": false,
+                  "install_cuda": false,
+                  "install_gcsfuse": true,
+                  "install_lustre": false,
+                  "install_managed_lustre": false,
+                  "install_nvidia_repo": true,
+                  "install_ompi": true,
+                  "allow_kernel_upgrades": false,
+                  "monitoring_agent": "cloud-ops",
+                }
+              destination: /var/tmp/slurm_vars.json
+              type: data
+            - content: (("#!/bin/bash\nset -e -o pipefail\nansible-pull \\\n    -U https://github.com/GoogleCloudPlatform/slurm-gcp -C ${var.build_slurm_from_git_ref} \\\n    -i localhost, --limit localhost --connection=local \\\n    -e @/var/tmp/slurm_vars.json \\\n    ansible/playbook.yml\n"))
+              destination: install_slurm.sh
+              type: shell
+            - content: |
+                * - memlock unlimited
+                * - nproc unlimited
+                * - stack unlimited
+                * - nofile 1048576
+                * - cpu unlimited
+                * - rtprio unlimited
+              destination: /etc/security/limits.d/99-unlimited.conf
+              type: data
+            - content: |
+                #!/bin/bash
+                set -ex -o pipefail
+                add-nvidia-repositories -y
+                apt update -y
+                apt install -y cuda-toolkit-12-8
+                apt install -y datacenter-gpu-manager-4-cuda12
+                apt install -y datacenter-gpu-manager-4-dev
+              destination: install-cuda-toolkit.sh
+              type: shell
+            - content: |
+                ---
+                - name: CUDA and DGMA settings
+                  hosts: all
+                  become: true
+                  vars:
+                    enable_nvidia_dcgm: false
+                  tasks:
+                  - name: Reduce NVIDIA repository priority
+                    ansible.builtin.copy:
+                      dest: /etc/apt/preferences.d/cuda-repository-pin-600
+                      mode: 0o0644
+                      owner: root
+                      group: root
+                      content: |
+                        Package: *
+                        Pin: release l=NVIDIA CUDA
+                        Pin-Priority: 400
+                  - name: Create nvidia-persistenced override directory
+                    ansible.builtin.file:
+                      path: /etc/systemd/system/nvidia-persistenced.service.d
+                      state: directory
+                      owner: root
+                      group: root
+                      mode: 0o755
+                  - name: Configure nvidia-persistenced override
+                    ansible.builtin.copy:
+                      dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                      owner: root
+                      group: root
+                      mode: 0o644
+                      content: |
+                        [Service]
+                        ExecStart=
+                        ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+                    notify: Reload SystemD
+                  handlers:
+                  - name: Reload SystemD
+                    ansible.builtin.systemd:
+                      daemon_reload: true
+                  post_tasks:
+                  - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+                    ansible.builtin.service:
+                      name: nvidia-dcgm.service
+                      state: stopped
+                      enabled: "{{ enable_nvidia_dcgm }}"
+                  - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+                    ansible.builtin.service:
+                      name: nvidia-persistenced.service
+                      state: stopped
+                      enabled: false
+              destination: configure_cuda_dcgm.yml
+              type: ansible-local
+            - content: |
+                ---
+                - name: Install ibverbs-utils
+                  hosts: all
+                  become: true
+                  tasks:
+                  - name: Install Linux Modules Extra
+                    ansible.builtin.package:
+                      name:
+                      - ibverbs-utils
+                      state: present
+              destination: install_ibverbs_utils.yml
+              type: ansible-local
+            - content: |
+                ENROOT_CONFIG_PATH     ${HOME}/.enroot
+              destination: /etc/enroot/enroot.conf
+              type: data
+  - group: image
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: sarthakag-test
+        prefix: (("a4high-slurm/${var.deployment_name}/image"))
+    modules:
+      - source: modules/packer/custom-image
+        kind: packer
+        id: slurm-a4high-image
+        use:
+          - slurm-image-network
+          - slurm-build-script
+        settings:
+          deployment_name: ((var.deployment_name))
+          disk_size: ((var.disk_size_gb))
+          image_family: ((var.instance_image.family))
+          labels: ((var.labels))
+          machine_type: ((var.image_build_machine_type))
+          metadata:
+            user-data: |
+              #cloud-config
+              write_files:
+              - path: /etc/apt/apt.conf.d/20auto-upgrades
+                permissions: '0644'
+                owner: root
+                content: |
+                  APT::Periodic::Update-Package-Lists "0";
+                  APT::Periodic::Unattended-Upgrade "0";
+          omit_external_ip: false
+          project_id: ((var.project_id))
+          source_image: ((var.base_image.image))
+          source_image_project_id:
+            - ((var.base_image.project))
+          startup_script: ((module.slurm-build-script.startup_script))
+          subnetwork_name: ((module.slurm-image-network.subnetwork_name))
+          zone: ((var.zone))
+  - group: cluster-env
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: sarthakag-test
+        prefix: (("a4high-slurm/${var.deployment_name}/cluster-env"))
+    terraform_providers:
+      google:
+        source: hashicorp/google
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+      google-beta:
+        source: hashicorp/google-beta
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+    modules:
+      - source: modules/network/vpc
+        kind: terraform
+        id: a4high-slurm-net-0
+        outputs:
+          - name: subnetwork_self_link
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          enable_internal_traffic: false
+          firewall_rules:
+            - allow:
+                - protocol: tcp
+                - protocol: udp
+                - protocol: icmp
+              name: (("${var.base_network_name}-internal-0"))
+              ranges:
+                - ((var.net0_range))
+          labels: ((var.labels))
+          mtu: 8896
+          network_name: (("${var.base_network_name}-net-0"))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetworks:
+            - subnet_ip: ((var.net0_range))
+              subnet_name: (("${var.base_network_name}-sub-0"))
+              subnet_region: ((var.region))
+      - source: modules/network/vpc
+        kind: terraform
+        id: a4high-slurm-net-1
+        outputs:
+          - name: subnetwork_self_link
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          enable_internal_traffic: false
+          firewall_rules:
+            - allow:
+                - protocol: tcp
+                - protocol: udp
+                - protocol: icmp
+              name: (("${var.base_network_name}-internal-1"))
+              ranges:
+                - ((var.net1_range))
+          labels: ((var.labels))
+          mtu: 8896
+          network_name: (("${var.base_network_name}-net-1"))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetworks:
+            - subnet_ip: ((var.net1_range))
+              subnet_name: (("${var.base_network_name}-sub-1"))
+              subnet_region: ((var.region))
+      - source: modules/network/gpu-rdma-vpc
+        kind: terraform
+        id: a4high-slurm-rdma-net
+        outputs:
+          - name: subnetwork_interfaces
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          network_name: (("${var.base_network_name}-rdma-net"))
+          network_profile: (("https://www.googleapis.com/compute/beta/projects/${var.project_id}/global/networkProfiles/${var.zone}-vpc-roce"))
+          network_routing_mode: REGIONAL
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetworks_template:
+            count: 8
+            ip_range: ((var.rdma_net_range))
+            name_prefix: (("${var.base_network_name}-mrdma-sub"))
+            region: ((var.region))
+      - source: modules/file-system/filestore
+        kind: terraform
+        id: homefs
+        use:
+          - a4high-slurm-net-0
+        outputs:
+          - name: network_storage
+        settings:
+          deletion_protection:
+            enabled: true
+            reason: Avoid data loss
+          deployment_name: ((var.deployment_name))
+          filestore_tier: HIGH_SCALE_SSD
+          labels: ((var.labels))
+          local_mount: /home
+          network_id: ((module.a4high-slurm-net-0.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          reserved_ip_range: ((var.filestore_ip_range))
+          size_gb: 10240
+          zone: ((var.zone))
+      - source: modules/file-system/cloud-storage-bucket
+        kind: terraform
+        id: gcs_bucket
+        outputs:
+          - name: network_storage
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          deployment_name: ((var.deployment_name))
+          enable_hierarchical_namespace: true
+          labels: ((var.labels))
+          local_mount: /gcs
+          mount_options: implicit-dirs,metadata-cache-negative-ttl-secs=0,metadata-cache-ttl-secs=-1,stat-cache-max-size-mb=-1,type-cache-max-size-mb=-1,enable-streaming-writes=true,dir-mode=777,file-mode=777,allow_other
+          project_id: ((var.project_id))
+          random_suffix: true
+          region: ((var.region))
+      - source: modules/file-system/pre-existing-network-storage
+        kind: terraform
+        id: gcs_checkpoints
+        outputs:
+          - name: client_install_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+          - name: mount_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          fs_type: gcsfuse
+          local_mount: /gcs-checkpoints
+          mount_options: implicit-dirs,metadata-cache-negative-ttl-secs=0,metadata-cache-ttl-secs=-1,stat-cache-max-size-mb=-1,type-cache-max-size-mb=-1,file-cache-max-size-mb=-1,file-cache-cache-file-for-range-read=true,file-cache-enable-parallel-downloads=true,cache-dir=/mnt/localssd,enable-streaming-writes=true,dir-mode=777,file-mode=777,allow_other
+          remote_mount: ((module.gcs_bucket.gcs_bucket_name))
+      - source: modules/file-system/pre-existing-network-storage
+        kind: terraform
+        id: gcs_training_data
+        outputs:
+          - name: client_install_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+          - name: mount_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          fs_type: gcsfuse
+          local_mount: /gcs-training-data
+          mount_options: implicit-dirs,metadata-cache-negative-ttl-secs=0,metadata-cache-ttl-secs=-1,stat-cache-max-size-mb=-1,type-cache-max-size-mb=-1,enable-streaming-writes=true,dir-mode=777,file-mode=777,allow_other
+          remote_mount: ((module.gcs_bucket.gcs_bucket_name))
+      - source: modules/file-system/pre-existing-network-storage
+        kind: terraform
+        id: gcs_model_serving
+        outputs:
+          - name: client_install_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+          - name: mount_runner
+            description: Automatically-generated output exported for use by later deployment groups
+            sensitive: true
+        settings:
+          fs_type: gcsfuse
+          local_mount: /gcs-model-serving
+          mount_options: implicit-dirs,cache-dir=/mnt/localssd,metadata-cache-negative-ttl-secs=0,metadata-cache-ttl-secs=-1,stat-cache-max-size-mb=-1,type-cache-max-size-mb=-1,file-cache-max-size-mb=-1,file-cache-cache-file-for-range-read=true,file-cache-enable-parallel-downloads=true,dir-mode=777,file-mode=777,allow_other
+          remote_mount: ((module.gcs_bucket.gcs_bucket_name))
+  - group: cluster
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: sarthakag-test
+        prefix: (("a4high-slurm/${var.deployment_name}/cluster"))
+    terraform_providers:
+      google:
+        source: hashicorp/google
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+      google-beta:
+        source: hashicorp/google-beta
+        version: '>= 6.9.0, <= 7.12.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+    modules:
+      - source: modules/scripts/startup-script
+        kind: terraform
+        id: a4high_startup
+        settings:
+          deployment_name: ((var.deployment_name))
+          docker:
+            daemon_config: '(("{\n  \"data-root\": \"${var.local_ssd_mountpoint}/docker\"\n}\n"))'
+            enabled: true
+            world_writable: true
+          labels: ((var.labels))
+          local_ssd_filesystem:
+            mountpoint: ((var.local_ssd_mountpoint))
+            permissions: "1777"
+          project_id: ((var.project_id))
+          region: ((var.region))
+          runners:
+            - ((module.gcs_checkpoints.client_install_runner))
+            - ((module.gcs_checkpoints.mount_runner))
+            - ((module.gcs_training_data.client_install_runner))
+            - ((module.gcs_training_data.mount_runner))
+            - ((module.gcs_model_serving.client_install_runner))
+            - ((module.gcs_model_serving.mount_runner))
+            - content: (("ENROOT_CONFIG_PATH     $${HOME}/.enroot\nENROOT_RUNTIME_PATH    ${var.local_ssd_mountpoint}/$${UID}/enroot/runtime\nENROOT_CACHE_PATH      ${var.local_ssd_mountpoint}/$${UID}/enroot/cache\nENROOT_DATA_PATH       ${var.local_ssd_mountpoint}/$${UID}/enroot/data\nENROOT_TEMP_PATH       ${var.local_ssd_mountpoint}/$${UID}/enroot\n"))
+              destination: /etc/enroot/enroot.conf
+              type: data
+            - content: '(("---\n- name: Install nccl\n  hosts: all\n  become: true\n  tasks:\n  - name: Update apt cache\n    ansible.builtin.apt:\n      update_cache: yes\n  - name: Install Linux Modules Extra\n    ansible.builtin.package:\n      name:\n      - \"libnccl2=${var.libnccl_version}\"\n      - \"libnccl-dev=${var.libnccl_version}\"\n      state: present\n"))'
+              destination: install_nccl.yml
+              type: ansible-local
+            - content: '(("---\n- name: Install Google NCCL-GIB Plugin\n  hosts: all\n  become: true\n  tasks:\n  - name: Add artifact registry gpg key\n    ansible.builtin.apt_key:\n      url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg\n      state: present\n  - name: Add artifact registry gpg key\n    ansible.builtin.apt_key:\n      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg\n      state: present\n  - name: Install Apt Transport AR Apt Repo\n    apt_repository:\n      repo: ''deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main''\n      state: present\n  - name: Install AR transport\n    ansible.builtin.apt:\n      name: \"apt-transport-artifact-registry\"\n      update_cache: true\n  - name: Install Google NCCL-GIB Plugin\n    apt_repository:\n      repo: \"deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main\"\n      state: present\n  - name: Install NCCL-GIB Plugin\n    ansible.builtin.apt:\n      name: \"nccl-gib=${var.nccl_gib_version}\"\n      update_cache: true\n  - name: Freeze NCCL GIB Plugin\n    ansible.builtin.dpkg_selections:\n      name: \"nccl-gib\"\n      selection: hold\n"))'
+              destination: install_nccl_gib.yml
+              type: ansible-local
+            - content: |
+                ---
+                - name: Configure NCCL/gIB environment
+                  hosts: all
+                  become: true
+                  tasks:
+                    - name: Deploy /etc/profile.d/nccl-gib.sh
+                      ansible.builtin.copy:
+                        dest: /etc/profile.d/nccl-gib.sh
+                        content: |
+                          # Load NCCL/gIB environment
+                          if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                            source /usr/local/gib/scripts/set_nccl_env.sh
+                          fi
+
+                          # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                          if [ -d "/usr/local/gib/lib64" ]; then
+                            export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                          fi
+                        mode: '0644'
+                  handlers:
+                    - name: Reload SystemD
+                      ansible.builtin.systemd:
+                        daemon_reload: true
+              destination: configure_nccl_env.yml
+              name: Ensure NCCL/gIB environment script is sourced for all users
+              type: ansible-local
+            - content: |
+                ---
+                - name: Enable NVIDIA DCGM on GPU nodes
+                  hosts: all
+                  become: true
+                  vars:
+                    enable_ops_agent: true
+                    enable_nvidia_dcgm: true
+                    enable_nvidia_persistenced: true
+                  tasks:
+                  - name: Update Ops Agent configuration
+                    ansible.builtin.blockinfile:
+                      path: /etc/google-cloud-ops-agent/config.yaml
+                      insertafter: EOF
+                      block: |
+                        metrics:
+                          receivers:
+                            dcgm:
+                              type: dcgm
+                          service:
+                            pipelines:
+                              dcgm:
+                                receivers:
+                                  - dcgm
+                    notify:
+                    - Restart Google Cloud Ops Agent
+                  handlers:
+                  - name: Restart Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                  post_tasks:
+                  - name: Enable Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                  - name: Enable NVIDIA DCGM
+                    ansible.builtin.service:
+                      name: nvidia-dcgm.service
+                      state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                      enabled: "{{ enable_nvidia_dcgm }}"
+                  - name: Enable NVIDIA Persistence Daemon
+                    ansible.builtin.service:
+                      name: nvidia-persistenced.service
+                      state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                      enabled: "{{ enable_nvidia_persistenced }}"
+              destination: enable_dcgm.yml
+              type: ansible-local
+      - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+        kind: terraform
+        id: a4high_nodeset
+        use:
+          - a4high-slurm-net-0
+          - a4high_startup
+        settings:
+          additional_networks: ((concat([{ network = null, subnetwork = module.a4high-slurm-net-1.subnetwork_self_link, subnetwork_project = var.project_id, nic_type = "GVNIC", queue_count = null, network_ip = "", stack_type = null, access_config = [], ipv6_access_config = [], alias_ip_range = [] }], module.a4high-slurm-rdma-net.subnetwork_interfaces)))
+          advanced_machine_features:
+            threads_per_core: null
+          bandwidth_tier: gvnic_enabled
+          disk_size_gb: ((var.disk_size_gb))
+          disk_type: hyperdisk-balanced
+          dws_flex:
+            enabled: ((var.a4h_dws_flex_enabled))
+          enable_placement: false
+          enable_public_ips: true
+          enable_spot_vm: ((var.a4h_enable_spot_vm))
+          instance_image: ((var.instance_image))
+          labels: ((var.labels))
+          machine_type: a4-highgpu-8g
+          name: a4high_nodeset
+          node_conf:
+            CoresPerSocket: 56
+            SocketsPerBoard: 2
+            ThreadsPerCore: 2
+          node_count_dynamic_max: 0
+          node_count_static: ((var.a4h_cluster_size))
+          on_host_maintenance: TERMINATE
+          project_id: ((var.project_id))
+          region: ((var.region))
+          reservation_name: ((var.a4h_reservation_name))
+          startup_script: ((module.a4high_startup.startup_script))
+          subnetwork_self_link: ((module.a4high-slurm-net-0.subnetwork_self_link))
+          zone: ((var.zone))
+      - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+        kind: terraform
+        id: a4high_partition
+        use:
+          - a4high_nodeset
+        settings:
+          exclusive: false
+          is_default: true
+          nodeset: ((flatten([module.a4high_nodeset.nodeset])))
+          partition_conf:
+            OverSubscribe: EXCLUSIVE
+            ResumeTimeout: 1200
+            SuspendTimeout: 1200
+          partition_name: a4high
+      - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+        kind: terraform
+        id: slurm_login
+        use:
+          - a4high-slurm-net-0
+        settings:
+          disk_size_gb: 300
+          enable_login_public_ips: true
+          instance_image: ((var.instance_image))
+          labels: ((var.labels))
+          machine_type: n2-standard-8
+          name_prefix: slurm_login
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetwork_self_link: ((module.a4high-slurm-net-0.subnetwork_self_link))
+          zone: ((var.zone))
+      - source: modules/scripts/startup-script
+        kind: terraform
+        id: controller_startup
+        settings:
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          runners:
+            - content: (("#!/bin/bash\nSLURM_ROOT=/opt/apps/adm/slurm\nPARTITION_NAME=${module.a4high_partition.partitions[0].partition_name}\nmkdir -m 0755 -p \"$${SLURM_ROOT}/scripts\"\n# enable a GPU health check that runs at the completion of all jobs on A4 nodes\nmkdir -p \"$${SLURM_ROOT}/partition-$${PARTITION_NAME}-epilog_slurmd.d\"\nln -s \"/slurm/scripts/tools/gpu-test\" \"$${SLURM_ROOT}/partition-$${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd\"\n# enable the use of password-free sudo within Slurm jobs on all compute nodes\n# feature is restricted to users with OS Admin Login IAM role\n# https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin\nmkdir -p \"$${SLURM_ROOT}/prolog_slurmd.d\"\nmkdir -p \"$${SLURM_ROOT}/epilog_slurmd.d\"\ncurl -s -o \"$${SLURM_ROOT}/scripts/sudo-oslogin\" \\\n    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin\nchmod 0755 \"$${SLURM_ROOT}/scripts/sudo-oslogin\"\nln -s \"$${SLURM_ROOT}/scripts/sudo-oslogin\" \"$${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd\"\nln -s \"$${SLURM_ROOT}/scripts/sudo-oslogin\" \"$${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd\"\n"))
+              destination: stage_scripts.sh
+              type: shell
+            - destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+              source: (("${var.benchmark_dir}/run-nccl-tests-via-ramble.sh"))
+              type: data
+            - destination: /opt/apps/system_benchmarks/README.md
+              source: (("${var.benchmark_dir}/README.md"))
+              type: data
+      - source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+        kind: terraform
+        id: slurm_controller
+        use:
+          - a4high-slurm-net-0
+          - a4high_partition
+          - slurm_login
+          - homefs
+          - gcs_bucket
+        settings:
+          controller_startup_script: ((module.controller_startup.startup_script))
+          deployment_name: ((var.deployment_name))
+          disk_size_gb: 300
+          disk_type: pd-extreme
+          enable_controller_public_ips: true
+          enable_external_prolog_epilog: true
+          instance_image: ((var.instance_image))
+          labels: ((var.labels))
+          login_nodes: ((flatten([module.slurm_login.login_nodes])))
+          machine_type: n2-standard-80
+          network_storage: ((flatten([module.gcs_bucket.network_storage, flatten([module.homefs.network_storage])])))
+          nodeset: ((flatten([module.a4high_partition.nodeset])))
+          nodeset_dyn: ((flatten([module.a4high_partition.nodeset_dyn])))
+          nodeset_tpu: ((flatten([module.a4high_partition.nodeset_tpu])))
+          partitions: ((flatten([module.a4high_partition.partitions])))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetwork_self_link: ((module.a4high-slurm-net-0.subnetwork_self_link))
+          zone: ((var.zone))
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: sarthakag-test
