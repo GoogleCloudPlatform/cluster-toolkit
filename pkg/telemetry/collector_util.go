@@ -19,8 +19,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
-	"strings"
 	"regexp"
+	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
