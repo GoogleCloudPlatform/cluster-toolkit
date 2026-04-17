@@ -164,7 +164,7 @@ func getOSVersion() string {
 	case "windows":
 		return getWindowsVersion()
 	default:
-		return "Unknown"
+		return ""
 	}
 }
 
