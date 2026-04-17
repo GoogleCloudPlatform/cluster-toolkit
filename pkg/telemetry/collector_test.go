@@ -48,6 +48,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
+		MACHINE_TYPE,
 		REGION,
 		ZONE,
 		OS_NAME,
@@ -82,12 +83,27 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 						"region": cty.StringVal("us-central1"),
 						"zone":   cty.StringVal("us-central1-a"),
 					}),
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID: config.ModuleID("compute_pool"),
+									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
 				}
 			},
 			expectedValues: map[string]string{
-				COMMAND_FLAGS: "force,project",
 				IS_TEST_DATA:  "true",
 				EXIT_CODE:     "0",
+				COMMAND_FLAGS: "force,project",
 				REGION:        "us-central1",
 				ZONE:          "us-central1-a",
 				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
@@ -97,13 +113,20 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		{
 			name:      "Failure exit code",
 			errorCode: 1, // Simulating a failure
+				MACHINE_TYPE:  "c2-standard-8",
+			},
+		},
+		{
+			name:      "Failure exit code with missing region, zone, and machine type",
+			errorCode: 1,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
 			},
 			setupCollector: func(c *Collector) {
 				// Blueprint with empty vars
 				c.blueprint = config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{}),
+					Vars:   config.NewDict(map[string]cty.Value{}),
+					Groups: []config.Group{},
 				}
 			},
 			expectedValues: map[string]string{
@@ -114,6 +137,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				ZONE:          "",
 				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
 				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
+				MACHINE_TYPE:  "", // Verify empty machine type when no matching modules exist
 			},
 		},
 	}
@@ -121,6 +145,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "mock"}
+
 			// Execute the setup function to apply flags to the command
 			if tt.setupCmd != nil {
 				tt.setupCmd(cmd)
@@ -523,6 +548,112 @@ func TestParseOsReleaseField(t *testing.T) {
 			name:     "Equals sign in value",
 			line:     `PRETTY_NAME="My=Custom=Linux"`,
 			expected: `My=Custom=Linux`,
+// TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
+func TestGetMachineType(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Single machine type in module",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("compute_pool"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "c2-standard-8",
+		},
+		{
+			name: "Multiple different machine types",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("login_node"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("n2-standard-2"),
+									}),
+								},
+								{
+									ID:     config.ModuleID("lcontroller_node"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("n2-standard-2"),
+									}),
+								},
+								{
+									ID:     config.ModuleID("compute_pool"),
+									Source: "modules/compute/gke-node-pool",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "n2-standard-2,c2-standard-8",
+		},
+		{
+			name: "TPU node type module (schedmd-slurm-gcp-v6-nodeset-tpu)",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("tpu_nodeset"),
+									Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu",
+									Settings: config.NewDict(map[string]cty.Value{
+										"node_type": cty.StringVal("v4-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "v4-8",
+		},
+		{
+			name: "No machine types in modules",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:       config.ModuleID("vpc_network"),
+									Source:   "modules/network/vpc",
+									Settings: config.NewDict(map[string]cty.Value{}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "",
 		},
 	}
 
@@ -531,6 +662,12 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			bp := tt.setupBp()
+
+			actual := getMachineType(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getMachineType() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
