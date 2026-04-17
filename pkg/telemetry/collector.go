@@ -169,7 +169,9 @@ func getOSVersion() string {
 func getBillingAccountId(bp config.Blueprint) string {
 	projectID := getKeyFromBlueprint("project_id", bp)
 	if projectID != "" {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		billingAccount := getProjectBillingAccount(ctx, projectID)
 		if billingAccount != "" {
 			return strings.TrimPrefix(billingAccount, "billingAccounts/")
