@@ -56,7 +56,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
-    c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
+	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -168,6 +168,17 @@ func getOSVersion() string {
 	}
 }
 
+var tfVersionFunc = shell.TfVersion
+
+// getTerraformVersion returns the version of the Terraform in use.
+func getTerraformVersion() string {
+	version, err := tfVersionFunc()
+	if err != nil {
+		return ""
+	}
+	return version
+}
+
 func getBillingAccountId(bp config.Blueprint) string {
 	projectID := getKeyFromBlueprint("project_id", bp)
 	if projectID != "" {
@@ -180,17 +191,6 @@ func getBillingAccountId(bp config.Blueprint) string {
 		}
 	}
 	return ""
-}
-
-var tfVersionFunc = shell.TfVersion
-
-// getTerraformVersion returns the version of the Terraform in use.
-func getTerraformVersion() string {
-	version, err := tfVersionFunc()
-	if err != nil {
-		return ""
-	}
-	return version
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

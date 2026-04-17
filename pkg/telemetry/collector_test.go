@@ -55,8 +55,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		ZONE,
 		OS_NAME,
 		OS_VERSION,
-		BILLING_ACCOUNT_ID,
 		TERRAFORM_VERSION,
+		BILLING_ACCOUNT_ID,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -111,9 +111,9 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				REGION:             "us-central1",
 				ZONE:               "us-central1-a",
 				MACHINE_TYPE:       "c2-standard-8",
-				OS_NAME:            getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:         getOSVersion(), // Dynamically expect the current OS version
-        TERRAFORM_VERSION: getTerraformVersion(),
+				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
 				BILLING_ACCOUNT_ID: "",
 			},
 		},
@@ -136,10 +136,10 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				COMMAND_FLAGS:      "",
 				REGION:             "",
 				ZONE:               "",
-				OS_NAME:            getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:         getOSVersion(), // Verify OS info is still collected on failure
-        TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
-				MACHINE_TYPE:       "",             // Verify empty machine type when no matching modules exist
+				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
 				BILLING_ACCOUNT_ID: "",
 			},
 		},
@@ -686,6 +686,50 @@ func TestParseOsReleaseField(t *testing.T) {
 	}
 }
 
+func TestGetTerraformVersion(t *testing.T) {
+	// Define the test cases
+	testCases := []struct {
+		name        string
+		mockVersion string
+		mockError   error
+		expected    string
+	}{
+		{
+			name:        "Success - returns terraform version",
+			mockVersion: "1.3.7",
+			mockError:   nil,
+			expected:    "1.3.7",
+		},
+		{
+			name:        "Failure - returns '' on error",
+			mockVersion: "",
+			mockError:   fmt.Errorf("executable file not found in $PATH"),
+			expected:    "",
+		},
+	}
+
+	// Save the original function and ensure it gets restored after tests
+	originalTfVersionFunc := tfVersionFunc
+	defer func() { tfVersionFunc = originalTfVersionFunc }()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Inject the mock function for the current test case
+			tfVersionFunc = func() (string, error) {
+				return tc.mockVersion, tc.mockError
+			}
+
+			// 2. Execute the method under test
+			actual := getTerraformVersion()
+
+			// 3. Assert the result
+			if actual != tc.expected {
+				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
+			}
+		})
+	}
+}
+
 // TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
 func TestGetBillingAccountId(t *testing.T) {
 	// Save the original function and restore it after the test finishes
@@ -746,45 +790,6 @@ func TestGetBillingAccountId(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
-func TestGetTerraformVersion(t *testing.T) {
-	// Define the test cases
-	testCases := []struct {
-		name        string
-		mockVersion string
-		mockError   error
-		expected    string
-	}{
-		{
-			name:        "Success - returns terraform version",
-			mockVersion: "1.3.7",
-			mockError:   nil,
-			expected:    "1.3.7",
-		},
-		{
-			name:        "Failure - returns '' on error",
-			mockVersion: "",
-			mockError:   fmt.Errorf("executable file not found in $PATH"),
-			expected:    "",
-		},
-	}
-
-	// Save the original function and ensure it gets restored after tests
-	originalTfVersionFunc := tfVersionFunc
-	defer func() { tfVersionFunc = originalTfVersionFunc }()
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// 1. Inject the mock function for the current test case
-			tfVersionFunc = func() (string, error) {
-				return tc.mockVersion, tc.mockError
-			}
-
-			// 2. Execute the method under test
-			actual := getTerraformVersion()
-
-			// 3. Assert the result
-			if actual != tc.expected {
-				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
 			}
 		})
 	}
