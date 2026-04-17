@@ -16,11 +16,13 @@ package telemetry
 
 import (
 	"bufio"
+	"context"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -99,9 +101,16 @@ func getLinuxVersion() string {
 	return "Linux (unknown version)"
 }
 
+const (
+	versionTimeOut = 2 * time.Second
+)
+
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	out, err := exec.Command("sw_vers", "-productVersion").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
 	if err != nil {
 		return "Darwin (unknown version)"
 	}
@@ -110,7 +119,10 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	cmd := exec.Command("cmd", "/c", "ver")
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")
 	out, err := cmd.Output()
 	if err != nil {
 		return "Windows (unknown version)"
