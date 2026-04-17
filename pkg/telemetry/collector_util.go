@@ -77,7 +77,7 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-func getProjectBillingAccount(ctx context.Context, projectID string) string {
+var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return ""

@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"testing"
@@ -53,6 +54,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		ZONE,
 		OS_NAME,
 		OS_VERSION,
+		BILLING_ACCOUNT_ID,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -101,14 +103,15 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "0",
-				COMMAND_FLAGS: "force,project",
-				REGION:        "us-central1",
-				ZONE:          "us-central1-a",
-				MACHINE_TYPE:  "c2-standard-8",
-				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:    getOSVersion(), // Dynamically expect the current OS version
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "0",
+				COMMAND_FLAGS:      "force,project",
+				REGION:             "us-central1",
+				ZONE:               "us-central1-a",
+				MACHINE_TYPE:       "c2-standard-8",
+				OS_NAME:            getOSName(),    // Dynamically expect the current OS name
+				OS_VERSION:         getOSVersion(), // Dynamically expect the current OS version
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 		{
@@ -125,14 +128,15 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
-				COMMAND_FLAGS: "",
-				REGION:        "",
-				ZONE:          "",
-				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
-				MACHINE_TYPE:  "",             // Verify empty machine type when no matching modules exist
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "1",
+				COMMAND_FLAGS:      "",
+				REGION:             "",
+				ZONE:               "",
+				OS_NAME:            getOSName(),    // Verify OS info is still collected on failure
+				OS_VERSION:         getOSVersion(), // Verify OS info is still collected on failure
+				MACHINE_TYPE:       "",             // Verify empty machine type when no matching modules exist
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 	}
@@ -673,6 +677,71 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
+func TestGetBillingAccountId(t *testing.T) {
+	// Save the original function and restore it after the test finishes
+	originalGetProjectBillingAccount := getProjectBillingAccount
+	defer func() { getProjectBillingAccount = originalGetProjectBillingAccount }()
+
+	tests := []struct {
+		name               string
+		setupBp            func() config.Blueprint
+		mockBillingAccount string
+		expected           string
+	}{
+		{
+			name: "Missing project_id in blueprint",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present but no billing account returned",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present and billing account trimmed",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
+			expected:           "012345-6789AB-CDEF01",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the GCP call for this specific test case
+			getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+				return tt.mockBillingAccount
+			}
+
+			bp := tt.setupBp()
+			actual := getBillingAccountId(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
