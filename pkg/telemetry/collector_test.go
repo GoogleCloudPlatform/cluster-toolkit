@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"testing"
@@ -56,6 +57,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		ZONE,
 		OS_NAME,
 		OS_VERSION,
+		TERRAFORM_VERSION,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -103,17 +105,18 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:   "true",
-				EXIT_CODE:      "0",
-				COMMAND_FLAGS:  "force,project",
-				IS_GKE:         "false",
-				IS_SLURM:       "false",
-				IS_VM_INSTANCE: "true",
-				REGION:         "us-central1",
-				ZONE:           "us-central1-a",
-				MACHINE_TYPE:   "c2-standard-8",
-				OS_NAME:        getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:     getOSVersion(), // Dynamically expect the current OS version
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "0",
+				COMMAND_FLAGS:     "force,project",
+        IS_GKE:            "false",
+				IS_SLURM:          "false",
+				IS_VM_INSTANCE:    "true",
+				REGION:            "us-central1",
+				ZONE:              "us-central1-a",
+				MACHINE_TYPE:      "c2-standard-8",
+				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
 			},
 		},
 		{
@@ -130,17 +133,18 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:   "true",
-				EXIT_CODE:      "1",
-				COMMAND_FLAGS:  "",
-				REGION:         "",
-				ZONE:           "",
-				IS_GKE:         "false",
-				IS_SLURM:       "false",
-				IS_VM_INSTANCE: "false",
-				OS_NAME:        getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:     getOSVersion(), // Verify OS info is still collected on failure
-				MACHINE_TYPE:   "",             // Verify empty machine type when no matching modules exist
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "1",
+				COMMAND_FLAGS:     "",
+				REGION:            "",
+				ZONE:              "",
+        IS_GKE:            "false",
+				IS_SLURM:          "false",
+				IS_VM_INSTANCE:    "false",
+				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
 			},
 		},
 	}
