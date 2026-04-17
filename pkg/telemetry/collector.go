@@ -45,9 +45,6 @@ func NewCollector(cmd *cobra.Command, args []string) *Collector {
 
 // Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int) {
-	// Fetch the Terraform version outside the mutex lock since it executes an external process.
-	tfVersion := getTerraformVersion()
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -57,7 +54,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
-	c.metadata[TERRAFORM_VERSION] = tfVersion
+	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
