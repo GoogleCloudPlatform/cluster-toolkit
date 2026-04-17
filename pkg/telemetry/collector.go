@@ -173,7 +173,7 @@ var tfVersionFunc = shell.TfVersion
 // getTerraformVersion returns the version of the Terraform in use.
 func getTerraformVersion() string {
 	version, err := tfVersionFunc()
-	if err != nil || version == "" {
+	if err != nil {
 		return ""
 	}
 	return version
