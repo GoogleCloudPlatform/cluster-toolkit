@@ -17,12 +17,17 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
 	"regexp"
+
 	"strings"
 	"time"
+
+	billing "cloud.google.com/go/billing/apiv1"
+	"cloud.google.com/go/billing/apiv1/billingpb"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -62,14 +67,30 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	val, err := bp.Eval(config.GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
+}
+
+// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+func getProjectBillingAccount(ctx context.Context, projectID string) string {
+	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return ""
 	}
-	v, _ := val.Unmark()
-	if !v.IsNull() && v.Type() == cty.String {
-		return v.AsString()
+	defer client.Close()
+	req := &billingpb.GetProjectBillingInfoRequest{
+		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	return ""
+	info, err := client.GetProjectBillingInfo(ctx, req)
+	if err != nil {
+		return ""
+	}
+	return info.GetBillingAccountName()
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.

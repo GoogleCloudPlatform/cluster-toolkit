@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"strconv"
@@ -53,6 +54,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
+	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -63,13 +65,14 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:     CLUSTER_TOOLKIT,
-		EventType:       "gclusterCLI",
-		EventName:       getCommandName(c.eventCmd),
-		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
-		ClientInstallId: getClientInstallId(),
-		ReleaseVersion:  getReleaseVersion(),
+		ConsoleType:      CLUSTER_TOOLKIT,
+		EventType:        "gclusterCLI",
+		EventName:        getCommandName(c.eventCmd),
+		EventMetadata:    getEventMetadataKVPairs(c.metadata),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
+		ClientInstallId:  getClientInstallId(),
+		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		ReleaseVersion:   getReleaseVersion(),
 	}
 }
 
@@ -161,6 +164,18 @@ func getOSVersion() string {
 	default:
 		return ""
 	}
+}
+
+func getBillingAccountId(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID != "" {
+		ctx := context.Background()
+		billingAccount := getProjectBillingAccount(ctx, projectID)
+		if billingAccount != "" {
+			return strings.TrimPrefix(billingAccount, "billingAccounts/")
+		}
+	}
+	return ""
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
