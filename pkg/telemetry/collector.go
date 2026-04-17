@@ -28,10 +28,10 @@ import (
 )
 
 var (
-	machineTypeModulePattern   = ".*modules.compute.*"
-	isGkeModulePatterns        = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
-	isSlurmModulePatterns      = []string{".*schedmd-slurm-gcp-.*"}
-	IsVmInstanceModulePatterns = []string{".*vm-instance.*"}
+	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
+	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
+	isVmInstanceModulePatterns = []string{"vm-instance"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -122,7 +122,7 @@ func getIsSlurm(modulesList []string) string {
 }
 
 func getIsVmInstance(modulesList []string) string {
-	return ifModulesMatchPatterns(modulesList, IsVmInstanceModulePatterns)
+	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
 }
 
 func getMachineType(bp config.Blueprint) string {

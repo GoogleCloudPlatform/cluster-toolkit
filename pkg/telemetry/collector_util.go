@@ -21,8 +21,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -49,11 +47,10 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 }
 
 func getAllModulesInBp(bp config.Blueprint) []string {
-	moduleInfos := make([]config.Module, 0)
-	modules := make([]string, 0)
-	moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
-	for _, module := range moduleInfos {
-		modules = append(modules, string(module.Source))
+	moduleInfos := config.GetAllModules(&bp)
+	modules := make([]string, len(moduleInfos))
+	for i, module := range moduleInfos {
+		modules[i] = string(module.Source)
 	}
 	return modules
 }
@@ -73,15 +70,14 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 }
 
 func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
-	matched := false
-	matched = slices.ContainsFunc(modulesList, func(s string) bool {
-		for _, pattern := range patterns {
-			new, _ := regexp.MatchString(pattern, s)
-			matched = matched || new
+	for _, m := range modulesList {
+		for _, p := range patterns {
+			if strings.Contains(m, p) {
+				return "true"
+			}
 		}
-		return matched
-	})
-	return strconv.FormatBool(matched)
+	}
+	return "false"
 }
 
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {
