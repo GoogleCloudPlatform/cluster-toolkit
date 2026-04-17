@@ -1,55 +1,23 @@
 name: Test PR Summary
 
- 
-
 on:
-
-  workflow_dispatch:
-
- 
+  workflow_dispatch:
 
 jobs:
+  pr-summary:
+    runs-on: ubuntu-latest
+   
+    steps:
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
 
-  pr-summary:
-
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Install jq
-
-        run: |
-
-          sudo apt-get update
-
-          sudo apt-get install -y jq
-
+      - name: Fetch PR count only (simple test)
+        run: |
+          REPO="GoogleCloudPlatform/cluster-toolkit"
+          
+          PRS=$(curl -s "https://api.github.com/repos/$REPO/pulls?state=closed&per_page=10")
  
-
-      - name: Fetch PRs and print summary
-
-        run: |
-
-          REPO="GoogleCloudPlatform/cluster-toolkit"
-
- 
-
-          LAST_WEEK=$(date -u -d "30 days ago" +%Y-%m-%dT%H:%M:%SZ)
-
- 
-
-          PRS=$(curl -s "https://api.github.com/repos/$REPO/pulls?state=closed&base=main&per_page=100")
-
- 
-
-          COUNT=$(echo "$PRS" | jq '[.[] | select(.merged_at != null and .merged_at >= "'$LAST_WEEK'")] | length')
-
- 
-
-          echo "Total PRs: $COUNT"
-
- 
-
-          echo "### Weekly Merged PRs" >> $GITHUB_STEP_SUMMARY
-
-          echo "Total: $COUNT" >> $GITHUB_STEP_SUMMARY
+          COUNT=$(echo "$PRS" | jq length)
+          echo "Total PRs fetched: $COUNT" 
