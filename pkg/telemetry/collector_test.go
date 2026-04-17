@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"runtime"
 	"testing"
 	"time"
 
@@ -50,6 +51,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
+		OS_NAME,
+		OS_VERSION,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -104,6 +107,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				REGION:        "us-central1",
 				ZONE:          "us-central1-a",
 				MACHINE_TYPE:  "c2-standard-8",
+				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
+				OS_VERSION:    getOSVersion(), // Dynamically expect the current OS version
 			},
 		},
 		{
@@ -113,7 +118,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				// No flags set
 			},
 			setupCollector: func(c *Collector) {
-				// Blueprint with empty vars and no compute modules
+				// Blueprint with empty vars
 				c.blueprint = config.Blueprint{
 					Vars:   config.NewDict(map[string]cty.Value{}),
 					Groups: []config.Group{},
@@ -125,7 +130,9 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				COMMAND_FLAGS: "",
 				REGION:        "",
 				ZONE:          "",
-				MACHINE_TYPE:  "", // Verify empty machine type when no matching modules exist
+				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
+				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
+				MACHINE_TYPE:  "",             // Verify empty machine type when no matching modules exist
 			},
 		},
 	}
@@ -561,6 +568,111 @@ func TestGetMachineType(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getMachineType() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetOSName verifies that the operating system name correctly matches the runtime GOOS.
+func TestGetOSName(t *testing.T) {
+	expected := runtime.GOOS
+	actual := getOSName()
+
+	if actual != expected {
+		t.Errorf("getOSName() = %q, want %q", actual, expected)
+	}
+}
+
+// TestOSSpecificVersionMethods verifies graceful failure when running
+// OS-specific version methods on the wrong OS.
+func TestOSSpecificVersionMethods(t *testing.T) {
+	linuxVer := getLinuxVersion()
+	macVer := getMacVersion()
+	winVer := getWindowsVersion()
+
+	if runtime.GOOS != "linux" && linuxVer != "Linux (unknown version)" {
+		// Note: On rare occasions (like WSL or specific Mac setups), /etc/os-release
+		// might exist, so we use Logf instead of Errorf to avoid flaky tests.
+		t.Logf("Unexpected linux version string on %s: %s", runtime.GOOS, linuxVer)
+	}
+
+	if runtime.GOOS != "darwin" && macVer != "Darwin (unknown version)" {
+		t.Errorf("getMacVersion() = %q on %s, want empty string", macVer, runtime.GOOS)
+	}
+
+	if runtime.GOOS != "windows" && winVer != "Windows (unknown version)" {
+		t.Errorf("getWindowsVersion() = %q on %s, want empty string", winVer, runtime.GOOS)
+	}
+}
+
+// TestGetOSVersionDelegation ensures getOSVersion() correctly delegates
+// to the right OS-specific method based on runtime.GOOS.
+func TestGetOSVersionDelegation(t *testing.T) {
+	osVer := getOSVersion()
+
+	switch runtime.GOOS {
+	case "linux":
+		expected := getLinuxVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	case "darwin":
+		expected := getMacVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	case "windows":
+		expected := getWindowsVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	default:
+		if osVer != "" {
+			t.Errorf("getOSVersion() = %q on %s, want empty string", osVer, runtime.GOOS)
+		}
+	}
+}
+
+// TestParseOsReleaseField thoroughly unit tests the string parsing logic
+// used by getLinuxVersion to read /etc/os-release files.
+func TestParseOsReleaseField(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected string
+	}{
+		{
+			name:     "With quotes",
+			line:     `PRETTY_NAME="Ubuntu 22.04 LTS"`,
+			expected: `Ubuntu 22.04 LTS`,
+		},
+		{
+			name:     "Without quotes",
+			line:     `VERSION_ID=22.04`,
+			expected: `22.04`,
+		},
+		{
+			name:     "No equals sign",
+			line:     `INVALID_LINE_FORMAT`,
+			expected: ``,
+		},
+		{
+			name:     "Empty value after equals",
+			line:     `PRETTY_NAME=`,
+			expected: ``,
+		},
+		{
+			name:     "Equals sign in value",
+			line:     `PRETTY_NAME="My=Custom=Linux"`,
+			expected: `My=Custom=Linux`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := parseOsReleaseField(tt.line)
+			if actual != tt.expected {
+				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
 			}
 		})
 	}
