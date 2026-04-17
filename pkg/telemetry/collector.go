@@ -17,6 +17,7 @@ package telemetry
 import (
 	"context"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/shell"
 	"runtime"
 	"strconv"
 	"strings"
@@ -54,7 +55,8 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
-	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
+	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
+  c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -178,6 +180,17 @@ func getBillingAccountId(bp config.Blueprint) string {
 		}
 	}
 	return ""
+}
+
+var tfVersionFunc = shell.TfVersion
+
+// getTerraformVersion returns the version of the Terraform in use.
+func getTerraformVersion() string {
+	version, err := tfVersionFunc()
+	if err != nil {
+		return ""
+	}
+	return version
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
