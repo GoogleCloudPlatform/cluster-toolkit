@@ -16,81 +16,47 @@ name: Weekly Merged PR Summary
 
 on:
   workflow_dispatch:
-  
+
 permissions:
- contents: read
- pull-requests: read
+  contents: read
+  pull-requests: read
 
 jobs:
   pr-summary:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-    steps:
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
-      - name: Checkout repo
+    - name: Install jq
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
 
-        uses: actions/checkout@v4
+    - name: Fetch weekly merged PRs (develop branch)
+      run: |
+        REPO="GoogleCloudPlatform/cluster-toolkit"
+        BASE_BRANCH="develop"
+        LAST_WEEK=$(date -u -d "7 days ago" +%Y-%m-%dT%H:%M:%SZ)
 
- 
+        echo "Fetching PRs from $BASE_BRANCH..."
 
-      - name: Install jq
+        PRS=$(curl -s "https://api.github.com/repos/$REPO/pulls?state=closed&base=$BASE_BRANCH&per_page=100")
 
-        run: |
+        COUNT=$(echo "$PRS" | jq '[.[] | select(.merged_at != null and .merged_at >= "'$LAST_WEEK'")] | length')
 
-          sudo apt-get update
+        LIST=$(echo "$PRS" | jq -r '
+          .[] |
+          select(.merged_at != null and .merged_at >= "'$LAST_WEEK'") |
+          "• \(.title) (#\(.number)) by \(.user.login)"
+        ')
 
-          sudo apt-get install -y jq
+        echo "-----------------------------------"
+        echo "Weekly merged PRs: $COUNT"
+        echo "$LIST"
+        echo "-----------------------------------"
 
- 
-
-      - name: Fetch weekly merged PRs (develop branch)
-
-        run: |
-
-          REPO="GoogleCloudPlatform/cluster-toolkit"
-
-          BASE_BRANCH="develop"
-
-          LAST_WEEK=$(date -u -d "7 days ago" +%Y-%m-%dT%H:%M:%SZ)
-
- 
-
-          echo "Fetching PRs from $BASE_BRANCH..."
-
- 
-
-          PRS=$(curl -s "https://api.github.com/repos/$REPO/pulls?state=closed&base=$BASE_BRANCH&per_page=100")
-
- 
-
-          COUNT=$(echo "$PRS" | jq '[.[] | select(.merged_at != null and .merged_at >= "'$LAST_WEEK'")] | length')
-
- 
-
-          LIST=$(echo "$PRS" | jq -r '
-
-            .[] |
-
-            select(.merged_at != null and .merged_at >= "'$LAST_WEEK'") |
-
-            "• \(.title) (#\(.number)) by \(.user.login)"
-
-          ')
-
- 
-
-          echo "-----------------------------------"
-
-          echo "Weekly merged PRs: $COUNT"
-
-          echo "$LIST"
-
-          echo "-----------------------------------"
-
- 
-
-          echo "### Weekly Merged PRs (Develop)" >> $GITHUB_STEP_SUMMARY
-
-          echo "Total: $COUNT" >> $GITHUB_STEP_SUMMARY
-
-          echo "$LIST" >> $GITHUB_STEP_SUMMARY
+        echo "### Weekly Merged PRs (Develop)" >> $GITHUB_STEP_SUMMARY
+        echo "Total: $COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "$LIST" >> $GITHUB_STEP_SUMMARY
