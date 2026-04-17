@@ -37,7 +37,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.87.0"
+	latestToolkitVersion     = "v1.88.0"
 )
 
 // map[moved module path]replacing module path
@@ -960,4 +960,13 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 		res[n] = ev
 	}
 	return NewDict(res), nil
+}
+
+// GetAllModules returns a slice of all modules defined in the blueprint.
+func GetAllModules(bp *Blueprint) []Module {
+	var modules []Module
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		modules = append(modules, *m)
+	})
+	return modules
 }

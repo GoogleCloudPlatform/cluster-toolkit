@@ -70,6 +70,9 @@ steps:
     sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
     sed -i '/- homefs/d' $${BLUEPRINT}
     sed -i '/filestore_ip_range:/d' $${BLUEPRINT}
+    sed -i '/machine_type: a4x-highgpu-4g/a\      guest_accelerator:' $${BLUEPRINT}
+    sed -i '/guest_accelerator:/a\      - type: nvidia-gb200' $${BLUEPRINT}
+    sed -i '/- type: nvidia-gb200/a\        count: 4' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
