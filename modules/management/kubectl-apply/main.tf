@@ -70,35 +70,31 @@ locals {
     ) : ""
   )
 
-  kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
-  parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
-  cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
-  other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
-  merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
-  merged_cluster_queues_with_lists = {
-    for name, cqs in local.merged_cluster_queues : name => {
-      base_cq          = cqs[0]
-      resource_groups  = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
-      admission_checks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
-    }
-  }
+  # 1. Combine splitting and decoding into one step
+  kueue_parsed = [for doc in split("\n---", local.kueue_config_content) : yamldecode(doc) if trimspace(doc) != ""]
+
+  # 2. Group ClusterQueues by name directly from the parsed list
+  cluster_queue_groups = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ClusterQueue" }
+
+  # 3. Merge ClusterQueues by inheriting cqs[0] and overwriting only the spec
   final_cluster_queues = [
-    for name, data in local.merged_cluster_queues_with_lists : {
-      apiVersion = data.base_cq.apiVersion
-      kind       = data.base_cq.kind
-      metadata   = data.base_cq.metadata
+    for name, cqs in local.cluster_queue_groups : merge(cqs[0], {
       spec = merge(
-        try(data.base_cq.spec, {}),
-        {
-          resourceGroups = data.resource_groups
-        },
-        length(data.admission_checks) > 0 ? {
-          admissionChecks = data.admission_checks
+        try(cqs[0].spec, {}),
+        { resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])]) },
+        # Aggregated admissionChecks logic
+        length(distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))) > 0 ? {
+          admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
         } : {}
       )
-    }
+    })
   ]
-  final_kueue_manifests = concat([for doc in local.other_docs : yamlencode(doc)], [for doc in local.final_cluster_queues : yamlencode(doc)])
+
+  # 4. Construct final manifest list
+  final_kueue_manifests = concat(
+    [for doc in local.kueue_parsed : yamlencode(doc) if try(doc.kind, "") != "ClusterQueue"],
+    [for doc in local.final_cluster_queues : yamlencode(doc)]
+  )
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -263,14 +259,6 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
-# Sleep for 15 seconds after Kueue installation to allow the Kubernetes API server
-# enough time to fully register the newly created Custom Resource Definitions (CRDs)
-# before we attempt to create instances of them (e.g. ClusterQueue, Topology).
-resource "time_sleep" "wait_for_kueue_crd" {
-  count           = local.install_kueue ? 1 : 0
-  depends_on      = [module.install_kueue]
-  create_duration = "15s"
-}
 
 module "configure_kueue" {
   source           = "./helm_install"
@@ -288,7 +276,7 @@ module "configure_kueue" {
     })
   ]
 
-  depends_on = [time_sleep.wait_for_kueue_crd]
+  depends_on = [module.install_kueue]
 
 }
 
