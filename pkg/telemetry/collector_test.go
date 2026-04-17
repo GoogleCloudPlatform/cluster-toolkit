@@ -48,6 +48,9 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
+		IS_GKE,
+		IS_SLURM,
+		IS_VM_INSTANCE,
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
@@ -88,8 +91,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 							Name: config.GroupName("primary"),
 							Modules: []config.Module{
 								{
-									ID: config.ModuleID("compute_pool"),
-									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
+									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
 										"machine_type": cty.StringVal("c2-standard-8"),
@@ -101,18 +103,21 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "0",
-				COMMAND_FLAGS: "force,project",
-				REGION:        "us-central1",
-				ZONE:          "us-central1-a",
-				MACHINE_TYPE:  "c2-standard-8",
-				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:    getOSVersion(), // Dynamically expect the current OS version
+				IS_TEST_DATA:   "true",
+				EXIT_CODE:      "0",
+				COMMAND_FLAGS:  "force,project",
+				IS_GKE:         "false",
+				IS_SLURM:       "false",
+				IS_VM_INSTANCE: "true",
+				REGION:         "us-central1",
+				ZONE:           "us-central1-a",
+				MACHINE_TYPE:   "c2-standard-8",
+				OS_NAME:        getOSName(),    // Dynamically expect the current OS name
+				OS_VERSION:     getOSVersion(), // Dynamically expect the current OS version
 			},
 		},
 		{
-			name:      "Failure exit code with missing region, zone, and machine type",
+			name:      "Failure exit code",
 			errorCode: 1,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
@@ -125,14 +130,17 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
-				COMMAND_FLAGS: "",
-				REGION:        "",
-				ZONE:          "",
-				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
-				MACHINE_TYPE:  "",             // Verify empty machine type when no matching modules exist
+				IS_TEST_DATA:   "true",
+				EXIT_CODE:      "1",
+				COMMAND_FLAGS:  "",
+				REGION:         "",
+				ZONE:           "",
+				IS_GKE:         "false",
+				IS_SLURM:       "false",
+				IS_VM_INSTANCE: "false",
+				OS_NAME:        getOSName(),    // Verify OS info is still collected on failure
+				OS_VERSION:     getOSVersion(), // Verify OS info is still collected on failure
+				MACHINE_TYPE:   "",             // Verify empty machine type when no matching modules exist
 			},
 		},
 	}
@@ -673,6 +681,122 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetIsGke(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies gke-cluster pattern",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "true",
+		},
+		{
+			name:        "identifies gke-node-pool pattern",
+			modulesList: []string{"module/gke-node-pool/bar"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no GKE modules are present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where GKE is present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/primary", "module/schedmd-slurm-gcp-v6-login"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsGke(tt.modulesList); got != tt.want {
+				t.Errorf("getIsGke() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsSlurm(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies schedmd-slurm-gcp pattern",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no Slurm modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where Slurm is present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-login", "module/schedmd-slurm-gcp-v6-compute"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsSlurm(tt.modulesList); got != tt.want {
+				t.Errorf("getIsSlurm() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsVmInstance(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies vm-instance pattern",
+			modulesList: []string{"module/network/vpc", "module/vm-instance/compute"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no VM instance modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where VM instance is present",
+			modulesList: []string{"module/vm-instance/login", "module/network/vpc"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsVmInstance(tt.modulesList); got != tt.want {
+				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
 			}
 		})
 	}
