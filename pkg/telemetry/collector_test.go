@@ -15,7 +15,6 @@
 package telemetry
 
 import (
-	"fmt"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"testing"
@@ -108,7 +107,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				IS_TEST_DATA:      "true",
 				EXIT_CODE:         "0",
 				COMMAND_FLAGS:     "force,project",
-        IS_GKE:            "false",
+				IS_GKE:            "false",
 				IS_SLURM:          "false",
 				IS_VM_INSTANCE:    "true",
 				REGION:            "us-central1",
@@ -138,7 +137,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				COMMAND_FLAGS:     "",
 				REGION:            "",
 				ZONE:              "",
-        IS_GKE:            "false",
+				IS_GKE:            "false",
 				IS_SLURM:          "false",
 				IS_VM_INSTANCE:    "false",
 				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
