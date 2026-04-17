@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/shell"
 	"runtime"
 	"strconv"
 	"strings"
@@ -53,6 +54,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
+	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -161,6 +163,16 @@ func getOSVersion() string {
 	default:
 		return ""
 	}
+}
+
+var tfVersionFunc = shell.TfVersion
+
+func getTerraformVersion() string {
+	version, err := tfVersionFunc()
+	if err != nil {
+		return "Unknown"
+	}
+	return version
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
