@@ -15,8 +15,14 @@
 package telemetry
 
 import (
+	"bufio"
+	"context"
 	"hpc-toolkit/pkg/config"
+	"os"
+	"os/exec"
 	"regexp"
+	"strings"
+	"time"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -64,4 +70,71 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 		return v.AsString()
 	}
 	return ""
+}
+
+// getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
+func getLinuxVersion() string {
+	// Standard way to identify Linux distribution version
+	f, err := os.Open("/etc/os-release")
+	if err != nil {
+		return "Linux (unknown version)"
+	}
+	defer f.Close()
+
+	var prettyName, versionID string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			prettyName = parseOsReleaseField(line)
+		} else if strings.HasPrefix(line, "VERSION_ID=") {
+			versionID = parseOsReleaseField(line)
+		}
+	}
+
+	if prettyName != "" {
+		return prettyName
+	}
+	if versionID != "" {
+		return versionID
+	}
+	return "Linux (unknown version)"
+}
+
+const (
+	versionTimeOut = 2 * time.Second
+)
+
+// getMacVersion uses sw_vers to get the macOS product version.
+func getMacVersion() string {
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
+	if err != nil {
+		return "Darwin (unknown version)"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// getWindowsVersion uses the ver command to get the Windows version.
+func getWindowsVersion() string {
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")
+	out, err := cmd.Output()
+	if err != nil {
+		return "Windows (unknown version)"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// parseOsReleaseField helper to clean up quotes from /etc/os-release values
+func parseOsReleaseField(line string) string {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.Trim(parts[1], "'\"")
 }

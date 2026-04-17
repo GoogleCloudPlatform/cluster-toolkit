@@ -16,6 +16,8 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/shell"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +52,9 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
+	c.metadata[OS_NAME] = getOSName()
+	c.metadata[OS_VERSION] = getOSVersion()
+	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -140,6 +145,35 @@ func getRegion(bp config.Blueprint) string {
 
 func getZone(bp config.Blueprint) string {
 	return getKeyFromBlueprint("zone", bp)
+}
+
+func getOSName() string {
+	return runtime.GOOS
+}
+
+// getOSVersion returns the OS version of the current system.
+func getOSVersion() string {
+	switch runtime.GOOS {
+	case "linux":
+		return getLinuxVersion()
+	case "darwin":
+		return getMacVersion()
+	case "windows":
+		return getWindowsVersion()
+	default:
+		return ""
+	}
+}
+
+var tfVersionFunc = shell.TfVersion
+
+// getTerraformVersion returns the version of the Terraform in use.
+func getTerraformVersion() string {
+	version, err := tfVersionFunc()
+	if err != nil {
+		return ""
+	}
+	return version
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
