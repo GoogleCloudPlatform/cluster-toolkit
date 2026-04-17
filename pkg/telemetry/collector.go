@@ -164,7 +164,7 @@ func getOSVersion() string {
 	case "windows":
 		return getWindowsVersion()
 	default:
-		return ""
+		return "Unknown"
 	}
 }
 
@@ -174,7 +174,7 @@ var tfVersionFunc = shell.TfVersion
 func getTerraformVersion() string {
 	version, err := tfVersionFunc()
 	if err != nil || version == "" {
-		return "Unknown"
+		return ""
 	}
 	return version
 }

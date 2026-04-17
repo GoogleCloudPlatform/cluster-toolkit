@@ -697,10 +697,10 @@ func TestGetTerraformVersion(t *testing.T) {
 			expected:    "1.3.7",
 		},
 		{
-			name:        "Failure - returns 'Unknown' on error",
+			name:        "Failure - returns '' on error",
 			mockVersion: "",
 			mockError:   fmt.Errorf("executable file not found in $PATH"),
-			expected:    "Unknown",
+			expected:    "",
 		},
 	}
 
