@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"testing"
@@ -53,6 +54,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		ZONE,
 		OS_NAME,
 		OS_VERSION,
+		TERRAFORM_VERSION,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -101,14 +103,15 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "0",
-				COMMAND_FLAGS: "force,project",
-				REGION:        "us-central1",
-				ZONE:          "us-central1-a",
-				MACHINE_TYPE:  "c2-standard-8",
-				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:    getOSVersion(), // Dynamically expect the current OS version
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "0",
+				COMMAND_FLAGS:     "force,project",
+				REGION:            "us-central1",
+				ZONE:              "us-central1-a",
+				MACHINE_TYPE:      "c2-standard-8",
+				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
 			},
 		},
 		{
@@ -125,14 +128,15 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
-				COMMAND_FLAGS: "",
-				REGION:        "",
-				ZONE:          "",
-				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
-				MACHINE_TYPE:  "",             // Verify empty machine type when no matching modules exist
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "1",
+				COMMAND_FLAGS:     "",
+				REGION:            "",
+				ZONE:              "",
+				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
 			},
 		},
 	}
@@ -673,6 +677,50 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetTerraformVersion(t *testing.T) {
+	// Define the test cases
+	testCases := []struct {
+		name        string
+		mockVersion string
+		mockError   error
+		expected    string
+	}{
+		{
+			name:        "Success - returns terraform version",
+			mockVersion: "1.3.7",
+			mockError:   nil,
+			expected:    "1.3.7",
+		},
+		{
+			name:        "Failure - returns '' on error",
+			mockVersion: "",
+			mockError:   fmt.Errorf("executable file not found in $PATH"),
+			expected:    "",
+		},
+	}
+
+	// Save the original function and ensure it gets restored after tests
+	originalTfVersionFunc := tfVersionFunc
+	defer func() { tfVersionFunc = originalTfVersionFunc }()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Inject the mock function for the current test case
+			tfVersionFunc = func() (string, error) {
+				return tc.mockVersion, tc.mockError
+			}
+
+			// 2. Execute the method under test
+			actual := getTerraformVersion()
+
+			// 3. Assert the result
+			if actual != tc.expected {
+				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
 			}
 		})
 	}
