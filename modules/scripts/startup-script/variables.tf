@@ -298,7 +298,7 @@ variable "enable_gpu_network_wait_online" {
 }
 
 variable "compute_endpoint_version" {
-  description = "Custom Google Compute API endpoint version (e.g., staging_v1)"
+  description = "Custom Google Compute API endpoint version."
   type        = string
   default     = null
 }

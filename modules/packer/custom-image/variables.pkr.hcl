@@ -282,13 +282,13 @@ variable "shielded_instance_config" {
 }
 
 variable "compute_endpoint_version" {
-  description = "Custom Google Compute API endpoint version (e.g., staging_v1)"
+  description = "Custom Google Compute API endpoint version."
   type        = string
   default     = null
 }
 
 variable "gcloud_path_override" {
-  description = "Path to the directory containing the gcloud binary to use as an override for local execution"
+  description = "Path to the directory containing the gcloud binary to use as an override for local execution."
   type        = string
   default     = ""
 }
