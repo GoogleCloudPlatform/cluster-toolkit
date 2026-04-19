@@ -378,7 +378,7 @@ variable "k8s_service_account_name" {
   default     = "workload-identity-k8s-sa"
 }
 
-variable "k8s_service_account_namespace" {
+variable "namespace" {
   description = "Kubernetes service account namespace to use with the gke cluster"
   type        = string
   default     = "default"

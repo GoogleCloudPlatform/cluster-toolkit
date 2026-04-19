@@ -1,0 +1,178 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Set local variables
+  ansible.builtin.set_fact:
+    source_job_file: "/workspace/tools/ml-diagnostics-test/sample_job.yaml"
+    modified_job_file: "/tmp/sample_job.yaml"
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.user_namespace is defined
+    - custom_vars.project is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Verify cert-manager charts are healthy in cert-manager namespace
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get pods -n cert-manager -o json
+  register: cert_manager_pods
+  retries: 20
+  delay: 15
+  until:
+  - cert_manager_pods.rc == 0
+  - (cert_manager_pods.stdout | from_json).items | length > 0
+  - (cert_manager_pods.stdout | from_json).items | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (cert_manager_pods.stdout | from_json).items | length
+
+- name: Verify Diagon charts are healthy in gke-mldiagnostics
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get pods -n gke-mldiagnostics -o json
+  register: diagon_pods
+  retries: 20
+  delay: 15
+  until:
+  - diagon_pods.rc == 0
+  - (diagon_pods.stdout | from_json).items | length > 0
+  - (diagon_pods.stdout | from_json).items | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (diagon_pods.stdout | from_json).items | length
+
+- name: Verify user namespace is labeled
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get ns {{ custom_vars.user_namespace }} -o json
+  register: ns_info
+  failed_when:
+  - ns_info.rc != 0
+  - (ns_info.stdout | from_json).metadata.labels['managed-mldiagnostics-gke'] != 'true'
+
+- name: Verify service account in workload namespace
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get sa workload-identity-k8s-sa -n {{ custom_vars.user_namespace }} -o json
+  register: sa_info
+  failed_when:
+  - sa_info.rc != 0
+  - (sa_info.stdout | from_json).metadata.annotations['iam.gke.io/gcp-service-account'] is not defined
+
+- name: Verify LocalQueue exists in user namespace
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get localqueue -n {{ custom_vars.user_namespace }} -o json
+  register: lq_info
+  failed_when:
+  - lq_info.rc != 0
+  - (lq_info.stdout | from_json).items | length == 0
+
+- name: Create modified job file
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    cp {{ source_job_file }} {{ modified_job_file }}
+    sed -i 's/<user_namespace>/{{ custom_vars.user_namespace }}/g' {{ modified_job_file }}
+    sed -i 's/<k8s-service-account-name>/{{ custom_vars.k8s_service_account }}/' {{ modified_job_file }}
+    sed -i 's/<tpu_accelerator>/{{ custom_vars.tpu_accelerator }}/' {{ modified_job_file }}
+    sed -i 's/<tpu_topology>/{{ custom_vars.tpu_topology }}/' {{ modified_job_file }}
+    sed -i 's|#Add Image tag here|{{ custom_vars.image_tag }}|' {{ modified_job_file }}
+    sed -i 's/<project_id>/{{ custom_vars.project }}/' {{ modified_job_file }}
+    sed -i 's/<region>/{{ region }}/' {{ modified_job_file }}
+    sed -i 's|<gcs_bucket_path>|gs://{{ custom_vars.gcs_bucket }}/{{ build }}|' {{ modified_job_file }}
+  args:
+    executable: /bin/bash
+
+- name: Submit sample job
+  delegate_to: localhost
+  ansible.builtin.command: kubectl apply -f {{ modified_job_file }}
+  register: job_submission
+
+- name: Block to verify job and capture debug info on failure
+  block:
+  - name: Verify sample job pods are created
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get pods -n {{ custom_vars.user_namespace }} -l jobset.sigs.k8s.io/jobset-name={{ custom_vars.jobset_name }} -o json
+    register: job_pods
+    until:
+    - job_pods.rc == 0
+    - (job_pods.stdout | from_json).items | length > 0
+    retries: 30
+    delay: 10
+
+  - name: Wait for jobset to complete
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get jobset {{ custom_vars.jobset_name }} -n {{ custom_vars.user_namespace }} -o json
+    register: jobset_info
+    until:
+    - jobset_info.rc == 0
+    - (jobset_info.stdout | from_json).status.conditions | default([]) | selectattr('type', 'equalto', 'Completed') | selectattr('status', 'equalto', 'True') | list | length > 0
+    retries: 30
+    delay: 20
+
+  - name: Verify logs contain Pantheon MLrun URL
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      gcloud logging read "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"{{ custom_vars.user_namespace }}\" AND textPayload:\"Pantheon MLrun URL\"" --project {{ custom_vars.project }} --limit 1 --format=json
+    register: logs_output
+    until:
+    - logs_output.rc == 0
+    - (logs_output.stdout | from_json) | length > 0
+    retries: 10
+    delay: 15
+
+  - name: Verify profiling data in GCS
+    delegate_to: localhost
+    ansible.builtin.command: gsutil ls gs://{{ custom_vars.gcs_bucket }}/{{ build }}/**/xplane.pb
+    register: gcs_check
+    until: gcs_check.rc == 0
+    retries: 10
+    delay: 15
+
+  rescue:
+  - name: "FAILURE: Capturing debug info"
+    ansible.builtin.debug:
+      msg: "ML Diagnostics test failed. Capturing logs and descriptions."
+
+  - name: Get pods status on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get pods -n {{ custom_vars.user_namespace }} -o wide
+    register: pods_on_failure
+    changed_when: false
+
+  - name: Print pods status on failure
+    ansible.builtin.debug:
+      var: pods_on_failure.stdout_lines
+
+  - name: Describe jobset on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe jobset {{ custom_vars.jobset_name }} -n {{ custom_vars.user_namespace }}
+    register: jobset_describe
+    changed_when: false
+
+  - name: Print jobset description on failure
+    ansible.builtin.debug:
+      var: jobset_describe.stdout_lines
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "ML Diagnostics test failed."
+
+  always:
+  - name: Cleanup sample job
+    delegate_to: localhost
+    ansible.builtin.command: kubectl delete -f {{ modified_job_file }}
+    when: job_submission.changed
+
+  - name: Cleanup GCS profiling data
+    delegate_to: localhost
+    ansible.builtin.command: gsutil rm -r gs://{{ custom_vars.gcs_bucket }}/{{ build }}
+    when: job_submission.changed

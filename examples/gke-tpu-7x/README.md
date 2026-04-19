@@ -449,15 +449,15 @@ The logs will display content from `shared_output.txt`, showing timestamps and h
 
 To enable Google Cloud ML Diagnostics, perform the following steps before deploying:
 
-1. Specify workload namespace (e.g., ai-workloads) for `vars.workload_namespace`, which can be utilized across different modules in the blueprint.
+1. Specify user workload namespace (e.g., ai-workloads) for `vars.user_namespace`, which can be utilized across different modules in the blueprint.
 
     ```yaml
     vars:
       # ... other variables ...
-      workload_namespace: ai-workloads
+      user_namespace: ai-workloads
     ```
 
-2. The workload Kubernetes Service Account bound to the Google Service Account requires specific [roles](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview#iam-permissions) for running ML Diagnostics workloads. In the blueprint, one additional permission is required, add `"clusterdirector.editor"` to `workload_service_account`.
+2. The workload Kubernetes Service Account bound to the Google Service Account requires specific [roles](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview#iam-permissions) for running ML Diagnostics workloads. In the blueprint, one additional permission is required, add `"hypercomputecluster.editor"` to `workload_service_account`.
 
     ```yaml
       - id: workload_service_account
@@ -466,10 +466,10 @@ To enable Google Cloud ML Diagnostics, perform the following steps before deploy
           name: gke-wl-sa
           project_roles:
           # ... other roles ...
-          - clusterdirector.editor
+          - hypercomputecluster.editor
     ```
 
-3. Add setting `k8s_service_account_namespace: $(vars.workload_namespace)` in `gke-tpu-7x-cluster`. This creates Kubernetes Service account with Workload identity in workload namespace, required for ML Diagnostics to access GCS buckets.
+3. Add setting `namespace: $(vars.user_namespace)` in `gke-tpu-7x-cluster`. This creates Kubernetes Service account with Workload identity in user namespace, required for ML Diagnostics to access GCS buckets.
 
     ```yaml
       - id: gke-tpu-7x-cluster
@@ -477,10 +477,10 @@ To enable Google Cloud ML Diagnostics, perform the following steps before deploy
         use: [gke-tpu-7x-net-0, workload_service_account]
         settings:
           # ... other settings ...
-          k8s_service_account_namespace: $(vars.workload_namespace)
+          namespace: $(vars.user_namespace)
     ```
 
-4. Add setting `workload_namespace: $(vars.workload_namespace)` in `config_template_vars` under Kueue in `workload-manager-install` module to set up LocalQueue in the workload namespace. This variable is templatized into the Kueue configuration file, if it is not provided, the value will default to ‘default’.
+4. Add setting `namespace: $(vars.user_namespace)` in `config_template_vars` under Kueue in `workload-manager-install` module to set up LocalQueue in the user namespace. This variable is templatized into the Kueue configuration file, if it is not provided, the value will default to ‘default’.
 5. In `workload-manager-install` module, add `cert_manager: {install: true}`. This is required for injection-webhook.
     OPTIONAL: you can specify cert-manager version by setting `cert_manager: {install: true, version: "<version>"}`.
 
@@ -494,26 +494,25 @@ To enable Google Cloud ML Diagnostics, perform the following steps before deploy
             config_path: $(vars.kueue_configuration_path)
             config_template_vars:
               # ... other vars ...
-              workload_namespace: $(vars.workload_namespace)
+              namespace: $(vars.user_namespace)
           cert_manager: 
             install: true
             #version: "v1.17.2" # optional
     ```
 
-6. Enable `gke-ml-diagnostics` module to install ML Diagnostics charts and configurations to workload namespace, add `workload_namespace: $(vars.workload_namespace)` in `gke-ml-diagnostics` module settings.
-    OPTIONAL: you can specify chart versions for ML Diagnostics by setting `injection_webhook_version: "<version>"` and `connection_operator_version: "<version>"` under `mldiagnostics` setting.
+6. Enable `ml-diagnostics` module to install ML Diagnostics charts and configurations to user namespace.
+    OPTIONAL: you can specify chart versions for ML Diagnostics by setting `injection_webhook_version: "<version>"` and `connection_operator_version: "<version>"` under `mldiagnostics` setting. Value for var.namespace will be consumed from gke-tpu-7x-cluster, you can optionally add the setting `namespace: $(vars.user_namespace)`
 
     ```yaml
-      - id: gke-ml-diagnostics
+      - id: ml-diagnostics
         source: modules/management/diagnostics
         use: [gke-tpu-7x-cluster, workload-manager-install]
         settings:
           mldiagnostics:
             enable: true
-          workload_namespace: $(vars.workload_namespace)
     ```
 
-When `enable: true` in `gke-ml-diagnostics`, cert-manager and workload identity will be validated here as they are created in other modules.
+When `enable: true` in `ml-diagnostics`, cert-manager and workload identity will be validated here as they are created in other modules.
 
 #### Testing ML Diagnostics cluster creation
 
@@ -539,25 +538,25 @@ When `enable: true` in `gke-ml-diagnostics`, cert-manager and workload identity 
     kubectl get all -n gke-mldiagnostics
     ```
 
-4. Verify workload namespace is created and labeled with "managed-mldiagnostics-gke: true".
+4. Verify user namespace is created and labeled with "managed-mldiagnostics-gke: true".
 
     ```sh
-    kubectl describe ns <workload_namespace>
+    kubectl describe ns <user_namespace>
     ```
 
-5. Verify kubernetes service account in workload namespace.
+5. Verify kubernetes service account in user namespace.
 
     ```sh
-    kubectl get serviceaccount -n <workload_namespace>
-    kubectl get sa <k8s_service_account_name> -n <workload_namespace> -o yaml
+    kubectl get serviceaccount -n <user_namespace>
+    kubectl get sa <k8s_service_account_name> -n <user_namespace> -o yaml
     ```
 
     Default k8s_service_account_name is workload-identity-k8s-sa
 
-6. Verify local queue in the workload namespace.
+6. Verify local queue in the user namespace.
 
     ```sh
-    kubectl get localqueues -n <workload_namespace>
+    kubectl get localqueues -n <user_namespace>
     ```
 
 The above verification steps will ensure that the ML Diagnostics chart installations and namespace configurations are properly set.

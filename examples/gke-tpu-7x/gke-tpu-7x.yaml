@@ -49,7 +49,7 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
-  # workload_namespace: # Set the workload namespace for ML diagnostics
+  # user_namespace: # Set the namespace to be configured for running workloads
 
 
 deployment_groups:
@@ -169,7 +169,7 @@ deployment_groups:
       #   install: true
 
   # For instructions on enabling ML Diagnostics, refer to README.md#understanding-ml-diagnostics-integration
-  - id: gke-ml-diagnostics
+  - id: ml-diagnostics
     source: modules/management/diagnostics
     use: [gke-tpu-7x-cluster, workload-manager-install]
     settings:
