@@ -489,11 +489,11 @@ provider "kubernetes" {
   token                  = data.google_client_config.default.access_token
 }
 
-resource "kubernetes_namespace" "workload_namespace" {
-  count = var.k8s_service_account_namespace != "default" ? 1 : 0
+resource "kubernetes_namespace" "user_namespace" {
+  count = var.namespace != "default" ? 1 : 0
 
   metadata {
-    name = var.k8s_service_account_namespace
+    name = var.namespace
   }
 
   depends_on = [
@@ -508,7 +508,7 @@ module "workload_identity" {
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
-  namespace           = var.k8s_service_account_namespace
+  namespace           = var.namespace
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
 
@@ -516,7 +516,7 @@ module "workload_identity" {
   depends_on = [
     data.google_project.project,
     google_container_cluster.gke_cluster,
-    kubernetes_namespace.workload_namespace
+    kubernetes_namespace.user_namespace
   ]
 }
 

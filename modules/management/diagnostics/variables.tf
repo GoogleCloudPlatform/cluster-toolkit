@@ -29,7 +29,7 @@ variable "gke_cluster_exists" {
   default     = false
 }
 
-variable "ready" {
+variable "kubectl_apply_ready" {
   description = "A static flag that signals to downstream modules that upstream dependencies are ready."
   type        = any
   default     = false
@@ -41,43 +41,55 @@ variable "k8s_service_account_name" {
   default     = "workload-identity-k8s-sa"
 }
 
+variable "namespace" {
+  description = "The namespace where ML workloads will run and diagnostics should be enabled."
+  type        = string
+  default     = "default"
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "gke_version" {
+  description = "GKE version of the cluster"
+  type        = string
+  default     = null
+}
+
 variable "mldiagnostics" {
   description = "Unified settings for mldiagnostics"
   type = object({
     enable                      = optional(bool, false)
-    workload_namespace          = optional(string, "default")
     injection_webhook_version   = optional(string, "0.25.0")
     connection_operator_version = optional(string, "0.21.0")
   })
   default = {}
 }
 
-# Validate that the workload namespace exists
+# Validate that the user namespace exists
 resource "terraform_data" "validate_namespace" {
   count = var.mldiagnostics.enable ? 1 : 0
 
   lifecycle {
     precondition {
-      condition     = contains(data.kubernetes_all_namespaces.all[0].namespaces, var.mldiagnostics.workload_namespace)
-      error_message = "The specified workload namespace '${var.mldiagnostics.workload_namespace}' does not exist in the cluster. Please ensure configure_workload_identity_sa is enabled and k8s_service_account_namespace is set to '${var.mldiagnostics.workload_namespace}' in the gke-cluster module."
+      condition     = contains(data.kubernetes_all_namespaces.all[0].namespaces, var.namespace)
+      error_message = "The specified user workload namespace '${var.namespace}' does not exist in the cluster. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.ready]
+  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
 }
 
-# Validate that the workload service account exists in workload namespace and is annotated for Workload Identity
+# Validate that the workload service account exists in user namespace and is annotated for Workload Identity
 resource "terraform_data" "validate_sa" {
   count = var.mldiagnostics.enable ? 1 : 0
 
   lifecycle {
     precondition {
-      condition     = contains(keys(try(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations, {})), "iam.gke.io/gcp-service-account")
-      error_message = "The Service Account must be annotated for Workload Identity in workload namespace '${var.mldiagnostics.workload_namespace}'. Please ensure configure_workload_identity_sa is enabled and k8s_service_account_namespace is set to '${var.mldiagnostics.workload_namespace}' in the gke-cluster module."
+      condition     = !var.gke_cluster_exists ? true : contains(keys(try(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations, {})), "iam.gke.io/gcp-service-account")
+      error_message = "The Service Account must be annotated for Workload Identity in user workload namespace '${var.namespace}'. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.ready]
+  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
 }
 
 # Validate that the cert-manager namespace exists
@@ -91,5 +103,5 @@ resource "terraform_data" "validate_cert_manager" {
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.ready]
+  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
 }

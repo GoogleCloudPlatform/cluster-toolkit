@@ -21,7 +21,7 @@ output "instructions" {
     - ML Diagnostics Webhook and Connection Operator are installed in the '${local.mldiagnostics_namespace}' namespace.
 
     IMPORTANT:
-    - Workloads must be deployed in the '${var.mldiagnostics.workload_namespace}' namespace.
+    - Workloads must be deployed in the '${var.namespace}' namespace.
     - That namespace has been labeled 'managed-mldiagnostics-gke: "true"' to enable webhook injection.
     - Ensure your workload pods use the Kubernetes Service Account configured with Workload Identity - '${var.k8s_service_account_name}'.
   EOT

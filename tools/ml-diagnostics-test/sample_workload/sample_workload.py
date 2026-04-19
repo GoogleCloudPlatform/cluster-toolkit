@@ -15,6 +15,7 @@
 """Example training script."""
 
 import logging
+import os
 import time
 import jax
 import jax.numpy as jnp
@@ -73,9 +74,9 @@ def main():
   machinelearning_run(
       name="workload-diagon",
       run_group="test_rungroup",
-      project=<project-name>,
-      region=<region>,
-      gcs_path=<existing-gcs-bucket-path>, #"gs://diagon-xprof-gcs/test"
+      project=os.environ.get("PROJECT_ID"),
+      region=os.environ.get("REGION"),
+      gcs_path=os.environ.get("GCS_PATH"),
       on_demand_xprof=False
   )
 
