@@ -15,12 +15,17 @@
 package telemetry
 
 import (
+	"context"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 
 	"github.com/zclconf/go-cty/cty"
 
@@ -69,9 +74,10 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventType:       "gclusterCLI",
 		EventName:       getCommandName(c.eventCmd),
 		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
+		ProjectNumber:   getProjectNumber(c.blueprint),
 		ClientInstallId: getClientInstallId(),
 		ReleaseVersion:  getReleaseVersion(),
+		LatencyMs:       getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -105,6 +111,27 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getProjectNumber(bp config.Blueprint) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	projectID := getKeyFromBlueprint("project_id", bp)
+
+	client, _ := resourcemanager.NewProjectsClient(ctx)
+	defer client.Close()
+
+	req := &resourcemanagerpb.GetProjectRequest{
+		Name: fmt.Sprintf("projects/%s", projectID),
+	}
+	project, err := client.GetProject(ctx, req)
+
+	if err != nil || project == nil || project.Name == "" {
+		return ""
+	} else {
+		return strings.TrimPrefix(project.Name, "projects/")
+	}
 }
 
 func getMachineType(bp config.Blueprint) string {

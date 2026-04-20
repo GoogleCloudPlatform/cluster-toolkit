@@ -22,6 +22,7 @@ require (
 
 require (
 	cloud.google.com/go/firestore v1.18.0
+	cloud.google.com/go/resourcemanager v1.10.6
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-billy/v5 v5.8.0
 	github.com/google/go-cmp v0.7.0

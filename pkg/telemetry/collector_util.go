@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -101,13 +100,9 @@ func getLinuxVersion() string {
 	return "Linux (unknown version)"
 }
 
-const (
-	versionTimeOut = 2 * time.Second
-)
-
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -119,7 +114,7 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")

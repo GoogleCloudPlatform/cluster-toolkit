@@ -24,11 +24,12 @@ import (
 )
 
 const (
-	ClearcutProdURL   = "https://play.googleapis.com/log"
-	configDirName     = "cluster-toolkit"
-	HttpServerTimeout = 10 * time.Second
-	CLUSTER_TOOLKIT   = "CLUSTER_TOOLKIT"
-	CONCORD           = "CONCORD"
+	clearcutProdURL = "https://play.googleapis.com/log"
+	configDirName   = "cluster-toolkit"
+	timeout10Sec    = 10 * time.Second
+	timeout2Sec     = 2 * time.Second
+	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
+	CONCORD         = "CONCORD"
 )
 
 // Collector encapsulates the telemetry state (avoids global variables).
