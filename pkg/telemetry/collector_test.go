@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"runtime"
 	"testing"
@@ -48,9 +49,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
-		IS_GKE,
-		IS_SLURM,
-		IS_VM_INSTANCE,
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
@@ -92,7 +90,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 							Name: config.GroupName("primary"),
 							Modules: []config.Module{
 								{
-									ID:     config.ModuleID("compute_pool"),
+									ID: config.ModuleID("compute_pool"),
+									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
 										"machine_type": cty.StringVal("c2-standard-8"),
@@ -107,9 +106,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				IS_TEST_DATA:      "true",
 				EXIT_CODE:         "0",
 				COMMAND_FLAGS:     "force,project",
-				IS_GKE:            "false",
-				IS_SLURM:          "false",
-				IS_VM_INSTANCE:    "true",
 				REGION:            "us-central1",
 				ZONE:              "us-central1-a",
 				MACHINE_TYPE:      "c2-standard-8",
@@ -119,7 +115,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			},
 		},
 		{
-			name:      "Failure exit code",
+			name:      "Failure exit code with missing region, zone, and machine type",
 			errorCode: 1,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
@@ -137,9 +133,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				COMMAND_FLAGS:     "",
 				REGION:            "",
 				ZONE:              "",
-				IS_GKE:            "false",
-				IS_SLURM:          "false",
-				IS_VM_INSTANCE:    "false",
 				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
 				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
 				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
@@ -684,6 +677,50 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetTerraformVersion(t *testing.T) {
+	// Define the test cases
+	testCases := []struct {
+		name        string
+		mockVersion string
+		mockError   error
+		expected    string
+	}{
+		{
+			name:        "Success - returns terraform version",
+			mockVersion: "1.3.7",
+			mockError:   nil,
+			expected:    "1.3.7",
+		},
+		{
+			name:        "Failure - returns '' on error",
+			mockVersion: "",
+			mockError:   fmt.Errorf("executable file not found in $PATH"),
+			expected:    "",
+		},
+	}
+
+	// Save the original function and ensure it gets restored after tests
+	originalTfVersionFunc := tfVersionFunc
+	defer func() { tfVersionFunc = originalTfVersionFunc }()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Inject the mock function for the current test case
+			tfVersionFunc = func() (string, error) {
+				return tc.mockVersion, tc.mockError
+			}
+
+			// 2. Execute the method under test
+			actual := getTerraformVersion()
+
+			// 3. Assert the result
+			if actual != tc.expected {
+				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
 			}
 		})
 	}
