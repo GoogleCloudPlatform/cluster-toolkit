@@ -50,6 +50,34 @@ func (s *SemanticSuite) TestTestModuleNotUsed(c *C) {
 	c.Assert(err, NotNil)
 }
 
+func (s *SemanticSuite) TestTestModuleUsed(c *C) {
+	bp := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "group1",
+				Modules: []config.Module{
+					{
+						ID:   "module1",
+						Kind: config.TerraformKind,
+					},
+					{
+						ID:   "module2",
+						Kind: config.TerraformKind,
+						Use:  config.ModuleIDs{"module1"},
+						Settings: config.NewDict(map[string]cty.Value{
+							"setting": config.AsProductOfModuleUse(cty.StringVal("some-value"), "module1"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	inputs := config.NewDict(map[string]cty.Value{})
+	err := testModuleNotUsed(bp, inputs)
+	c.Assert(err, IsNil)
+}
+
 func (s *SemanticSuite) TestTestDeploymentVariableNotUsed(c *C) {
 	bp := config.Blueprint{
 		Vars: config.NewDict(map[string]cty.Value{

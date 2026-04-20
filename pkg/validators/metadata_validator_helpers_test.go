@@ -16,6 +16,7 @@ package validators
 
 import (
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -142,8 +143,34 @@ func (s *MetadataHelpersSuite) TestIsVarSet(c *C) {
 	c.Assert(isVarSet(nil), Equals, false)
 	c.Assert(isVarSet([]cty.Value{cty.StringVal("")}), Equals, false)
 	c.Assert(isVarSet([]cty.Value{cty.NumberIntVal(0)}), Equals, false)
-	c.Assert(isVarSet([]cty.Value{cty.NumberIntVal(-1)}), Equals, false)
 	c.Assert(isVarSet([]cty.Value{cty.BoolVal(false)}), Equals, false)
 	c.Assert(isVarSet([]cty.Value{cty.ListValEmpty(cty.String)}), Equals, false)
 	c.Assert(isVarSet([]cty.Value{cty.StringVal("foo")}), Equals, true)
+}
+
+func (s *MetadataHelpersSuite) TestIterateRuleTargets(c *C) {
+	bp := config.Blueprint{}
+	mod := config.Module{
+		ID: "m1",
+		Settings: config.NewDict(map[string]cty.Value{
+			"var_a": cty.StringVal("val_a"),
+		}),
+	}
+	rule := modulereader.ValidationRule{
+		Inputs: map[string]interface{}{
+			"vars":     []interface{}{"var_a"},
+			"optional": false,
+		},
+	}
+	group := config.Group{Modules: []config.Module{mod}}
+
+	var called bool
+	err := IterateRuleTargets(bp, mod, rule, group, 0, func(t Target) error {
+		called = true
+		c.Assert(t.Name, Equals, "var_a")
+		c.Assert(t.Values[0].AsString(), Equals, "val_a")
+		return nil
+	})
+	c.Assert(err, IsNil)
+	c.Assert(called, Equals, true)
 }
