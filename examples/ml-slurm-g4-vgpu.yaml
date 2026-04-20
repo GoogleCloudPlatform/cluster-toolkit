@@ -80,13 +80,13 @@ deployment_groups:
 
             - name: Download CMake
               ansible.builtin.get_url:
-                url: https://cmake.org/files/v3.26/cmake-3.26.0-rc1-linux-x86_64.sh
-                dest: /tmp/cmake-3.26.0-rc1-linux-x86_64.sh
+                url: https://cmake.org/files/v3.26/cmake-3.26.0-linux-x86_64.sh
+                dest: /tmp/cmake-3.26.0-linux-x86_64.sh
                 mode: '0755'
 
             - name: Install CMake
               ansible.builtin.command:
-                cmd: /tmp/cmake-3.26.0-rc1-linux-x86_64.sh --skip-license
+                cmd: /tmp/cmake-3.26.0-linux-x86_64.sh --skip-license
           
       - type: data
         destination: /var/tmp/slurm_vars.json
@@ -184,12 +184,13 @@ deployment_groups:
           sudo dpkg -i cuda-keyring.deb
           sudo apt-get update
           
-          # Copy driver from GCS bucket and install if bucket is set
-          echo "Copying driver from GCS..."
-          gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run /tmp/
-          chmod +x /tmp/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run
+          # Copy driver from GCS bucket and install
+          TMP_DIR=$(mktemp -d)
+          gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
+          chmod +x "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run"
           echo "Installing driver..."
-          sudo sh /tmp/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run --silent
+          sudo sh "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run" --silent
+          rm -rf "${TMP_DIR}"
 
           # install the DCGM package
           sudo apt-get install -y datacenter-gpu-manager
