@@ -22,6 +22,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-nodeset/v1.88.1"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-nodeset/v1.88.0"
   }
 }
