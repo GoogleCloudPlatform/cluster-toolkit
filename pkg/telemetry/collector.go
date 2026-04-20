@@ -24,9 +24,6 @@ import (
 	"strings"
 	"time"
 
-	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
-	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
-
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/spf13/cobra"
@@ -113,27 +110,67 @@ func getCmdFlags(cmd *cobra.Command) string {
 	return strings.Join(flags, ",")
 }
 
+// func getProjectNumber(bp config.Blueprint) string {
+// 	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+// 	defer cancel()
+
+// 	projectID := getKeyFromBlueprint("project_id", bp)
+// 	client, err := resourcemanager.NewProjectsClient(ctx)
+// 	if err != nil || projectID == "" {
+// 		return ""
+// 	}
+// 	defer client.Close()
+
+// 	req := &resourcemanagerpb.GetProjectRequest{
+// 		Name: fmt.Sprintf("projects/%s", projectID),
+// 	}
+// 	project, err := client.GetProject(ctx, req)
+
+// 	if err != nil || project == nil || project.Name == "" {
+// 		return ""
+// 	} else {
+// 		return strings.TrimPrefix(project.Name, "projects/")
+// 	}
+// }
+
+// --- Interface to abstract the Projects Client ---
+type ProjectsClientInterface interface {
+	GetProject(ctx context.Context, req *GetProjectRequest) (*Project, error)
+	Close() error
+}
+
+type GetProjectRequest struct {
+	Name string
+}
+
+type Project struct {
+	Name string
+}
+
+var NewProjectsClient = func(ctx context.Context) (ProjectsClientInterface, error) {
+	return nil, fmt.Errorf("NewProjectsClient not implemented")
+}
+
 func getProjectNumber(bp config.Blueprint) string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
 	defer cancel()
 
 	projectID := getKeyFromBlueprint("project_id", bp)
-	client, err := resourcemanager.NewProjectsClient(ctx)
+	client, err := NewProjectsClient(ctx)
 	if err != nil || projectID == "" {
 		return ""
 	}
 	defer client.Close()
 
-	req := &resourcemanagerpb.GetProjectRequest{
+	req := &GetProjectRequest{
 		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	project, err := client.GetProject(ctx, req)
 
+	project, err := client.GetProject(ctx, req)
 	if err != nil || project == nil || project.Name == "" {
 		return ""
-	} else {
-		return strings.TrimPrefix(project.Name, "projects/")
 	}
+	return strings.TrimPrefix(project.Name, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {
