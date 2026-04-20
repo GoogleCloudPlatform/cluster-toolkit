@@ -17,11 +17,15 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -69,6 +73,18 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 		return v.AsString()
 	}
 	return ""
+}
+
+// fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
+var fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+	client, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
+	project, err := client.GetProject(ctx, req)
+	return project.Name, err
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.

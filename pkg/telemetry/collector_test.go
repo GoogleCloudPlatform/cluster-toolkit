@@ -731,36 +731,12 @@ func TestGetTerraformVersion(t *testing.T) {
 
 // TestGetProjectNumber verifies that the project number is correctly fetched
 // or gracefully fails depending on the blueprint configuration and API response.
-type fakeProjectsClient struct {
-	getProjectFunc func(ctx context.Context, req *GetProjectRequest) (*Project, error)
-}
-
-func (f *fakeProjectsClient) GetProject(ctx context.Context, req *GetProjectRequest) (*Project, error) {
-	if f.getProjectFunc != nil {
-		return f.getProjectFunc(ctx, req)
-	}
-	return nil, fmt.Errorf("GetProject not implemented in fake")
-}
-
-func (f *fakeProjectsClient) Close() error {
-	return nil
-}
-
-var mockGetProjectFunc = func(ctx context.Context, req *GetProjectRequest) (*Project, error) {
-	if req.Name == "projects/test-project-1" {
-		return &Project{Name: "projects/1234567890"}, nil
-	}
-	if req.Name == "projects/test-project-2" {
-		return &Project{Name: "projects/9876543210"}, nil
-	}
-	return nil, errors.New("project not found")
-}
-
 func TestGetProjectNumber(t *testing.T) {
 	tests := []struct {
 		name      string
 		blueprint config.Blueprint
 		clientErr error
+		mockErr   error
 		want      string
 	}{
 		{
@@ -805,13 +781,14 @@ func TestGetProjectNumber(t *testing.T) {
 					"project_id": cty.StringVal("error-project"),
 				}),
 			},
-			want: "",
+			mockErr: errors.New("project not found"),
+			want:    "",
 		},
 		{
 			name: "api_returns_empty_name",
 			blueprint: config.Blueprint{
 				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("empty-name-project"),
+					"project_id": cty.StringVal(""),
 				}),
 			},
 			want: "",
@@ -836,16 +813,25 @@ func TestGetProjectNumber(t *testing.T) {
 		},
 	}
 
-	origNewProjectsClient := NewProjectsClient
-	defer func() { NewProjectsClient = origNewProjectsClient }()
+	// To safely mock package-level variables without permanently altering the global state.
+	origFetchProjectName := fetchProjectName
+	defer func() { fetchProjectName = origFetchProjectName }()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			NewProjectsClient = func(ctx context.Context) (ProjectsClientInterface, error) {
+			// Mock the function directly for this test case
+			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
 				if tt.clientErr != nil {
-					return nil, tt.clientErr
+					return "", tt.clientErr
 				}
-				return &fakeProjectsClient{getProjectFunc: mockGetProjectFunc}, nil
+				// simulate mock responses based on test setup
+				if projectID == "test-project-1" {
+					return "projects/1234567890", nil
+				}
+				if projectID == "test-project-2" {
+					return "projects/9876543210", nil
+				}
+				return "", errors.New("not found")
 			}
 
 			got := getProjectNumber(tt.blueprint)
