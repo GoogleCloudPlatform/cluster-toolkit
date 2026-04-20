@@ -185,7 +185,7 @@ deployment_groups:
           sudo apt-get update
           
           # Copy driver from GCS bucket and install
-          TMP_DIR=$(mktemp -d)
+          TMP_DIR=\$(mktemp -d)
           gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
           chmod +x "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run"
           echo "Installing driver..."
@@ -255,7 +255,6 @@ deployment_groups:
       disk_size_gb: $(vars.disk_size_gb)
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.reservation_name)
-
 
   - id: vgpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
