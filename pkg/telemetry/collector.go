@@ -31,6 +31,7 @@ import (
 
 var (
 	machineTypeModulePattern = ".*modules.compute.*"
+	standardModules          = config.GetPredefinedModules()
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -46,10 +47,10 @@ func NewCollector(cmd *cobra.Command, args []string) *Collector {
 
 // Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int) {
+	bpModulesList := getBpModulesList(c.blueprint)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
@@ -153,12 +154,13 @@ func getZone(bp config.Blueprint) string {
 
 func getModules(modulesList []string) string {
 	sanitizedModules := make([]string, 0)
-	standardModules, _ := config.GetPredefinedModules()
-	for _, m := range modulesList {
-		if slices.Contains(standardModules, m) {
-			sanitizedModules = append(sanitizedModules, m)
-		} else {
-			sanitizedModules = append(sanitizedModules, "Custom")
+	if len(standardModules) > 0 {
+		for _, m := range modulesList {
+			if slices.Contains(standardModules, m) {
+				sanitizedModules = append(sanitizedModules, m)
+			} else {
+				sanitizedModules = append(sanitizedModules, "Custom")
+			}
 		}
 	}
 	return strings.Join(sanitizedModules, ",")

@@ -1035,7 +1035,6 @@ func TestGetPredefinedModules(t *testing.T) {
 		mockResp    *http.Response
 		mockErr     error
 		expected    []string
-		expectErr   bool
 		errContains string
 	}{
 		{
@@ -1055,8 +1054,7 @@ func TestGetPredefinedModules(t *testing.T) {
 			},
 			// Expected to ignore "ignore_me.txt", "some_other_dir", and "not_a_blob" (since it's a tree)
 			// Expected to deduplicate the "modules/network/vpc" module.
-			expected:  []string{"modules/network/vpc", "community/modules/compute/mig"},
-			expectErr: false,
+			expected: []string{"modules/network/vpc", "community/modules/compute/mig"},
 		},
 		{
 			name: "error: non-200 status code",
@@ -1065,8 +1063,6 @@ func TestGetPredefinedModules(t *testing.T) {
 				Status:     "404 Not Found",
 				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Not Found"}`)),
 			},
-			expectErr:   true,
-			errContains: "GitHub API returned status: 404 Not Found",
 		},
 		{
 			name: "error: invalid JSON",
@@ -1074,14 +1070,10 @@ func TestGetPredefinedModules(t *testing.T) {
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
 			},
-			expectErr:   true,
-			errContains: "failed to decode JSON response",
 		},
 		{
-			name:        "error: network failure or timeout",
-			mockErr:     fmt.Errorf("connection timeout"),
-			expectErr:   true,
-			errContains: "failed to fetch from GitHub API",
+			name:    "error: network failure or timeout",
+			mockErr: fmt.Errorf("connection timeout"),
 		},
 	}
 
@@ -1099,25 +1091,14 @@ func TestGetPredefinedModules(t *testing.T) {
 				},
 			}
 
-			modules, err := GetPredefinedModules()
+			modules := GetPredefinedModules()
 
-			if tc.expectErr {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tc.errContains)
-				}
-				if !strings.Contains(err.Error(), tc.errContains) {
-					t.Errorf("expected error containing %q, got: %v", tc.errContains, err)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				// reflect.DeepEqual works deterministically here because the function processes
-				// the JSON array sequentially and appends exactly in the order items appear.
-				if !reflect.DeepEqual(modules, tc.expected) {
-					t.Errorf("expected modules %v, got %v", tc.expected, modules)
-				}
+			// reflect.DeepEqual works deterministically here because the function processes
+			// the JSON array sequentially and appends exactly in the order items appear.
+			if !reflect.DeepEqual(modules, tc.expected) {
+				t.Errorf("expected modules %v, got %v", tc.expected, modules)
 			}
+
 		})
 	}
 }

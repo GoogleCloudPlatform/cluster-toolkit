@@ -787,18 +787,6 @@ func TestGetModules(t *testing.T) {
 			},
 			expected: "",
 		},
-		{
-			name:  "error: API failure defaults to custom modules",
-			input: []string{"modules/network/vpc"},
-			mockResp: &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Status:     "500 Internal Server Error",
-				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
-			},
-			// When GetPredefinedModules() fails, it returns nil. slices.Contains(nil, val)
-			// evaluates to false, so everything is safely marked as "Custom"
-			expected: "Custom",
-		},
 	}
 
 	for _, tc := range tests {

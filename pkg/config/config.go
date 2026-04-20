@@ -987,7 +987,7 @@ type TreeResponse struct {
 
 // GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
 // This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
-func GetPredefinedModules() ([]string, error) {
+func GetPredefinedModules() []string {
 	version := GetToolkitVersion()
 
 	// Query the GitHub API for the recursive file tree of this specific version tag
@@ -998,17 +998,17 @@ func GetPredefinedModules() ([]string, error) {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+		return nil
 	}
 
 	var treeResp TreeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+		return nil
 	}
 
 	var predefinedModules []string
@@ -1030,5 +1030,5 @@ func GetPredefinedModules() ([]string, error) {
 			}
 		}
 	}
-	return predefinedModules, nil
+	return predefinedModules
 }
