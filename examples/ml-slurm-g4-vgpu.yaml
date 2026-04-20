@@ -185,7 +185,7 @@ deployment_groups:
           sudo apt-get update
           
           # Copy driver from GCS bucket and install
-          TMP_DIR=$$(mktemp -d)
+          TMP_DIR=\$(mktemp -d)
           gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
           chmod +x "${TMP_DIR}/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run"
           echo "Installing driver..."
