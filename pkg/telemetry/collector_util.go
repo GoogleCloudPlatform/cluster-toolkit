@@ -51,6 +51,15 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 	return eventMetadata
 }
 
+func getAllModulesInBp(bp config.Blueprint) []string {
+	moduleInfos := config.GetAllModules(&bp)
+	modules := make([]string, len(moduleInfos))
+	for i, module := range moduleInfos {
+		modules[i] = string(module.Source)
+	}
+	return modules
+}
+
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -63,6 +72,17 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 		}
 	}
 	return modules
+}
+
+func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
+	for _, m := range modulesList {
+		for _, p := range patterns {
+			if strings.Contains(m, p) {
+				return "true"
+			}
+		}
+	}
+	return "false"
 }
 
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {

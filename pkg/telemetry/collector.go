@@ -30,7 +30,10 @@ import (
 )
 
 var (
-	machineTypeModulePattern = ".*modules.compute.*"
+	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
+	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
+	isVmInstanceModulePatterns = []string{"vm-instance"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -49,7 +52,12 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	bpModulesList := getAllModulesInBp(c.blueprint)
+
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[IS_GKE] = getIsGke(bpModulesList)
+	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
+	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
@@ -108,6 +116,18 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getIsGke(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isGkeModulePatterns)
+}
+
+func getIsSlurm(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isSlurmModulePatterns)
+}
+
+func getIsVmInstance(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
 }
 
 func getMachineType(bp config.Blueprint) string {

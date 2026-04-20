@@ -730,6 +730,122 @@ func TestGetTerraformVersion(t *testing.T) {
 	}
 }
 
+func TestGetIsGke(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies gke-cluster pattern",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "true",
+		},
+		{
+			name:        "identifies gke-node-pool pattern",
+			modulesList: []string{"module/gke-node-pool/bar"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no GKE modules are present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where GKE is present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/primary", "module/schedmd-slurm-gcp-v6-login"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsGke(tt.modulesList); got != tt.want {
+				t.Errorf("getIsGke() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsSlurm(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies schedmd-slurm-gcp pattern",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no Slurm modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where Slurm is present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-login", "module/schedmd-slurm-gcp-v6-compute"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsSlurm(tt.modulesList); got != tt.want {
+				t.Errorf("getIsSlurm() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsVmInstance(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies vm-instance pattern",
+			modulesList: []string{"module/network/vpc", "module/vm-instance/compute"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no VM instance modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where VM instance is present",
+			modulesList: []string{"module/vm-instance/login", "module/network/vpc"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsVmInstance(tt.modulesList); got != tt.want {
+				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
 func TestGetBillingAccountId(t *testing.T) {
 	// Save the original function and restore it after the test finishes
@@ -775,8 +891,8 @@ func TestGetBillingAccountId(t *testing.T) {
 			},
 			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
 			expected:           "012345-6789AB-CDEF01",
-		},
-	}
+    },
+  }
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
