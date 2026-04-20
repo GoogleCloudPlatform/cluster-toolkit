@@ -990,7 +990,7 @@ func TestGetAllModules(t *testing.T) {
 			bp := tt.setupBp()
 
 			// Call the method
-			modules := GetAllModules(bp)
+			modules := GetAllBpModules(bp)
 
 			// Extract just the ModuleIDs to make the comparison simpler and more robust
 			var actualIDs []ModuleID

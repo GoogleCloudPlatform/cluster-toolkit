@@ -18,6 +18,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,10 +49,13 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	bpModulesList := getBpModulesList(c.blueprint)
+
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
+	c.metadata[MODULES] = getModules(bpModulesList)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -145,6 +149,19 @@ func getRegion(bp config.Blueprint) string {
 
 func getZone(bp config.Blueprint) string {
 	return getKeyFromBlueprint("zone", bp)
+}
+
+func getModules(modulesList []string) string {
+	sanitizedModules := make([]string, 0)
+	standardModules, _ := config.GetPredefinedModules()
+	for _, m := range modulesList {
+		if slices.Contains(standardModules, m) {
+			sanitizedModules = append(sanitizedModules, m)
+		} else {
+			sanitizedModules = append(sanitizedModules, "Custom module")
+		}
+	}
+	return strings.Join(sanitizedModules, ",")
 }
 
 func getOSName() string {
