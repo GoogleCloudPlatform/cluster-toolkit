@@ -45,8 +45,9 @@ locals {
 
   kueue_config_content = join("\n---\n", compact([
     local.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
-      super_slice_topology_name      = "super-slice-topology"
-      super_slice_cluster_queue_name = "cluster-queue"
+      super_slice_topology_name         = "super-slice-topology"
+      super_slice_cluster_queue_names   = coalesce(try(var.kueue.super_slicing_config.cluster_queue_names, []), [])
+      super_slice_resource_flavor_names = coalesce(try(var.kueue.super_slicing_config.resource_flavor_names, []), [])
     }) : "",
     var.kueue.enable_pathways_for_tpus ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
@@ -73,8 +74,9 @@ locals {
   # 1. Combine splitting and decoding into one step
   kueue_parsed = [for doc in split("\n---", local.kueue_config_content) : yamldecode(doc) if trimspace(doc) != ""]
 
-  # 2. Group ClusterQueues by name directly from the parsed list
-  cluster_queue_groups = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ClusterQueue" }
+  # 2. Group ClusterQueues and ResourceFlavors by name directly from the parsed list
+  cluster_queue_groups   = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ClusterQueue" }
+  resource_flavor_groups = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ResourceFlavor" }
 
   # 3. Merge ClusterQueues by inheriting cqs[0] and overwriting only the spec
   final_cluster_queues = [
@@ -90,10 +92,18 @@ locals {
     })
   ]
 
+  # Merge ResourceFlavors by inheriting rfs[0] and merging the spec across all instances
+  final_resource_flavors = [
+    for name, rfs in local.resource_flavor_groups : merge(rfs[0], {
+      spec = merge([for rf in rfs : try(rf.spec, {})]...)
+    })
+  ]
+
   # 4. Construct final manifest list
   final_kueue_manifests = concat(
-    [for doc in local.kueue_parsed : yamlencode(doc) if try(doc.kind, "") != "ClusterQueue"],
-    [for doc in local.final_cluster_queues : yamlencode(doc)]
+    [for doc in local.kueue_parsed : yamlencode(doc) if try(doc.kind, "") != "ClusterQueue" && try(doc.kind, "") != "ResourceFlavor"],
+    [for doc in local.final_cluster_queues : yamlencode(doc)],
+    [for doc in local.final_resource_flavors : yamlencode(doc)]
   )
 
   # 1. First, Identify manifests that are explicitly enabled.
@@ -212,6 +222,20 @@ resource "terraform_data" "kueue_slice_controller_version_check" {
     precondition {
       condition     = !local.enable_slice_controller || module.super_slicing_kueue_version_check.is_greater_than_or_equal
       error_message = "Kueue super-slicing requires Kueue version >= 0.15.2."
+    }
+  }
+}
+
+resource "terraform_data" "kueue_super_slicing_validations" {
+  count = local.enable_slice_controller ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = var.kueue.accelerator_topology_mode == "PROVISION_ONLY"
+      error_message = "accelerator_topology_mode must be set to 'PROVISION_ONLY' when using Kueue super-slicing."
+    }
+    precondition {
+      condition     = can(regex("tpuv7x-4x4x4|tpu7x-standard-4t", coalesce(var.kueue.machine_type, "")))
+      error_message = "Kueue super-slicing requires machine_type containing 'tpuv7x-4x4x4' or 'tpu7x-standard-4t'."
     }
   }
 }
