@@ -824,6 +824,9 @@ func TestGetProjectNumber(t *testing.T) {
 				if tt.clientErr != nil {
 					return "", tt.clientErr
 				}
+				if tt.mockErr != nil {
+					return "", tt.mockErr
+				}
 				// simulate mock responses based on test setup
 				if projectID == "test-project-1" {
 					return "projects/1234567890", nil

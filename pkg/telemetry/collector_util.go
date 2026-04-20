@@ -84,7 +84,10 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	defer client.Close()
 	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
 	project, err := client.GetProject(ctx, req)
-	return project.Name, err
+	if err != nil {
+		return "", err
+	}
+	return project.Name, nil
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
