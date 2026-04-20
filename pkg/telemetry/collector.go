@@ -158,7 +158,7 @@ func getModules(modulesList []string) string {
 		if slices.Contains(standardModules, m) {
 			sanitizedModules = append(sanitizedModules, m)
 		} else {
-			sanitizedModules = append(sanitizedModules, "Custom module")
+			sanitizedModules = append(sanitizedModules, "Custom")
 		}
 	}
 	return strings.Join(sanitizedModules, ",")

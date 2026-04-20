@@ -15,8 +15,11 @@
 package telemetry
 
 import (
+	"bytes"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"io"
+	"net/http"
 	"runtime"
 	"testing"
 	"time"
@@ -721,6 +724,97 @@ func TestGetTerraformVersion(t *testing.T) {
 			// 3. Assert the result
 			if actual != tc.expected {
 				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetModules(t *testing.T) {
+	// Save and restore the original transport
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Mock JSON response that config.GetPredefinedModules() will parse
+	mockJSON := `{
+		"tree": [
+			{"path": "modules/network/vpc/main.tf", "type": "blob"},
+			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name     string
+		input    []string
+		mockResp *http.Response
+		expected string
+	}{
+		{
+			name:  "success: all standard modules",
+			input: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to keep original paths
+			expected: "modules/network/vpc,community/modules/compute/mig",
+		},
+		{
+			name:  "success: mix of standard and custom modules",
+			input: []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize the unknown module
+			expected: "modules/network/vpc,Custom,community/modules/compute/mig",
+		},
+		{
+			name:  "success: only custom modules",
+			input: []string{"my/custom/module1", "my/custom/module2"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize all
+			expected: "Custom,Custom",
+		},
+		{
+			name:  "success: empty input",
+			input: []string{},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "",
+		},
+		{
+			name:  "error: API failure defaults to custom modules",
+			input: []string{"modules/network/vpc"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Status:     "500 Internal Server Error",
+				Body:       io.NopCloser(bytes.NewBufferString(`{}`)),
+			},
+			// When GetPredefinedModules() fails, it returns nil. slices.Contains(nil, val)
+			// evaluates to false, so everything is safely marked as "Custom"
+			expected: "Custom",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Uses the mocks already defined in the package
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return tc.mockResp, nil
+				},
+			}
+
+			// Call the method under test
+			result := getModules(tc.input)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
 			}
 		})
 	}
