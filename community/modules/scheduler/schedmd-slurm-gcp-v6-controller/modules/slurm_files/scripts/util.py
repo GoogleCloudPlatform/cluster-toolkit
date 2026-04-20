@@ -1635,12 +1635,18 @@ class Lookup:
         if not node_name:
             node_name = self.hostname
         node_name_short = node_name.split(".")[0]
-        
-        parts = node_name_short.rsplit("-", 1)
-        if len(parts) != 2:
-            raise Exception(f"node name {node_name} is not valid")
-        
-        prefix, suffix = parts
+
+        if node_name_short.endswith("]"):
+            idx = node_name_short.rfind("-[")
+            if idx == -1:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix = node_name_short[:idx]
+            suffix = node_name_short[idx + 1 :]
+        else:
+            parts = node_name_short.rsplit("-", 1)
+            if len(parts) != 2:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix, suffix = parts
         
         cluster_name = self.cfg.slurm_cluster_name
         if not prefix.startswith(f"{cluster_name}-"):
