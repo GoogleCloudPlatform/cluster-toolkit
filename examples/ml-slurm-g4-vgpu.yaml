@@ -18,9 +18,9 @@ blueprint_name: ml-slurm-g4-vgpu
 vars:
   deployment_name: g4-vgpu
   project_id:  # specify the project id
-  region: us-central1 
-  zone: us-central1-b 
-  cluster_size: 2 
+  region: us-central1
+  zone: us-central1-b
+  cluster_size: 2
   machine_type: g4-standard-12 # Options: g4-standard-6, g4-standard-12, g4-standard-24
 
   # Image settings
@@ -87,7 +87,7 @@ deployment_groups:
             - name: Install CMake
               ansible.builtin.command:
                 cmd: /tmp/cmake-3.26.0-linux-x86_64.sh --skip-license
-          
+
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -100,7 +100,6 @@ deployment_groups:
             "allow_kernel_upgrades": false,
             "monitoring_agent": "none"
           }
-          
       - type: shell
         destination: install_slurm.sh
         content: |
@@ -183,7 +182,6 @@ deployment_groups:
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O cuda-keyring.deb
           sudo dpkg -i cuda-keyring.deb
           sudo apt-get update
-          
           # Copy driver from GCS bucket and install
           TMP_DIR=\$(mktemp -d)
           gsutil cp gs://gce-nvidia-vgpu-drivers/G4_VGPU/NVIDIA-Linux-x86_64-580.126.09-grid-gcp.run "${TMP_DIR}/"
@@ -194,7 +192,6 @@ deployment_groups:
 
           # install the DCGM package
           sudo apt-get install -y datacenter-gpu-manager
-        
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -240,7 +237,7 @@ deployment_groups:
 
   - id: vgpu_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network,g4_node_startup]
+    use: [network, g4_node_startup]
     settings:
       node_count_static: $(vars.cluster_size)
       node_count_dynamic_max: 0
