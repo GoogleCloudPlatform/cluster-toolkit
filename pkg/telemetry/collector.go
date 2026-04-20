@@ -119,7 +119,10 @@ func getProjectNumber(bp config.Blueprint) string {
 
 	projectID := getKeyFromBlueprint("project_id", bp)
 
-	client, _ := resourcemanager.NewProjectsClient(ctx)
+	client, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return ""
+	}
 	defer client.Close()
 
 	req := &resourcemanagerpb.GetProjectRequest{
