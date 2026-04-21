@@ -191,6 +191,9 @@ func getZone(bp config.Blueprint) string {
 	return getKeyFromBlueprint("zone", bp)
 }
 
+// getModules returns a comma-separated string of sanitized module names.
+// It checks each module in the provided list against the officially predefined standardModules as per the user's version.
+// Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
 func getModules(modulesList []string) string {
 	sanitizedModules := make([]string, 0)
 	if len(standardModules) > 0 {
