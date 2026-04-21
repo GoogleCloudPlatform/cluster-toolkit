@@ -1090,18 +1090,30 @@ func TestGetModules(t *testing.T) {
 			},
 			expected: "",
 		},
+		{
+			name:  "error: standardModules fetch failed (UNVERIFIED)",
+			input: []string{"modules/network/vpc", "my/custom/module"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Uses the mocks already defined in the package
 			http.DefaultTransport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
 					return tc.mockResp, nil
 				},
 			}
 
-			// Call the method under test
+			// Force re-initialization of the global variable for this specific test so it picks up the mocked HTTP response, and restore it afterwards.
+			originalModules := standardModules
+			standardModules = config.GetPredefinedModules()
+			defer func() { standardModules = originalModules }()
+
 			result := getModules(tc.input)
 
 			if result != tc.expected {

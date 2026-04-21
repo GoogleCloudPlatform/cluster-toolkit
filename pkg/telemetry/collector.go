@@ -195,16 +195,25 @@ func getZone(bp config.Blueprint) string {
 // It checks each module in the provided list against the officially predefined standardModules as per the user's version.
 // Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
 func getModules(modulesList []string) string {
-	sanitizedModules := make([]string, 0)
-	if len(standardModules) > 0 {
-		for _, m := range modulesList {
-			if slices.Contains(standardModules, m) {
-				sanitizedModules = append(sanitizedModules, m)
-			} else {
-				sanitizedModules = append(sanitizedModules, "Custom")
-			}
+	// If the blueprint has no modules, return empty string
+	if len(modulesList) == 0 {
+		return ""
+	}
+
+	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
+	if len(standardModules) == 0 {
+		return "UNVERIFIED"
+	}
+
+	sanitizedModules := make([]string, 0, len(modulesList))
+	for _, m := range modulesList {
+		if slices.Contains(standardModules, m) {
+			sanitizedModules = append(sanitizedModules, m)
+		} else {
+			sanitizedModules = append(sanitizedModules, "Custom")
 		}
 	}
+
 	return strings.Join(sanitizedModules, ",")
 }
 
