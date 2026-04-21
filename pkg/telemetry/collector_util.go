@@ -52,7 +52,7 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 }
 
 func getBpModulesList(bp config.Blueprint) []string {
-	moduleInfos := config.GetAllModules(&bp)
+	moduleInfos := config.GetAllBpModules(&bp)
 	modules := make([]string, len(moduleInfos))
 	for i, module := range moduleInfos {
 		modules[i] = string(module.Source)

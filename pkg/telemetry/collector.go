@@ -32,7 +32,7 @@ import (
 
 var (
 	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
-  standardModules          = config.GetPredefinedModules()
+	standardModules            = config.GetPredefinedModules()
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -51,12 +51,10 @@ func NewCollector(cmd *cobra.Command, args []string) *Collector {
 
 // Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int) {
-	bpModulesList := getBpModulesList(c.blueprint)
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	bpModulesList := getAllModulesInBp(c.blueprint)
+	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)

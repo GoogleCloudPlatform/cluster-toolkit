@@ -15,13 +15,13 @@
 package telemetry
 
 import (
-  "bytes"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-  "io"
-  "net/http"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 
