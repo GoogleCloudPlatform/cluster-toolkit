@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"runtime"
@@ -30,8 +31,11 @@ import (
 )
 
 var (
-	machineTypeModulePattern = ".*modules.compute.*"
-	standardModules          = config.GetPredefinedModules()
+	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+  standardModules          = config.GetPredefinedModules()
+	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
+	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
+	isVmInstanceModulePatterns = []string{"vm-instance"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -52,7 +56,12 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	bpModulesList := getAllModulesInBp(c.blueprint)
+
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[IS_GKE] = getIsGke(bpModulesList)
+	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
+	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
@@ -60,6 +69,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
+	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -70,13 +80,15 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:     CLUSTER_TOOLKIT,
-		EventType:       "gclusterCLI",
-		EventName:       getCommandName(c.eventCmd),
-		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
-		ClientInstallId: getClientInstallId(),
-		ReleaseVersion:  getReleaseVersion(),
+		ConsoleType:      CLUSTER_TOOLKIT,
+		EventType:        "gclusterCLI",
+		EventName:        getCommandName(c.eventCmd),
+		EventMetadata:    getEventMetadataKVPairs(c.metadata),
+		ProjectNumber:    getProjectNumber(c.blueprint),
+		ClientInstallId:  getClientInstallId(),
+		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		ReleaseVersion:   getReleaseVersion(),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -110,6 +122,35 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getIsGke(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isGkeModulePatterns)
+}
+
+func getIsSlurm(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isSlurmModulePatterns)
+}
+
+func getIsVmInstance(modulesList []string) string {
+	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
+}
+
+func getProjectNumber(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID == "" {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	projectName, err := fetchProjectName(ctx, projectID)
+	if err != nil || projectName == "" {
+		return ""
+	}
+
+	return strings.TrimPrefix(projectName, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {
@@ -193,6 +234,20 @@ func getTerraformVersion() string {
 		return ""
 	}
 	return version
+}
+
+func getBillingAccountId(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		billingAccount := getProjectBillingAccount(ctx, projectID)
+		if billingAccount != "" {
+			return strings.TrimPrefix(billingAccount, "billingAccounts/")
+		}
+	}
+	return ""
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

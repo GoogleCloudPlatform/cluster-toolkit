@@ -34,9 +34,9 @@ func Flush(payload LogRequest) {
 	}
 
 	client := &http.Client{
-		Timeout: HttpServerTimeout,
+		Timeout: timeout10Sec,
 	}
-	u, _ := url.Parse(ClearcutProdURL)
+	u, _ := url.Parse(clearcutProdURL)
 	params := url.Values{}
 	params.Add("format", "json_proto")
 	u.RawQuery = params.Encode()
