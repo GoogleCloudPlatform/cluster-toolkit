@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 
 var (
 	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	standardModules            = config.GetPredefinedModules()
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -52,7 +54,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	bpModulesList := getAllModulesInBp(c.blueprint)
+	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
@@ -61,6 +63,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
+	c.metadata[MODULES] = getModules(bpModulesList)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -186,6 +189,32 @@ func getRegion(bp config.Blueprint) string {
 
 func getZone(bp config.Blueprint) string {
 	return getKeyFromBlueprint("zone", bp)
+}
+
+// getModules returns a comma-separated string of sanitized module names.
+// It checks each module in the provided list against the officially predefined standardModules as per the user's version.
+// Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
+func getModules(modulesList []string) string {
+	// If the blueprint has no modules, return empty string
+	if len(modulesList) == 0 {
+		return ""
+	}
+
+	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
+	if len(standardModules) == 0 {
+		return "UNVERIFIED"
+	}
+
+	sanitizedModules := make([]string, 0, len(modulesList))
+	for _, m := range modulesList {
+		if slices.Contains(standardModules, m) {
+			sanitizedModules = append(sanitizedModules, m)
+		} else {
+			sanitizedModules = append(sanitizedModules, "Custom")
+		}
+	}
+
+	return strings.Join(sanitizedModules, ",")
 }
 
 func getOSName() string {

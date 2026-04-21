@@ -25,6 +25,12 @@ import (
 	"sort"
 	"strings"
 
+	"encoding/json"
+	"net/http"
+	"path"
+
+	"time"
+
 	"github.com/agext/levenshtein"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
@@ -962,11 +968,67 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	return NewDict(res), nil
 }
 
-// GetAllModules returns a slice of all modules defined in the blueprint.
-func GetAllModules(bp *Blueprint) []Module {
+// GetAllBpModules returns a slice of all modules defined in the blueprint.
+func GetAllBpModules(bp *Blueprint) []Module {
 	var modules []Module
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		modules = append(modules, *m)
 	})
 	return modules
+}
+
+// TreeResponse represents the expected JSON structure from the GitHub Git Trees API
+type TreeResponse struct {
+	Tree []struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	} `json:"tree"`
+}
+
+// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedModules() []string {
+	version := GetToolkitVersion()
+
+	// Query the GitHub API for the recursive file tree of this specific version tag
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil
+	}
+
+	var predefinedModules []string
+	moduleSet := make(map[string]bool)
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// We only care about files ("blob") inside the known module directories
+		if item.Type == "blob" {
+			if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
+				// Identify module directories by Terraform or Packer configuration files
+				if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
+					moduleDir := path.Dir(item.Path)
+					if !moduleSet[moduleDir] {
+						moduleSet[moduleDir] = true
+						predefinedModules = append(predefinedModules, moduleDir)
+					}
+				}
+			}
+		}
+	}
+	return predefinedModules
 }
