@@ -749,6 +749,9 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     topo = gen_topology(lkp).compress()
     yaml_file = lkp.etc_dir / "cloud_topology.yaml"
     block_is_default = any(lkp.has_block_topology(p) for p in lkp.cfg.partitions.values())
+    if topology_plugin(lkp) == TOPOLOGY_TREE:
+        block_is_default = False
+
 
     with open(yaml_file, "w") as f:
         f.write(FILE_PREAMBLE)
