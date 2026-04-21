@@ -52,7 +52,8 @@ locals {
     startswith(var.machine_type, "a3-") ||
     startswith(var.machine_type, "a4-") ||
     startswith(var.machine_type, "a4x-") ||
-    startswith(var.machine_type, "ct6e-")
+    startswith(var.machine_type, "ct6e-") ||
+    startswith(var.machine_type, "tpu7x-")
   )
   enable_dranet_actual = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible && length(var.additional_networks) == 0)
 
@@ -510,7 +511,7 @@ module "kubectl_apply" {
 check "dranet_requirements" {
   assert {
     condition     = var.enable_dranet == true ? (local.is_dranet_compatible && local.is_dranet_supported_machine) : true
-    error_message = "DRANET is only supported on GKE version >= 1.34.1-gke.1829001 and specific machine types (e.g. A3/A4/CT6E). Please disable enable_dranet or use a supported version and machine type."
+    error_message = "DRANET is only supported on GKE version >= 1.34.1-gke.1829001 and specific machine types (e.g. A3/A4/CT6E/TPU7X). Please disable enable_dranet or use a supported version and machine type."
   }
 }
 
