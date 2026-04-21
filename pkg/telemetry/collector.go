@@ -33,6 +33,7 @@ import (
 var (
 	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
 	standardModules            = config.GetPredefinedModules()
+	standardDeploymentFiles    = config.GetPredefinedExampleFiles()
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -57,6 +58,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -120,6 +122,23 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getDeploymentFile(cmd *cobra.Command) string {
+	var path string
+	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
+		path = flag.Value.String()
+	}
+	// else if len(args) > 0 {
+	// 	// 2. For standard commands (create, deploy, destroy), the blueprint or
+	// 	// deployment directory is usually the first positional argument
+	// 	path = args[0]
+	// }
+
+	if path != "" && slices.Contains(standardDeploymentFiles, path) {
+		return path
+	}
+	return ""
 }
 
 func getIsGke(modulesList []string) string {

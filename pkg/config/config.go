@@ -985,12 +985,8 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
-// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
-func GetPredefinedModules() []string {
-	version := GetToolkitVersion()
-
-	// Query the GitHub API for the recursive file tree of this specific version tag
+// fetchGitFiles queries the GitHub API and decodes the JSON into a TreeResponse
+func fetchGitFiles(version string) (*TreeResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -998,37 +994,75 @@ func GetPredefinedModules() []string {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
 	}
 
 	var treeResp TreeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
+	return &treeResp, nil
+}
+
+// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedModules() []string {
 	var predefinedModules []string
 	moduleSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitFiles(version)
 
-	// Parse the remote tree
-	for _, item := range treeResp.Tree {
-		// We only care about files ("blob") inside the known module directories
-		if item.Type == "blob" {
-			if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
-				// Identify module directories by Terraform or Packer configuration files
-				if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
-					moduleDir := path.Dir(item.Path)
-					if !moduleSet[moduleDir] {
-						moduleSet[moduleDir] = true
-						predefinedModules = append(predefinedModules, moduleDir)
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We only care about files ("blob") inside the known module directories
+			if item.Type == "blob" {
+				if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
+					// Identify module directories by Terraform or Packer configuration files
+					if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
+						moduleDir := path.Dir(item.Path)
+						if !moduleSet[moduleDir] {
+							moduleSet[moduleDir] = true
+							predefinedModules = append(predefinedModules, moduleDir)
+						}
 					}
 				}
 			}
 		}
 	}
 	return predefinedModules
+}
+
+// GetPredefinedExampleFiles fetches all pre-defined deployment files for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom files are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedExampleFiles() []string {
+	var predefinedFiles []string
+	fileSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitFiles(version)
+
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We only care about files ("blob") inside the known directories
+			if item.Type == "blob" {
+				if strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/") {
+					if strings.HasSuffix(item.Path, ".yaml") {
+						fileDir := path.Dir(item.Path)
+						if !fileSet[fileDir] {
+							fileSet[fileDir] = true
+							predefinedFiles = append(predefinedFiles, fileDir)
+						}
+					}
+				}
+			}
+		}
+	}
+	return predefinedFiles
 }
