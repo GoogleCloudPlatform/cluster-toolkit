@@ -22,7 +22,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"io"
 	"net/http"
-  "os"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
