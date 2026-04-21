@@ -75,14 +75,15 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:      CLUSTER_TOOLKIT,
-		EventType:        "gclusterCLI",
-		EventName:        getCommandName(c.eventCmd),
-		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		LatencyMs:        getLatencyMs(c.eventStartTime),
-		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
-		ReleaseVersion:   getReleaseVersion(),
+		ConsoleType:     CLUSTER_TOOLKIT,
+		EventType:       "gclusterCLI",
+		EventName:       getCommandName(c.eventCmd),
+		EventMetadata:   getEventMetadataKVPairs(c.metadata),
+		ProjectNumber:   getProjectNumber(c.blueprint),
+		ClientInstallId: getClientInstallId(),
+    BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		ReleaseVersion:  getReleaseVersion(),
+		LatencyMs:       getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -128,6 +129,23 @@ func getIsSlurm(modulesList []string) string {
 
 func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
+}
+
+func getProjectNumber(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID == "" {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	projectName, err := fetchProjectName(ctx, projectID)
+	if err != nil || projectName == "" {
+		return ""
+	}
+
+	return strings.TrimPrefix(projectName, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {
