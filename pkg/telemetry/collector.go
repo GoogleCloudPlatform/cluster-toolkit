@@ -235,11 +235,6 @@ func getBillingAccountId(bp config.Blueprint) string {
 	return ""
 }
 
-// This method intentionally returns "true", as all telemetry is in testing phase currently.
-func getIsTestData() string {
-	return "true" // do not modify
-}
-
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
 func getIsGoogler() bool {
 	// 1. Check Application Default Credentials (ADC) for Service Accounts.
@@ -253,17 +248,24 @@ func getIsGoogler() bool {
 	}
 
 	// 2. Fall back to checking the active gcloud authenticated account.
-	cmd := exec.Command("gcloud", "config", "get-value", "core/account")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/account")
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 
-	if err := cmd.Run(); err == nil {
+	if err := cmd.Run(); err == nil && stdout.Len() > 0 {
 		email := strings.TrimSpace(stdout.String())
 		if isInternalEmail(email) {
 			return true
 		}
 	}
 	return false
+}
+
+// This method intentionally returns "true", as all telemetry is in testing phase currently.
+func getIsTestData() string {
+	return "true" // do not modify
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
