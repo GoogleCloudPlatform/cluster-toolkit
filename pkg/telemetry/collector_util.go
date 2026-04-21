@@ -17,6 +17,7 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os/exec"
 	"strings"
@@ -24,9 +25,13 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
+	"cloud.google.com/go/billing/apiv1/billingpb"
 	"github.com/zclconf/go-cty/cty"
+
+	billing "cloud.google.com/go/billing/apiv1"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
 func getBlueprint(args []string) config.Blueprint {
@@ -48,6 +53,15 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 	return eventMetadata
 }
 
+func getAllModulesInBp(bp config.Blueprint) []string {
+	moduleInfos := config.GetAllModules(&bp)
+	modules := make([]string, len(moduleInfos))
+	for i, module := range moduleInfos {
+		modules[i] = string(module.Source)
+	}
+	return modules
+}
+
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -62,16 +76,58 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 	return modules
 }
 
+func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
+	for _, m := range modulesList {
+		for _, p := range patterns {
+			if strings.Contains(m, p) {
+				return "true"
+			}
+		}
+	}
+	return "false"
+}
+
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	val, err := bp.Eval(config.GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
+}
+
+// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return ""
 	}
-	v, _ := val.Unmark()
-	if !v.IsNull() && v.Type() == cty.String {
-		return v.AsString()
+	defer client.Close()
+	req := &billingpb.GetProjectBillingInfoRequest{
+		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	return ""
+	info, err := client.GetProjectBillingInfo(ctx, req)
+	if err != nil {
+		return ""
+	}
+	return info.GetBillingAccountName()
+}
+
+// fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
+var fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+	client, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
+	project, err := client.GetProject(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return project.Name, nil
 }
 
 var (
@@ -130,13 +186,9 @@ func getLinuxVersion() string {
 	return "Linux (unknown version)"
 }
 
-const (
-	versionTimeOut = 2 * time.Second
-)
-
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -148,7 +200,7 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")

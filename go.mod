@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	cloud.google.com/go/storage v1.58.0 // indirect
-	github.com/go-git/go-git/v5 v5.17.1
+	github.com/go-git/go-git/v5 v5.18.0
 	github.com/hashicorp/go-getter v1.8.4
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -21,7 +21,9 @@ require (
 )
 
 require (
+	cloud.google.com/go/billing v1.20.4
 	cloud.google.com/go/firestore v1.18.0
+	cloud.google.com/go/resourcemanager v1.10.6
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-billy/v5 v5.8.0
 	github.com/google/go-cmp v0.7.0

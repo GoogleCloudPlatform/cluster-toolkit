@@ -15,14 +15,16 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"os"
+  "os"
 	"os/exec"
-	"runtime"
 	"testing"
 	"time"
+
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,6 +59,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		ZONE,
 		OS_NAME,
 		OS_VERSION,
+		TERRAFORM_VERSION,
+		BILLING_ACCOUNT_ID,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -105,14 +109,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "0",
-				COMMAND_FLAGS: "force,project",
-				REGION:        "us-central1",
-				ZONE:          "us-central1-a",
-				MACHINE_TYPE:  "c2-standard-8",
-				OS_NAME:       getOSName(),    // Dynamically expect the current OS name
-				OS_VERSION:    getOSVersion(), // Dynamically expect the current OS version
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "0",
+				COMMAND_FLAGS:      "force,project",
+				REGION:             "us-central1",
+				ZONE:               "us-central1-a",
+				MACHINE_TYPE:       "c2-standard-8",
+				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 		{
@@ -129,14 +135,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1",
-				COMMAND_FLAGS: "",
-				REGION:        "",
-				ZONE:          "",
-				OS_NAME:       getOSName(),    // Verify OS info is still collected on failure
-				OS_VERSION:    getOSVersion(), // Verify OS info is still collected on failure
-				MACHINE_TYPE:  "",             // Verify empty machine type when no matching modules exist
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "1",
+				COMMAND_FLAGS:      "",
+				REGION:             "",
+				ZONE:               "",
+				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 	}
@@ -795,6 +803,347 @@ func TestParseOsReleaseField(t *testing.T) {
 			actual := parseOsReleaseField(tt.line)
 			if actual != tt.expected {
 				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetTerraformVersion(t *testing.T) {
+	// Define the test cases
+	testCases := []struct {
+		name        string
+		mockVersion string
+		mockError   error
+		expected    string
+	}{
+		{
+			name:        "Success - returns terraform version",
+			mockVersion: "1.3.7",
+			mockError:   nil,
+			expected:    "1.3.7",
+		},
+		{
+			name:        "Failure - returns '' on error",
+			mockVersion: "",
+			mockError:   fmt.Errorf("executable file not found in $PATH"),
+			expected:    "",
+		},
+	}
+
+	// Save the original function and ensure it gets restored after tests
+	originalTfVersionFunc := tfVersionFunc
+	defer func() { tfVersionFunc = originalTfVersionFunc }()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Inject the mock function for the current test case
+			tfVersionFunc = func() (string, error) {
+				return tc.mockVersion, tc.mockError
+			}
+
+			// 2. Execute the method under test
+			actual := getTerraformVersion()
+
+			// 3. Assert the result
+			if actual != tc.expected {
+				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetIsGke(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies gke-cluster pattern",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "true",
+		},
+		{
+			name:        "identifies gke-node-pool pattern",
+			modulesList: []string{"module/gke-node-pool/bar"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no GKE modules are present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where GKE is present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/primary", "module/schedmd-slurm-gcp-v6-login"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsGke(tt.modulesList); got != tt.want {
+				t.Errorf("getIsGke() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsSlurm(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies schedmd-slurm-gcp pattern",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no Slurm modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where Slurm is present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-login", "module/schedmd-slurm-gcp-v6-compute"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsSlurm(tt.modulesList); got != tt.want {
+				t.Errorf("getIsSlurm() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsVmInstance(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies vm-instance pattern",
+			modulesList: []string{"module/network/vpc", "module/vm-instance/compute"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no VM instance modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where VM instance is present",
+			modulesList: []string{"module/vm-instance/login", "module/network/vpc"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsVmInstance(tt.modulesList); got != tt.want {
+				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGetProjectNumber verifies that the project number is correctly fetched
+// or gracefully fails depending on the blueprint configuration and API response.
+func TestGetProjectNumber(t *testing.T) {
+	tests := []struct {
+		name      string
+		blueprint config.Blueprint
+		clientErr error
+		mockErr   error
+		want      string
+	}{
+		{
+			name: "success_1",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-1"),
+				}),
+			},
+			want: "1234567890",
+		},
+		{
+			name: "success_2",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-2"),
+				}),
+			},
+			want: "9876543210",
+		},
+		{
+			name: "no_project_id",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{}),
+			},
+			want: "",
+		},
+		{
+			name: "client_creation_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("any-project"),
+				}),
+			},
+			clientErr: errors.New("failed to create client"),
+			want:      "",
+		},
+		{
+			name: "api_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("error-project"),
+				}),
+			},
+			mockErr: errors.New("project not found"),
+			want:    "",
+		},
+		{
+			name: "api_returns_empty_name",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal(""),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "api_returns_nil_project",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("nil-project"),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "project_id_not_string_type",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.NumberIntVal(123),
+				}),
+			},
+			want: "",
+		},
+	}
+
+	// To safely mock package-level variables without permanently altering the global state.
+	origFetchProjectName := fetchProjectName
+	defer func() { fetchProjectName = origFetchProjectName }()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the function directly for this test case
+			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+				if tt.clientErr != nil {
+					return "", tt.clientErr
+				}
+				if tt.mockErr != nil {
+					return "", tt.mockErr
+				}
+				// simulate mock responses based on test setup
+				if projectID == "test-project-1" {
+					return "projects/1234567890", nil
+				}
+				if projectID == "test-project-2" {
+					return "projects/9876543210", nil
+				}
+				return "", errors.New("not found")
+			}
+
+			got := getProjectNumber(tt.blueprint)
+			if got != tt.want {
+				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
+func TestGetBillingAccountId(t *testing.T) {
+	// Save the original function and restore it after the test finishes
+	originalGetProjectBillingAccount := getProjectBillingAccount
+	defer func() { getProjectBillingAccount = originalGetProjectBillingAccount }()
+
+	tests := []struct {
+		name               string
+		setupBp            func() config.Blueprint
+		mockBillingAccount string
+		expected           string
+	}{
+		{
+			name: "Missing project_id in blueprint",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present but no billing account returned",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present and billing account trimmed",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
+			expected:           "012345-6789AB-CDEF01",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the GCP call for this specific test case
+			getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+				return tt.mockBillingAccount
+			}
+
+			bp := tt.setupBp()
+			actual := getBillingAccountId(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
