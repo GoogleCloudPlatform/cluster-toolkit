@@ -499,8 +499,8 @@ func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) err
 	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
 }
 
-// TestGCSFuseIAMRoleExists checks if the custom IAM role 'gke.gcsfuse.profileUser' exists.
-func TestGCSFuseIAMRoleExists(projectID string) error {
+// testGCSFuseIAMRoleExists checks if the custom IAM role 'gke.gcsfuse.profileUser' exists.
+func testGCSFuseIAMRoleExistsCheck(projectID string) error {
 	ctx := context.Background()
 	s, err := iam.NewService(ctx)
 	if err != nil {
@@ -518,8 +518,10 @@ func TestGCSFuseIAMRoleExists(projectID string) error {
 					"Please refer to modules/file-system/gke-persistent-volume/README.md for instructions.",
 			}
 		}
-		// If 403 or other API issue, issue warning but do not block (maybe user just cannot read it)
-		logging.Error("WARNING: Could not check IAM role %s: %v. Proceeding.", roleName, err)
+		logging.Error("\n[!] WARNING: Unable to verify existence of the custom IAM role '%s'.", roleName)
+		logging.Error("    Permission 'iam.roles.get' was denied. GCS Fuse CSI Storage Profiles require this role to scan and mount storage.")
+		logging.Error("    Please verify with your Google Cloud administrator that the custom IAM role has been provisioned successfully.")
+		logging.Error("    Reference: modules/file-system/gke-persistent-volume/README.md\n")
 		return nil
 	}
 
@@ -577,5 +579,5 @@ func testGCSFuseIAMRoleExists(bp config.Blueprint, inputs config.Dict) error {
 	if err != nil {
 		return err
 	}
-	return TestGCSFuseIAMRoleExists(m["project_id"])
+	return testGCSFuseIAMRoleExistsCheck(m["project_id"])
 }
