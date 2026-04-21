@@ -266,7 +266,7 @@ func getBillingAccountId(bp config.Blueprint) string {
 
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
 func getIsGoogler() bool {
-	// 1. Check Application Default Credentials (ADC) for Service Accounts.
+	// Check Application Default Credentials (ADC) for Service Accounts.
 	// CI pipelines usually inject credentials via this environment variable.
 	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	if adcPath != "" {
@@ -276,7 +276,7 @@ func getIsGoogler() bool {
 		}
 	}
 
-	// 2. Fall back to checking the active gcloud authenticated account.
+	// Fall back to checking the active gcloud authenticated account.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/account")
