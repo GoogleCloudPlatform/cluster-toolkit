@@ -191,6 +191,19 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+resource "terraform_data" "wait_for_kueue_webhook" {
+  count = local.install_kueue ? 1 : 0
+
+  provisioner "local-exec" {
+    command = <<EOF
+      gcloud container clusters get-credentials ${local.cluster_name} --region ${local.cluster_location} --project ${local.project_id}
+      kubectl wait --for=condition=Available deployment/kueue-controller-manager -n kueue-system --timeout=300s
+    EOF
+  }
+
+  depends_on = [module.install_kueue]
+}
+
 module "configure_kueue" {
   source           = "./helm_install"
   count            = local.configure_kueue ? 1 : 0
@@ -207,8 +220,7 @@ module "configure_kueue" {
     })
   ]
 
-  depends_on = [module.install_kueue]
-
+  depends_on = [module.install_kueue, terraform_data.wait_for_kueue_webhook]
 }
 
 module "install_jobset" {
