@@ -956,7 +956,7 @@ func TestGetProjectNumber(t *testing.T) {
 			got := getProjectNumber(tt.blueprint)
 			if got != tt.want {
 				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
-      }
-    })
-  }
+			}
+		})
+	}
 }
