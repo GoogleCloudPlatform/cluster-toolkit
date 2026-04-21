@@ -21,6 +21,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/billing v1.20.4
 	cloud.google.com/go/firestore v1.18.0
 	cloud.google.com/go/resourcemanager v1.10.6
 	github.com/fatih/color v1.18.0

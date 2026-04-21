@@ -64,6 +64,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
+	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -74,14 +75,15 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:     CLUSTER_TOOLKIT,
-		EventType:       "gclusterCLI",
-		EventName:       getCommandName(c.eventCmd),
-		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:   getProjectNumber(c.blueprint),
-		ClientInstallId: getClientInstallId(),
-		ReleaseVersion:  getReleaseVersion(),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
+		ConsoleType:      CLUSTER_TOOLKIT,
+		EventType:        "gclusterCLI",
+		EventName:        getCommandName(c.eventCmd),
+		EventMetadata:    getEventMetadataKVPairs(c.metadata),
+		ProjectNumber:    getProjectNumber(c.blueprint),
+		ClientInstallId:  getClientInstallId(),
+		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		ReleaseVersion:   getReleaseVersion(),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -213,6 +215,20 @@ func getTerraformVersion() string {
 		return ""
 	}
 	return version
+}
+
+func getBillingAccountId(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		billingAccount := getProjectBillingAccount(ctx, projectID)
+		if billingAccount != "" {
+			return strings.TrimPrefix(billingAccount, "billingAccounts/")
+		}
+	}
+	return ""
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

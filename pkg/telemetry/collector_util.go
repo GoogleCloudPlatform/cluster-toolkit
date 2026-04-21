@@ -24,10 +24,12 @@ import (
 	"regexp"
 	"strings"
 
+	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/zclconf/go-cty/cty"
+
+	billing "cloud.google.com/go/billing/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
-
-	"github.com/zclconf/go-cty/cty"
 )
 
 func getBlueprint(args []string) config.Blueprint {
@@ -85,14 +87,30 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 
 func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	val, err := bp.Eval(config.GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
+}
+
+// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return ""
 	}
-	v, _ := val.Unmark()
-	if !v.IsNull() && v.Type() == cty.String {
-		return v.AsString()
+	defer client.Close()
+	req := &billingpb.GetProjectBillingInfoRequest{
+		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	return ""
+	info, err := client.GetProjectBillingInfo(ctx, req)
+	if err != nil {
+		return ""
+	}
+	return info.GetBillingAccountName()
 }
 
 // fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
