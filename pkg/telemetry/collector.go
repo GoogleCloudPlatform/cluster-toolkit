@@ -15,9 +15,12 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
+	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -83,7 +86,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		ClientInstallId:  getClientInstallId(),
 		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
 		ReleaseVersion:   getReleaseVersion(),
-    		IsGoogler:       getIsGoogler(),
+		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
@@ -237,12 +240,30 @@ func getIsTestData() string {
 	return "true" // do not modify
 }
 
-// getIsGoogler identifies if the CLI is being run by an internal Google user.
+// getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
 func getIsGoogler() bool {
-	if hasProdAccess() {
-		return true
+	// 1. Check Application Default Credentials (ADC) for Service Accounts.
+	// CI pipelines usually inject credentials via this environment variable.
+	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if adcPath != "" {
+		isInternal, err := checkADCForInternalUser(adcPath)
+		if err == nil && isInternal {
+			return true
+		}
 	}
-	return isGoogleCloudAccount()
+
+	// 2. Fall back to checking the active gcloud authenticated account.
+	cmd := exec.Command("gcloud", "config", "get-value", "core/account")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err == nil {
+		email := strings.TrimSpace(stdout.String())
+		if isInternalEmail(email) {
+			return true
+		}
+	}
+	return false
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {

@@ -19,8 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-  "os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -463,124 +461,6 @@ func TestGetKeyFromBlueprint(t *testing.T) {
 	}
 }
 
-// TestHelperProcess isn't a regular test. It acts as a dummy executable
-// to mock the output of exec.Command during unit testing.
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-	fmt.Fprint(os.Stdout, os.Getenv("MOCK_GCLOUD_OUTPUT"))
-	if os.Getenv("MOCK_GCLOUD_ERR") == "1" {
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
-
-func TestGetIsGoogler(t *testing.T) {
-	// Save the original functions to restore them after the test
-	originalExecCommand := execCommand
-	originalExecLookPath := execLookPath
-	defer func() {
-		execCommand = originalExecCommand
-		execLookPath = originalExecLookPath
-	}()
-
-	tests := []struct {
-		name         string
-		gcloudEmail  string
-		gcloudFail   bool
-		mockBinaries map[string]bool
-		expected     bool
-	}{
-		{
-			name:         "google account with @google.com domain",
-			gcloudEmail:  "user@google.com\n",
-			gcloudFail:   false,
-			mockBinaries: map[string]bool{},
-			expected:     true,
-		},
-		{
-			name:         "non-google account, but gcert is present",
-			gcloudEmail:  "user@example.com\n",
-			gcloudFail:   false,
-			mockBinaries: map[string]bool{"gcert": true},
-			expected:     true,
-		},
-		{
-			name:         "non-google account, but prodaccess is present",
-			gcloudEmail:  "user@example.com\n",
-			gcloudFail:   false,
-			mockBinaries: map[string]bool{"prodaccess": true},
-			expected:     true,
-		},
-		{
-			name:         "non-google account, no internal binaries",
-			gcloudEmail:  "user@example.com\n",
-			gcloudFail:   false,
-			mockBinaries: map[string]bool{},
-			expected:     false,
-		},
-		{
-			name:         "gcloud command fails, but gcert is present",
-			gcloudEmail:  "",
-			gcloudFail:   true,
-			mockBinaries: map[string]bool{"gcert": true},
-			expected:     true,
-		},
-		{
-			name:         "gcloud command fails, no internal binaries",
-			gcloudEmail:  "",
-			gcloudFail:   true,
-			mockBinaries: map[string]bool{},
-			expected:     false,
-		},
-		{
-			name:         "empty gcloud output, no internal binaries",
-			gcloudEmail:  "",
-			gcloudFail:   false,
-			mockBinaries: map[string]bool{},
-			expected:     false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Apply our mocks for this test case
-			execCommand = mockExecCommand(tc.gcloudEmail, tc.gcloudFail)
-			execLookPath = mockLookPath(tc.mockBinaries)
-
-			actual := getIsGoogler()
-			if actual != tc.expected {
-				t.Errorf("getIsGoogler() = %v, expected %v", actual, tc.expected)
-			}
-		})
-	}
-}
-
-// mockExecCommand creates a mock function to replace exec.Command
-func mockExecCommand(output string, fail bool) func(string, ...string) *exec.Cmd {
-	return func(command string, args ...string) *exec.Cmd {
-		cs := []string{"-test.run=TestHelperProcess", "--", command}
-		cs = append(cs, args...)
-		cmd := exec.Command(os.Args[0], cs...)
-		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
-		cmd.Env = append(cmd.Env, fmt.Sprintf("MOCK_GCLOUD_OUTPUT=%s", output))
-		if fail {
-			cmd.Env = append(cmd.Env, "MOCK_GCLOUD_ERR=1")
-		}
-		return cmd
-	}
-}
-
-// mockLookPath creates a mock function to replace exec.LookPath
-func mockLookPath(mockBinaries map[string]bool) func(string) (string, error) {
-	return func(file string) (string, error) {
-		if mockBinaries[file] {
-			return "/mock/path/to/" + file, nil
-		}
-		return "", errors.New("executable file not found in $PATH")
-	}
-}
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {

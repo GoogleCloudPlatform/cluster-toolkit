@@ -17,10 +17,9 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"os/exec"
-	"strings"
 	"os"
 	"os/exec"
 	"regexp"
@@ -130,33 +129,51 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	return project.Name, nil
 }
 
-var (
-	execCommand  = exec.Command
-	execLookPath = exec.LookPath
-)
-
-// isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
-func isGoogleCloudAccount() bool {
-	cmd := execCommand("gcloud", "config", "get-value", "account", "--quiet")
-	out, err := cmd.Output()
+// checkADCForInternalUser parses the ADC JSON file to extract the client email.
+func checkADCForInternalUser(credentialsPath string) (bool, error) {
+	data, err := os.ReadFile(credentialsPath)
 	if err != nil {
+		return false, err // Fail open (treat as external) if file can't be read
+	}
+
+	var key ServiceAccountKey
+	if err := json.Unmarshal(data, &key); err != nil {
+		return false, err
+	}
+
+	return isInternalEmail(key.ClientEmail), nil
+}
+
+// isInternalEmail contains the logic to identify Google emails and internal SA domains.
+func isInternalEmail(email string) bool {
+	if email == "" {
 		return false
 	}
 
-	email := strings.TrimSpace(string(out))
-	return strings.HasSuffix(email, "@google.com")
-}
-
-// hasProdAccess checks for the presence of internal developer binaries.
-func hasProdAccess() bool {
-	if _, err := execLookPath("gcert"); err == nil {
+	// Direct Google employees workstation accounts
+	if strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, ".google.com") {
 		return true
 	}
-	if _, err := execLookPath("prodaccess"); err == nil {
-		return true
+
+	// Allowlist specific internal Cluster Toolkit project IDs that tests use.
+	internalProjects := []string{
+		"hpc-toolkit-dev",
+		"hpc-toolkit-demo",
+		"hpc-toolkit-gsc",
+	}
+
+	for _, project := range internalProjects {
+		pattern := ".*" + project + ".*gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
 	}
 
 	return false
+}
+
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
 func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version
