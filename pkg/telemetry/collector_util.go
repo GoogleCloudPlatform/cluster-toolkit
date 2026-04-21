@@ -17,12 +17,15 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
+
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -92,6 +95,21 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
+// fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
+var fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+	client, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
+	project, err := client.GetProject(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return project.Name, nil
+}
+
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
 func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version
@@ -121,13 +139,9 @@ func getLinuxVersion() string {
 	return "Linux (unknown version)"
 }
 
-const (
-	versionTimeOut = 2 * time.Second
-)
-
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -139,7 +153,7 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), versionTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")

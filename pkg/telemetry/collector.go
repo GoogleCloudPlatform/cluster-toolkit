@@ -15,6 +15,7 @@
 package telemetry
 
 import (
+	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"runtime"
@@ -77,9 +78,10 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventType:       "gclusterCLI",
 		EventName:       getCommandName(c.eventCmd),
 		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
+		ProjectNumber:   getProjectNumber(c.blueprint),
 		ClientInstallId: getClientInstallId(),
 		ReleaseVersion:  getReleaseVersion(),
+		LatencyMs:       getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -125,6 +127,23 @@ func getIsSlurm(modulesList []string) string {
 
 func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
+}
+
+func getProjectNumber(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID == "" {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	projectName, err := fetchProjectName(ctx, projectID)
+	if err != nil || projectName == "" {
+		return ""
+	}
+
+	return strings.TrimPrefix(projectName, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {

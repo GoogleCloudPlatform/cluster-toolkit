@@ -15,11 +15,14 @@
 package telemetry
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"runtime"
 	"testing"
 	"time"
+
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -837,6 +840,122 @@ func TestGetIsVmInstance(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getIsVmInstance(tt.modulesList); got != tt.want {
 				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGetProjectNumber verifies that the project number is correctly fetched
+// or gracefully fails depending on the blueprint configuration and API response.
+func TestGetProjectNumber(t *testing.T) {
+	tests := []struct {
+		name      string
+		blueprint config.Blueprint
+		clientErr error
+		mockErr   error
+		want      string
+	}{
+		{
+			name: "success_1",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-1"),
+				}),
+			},
+			want: "1234567890",
+		},
+		{
+			name: "success_2",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-2"),
+				}),
+			},
+			want: "9876543210",
+		},
+		{
+			name: "no_project_id",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{}),
+			},
+			want: "",
+		},
+		{
+			name: "client_creation_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("any-project"),
+				}),
+			},
+			clientErr: errors.New("failed to create client"),
+			want:      "",
+		},
+		{
+			name: "api_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("error-project"),
+				}),
+			},
+			mockErr: errors.New("project not found"),
+			want:    "",
+		},
+		{
+			name: "api_returns_empty_name",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal(""),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "api_returns_nil_project",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("nil-project"),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "project_id_not_string_type",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.NumberIntVal(123),
+				}),
+			},
+			want: "",
+		},
+	}
+
+	// To safely mock package-level variables without permanently altering the global state.
+	origFetchProjectName := fetchProjectName
+	defer func() { fetchProjectName = origFetchProjectName }()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the function directly for this test case
+			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+				if tt.clientErr != nil {
+					return "", tt.clientErr
+				}
+				if tt.mockErr != nil {
+					return "", tt.mockErr
+				}
+				// simulate mock responses based on test setup
+				if projectID == "test-project-1" {
+					return "projects/1234567890", nil
+				}
+				if projectID == "test-project-2" {
+					return "projects/9876543210", nil
+				}
+				return "", errors.New("not found")
+			}
+
+			got := getProjectNumber(tt.blueprint)
+			if got != tt.want {
+				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
 			}
 		})
 	}
