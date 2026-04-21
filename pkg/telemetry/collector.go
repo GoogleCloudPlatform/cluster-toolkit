@@ -75,15 +75,15 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:     CLUSTER_TOOLKIT,
-		EventType:       "gclusterCLI",
-		EventName:       getCommandName(c.eventCmd),
-		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:   getProjectNumber(c.blueprint),
-		ClientInstallId: getClientInstallId(),
-    BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
-		ReleaseVersion:  getReleaseVersion(),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
+		ConsoleType:      CLUSTER_TOOLKIT,
+		EventType:        "gclusterCLI",
+		EventName:        getCommandName(c.eventCmd),
+		EventMetadata:    getEventMetadataKVPairs(c.metadata),
+		ProjectNumber:    getProjectNumber(c.blueprint),
+		ClientInstallId:  getClientInstallId(),
+		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		ReleaseVersion:   getReleaseVersion(),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
 

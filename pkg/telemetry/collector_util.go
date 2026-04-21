@@ -22,16 +22,14 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-
 	"strings"
 
-	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
-	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
+	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/zclconf/go-cty/cty"
 
 	billing "cloud.google.com/go/billing/apiv1"
-	"cloud.google.com/go/billing/apiv1/billingpb"
-
-	"github.com/zclconf/go-cty/cty"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
 func getBlueprint(args []string) config.Blueprint {

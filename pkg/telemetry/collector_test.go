@@ -1009,8 +1009,8 @@ func TestGetBillingAccountId(t *testing.T) {
 			},
 			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
 			expected:           "012345-6789AB-CDEF01",
-    },
-  }
+		},
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
