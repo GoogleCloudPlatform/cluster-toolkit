@@ -1030,9 +1030,9 @@ func TestGetBillingAccountId(t *testing.T) {
 }
 
 func TestGetModules(t *testing.T) {
-	// Backup the original standardModules to restore it after the test
-	originalStandardModules := standardModules
-	defer func() { standardModules = originalStandardModules }()
+	// Backup the original fetch function to restore it after the test
+	originalFetch := fetchStandardModules
+	defer func() { fetchStandardModules = originalFetch }()
 
 	tests := []struct {
 		name         string
@@ -1050,17 +1050,15 @@ func TestGetModules(t *testing.T) {
 		{
 			name:  "error: standardModules fetch failed (UNVERIFIED)",
 			input: []string{"modules/network/vpc", "my/custom/module"},
-			// Simulates a failure to fetch standard modules (empty standardModules list)
+			// Simulates a failure to fetch standard modules
 			mockStandard: []string{},
-			// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED"
-			expected: "UNVERIFIED",
+			expected:     "UNVERIFIED",
 		},
 		{
 			name:         "success: all standard modules",
 			input:        []string{"modules/network/vpc", "community/modules/compute/mig"},
 			mockStandard: []string{"modules/network/vpc", "community/modules/compute/mig"},
-			// Standard modules are preserved
-			expected: "modules/network/vpc,community/modules/compute/mig",
+			expected:     "modules/network/vpc,community/modules/compute/mig",
 		},
 		{
 			name:         "success: mix of standard and custom modules",
@@ -1079,8 +1077,10 @@ func TestGetModules(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Mock the package-level variable for the current test case
-			standardModules = tc.mockStandard
+			// Mock the lazy loader for the current test case
+			fetchStandardModules = func() []string {
+				return tc.mockStandard
+			}
 
 			result := getModules(tc.input)
 			if result != tc.expected {
@@ -1091,14 +1091,16 @@ func TestGetModules(t *testing.T) {
 }
 
 func TestGetDeploymentFile(t *testing.T) {
-	// Backup the original standardDeploymentFiles to restore it after the test
-	originalStandardDeploymentFiles := standardDeploymentFiles
-	defer func() { standardDeploymentFiles = originalStandardDeploymentFiles }()
+	// Backup the original fetch function to restore it after the test
+	originalFetch := fetchStandardDeploymentFiles
+	defer func() { fetchStandardDeploymentFiles = originalFetch }()
 
 	// Mock the predefined list of standard files for controlled testing
-	standardDeploymentFiles = []string{
-		"examples/hpc-slurm.yaml",
-		"community/examples/batch-job.yaml",
+	fetchStandardDeploymentFiles = func() []string {
+		return []string{
+			"examples/hpc-slurm.yaml",
+			"community/examples/batch-job.yaml",
+		}
 	}
 
 	tests := []struct {
@@ -1121,11 +1123,9 @@ func TestGetDeploymentFile(t *testing.T) {
 			setupCommand: func() *cobra.Command {
 				cmd := &cobra.Command{}
 				cmd.Flags().String("deployment-file", "", "Path to deployment file")
-				// Setting the value with the "./" prefix
 				_ = cmd.Flags().Set("deployment-file", "./examples/hpc-slurm.yaml")
 				return cmd
 			},
-			// The method should trim the "./" prefix and successfully match the file
 			expectedResult: "examples/hpc-slurm.yaml",
 		},
 		{
@@ -1136,7 +1136,6 @@ func TestGetDeploymentFile(t *testing.T) {
 				_ = cmd.Flags().Set("deployment-file", "my-custom-cluster.yaml")
 				return cmd
 			},
-			// Should return empty string because it's not in standardDeploymentFiles
 			expectedResult: "",
 		},
 		{
@@ -1144,7 +1143,6 @@ func TestGetDeploymentFile(t *testing.T) {
 			setupCommand: func() *cobra.Command {
 				cmd := &cobra.Command{}
 				cmd.Flags().String("deployment-file", "", "Path to deployment file")
-				// Not setting a value, so it defaults to ""
 				return cmd
 			},
 			expectedResult: "",
@@ -1153,7 +1151,6 @@ func TestGetDeploymentFile(t *testing.T) {
 			name: "failure: deployment-file flag does not exist on the command",
 			setupCommand: func() *cobra.Command {
 				cmd := &cobra.Command{}
-				// The flag is entirely missing
 				return cmd
 			},
 			expectedResult: "",

@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	standardModules         = config.GetPredefinedModules()
-	standardDeploymentFiles = config.GetPredefinedExampleFiles()
+	fetchStandardModules         = config.GetPredefinedModules
+	fetchStandardDeploymentFiles = config.GetPredefinedExampleFiles
 
 	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
 
@@ -132,8 +132,12 @@ func getDeploymentFile(cmd *cobra.Command) string {
 		path = flag.Value.String()
 	}
 	path = strings.TrimPrefix(path, "./")
-	if slices.Contains(standardDeploymentFiles, path) {
-		return path
+
+	if path != "" {
+		// Lazily load the predefined files here
+		if slices.Contains(fetchStandardDeploymentFiles(), path) {
+			return path
+		}
 	}
 	return ""
 }
@@ -215,6 +219,8 @@ func getModules(modulesList []string) string {
 	if len(modulesList) == 0 {
 		return ""
 	}
+
+	standardModules := fetchStandardModules()
 
 	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
 	if len(standardModules) == 0 {
