@@ -1122,3 +1122,73 @@ func TestGetModules(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDeploymentFile(t *testing.T) {
+	// Backup the original standardDeploymentFiles to restore it after the test
+	originalStandardDeploymentFiles := standardDeploymentFiles
+	defer func() { standardDeploymentFiles = originalStandardDeploymentFiles }()
+
+	// Mock the predefined list of standard files for controlled testing
+	standardDeploymentFiles = []string{
+		"examples/hpc-slurm.yaml",
+		"community/examples/batch-job.yaml",
+	}
+
+	tests := []struct {
+		name           string
+		setupCommand   func() *cobra.Command
+		expectedResult string
+	}{
+		{
+			name: "success: flag set with a recognized standard deployment file",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "examples/hpc-slurm.yaml")
+				return cmd
+			},
+			expectedResult: "examples/hpc-slurm.yaml",
+		},
+		{
+			name: "failure: flag set with a custom/unrecognized deployment file",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "my-custom-cluster.yaml")
+				return cmd
+			},
+			// Should return empty string because it's not in standardDeploymentFiles
+			expectedResult: "",
+		},
+		{
+			name: "failure: flag exists but is empty",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				// Not setting a value, so it defaults to ""
+				return cmd
+			},
+			expectedResult: "",
+		},
+		{
+			name: "failure: deployment-file flag does not exist on the command",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				// The flag is entirely missing
+				return cmd
+			},
+			expectedResult: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := tc.setupCommand()
+			result := getDeploymentFile(cmd)
+
+			if result != tc.expectedResult {
+				t.Errorf("getDeploymentFile() = %q; want %q", result, tc.expectedResult)
+			}
+		})
+	}
+}
