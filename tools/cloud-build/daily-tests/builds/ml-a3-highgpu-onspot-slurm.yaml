@@ -56,7 +56,7 @@ steps:
     echo "Sourcing find_available_zone.sh to determine zone."
     # source /workspace/tools/cloud-build/find_available_zone.sh
     ZONE="us-central1-b"
-    PROVISIONING_MODELS="SPOT"
+    PROVISIONING_MODEL="SPOT"
     if [ -z "$${ZONE:-}" ]; then
       echo "ERROR: ZONE not found" >&2
       exit 1
