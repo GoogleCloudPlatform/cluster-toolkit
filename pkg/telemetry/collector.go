@@ -31,9 +31,11 @@ import (
 )
 
 var (
-	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
-	standardModules            = config.GetPredefinedModules()
-	standardDeploymentFiles    = config.GetPredefinedExampleFiles()
+	standardModules         = config.GetPredefinedModules()
+	standardDeploymentFiles = config.GetPredefinedExampleFiles()
+
+	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
+
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -129,13 +131,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
 		path = flag.Value.String()
 	}
-	// else if len(args) > 0 {
-	// 	// 2. For standard commands (create, deploy, destroy), the blueprint or
-	// 	// deployment directory is usually the first positional argument
-	// 	path = args[0]
-	// }
-
-	if path != "" && slices.Contains(standardDeploymentFiles, path) {
+	if slices.Contains(standardDeploymentFiles, path) {
 		return path
 	}
 	return ""

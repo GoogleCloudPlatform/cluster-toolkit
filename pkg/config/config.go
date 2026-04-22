@@ -1054,10 +1054,9 @@ func GetPredefinedExampleFiles() []string {
 			if item.Type == "blob" {
 				if strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/") {
 					if strings.HasSuffix(item.Path, ".yaml") {
-						fileDir := path.Dir(item.Path)
-						if !fileSet[fileDir] {
-							fileSet[fileDir] = true
-							predefinedFiles = append(predefinedFiles, fileDir)
+						if !fileSet[item.Path] {
+							fileSet[item.Path] = true
+							predefinedFiles = append(predefinedFiles, item.Path)
 						}
 					}
 				}
