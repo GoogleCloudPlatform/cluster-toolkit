@@ -83,6 +83,7 @@ steps:
     fi
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
