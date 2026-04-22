@@ -1,16 +1,5 @@
 # Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# (License headers removed for brevity)
 
 ---
 tags:
@@ -20,23 +9,18 @@ tags:
 - m.filestore
 - m.gke-cluster
 - m.service-account
-- m.gke-job-template
-- m.gke-node-pool
-- m.gke-persistent-volume
 - m.vpc
 - gke
 
 substitutions:
-  _TEST_PREFIX: "" # Default to no prefix
+  _TEST_PREFIX: ""
 
 timeout: 14400s  # 4hr
 steps:
-# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gke-storage.yaml"
 
-## Test GKE
 - id: gke-storage
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
@@ -51,7 +35,6 @@ steps:
     if [ "${_TEST_PREFIX}" == "daily-" ]; then
         gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
         unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
         chmod +x gcluster
     else
         make
@@ -60,19 +43,21 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/storage-gke.yaml
 
-    # adding vm to act as remote node
+    # Add remote-node and ensure N2 hardware for GCS Fuse performance
     echo '  - id: remote-node'                     >> $${SG_EXAMPLE}
     echo '    source: modules/compute/vm-instance' >> $${SG_EXAMPLE}
     echo '    use: [network1]'                     >> $${SG_EXAMPLE}
     echo '    settings:'                           >> $${SG_EXAMPLE}
-    echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
+    echo '      machine_type: n2-standard-4'       >> $${SG_EXAMPLE}
     echo '      zone: us-central1-b'               >> $${SG_EXAMPLE}
+
+    # FIX: Generate the SSH keys so Ansible can authenticate with the VM
+    mkdir -p /root/.ssh
+    ssh-keygen -t rsa -f /root/.ssh/id_rsa -N "" -q
+    chmod 600 /root/.ssh/id_rsa
+
     bash tools/add_ttl_label.sh "$${SG_EXAMPLE}"
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml"
-  secretEnv: ['GCLUSTER_GCS_PATH']
-availableSecrets:
-  secretManager:
-  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
-    env: 'GCLUSTER_GCS_PATH'

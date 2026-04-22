@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    echo "Pruning OS Login keys for Service Account..."
+    for key in $(gcloud compute os-login ssh-keys list --format="get(key)"); do
+      echo "Deleting key: $key"
+      gcloud compute os-login ssh-keys remove --key=$key --quiet
+    done

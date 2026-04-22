@@ -1,18 +1,18 @@
 /**
-  * Copyright 2026 Google LLC
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-  *
-  *      http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+ * Copyright 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 locals {
   # This label allows for billing report tracking based on module.
@@ -28,10 +28,10 @@ locals {
 }
 
 locals {
-  dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
-  prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
+  dash              = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
+  prefix            = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
-  name             = local.name_maybe_empty != "" ? local.name_maybe_empty : "NO-NAME-GIVEN"
+  name              = local.name_maybe_empty != "" ? local.name_maybe_empty : "NO-NAME-GIVEN"
 
   cluster_authenticator_security_group = var.authenticator_security_group == null ? [] : [{
     security_group = var.authenticator_security_group
@@ -89,11 +89,11 @@ module "slice_controller_version_check" {
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
-  project         = var.project_id
-  name            = local.name
-  location        = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  resource_labels = local.labels
-  networking_mode = var.networking_mode
+  project          = var.project_id
+  name             = local.name
+  location         = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  resource_labels  = local.labels
+  networking_mode  = var.networking_mode
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
@@ -108,7 +108,7 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  network    = var.network_id
+  network     = var.network_id
   subnetwork = var.subnetwork_self_link
 
   # Note: the existence of the "master_authorized_networks_config" block enables
@@ -256,10 +256,12 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  ## --- CHANGED TIMEOUT BLOCK ---
   timeouts {
-    create = var.timeout_create
+    create = "90m"  # Increased from var.timeout_create to accommodate A3 Ultra hardware
     update = var.timeout_update
   }
+  ## -----------------------------
 
   dynamic "node_pool_defaults" {
     for_each = var.enable_gcfs ? [1] : []

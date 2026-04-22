@@ -26,33 +26,32 @@
   delegate_to: localhost
   ansible.builtin.shell: |
     job_file=({{ workspace }}/{{ deployment_name }}/primary/fio-benchmark*)
-    # Assuming only one benchmark file matches
     kubectl create -f "${job_file[0]}" -o=jsonpath='{.metadata.name}'
   args:
     executable: /bin/bash
   register: fio_job_create_output
+  # Ensure we don't capture extra whitespace
+  changed_when: fio_job_create_output.rc == 0
 
 - name: Set FIO job name
   ansible.builtin.set_fact:
-    fio_job_name: "{{ fio_job_create_output.stdout }}"
+    fio_job_name: "{{ fio_job_create_output.stdout | trim }}"
 
 - name: Wait for FIO Job to complete
-  # The FIO job should take approximately 20 minutes, process times out after a max wait of 40 mins
   delegate_to: localhost
+  # Updated to 60m as requested
   ansible.builtin.command: "kubectl wait --for=condition=complete --timeout=60m job/{{ fio_job_name }}"
   changed_when: false
 
-- name: Fetch logs from the FIO job pod and save to fio_pod_logs.txt
+- name: Fetch logs from the FIO job pod
   delegate_to: localhost
   ansible.builtin.shell: |
     pod_name="$(kubectl get pods -l job-name={{ fio_job_name }} -o jsonpath='{.items[0].metadata.name}')"
     kubectl logs "$pod_name" > fio_pod_logs.txt
-
-- name: Print the FIO test logs
-  debug:
-    msg: "{{ lookup('file', 'fio_pod_logs.txt') }}"
+  # We want logs even if the job didn't reach 'complete' (e.g. if it errored out)
+  ignore_errors: yes 
 
 - name: Clean up FIO job
   delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl delete job {{ fio_job_name }} -v=9
+  ansible.builtin.shell: "kubectl delete job {{ fio_job_name }} --v=9"
+  ignore_errors: yes

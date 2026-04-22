@@ -17,218 +17,184 @@
 - name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
-  ## Display Terraform Version
-  - name: "Get Terraform Version"
-    ansible.builtin.command: terraform version
-    changed_when: false
-    register: terraform_version_output
-
-  - name: "Print Terraform Version"
-    ansible.builtin.debug:
-      msg: |
-        ---- TERRAFORM VERSION ----
-        {{ terraform_version_output.stdout }}
-        ---------------------------
-
-  ## Create SSH Keys
-  - name: "Create .ssh folder"
-    ansible.builtin.file:
-      path: "/builder/home/.ssh"
-      state: directory
-      mode: 0700
-
-  - name: Create SSH Key
-    community.crypto.openssh_keypair:
-      path: "/builder/home/.ssh/id_rsa"
-
-  ## Get builder IP address
-  - name: Get Builder IP
-    register: build_ip
-    changed_when: false
-    args:
-      executable: /bin/bash
-    ansible.builtin.shell: |
-      set -e -o pipefail
-      dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
-          awk -F'"' '{print $2}'
-
-  ## Create cluster
-  - name: Create Deployment Directory
-    ansible.builtin.include_tasks:
-      file: tasks/create_deployment_directory.yml
-
-  - name: Create Infrastructure and test
-    block:
-    - name: Create Cluster with gcluster
-      register: deployment
-      changed_when: deployment.changed
-      ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
-      args:
-        chdir: "{{ workspace }}"
-      environment:
-        TF_IN_AUTOMATION: "TRUE"
-
-    - name: Print instance IDs of VMs
-      ansible.builtin.include_tasks:
-        file: tasks/get_instance_ids.yml
-
-    - name: Get IP of the remote node - Exact name provided
+    - name: "Get Terraform Version"
+      ansible.builtin.command: terraform version
       changed_when: false
-      register: get_remote_ip
-      ansible.builtin.command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
-        --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
-      when: '"*" not in remote_node'
+      register: terraform_version_output
 
-    # Setting a fact is needed because the variable will overwrite itself even
-    # if a task is skipped, leading to an undefined variable when the exact name
-    # is provided.
-    - name: Set remote_ip variable - Exact name provided
-      ansible.builtin.set_fact:
-        remote_ip: "{{ get_remote_ip.stdout }}"
-      when: '"*" not in remote_node'
-
-    - name: Get IP of the remote node - Name pattern provided
-      changed_when: false
-      register: get_remote_ip
-      ansible.builtin.command: >-
-        gcloud compute instances list \
-          --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
-          --filter=NAME:{{ remote_node }}
-      when: '"*" in remote_node'
-
-    - name: Set remote_ip variable - Name pattern provided
-      ansible.builtin.set_fact:
-        remote_ip: "{{ get_remote_ip.stdout }}"
-      when: '"*" in remote_node'
-
-    - name: Print remote node's public IP
+    - name: "Print Terraform Version"
       ansible.builtin.debug:
-        var: remote_ip
+        msg: |
+          ---- TERRAFORM VERSION ----
+          {{ terraform_version_output.stdout }}
+          ---------------------------
 
-    # Setup firewall for cloud build
-    - name: Create firewall rule
-      register: fw_result
-      changed_when: fw_result.rc == 0
-      ansible.builtin.command:
-        argv:
-        - gcloud
-        - compute
-        - --project={{ project }}
-        - firewall-rules
-        - create
-        - "{{ deployment_name }}"
-        - --direction=INGRESS
-        - --priority=1000
-        - --network={{ network }}
-        - --action=ALLOW
-        - --rules=tcp:22
-        - --source-ranges={{ build_ip.stdout }}
+    - name: "Create .ssh folder"
+      ansible.builtin.file:
+        path: "/builder/home/.ssh"
+        state: directory
+        mode: 0700
 
-    - name: 'Add SSH Keys to OS-Login'
-      register: key_result
-      changed_when: key_result.rc == 0
-      ansible.builtin.command:
-        argv:
-        - gcloud
-        - compute
-        - os-login
-        - ssh-keys
-        - add
-        - --ttl
-        - 2h
-        - "--key-file=/builder/home/.ssh/id_rsa.pub"
+    - name: Create SSH Key
+      community.crypto.openssh_keypair:
+        path: "/builder/home/.ssh/id_rsa"
 
-    - name: Add Remote node as host
-      ansible.builtin.add_host:
-        hostname: "{{ remote_ip }}"
-        groups: [remote_host]
-      when: (remote_ip | default('')) | ansible.utils.ipaddr != false
+    - name: Get Builder IP
+      register: build_ip
+      changed_when: false
+      ansible.builtin.shell: |
+        set -e -o pipefail
+        dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | awk -F'"' '{print $2}'
+      args:
+        executable: /bin/bash
 
-    - name: Wait for host tasks
-      ansible.builtin.include_tasks: tasks/wait-for-host.yml
-      vars:
-        host_ip: "{{ remote_ip }}"
-        ansible_ssh_private_key_file: "/root/.ssh/id_rsa"
-
-    ## Cleanup and fail gracefully
-    rescue:
-    - name: Capture gcluster stderr
-      failed_when: false
-      ansible.builtin.set_fact:
-        gcluster_stderr: "{{ deployment.stderr | replace('\n',' ') }}"
-
-    - name: Gather logs
+    - name: Create Deployment Directory
       ansible.builtin.include_tasks:
-        file: tasks/gather_startup_script_logs.yml
-        apply:
-          delegate_to: localhost
+        file: tasks/create_deployment_directory.yml
 
-    - name: Include rescue from gcluster failure
-      ansible.builtin.include_tasks:
-        file: tasks/rescue_gcluster_failure.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        workspace: "{{ workspace }}"
+    - name: Create Infrastructure and test
+      block:
+        - name: Create Cluster with gcluster
+          register: deployment
+          changed_when: deployment.changed
+          ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
+          args:
+            chdir: "{{ workspace }}"
+          environment:
+            TF_IN_AUTOMATION: "TRUE"
 
-    - name: Trigger failure (rescue blocks otherwise revert failures)
-      ansible.builtin.fail:
-        msg: "Failed while setting up test infrastructure"
+        - name: Wait for GKE Webhooks to settle
+          ansible.builtin.pause:
+            seconds: 60
+          when: deployment.changed
+
+        - name: Print instance IDs of VMs
+          ansible.builtin.include_tasks:
+            file: tasks/get_instance_ids.yml
+
+        - name: Get IP of the remote node - Exact name provided
+          changed_when: false
+          register: get_remote_ip
+          ansible.builtin.command: >-
+            gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
+            --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
+          when: '"*" not in remote_node'
+
+        - name: Set remote_ip variable - Exact name provided
+          ansible.builtin.set_fact:
+            remote_ip: "{{ get_remote_ip.stdout }}"
+          when: '"*" not in remote_node'
+
+        - name: Get IP of the remote node - Name pattern provided
+          changed_when: false
+          register: get_remote_ip_pattern
+          ansible.builtin.command: >-
+            gcloud compute instances list \
+              --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
+              --filter=NAME:{{ remote_node }}
+          when: '"*" in remote_node'
+
+        - name: Set remote_ip variable - Name pattern provided
+          ansible.builtin.set_fact:
+            remote_ip: "{{ get_remote_ip_pattern.stdout }}"
+          when: '"*" in remote_node'
+
+        - name: Create firewall rule
+          register: fw_result
+          changed_when: fw_result.rc == 0
+          ansible.builtin.command:
+            argv:
+              - gcloud
+              - compute
+              - --project={{ project }}
+              - firewall-rules
+              - create
+              - "{{ deployment_name }}"
+              - --direction=INGRESS
+              - --priority=1000
+              - --network={{ network }}
+              - --action=ALLOW
+              - --rules=tcp:22
+              - --source-ranges={{ build_ip.stdout }}
+
+        - name: 'Add SSH Keys to OS-Login'
+          register: key_result
+          changed_when: key_result.rc == 0
+          ansible.builtin.command:
+            argv:
+              - gcloud
+              - compute
+              - os-login
+              - ssh-keys
+              - add
+              - --ttl
+              - 2h
+              - "--key-file=/builder/home/.ssh/id_rsa.pub"
+
+        - name: Add Remote node as host
+          ansible.builtin.add_host:
+            hostname: "{{ remote_ip }}"
+            groups: [remote_host]
+          when: (remote_ip | default('')) | ansible.utils.ipaddr != false
+
+        - name: Wait for host tasks
+          ansible.builtin.include_tasks: tasks/wait-for-host.yml
+          vars:
+            host_ip: "{{ remote_ip }}"
+            ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
+
+      rescue:
+        - name: Capture gcluster stderr
+          failed_when: false
+          ansible.builtin.set_fact:
+            gcluster_stderr: "{{ deployment.stderr | default('') | replace('\n',' ') }}"
+
+        - name: Gather logs
+          ansible.builtin.include_tasks:
+            file: tasks/gather_startup_script_logs.yml
+
+        - name: Cleanup OS-Login SSH Keys after failure
+          ansible.builtin.command:
+            cmd: gcloud compute os-login ssh-keys remove --key-file=/builder/home/.ssh/id_rsa.pub
+          failed_when: false
+
+        - name: Trigger failure
+          ansible.builtin.fail:
+            msg: "Failed while setting up test infrastructure"
 
 - name: Run Integration Tests
   hosts: remote_host
   vars:
-    startup_timeout_seconds: 600  # 10 minutes
+    startup_timeout_seconds: 600
+    ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
   gather_facts: false
-  ignore_unreachable: true  # ensure always block will run even if SSH fails
+  ignore_unreachable: true
   tasks:
-  - name: Remote Test Block
-    vars:
-      ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
-
-    block:
-    - name: Include wait for startup script
-      ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
-      vars:
-        timeout_seconds: "{{ startup_timeout_seconds }}"
-
-    - name: Add instance labels for spot instances
-      ansible.builtin.include_tasks: tasks/add-instance-labels.yml
-      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
-
-    - name: Run Integration tests for Cluster Toolkit
-      ansible.builtin.include_tasks: "{{ test }}"
-      vars:
-        remote_node: "{{ remote_node }}"
-        deployment_name: "{{ deployment_name }}"
-        custom_vars: "{{ custom_vars }}"
-      loop: "{{ post_deploy_tests }}"
-      loop_control:
-        loop_var: test
-
-    rescue:
-    - name: Conditionally check for spot preemptions after a failure
-      when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
+    - name: Remote Test Block
       block:
-      - name: Display test failure message
-        ansible.builtin.debug:
-          msg: "A task within the integration tests failed. Spot VMs are enabled, so running preemption checks."
+        - name: Include wait for startup script
+          ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
+          vars:
+            timeout_seconds: "{{ startup_timeout_seconds }}"
 
-      - name: Check for recent preemptions
-        ansible.builtin.include_tasks: test-validation/test-preemption.yml
+        - name: Run Integration tests for Cluster Toolkit
+          ansible.builtin.include_tasks: "{{ test }}"
+          vars:
+            remote_node: "{{ remote_node }}"
+            deployment_name: "{{ deployment_name }}"
+            custom_vars: "{{ custom_vars }}"
+          loop: "{{ post_deploy_tests }}"
+          loop_control:
+            loop_var: test
 
-    - name: Propagate original failure after rescue tasks
-      ansible.builtin.fail:
-        msg: "Integration tests failed. Rescue tasks were executed."
+      rescue:
+        - name: Propagate original failure after rescue tasks
+          ansible.builtin.fail:
+            msg: "Integration tests failed. Rescue tasks were executed."
 
-    always:
-    - name: Cleanup firewall and infrastructure
-      ansible.builtin.include_tasks:
-        file: tasks/rescue_gcluster_failure.yml
-        apply:
+      always:
+        - name: Final OS-Login SSH Key Cleanup
           delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        workspace: "{{ workspace }}"
+          ansible.builtin.command:
+            cmd: gcloud compute os-login ssh-keys remove --key-file=/builder/home/.ssh/id_rsa.pub
+          failed_when: false
