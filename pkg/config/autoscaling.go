@@ -38,7 +38,7 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 
 	for it.Next() {
 		_, resVal := it.Element()
-		processedLimit, ok, err := processAutoscalingLimit(resVal)
+		processedLimit, ok, err := processAutoscalingLimit(resVal, bp, mod)
 		if err != nil {
 			return err
 		}
@@ -47,7 +47,11 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 		}
 	}
 
-	caMap["limits"] = cty.ListVal(newLimits)
+	if len(newLimits) > 0 {
+		caMap["limits"] = cty.ListVal(newLimits)
+	} else {
+		caMap["limits"] = cty.ListValEmpty(limitsVal.Type().ElementType())
+	}
 	mod.Settings = mod.Settings.With("cluster_autoscaling", cty.ObjectVal(caMap))
 
 	return nil
@@ -82,7 +86,7 @@ func validateAndGetLimits(bp Blueprint, mod *Module) (map[string]cty.Value, cty.
 	return caMap, limitsVal, true, nil
 }
 
-func processAutoscalingLimit(resVal cty.Value) (cty.Value, bool, error) {
+func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module) (cty.Value, bool, error) {
 	if !resVal.Type().IsObjectType() {
 		return cty.Value{}, false, nil
 	}
@@ -94,32 +98,18 @@ func processAutoscalingLimit(resVal cty.Value) (cty.Value, bool, error) {
 	}
 	machineType := mtVal.AsString()
 
-	maxCount := 1
-	maxCountPassed := false
-	if mcVal, ok := resMap["autoprovisioning_max_accelerator_count"]; ok && !mcVal.IsNull() && mcVal.IsKnown() {
-		if mcVal.Type() == cty.Number {
-			f, _ := mcVal.AsBigFloat().Float64()
-			maxCount = int(f)
-			maxCountPassed = true
-		}
+	maxCount, maxCountPassed := extractMaxCount(resMap)
+	acceleratorsPerVM, accType, err := getAcceleratorCountAndType(machineType, bp, mod)
+	if err != nil {
+		return cty.Value{}, false, err
 	}
-
-	acceleratorsPerVM, accType := extractAcceleratorCountAndType(machineType)
 	if acceleratorsPerVM == 0 {
-		return cty.Value{}, false, nil // Not an accelerator or unrecognized
+		return cty.Value{}, false, nil
 	}
 
-	var totalAccelerators int
-	if maxCountPassed {
-		if maxCount <= 0 {
-			return cty.Value{}, false, fmt.Errorf("autoprovisioning_max_accelerator_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
-		}
-		if maxCount%acceleratorsPerVM != 0 {
-			return cty.Value{}, false, fmt.Errorf("autoprovisioning_max_accelerator_count (%d) for machine type %s must be a multiple of its native accelerator count (%d)", maxCount, machineType, acceleratorsPerVM)
-		}
-		totalAccelerators = maxCount
-	} else {
-		totalAccelerators = acceleratorsPerVM // assume 1 VM worth by default
+	totalAccelerators, err := validateAndExtractTotalAccelerators(maxCount, maxCountPassed, acceleratorsPerVM, machineType)
+	if err != nil {
+		return cty.Value{}, false, err
 	}
 
 	resMap["autoprovisioning_max_accelerator_count"] = cty.NumberIntVal(int64(totalAccelerators))
@@ -127,37 +117,64 @@ func processAutoscalingLimit(resVal cty.Value) (cty.Value, bool, error) {
 	return cty.ObjectVal(resMap), true, nil
 }
 
-//go:embed accelerators.json
-var acceleratorsBytes []byte
-
-type acceleratorData struct {
-	Count int    `json:"count"`
-	Type  string `json:"type"`
+func extractMaxCount(resMap map[string]cty.Value) (int, bool) {
+	if mcVal, ok := resMap["autoprovisioning_max_accelerator_count"]; ok && !mcVal.IsNull() && mcVal.IsKnown() {
+		if mcVal.Type() == cty.Number {
+			f, _ := mcVal.AsBigFloat().Float64()
+			return int(f), true
+		}
+	}
+	return 1, false
 }
 
-var (
-	gpuMachineTypeToAccelerator map[string]acceleratorData
-	tpuMachineTypeToAccelerator map[string]acceleratorData
-)
+func validateAndExtractTotalAccelerators(maxCount int, maxCountPassed bool, acceleratorsPerVM int, machineType string) (int, error) {
+	if maxCountPassed {
+		if maxCount <= 0 {
+			return 0, fmt.Errorf("autoprovisioning_max_accelerator_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
+		}
+		if maxCount%acceleratorsPerVM != 0 {
+			return 0, fmt.Errorf("autoprovisioning_max_accelerator_count (%d) for machine type %s must be a multiple of its native accelerator count (%d)", maxCount, machineType, acceleratorsPerVM)
+		}
+		return maxCount, nil
+	}
+	return acceleratorsPerVM, nil
+}
 
-func init() {
+func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (int, string, error) {
+	var origMt cty.Value
+	hasMt := mod.Settings.Has("machine_type")
+	if hasMt {
+		origMt = mod.Settings.Get("machine_type")
+	}
+	mod.Settings = mod.Settings.With("machine_type", cty.StringVal(machineType))
+
+	cfgJson, err := getMachineConfigJSON(mod, bp)
+	if err != nil {
+		return 0, "", err
+	}
+
+	if hasMt {
+		mod.Settings = mod.Settings.With("machine_type", origMt)
+	}
+
 	var data struct {
-		Gpus map[string]acceleratorData `json:"gpus"`
-		Tpus map[string]acceleratorData `json:"tpus"`
+		GPUs map[string]struct {
+			Count int    `json:"count"`
+			Type  string `json:"type"`
+		} `json:"gpus"`
+		TPUs map[string]struct {
+			Count int `json:"count"`
+		} `json:"tpus"`
 	}
-	if err := json.Unmarshal(acceleratorsBytes, &data); err != nil {
-		panic(fmt.Sprintf("failed to unmarshal accelerators.json: %v", err))
+	if err := json.Unmarshal([]byte(cfgJson), &data); err != nil {
+		return 0, "", fmt.Errorf("failed to unmarshal machine configurations: %w", err)
 	}
-	gpuMachineTypeToAccelerator = data.Gpus
-	tpuMachineTypeToAccelerator = data.Tpus
-}
 
-func extractAcceleratorCountAndType(machineType string) (int, string) {
-	if acc, ok := gpuMachineTypeToAccelerator[machineType]; ok {
-		return acc.Count, acc.Type
+	if acc, ok := data.GPUs[machineType]; ok {
+		return acc.Count, acc.Type, nil
+	} else if acc, ok := data.TPUs[machineType]; ok {
+		return acc.Count, machineType, nil
 	}
-	if acc, ok := tpuMachineTypeToAccelerator[machineType]; ok {
-		return acc.Count, acc.Type
-	}
-	return 0, ""
+
+	return 0, "", nil
 }
