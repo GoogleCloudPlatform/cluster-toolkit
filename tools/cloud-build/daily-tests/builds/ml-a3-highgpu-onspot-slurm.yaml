@@ -54,9 +54,7 @@ steps:
   - |
     set -e -u -o pipefail
     echo "Sourcing find_available_zone.sh to determine zone."
-    # source /workspace/tools/cloud-build/find_available_zone.sh
-    ZONE="us-central1-b"
-    PROVISIONING_MODEL="SPOT"
+    source /workspace/tools/cloud-build/find_available_zone.sh
     if [ -z "$${ZONE:-}" ]; then
       echo "ERROR: ZONE not found" >&2
       exit 1
@@ -88,8 +86,6 @@ steps:
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
-    cat $${BLUEPRINT}
-    exit 0
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
