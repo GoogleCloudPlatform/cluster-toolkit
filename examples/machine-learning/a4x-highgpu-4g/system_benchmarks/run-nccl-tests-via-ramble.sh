@@ -44,7 +44,26 @@ read -t 30 -rp "To continue, hit [enter]. To cancel, type [Ctrl-c]. Will auto-co
 mkdir -p "${TEST_DIR}"
 
 # Install prerequisites
-sudo apt-get install -y python3-venv jq
+# Handle Munge service conflict
+MUNGE_ACTIVE=false
+if systemctl is-active --quiet munge; then
+	MUNGE_ACTIVE=true
+	echo "Stopping Munge to prevent package lock..."
+	sudo systemctl stop munge || true
+fi
+
+# Non-interactive installation
+echo "Installing prerequisites..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+	-o Dpkg::Options::="--force-confdef" \
+	-o Dpkg::Options::="--force-confold" \
+	python3-venv jq
+
+# Restart Munge if it was active
+if [ "$MUNGE_ACTIVE" = true ]; then
+	echo "Restarting Munge..."
+	sudo systemctl start munge || true
+fi
 
 # Create enroot credentials set up for artifact registry
 mkdir -p "${HOME}"/.enroot/
@@ -109,13 +128,13 @@ ramble:
 
   env_vars:
     set:
-      OMPI_MCA_btl_tcp_if_include: enp0s1
+      OMPI_MCA_btl_tcp_if_include: enp0s3,enp192s2
       PMIX_MCA_gds: ^ds12
       UCX_NET_DEVICES: gpu0rdma0,gpu1rdma0,gpu2rdma0,gpu3rdma0
       PMIX_MCA_psec: native
       UCX_IB_FORK_INIT: n
       NCCL_NET: gIB
-      NCCL_SOCKET_IFNAME: enp0s1,enp192s1
+      NCCL_SOCKET_IFNAME: enp0s3,enp192s2
       LD_LIBRARY_PATH: /usr/local/gib/lib64:usr/local/nvidia/lib
 
   applications:

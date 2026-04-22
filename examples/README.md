@@ -23,11 +23,14 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
+  * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgu-yaml-) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [pfs-managed-lustre-slurm.yaml](#pfs-managed-lustre-slurmyaml-) ![core-badge]
   * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -58,11 +61,15 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
+  * [gke-a4](#gke-a4-) ![core-badge]
+  * [gke-a4x](#gke-a4x-) ![core-badge]
+  * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
   * [netapp-volumes.yaml](#netapp-volumesyaml-) ![core-badge]
   * [gke-tpu-7x](#gke-tpu-7x-) ![core-badge]
   * [gcloud-example.yaml](#gcloud-exampleyaml--) ![community-badge] ![experimental-badge]
@@ -405,6 +412,31 @@ timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
+### [ml-slurm-g4.yaml] ![core-badge]
+
+This blueprint deploys a high-performance computing (HPC) cluster featuring a Slurm scheduler, optimized for machine learning workloads.
+
+Before deploying the blueprint, ensure you are utilizing one of the provision models specified within the blueprint.
+
+To provision the cluster, please run:
+
+```text
+./gcluster create examples/ml-slurm-g4.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy <deployment_name>
+```
+
+When you are done, clean up the resources:
+
+```text
+./gcluster destroy <DEPLOYMENT_FOLDER> --auto-approve
+```
+
+[ml-slurm-g4.yaml]: ../examples/ml-slurm-g4.yaml
+
+### [ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) ![community-badge] ![experimental-badge]
+
+This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using **NVIDIA G4 vGPUs** (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to recognize the fractional GPU resources, making it suitable for cost-effective ML development and inference tasks.
+
 ### [image-builder.yaml] ![core-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
@@ -653,6 +685,28 @@ For this example, the following is needed in the selected region:
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
 
+### [pfs-managed-lustre-slurm.yaml] ![core-badge]
+
+This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully managed, POSIX-compliant parallel file system optimized for the massive I/O demands of AI/ML training and scientific simulations.
+
+Creates a Managed Lustre file-system that is mounted on the slurm cluster controller instance.
+
+The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
+file system is designed for high IO performance. For further information, refer the official documentation [Performance tiers and maximum storage capacities](https://docs.cloud.google.com/managed-lustre/docs/create-instance#performance-tiers)
+
+To provision the cluster, run the following command. You will be prompted to approve each deployment group.
+
+```text
+./gcluster deploy examples/pfs-managed-lustre-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
+To destroy the cluster,Run below command:
+
+```text
+./gcluster destroy <deployment_name>
+```
+
+[pfs-managed-lustre-slurm.yaml]: ./pfs-managed-lustre-slurm.yaml
 ### [rapid-storage-slurm.yaml] ![core-badge]
 
 This blueprint showcases the integration of several storage solutions:
@@ -1419,14 +1473,14 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
+This blueprint provisions a GKE cluster with A3 High nodes (`a3-highgpu-8g`). Refer to the [A3 High Deployment Guide](./gke-a3-highgpu/README.md) for detailed instructions.
 
-After provisioning the cluster and the nodepool, the below components will be installed
-to enable GPUDirect for the A3 High machines.
+A3 High VMs feature 8 NVIDIA H100 GPUs and are optimized for high-performance ML training. The blueprint automatically configures:
 
-* NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
-* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
-* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
+* **GPU-Direct TCPX**: High-bandwidth, low-latency networking stack.
+* **Multi-networking**: 4 dedicated VPC networks for GPU-to-GPU communication.
+* **Topology Aware Scheduling (TAS)**: Optimized workload placement via Kueue.
+* **Cluster Health Services (CHS)**: Automated GPU health checks.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1434,24 +1488,23 @@ to enable GPUDirect for the A3 High machines.
 > to apply a manifest. **You must use
 > the `authorized_cidr` variable to supply an authorized network which contains
 > the IP address of the machine deploying the blueprint, for example
-> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
-> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+> `--vars authorized_cidr=<your-ip-address>/32`.**
 
 #### Troubleshooting
 
 ##### Externally Managed Environment Error
 
-If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager.
 
 ```shell
-  ## One time step of creating the venv
-  VENV_DIR=~/venvp3
-  python3 -m venv $VENV_DIR
-  ## Enter your venv.
-  source $VENV_DIR/bin/activate
+## One time step of creating the venv
+VENV_DIR=~/venvp3
+python3 -m venv $VENV_DIR
+## Enter your venv.
+source $VENV_DIR/bin/activate
 ```
 
-[gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+[gke-a3-highgpu.yaml]: ./gke-a3-highgpu/gke-a3-highgpu.yaml
 
 ### [gke-a3-highgpu-inference-gateway.yaml] ![core-badge]
 
@@ -1553,6 +1606,12 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
+### [hpc-slurm-kms.yaml] ![community-badge] ![experimental-badge]
+
+Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket.
+
+[hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
+
 ### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
@@ -1653,6 +1712,24 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
 
 [gke-g4]: ../examples/gke-g4
+
+### [gke-a4] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-a4-vms-powered-by-nvidia-b200-gpu-aka-blackwell). The deployment instructions can be found in the [README](/examples/gke-a4/README.md).
+
+[gke-a4]: ../examples/gke-a4
+
+### [gke-a4x] ![core-badge]
+
+This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found [here](https://cloud.google.com/blog/products/compute/new-a4x-vms-powered-by-nvidia-gb200-gpus). The deployment instructions can be found in the [README](/examples/gke-a4x/README.md).
+
+[gke-a4x]: ../examples/gke-a4x
+
+### [gke-a4x-max-bm] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found [here](https://cloud.google.com/blog/products/compute/now-shipping-a4x-max-vertex-ai-training-and-more). The deployment instructions can be found in the [README](/examples/gke-a4x-max-bm/README.md).
+
+[gke-a4x-max-bm]: ../examples/gke-a4x-max-bm
 
 ### [netapp-volumes.yaml] ![core-badge]
 

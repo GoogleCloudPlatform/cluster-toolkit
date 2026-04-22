@@ -32,6 +32,7 @@ module "gpu" {
 
   machine_type      = var.machine_type
   guest_accelerator = var.guest_accelerator
+  machine_configs   = var.machine_configs
 }
 
 locals {
@@ -87,6 +88,7 @@ module "tpu" {
 
   machine_type     = var.machine_type
   placement_policy = var.placement_policy
+  machine_configs  = var.machine_configs
 }
 
 
@@ -429,6 +431,10 @@ resource "google_container_node_pool" "node_pool" {
       condition     = var.spot == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
+    precondition {
+      condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
+      error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
+    }
   }
 }
 
@@ -499,13 +505,13 @@ module "kubectl_apply" {
   cluster_id = var.cluster_id
   project_id = var.project_id
 
-  apply_manifests = flatten([
+  apply_manifests = var.install_gpu_direct_manifests ? flatten([
     for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
       {
         source = manifest
       }
     ]
-  ])
+  ]) : []
 }
 
 check "dranet_requirements" {

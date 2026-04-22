@@ -113,7 +113,7 @@ squeue
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
@@ -121,7 +121,7 @@ squeue
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
 | <a name="provider_helm"></a> [helm](#provider\_helm) | ~> 2.17 |
 
@@ -132,7 +132,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [helm_release.cert_manager](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [helm_release.prometheus](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [helm_release.slurm](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
@@ -143,7 +143,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_cert_manager_chart_version"></a> [cert\_manager\_chart\_version](#input\_cert\_manager\_chart\_version) | Version of the Cert Manager chart to install. | `string` | `"v1.18.2"` | no |
 | <a name="input_cert_manager_values"></a> [cert\_manager\_values](#input\_cert\_manager\_values) | Value overrides for the Cert Manager release | `any` | <pre>{<br/>  "crds": {<br/>    "enabled": true<br/>  }<br/>}</pre> | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
@@ -166,7 +166,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_slurm_namespace"></a> [slurm\_namespace](#output\_slurm\_namespace) | namespace for the slurm chart |
 | <a name="output_slurm_operator_namespace"></a> [slurm\_operator\_namespace](#output\_slurm\_operator\_namespace) | namespace for the slinky operator chart |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

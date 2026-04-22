@@ -449,8 +449,14 @@ variable "run_workload_script" {
   default     = true
 }
 
+variable "install_gpu_direct_manifests" {
+  description = "If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually."
+  type        = bool
+  default     = true
+}
+
 variable "enable_queued_provisioning" {
-  description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool."
+  description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool. This cannot be true if `accelerator_topology_mode` is set to `PROVISION_ONLY`."
   type        = bool
   default     = false
 }
@@ -530,4 +536,16 @@ variable "linux_node_config" {
   })
   default  = {}
   nullable = false
+}
+
+variable "accelerator_topology_mode" {
+  description = "The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`."
+  type        = string
+  default     = null
+}
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
 }

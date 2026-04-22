@@ -2,14 +2,14 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_helm"></a> [helm](#provider\_helm) | ~> 2.17 |
 
 ## Modules
@@ -19,13 +19,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [helm_release.apply_chart](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_atomic"></a> [atomic](#input\_atomic) | If set, the installation process purges chart on failure ('helm install --atomic'). The --wait flag will be set automatically if atomic is used. | `bool` | `false` | no |
 | <a name="input_chart_name"></a> [chart\_name](#input\_chart\_name) | Name of the Helm chart (can be a chart reference, path to a packaged chart, path to an unpacked chart directory, or a URL). | `string` | n/a | yes |
 | <a name="input_chart_repository"></a> [chart\_repository](#input\_chart\_repository) | URL of the Helm chart repository. Set to null or omit if 'chart\_name' is a path or URL. | `string` | `null` | no |
@@ -43,7 +43,7 @@ No modules.
 | <a name="input_keyring"></a> [keyring](#input\_keyring) | Location of public keys used for verification ('helm install --keyring'). Used if 'verify' is true. | `string` | `null` | no |
 | <a name="input_lint"></a> [lint](#input\_lint) | Run the helm chart linter during the plan ('helm lint'). | `bool` | `false` | no |
 | <a name="input_max_history"></a> [max\_history](#input\_max\_history) | Limit the maximum number of revisions saved per release ('helm upgrade --history-max'). 0 for no limit. | `number` | `null` | no |
-| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the Helm release into. | `string` | `"default"` | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the Helm release into. | `string` | `null` | no |
 | <a name="input_pass_credentials"></a> [pass\_credentials](#input\_pass\_credentials) | Pass credentials to all domains ('helm install --pass-credentials'). Use with caution. | `bool` | `false` | no |
 | <a name="input_postrender"></a> [postrender](#input\_postrender) | Configuration for a post-rendering executable ('helm install --post-renderer'). Should be an object with 'binary\_path' attribute. | <pre>object({<br/>    binary_path = string # Path to the post-renderer executable<br/>  })</pre> | `null` | no |
 | <a name="input_recreate_pods"></a> [recreate\_pods](#input\_recreate\_pods) | Perform pods restart for the resource if applicable ('helm upgrade --recreate-pods'). Note: This flag is deprecated in Helm CLI v3 itself. | `bool` | `false` | no |

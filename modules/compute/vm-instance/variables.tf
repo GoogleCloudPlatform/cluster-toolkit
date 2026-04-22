@@ -437,3 +437,9 @@ variable "reservation_name" {
     error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
   }
 }
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
+}

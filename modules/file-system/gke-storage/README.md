@@ -1,5 +1,5 @@
 > [!WARNING]
-> The `Parallelstore` `storage_type` is deprecated and will be removed on October 31, 2026. For a
+> The `Parallelstore` `storage_type` is deprecated and will be removed on August 31, 2026. For a
 > replacement on GKE, we recommend using the
 > [GCP Managed Lustre module](../managed-lustre/README.md)
 > See the [gke-managed-lustre.yaml](../../../examples/gke-managed-lustre.yaml) blueprint for a complete example.
@@ -7,11 +7,11 @@
 ## Description
 
 This module creates Kubernetes Storage Class (SC) that can be used by a Persistent Volume Claim (PVC)
-to dynamically provision GCP storage resources like Parallelstore.
+to dynamically provision GCP storage resources like Hyperdisk-balanced.
 
 ### Example
 
-The following example uses the `gke-storage` module to creates a Parallelstore Storage Class and Persistent Volume Claim,
+The following example uses the `gke-storage` module to create a Hyperdisk-balanced Storage Class and Persistent Volume Claim,
 then use them in a `gke-job-template` to dynamically provision the resource.
 
 ```yaml
@@ -19,29 +19,19 @@ then use them in a `gke-job-template` to dynamically provision the resource.
     source: modules/scheduler/gke-cluster
     use: [network]
     settings:
-      enable_parallelstore_csi: true
-
-  # Private Service Access (PSA) requires the compute.networkAdmin role which is
-  # included in the Owner role, but not Editor.
-  # PSA is required for all Parallelstore functionality.
-  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-    settings:
-      prefix_length: 24
+      enable_persistent_disk_csi: true
 
   - id: gke_storage
     source: modules/file-system/gke-storage
-    use: [ gke_cluster, private_service_access ]
+    use: [ gke_cluster ]
     settings:
-      storage_type: Parallelstore
-      access_mode: ReadWriteMany
+      storage_type: Hyperdisk-balanced
+      access_mode: ReadWriteOnce
       sc_volume_binding_mode: Immediate
       sc_reclaim_policy: Delete
       sc_topology_zones: [$(vars.zone)]
-      pvc_count: 2
-      capacity_gb: 12000
+      pvc_count: 1
+      capacity_gb: 500
 
   - id: job_template
     source: modules/compute/gke-job-template
@@ -49,7 +39,7 @@ then use them in a `gke-job-template` to dynamically provision the resource.
 ```
 
 See example
-[gke-managed-parallelstore.yaml](../../../examples/README.md#gke-managed-parallelstoreyaml--) blueprint
+[gke-managed-hyperdisk.yaml](../../../examples/README.md#gke-managed-hyperdiskyaml--) blueprint
 for a complete example.
 
 ### Authorized Network
@@ -96,7 +86,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -106,7 +96,7 @@ No providers.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 
 ## Resources
@@ -116,7 +106,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_mode"></a> [access\_mode](#input\_access\_mode) | The access mode that the volume can be mounted to the host/pod. More details in [Access Modes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes)<br/>Valid access modes:<br/>- ReadWriteOnce<br/>- ReadOnlyMany<br/>- ReadWriteMany<br/>- ReadWriteOncePod | `string` | n/a | yes |
 | <a name="input_capacity_gb"></a> [capacity\_gb](#input\_capacity\_gb) | The storage capacity with which to create the persistent volume. | `number` | n/a | yes |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
@@ -135,6 +125,6 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_persistent_volume_claims"></a> [persistent\_volume\_claims](#output\_persistent\_volume\_claims) | An object that describes a k8s PVC created by this module. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

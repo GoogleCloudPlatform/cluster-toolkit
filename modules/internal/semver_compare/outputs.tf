@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ${pvc_name}
-spec:
-  accessModes:
-    - ${access_mode}
-  resources:
-    requests:
-      storage: ${capacity}
-  storageClassName: ${storage_class_name}
-  
+output "is_valid_semver" {
+  value       = local.is_valid_semver
+  description = "True if both versions could be parsed into major.minor semantic logic."
+}
+
+output "is_greater_than_or_equal" {
+  value       = local.is_greater_than_or_equal
+  description = "True if the version meets the minimum requirement, or if the version is a non-standard custom string (fail-open)."
+}

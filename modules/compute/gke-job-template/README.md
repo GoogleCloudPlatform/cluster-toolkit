@@ -72,7 +72,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -80,7 +80,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -91,14 +91,14 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [local_file.job_template](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#input\_allocatable\_cpu\_per\_node) | The allocatable cpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `list(number)` | <pre>[<br/>  -1<br/>]</pre> | no |
 | <a name="input_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#input\_allocatable\_gpu\_per\_node) | The allocatable gpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field. | `list(number)` | <pre>[<br/>  -1<br/>]</pre> | no |
 | <a name="input_backoff_limit"></a> [backoff\_limit](#input\_backoff\_limit) | Controls the number of retries before considering a Job as failed. Set to zero for shared fate. | `number` | `0` | no |
@@ -128,6 +128,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the GKE job. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
