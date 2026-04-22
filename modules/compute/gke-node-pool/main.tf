@@ -425,10 +425,10 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition = var.is_reservation_active || (
-        (is_null(var.static_node_count) || var.static_node_count == 0) &&
-        (is_null(var.autoscaling_min_node_count) || var.autoscaling_min_node_count == 0) &&
-        (is_null(var.autoscaling_max_node_count) || var.autoscaling_max_node_count == 0) &&
-        (is_null(var.initial_node_count) || var.initial_node_count == 0)
+        (var.static_node_count == null || var.static_node_count == 0) &&
+        (var.autoscaling_min_node_count == null || var.autoscaling_min_node_count == 0) &&
+        (var.autoscaling_max_node_count == null || var.autoscaling_max_node_count == 0) &&
+        (var.initial_node_count == null || var.initial_node_count == 0)
       )
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
