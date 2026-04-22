@@ -29,7 +29,11 @@ metadata:
   namespace: <user_namespace>
   labels:
     diagon-enabled: "true"
+    kueue.x-k8s.io/queue-name: user-queue
 spec:
+  network:
+    enableDNSHostnames: true
+    subdomain: tpu-discovery-service
   replicatedJobs:
   - name: tpu-slice
     replicas: 1
@@ -42,7 +46,7 @@ spec:
         template:
           spec:
             serviceAccountName: <k8s-service-account-name> # default: workload-identity-k8s-sa
-            subdomain: tpu-discovery-service
+            automountServiceAccountToken: true
             restartPolicy: Never
             nodeSelector:
               cloud.google.com/gke-tpu-accelerator: <tpu_accelerator>

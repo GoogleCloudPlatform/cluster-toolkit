@@ -200,7 +200,7 @@ module "configure_kueue" {
   chart_version    = "0.1.0"
   namespace        = "kueue-system"
   create_namespace = true
-  wait             = false # Configuration resources (Queues) usually don't need wait
+  wait             = true
 
   values_yaml = [
     yamlencode({
@@ -208,14 +208,13 @@ module "configure_kueue" {
     })
   ]
 
-  depends_on = [module.install_kueue]
-
+  depends_on = [module.install_kueue, module.install_jobset]
 }
 
 module "install_jobset" {
   source           = "./helm_install"
   count            = local.install_jobset ? 1 : 0
-  wait             = false
+  wait             = true
   timeout          = 1200
   release_name     = "jobset"
   chart_repository = "oci://registry.k8s.io/jobset/charts"
@@ -226,7 +225,7 @@ module "install_jobset" {
   values_yaml = [
     file("${path.module}/jobset/jobset-helm-values.yaml")
   ]
-  depends_on = [var.gke_cluster_exists, module.configure_kueue]
+  depends_on = [var.gke_cluster_exists, module.install_kueue]
 }
 
 module "install_cert_manager" {
