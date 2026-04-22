@@ -5,7 +5,7 @@
   * you may not use this file except in compliance with the License.
   * You may obtain a copy of the License at
   *
-  *      http://www.apache.org/licenses/LICENSE-2.0
+  *      http://www.apache.0rg/licenses/LICENSE-2.0
   *
   * Unless required by applicable law or agreed to in writing, software
   * distributed under the License is distributed on an "AS IS" BASIS,
@@ -55,8 +55,8 @@ locals {
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 
   # Merge all Kubernetes labels
-  # Note: cloud.google.com/gke-queued is added manually because while GKE 
-  # automatically applies the taint, the label is required for workloads 
+  # Note: cloud.google.com/gke-queued is added manually because while GKE
+  # automatically applies the taint, the label is required for workloads
   # using nodeSelectors to correctly target these provisioned nodes.
   kubernetes_labels = merge(
     var.kubernetes_labels,
@@ -96,7 +96,7 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
 
   node_count = var.static_node_count
-  # Per-zone limits (min_node_count/max_node_count) are required to workaround a 
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a
   # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
     for_each = local.static_node_set ? [] : [1]
@@ -422,6 +422,10 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
       error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
+    }
+    precondition {
+      condition     = var.is_reservation_active || (var.static_node_count == null && var.autoscaling_min_node_count == null && var.autoscaling_max_node_count == null)
+      error_message = "When `is_reservation_active` is set to `false`, you cannot use `static_node_count`, `autoscaling_min_node_count`, or `autoscaling_max_node_count`. These variables must be `null` when `is_reservation_active` is `false`."
     }
   }
 }
