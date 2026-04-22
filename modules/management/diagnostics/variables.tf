@@ -84,7 +84,7 @@ resource "terraform_data" "validate_sa" {
 
   lifecycle {
     precondition {
-      condition     = !var.gke_cluster_exists ? true : contains(keys(try(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations, {})), "iam.gke.io/gcp-service-account")
+      condition     = try(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations != null ? contains(keys(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations), "iam.gke.io/gcp-service-account") : true, true)
       error_message = "The Service Account must be annotated for Workload Identity in user workload namespace '${var.namespace}'. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
     }
   }

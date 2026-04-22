@@ -97,14 +97,14 @@ steps:
     # Uncomment and set user_namespace
     sed -i 's/# user_namespace:/user_namespace: ai-workloads/' $${EXAMPLE_BP}
 
-    # Add hypercomputecluster.editor role
-    sed -i '/id: workload_service_account/,/project_roles:/s/project_roles:/project_roles:\n      - hypercomputecluster.editor/' $${EXAMPLE_BP}
+    # Add hypercomputecluster.editor role and storage.admin
+    sed -i '/id: workload_service_account/,/project_roles:/s/project_roles:/project_roles:\n      - hypercomputecluster.editor\n      - storage.admin/' $${EXAMPLE_BP}
 
     # Add namespace to gke-tpu-v6e-cluster settings for workload-identity
     sed -i '/id: gke-tpu-v6e-cluster/,/settings:/s/settings:/settings:\n      namespace: $(vars.user_namespace)/' $${EXAMPLE_BP}
 
     # Uncomment cert-manager
-    sed -i 's/# cert-manager:/cert-manager:/' $${EXAMPLE_BP}
+    sed -i 's/# cert_manager:/cert_manager:/' $${EXAMPLE_BP}
     sed -i 's/#   install: true/  install: true/' $${EXAMPLE_BP}
 
     # Add namespace to config_template_vars in workload-manager-install

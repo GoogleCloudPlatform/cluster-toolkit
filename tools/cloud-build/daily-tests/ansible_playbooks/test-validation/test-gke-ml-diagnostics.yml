@@ -38,8 +38,8 @@
   delay: 15
   until:
   - cert_manager_pods.rc == 0
-  - (cert_manager_pods.stdout | from_json).items | length > 0
-  - (cert_manager_pods.stdout | from_json).items | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (cert_manager_pods.stdout | from_json).items | length
+  - (cert_manager_pods.stdout | from_json)['items'] | length > 0
+  - (cert_manager_pods.stdout | from_json)['items'] | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (cert_manager_pods.stdout | from_json)['items'] | length
 
 - name: Verify Diagon charts are healthy in gke-mldiagnostics
   delegate_to: localhost
@@ -49,8 +49,8 @@
   delay: 15
   until:
   - diagon_pods.rc == 0
-  - (diagon_pods.stdout | from_json).items | length > 0
-  - (diagon_pods.stdout | from_json).items | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (diagon_pods.stdout | from_json).items | length
+  - (diagon_pods.stdout | from_json)['items'] | length > 0
+  - (diagon_pods.stdout | from_json)['items'] | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (diagon_pods.stdout | from_json)['items'] | length
 
 - name: Verify user namespace is labeled
   delegate_to: localhost
@@ -74,7 +74,7 @@
   register: lq_info
   failed_when:
   - lq_info.rc != 0
-  - (lq_info.stdout | from_json).items | length == 0
+  - (lq_info.stdout | from_json)['items'] | length == 0
 
 - name: Create modified job file
   delegate_to: localhost
@@ -104,8 +104,8 @@
     register: job_pods
     until:
     - job_pods.rc == 0
-    - (job_pods.stdout | from_json).items | length > 0
-    retries: 30
+    - (job_pods.stdout | from_json)['items'] | length > 0
+    retries: 90
     delay: 10
 
   - name: Wait for jobset to complete
@@ -118,10 +118,10 @@
     retries: 30
     delay: 20
 
-  - name: Verify logs contain Pantheon MLrun URL
+  - name: Verify logs contain ML Diagnostics URL
     delegate_to: localhost
     ansible.builtin.shell: |
-      gcloud logging read "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"{{ custom_vars.user_namespace }}\" AND textPayload:\"Pantheon MLrun URL\"" --project {{ custom_vars.project }} --limit 1 --format=json
+      gcloud logging read "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"{{ custom_vars.user_namespace }}\" AND textPayload:\"ML Diagnostics URL\"" --project {{ custom_vars.project }} --limit 1 --format=json
     register: logs_output
     until:
     - logs_output.rc == 0
@@ -131,7 +131,7 @@
 
   - name: Verify profiling data in GCS
     delegate_to: localhost
-    ansible.builtin.command: gsutil ls gs://{{ custom_vars.gcs_bucket }}/{{ build }}/**/xplane.pb
+    ansible.builtin.command: gcloud storage ls gs://{{ custom_vars.gcs_bucket }}/{{ build }}/**/*xplane.pb
     register: gcs_check
     until: gcs_check.rc == 0
     retries: 10
@@ -162,6 +162,39 @@
     ansible.builtin.debug:
       var: jobset_describe.stdout_lines
 
+  - name: Get pod names on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get pods -n {{ custom_vars.user_namespace }} -l jobset.sigs.k8s.io/jobset-name={{ custom_vars.jobset_name }} --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[*].metadata.name}'
+    register: pod_names
+    changed_when: false
+    failed_when: false
+
+  - name: Describe oldest pod on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl describe pod {{ pod_names.stdout.split() | first }} -n {{ custom_vars.user_namespace }}
+    register: pod_describe
+    when: (pod_names.stdout.split() | length) > 0
+    changed_when: false
+    failed_when: false
+
+  - name: Print oldest pod description on failure
+    ansible.builtin.debug:
+      var: pod_describe.stdout_lines
+    when: (pod_names.stdout.split() | length) > 0
+
+  - name: Get oldest pod logs on failure
+    delegate_to: localhost
+    ansible.builtin.command: kubectl logs {{ pod_names.stdout.split() | first }} -n {{ custom_vars.user_namespace }} --all-containers --tail=200
+    register: pod_logs
+    when: (pod_names.stdout.split() | length) > 0
+    changed_when: false
+    failed_when: false
+
+  - name: Print oldest pod logs on failure
+    ansible.builtin.debug:
+      var: pod_logs.stdout_lines
+    when: (pod_names.stdout.split() | length) > 0
+
   - name: Fail the playbook
     ansible.builtin.fail:
       msg: "ML Diagnostics test failed."
@@ -170,9 +203,11 @@
   - name: Cleanup sample job
     delegate_to: localhost
     ansible.builtin.command: kubectl delete -f {{ modified_job_file }}
-    when: job_submission.changed
+    when: job_submission is defined and job_submission.changed
+    failed_when: false
 
   - name: Cleanup GCS profiling data
     delegate_to: localhost
-    ansible.builtin.command: gsutil rm -r gs://{{ custom_vars.gcs_bucket }}/{{ build }}
-    when: job_submission.changed
+    ansible.builtin.command: gcloud storage rm -r gs://{{ custom_vars.gcs_bucket }}/{{ build }}
+    when: job_submission is defined and job_submission.changed
+    failed_when: false
