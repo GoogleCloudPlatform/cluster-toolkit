@@ -257,7 +257,7 @@ reservation_affinity:
 ```
 
 ### Target a future reservation OR reservations that are not fulfilled yet
-To create a GKE nodepool with a future reservation or reservations that are not fulfilled yet, set the `is_reservation_active` input variable to `false`. Note that to use this variable, these three input variables should not be set: `static_node_count`, `autoscaling_min_node_count`, `autoscaling_max_node_count` and `initial_node_count`.
+To create a GKE nodepool with a future reservation or reservations that are not fulfilled yet, set the `is_reservation_active` input variable to `false`. Note that to use this variable, these three input variables should not be set or be set to 0 or null: `static_node_count`, `autoscaling_min_node_count`, `autoscaling_max_node_count` and `initial_node_count`.
 
 ```yaml
 is_reservation_active: false
