@@ -85,6 +85,8 @@ steps:
     fi
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} $${SLURM_VARS_FILE} "DAILY"
+    cat $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
