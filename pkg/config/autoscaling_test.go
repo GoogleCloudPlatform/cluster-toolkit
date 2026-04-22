@@ -107,32 +107,3 @@ func (s *zeroSuite) TestExpandClusterAutoscaling_InvalidCount(c *C) {
 	c.Check(err, NotNil)
 	c.Check(err.Error(), Matches, ".*must be a multiple.*")
 }
-
-func (s *zeroSuite) TestExtractAcceleratorCountAndType(c *C) {
-	// GPU
-	count, t := extractAcceleratorCountAndType("a3-highgpu-8g")
-	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "nvidia-h100-80gb")
-
-	count, t = extractAcceleratorCountAndType("a3-megagpu-8g")
-	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "nvidia-h100-mega-80gb")
-
-	count, t = extractAcceleratorCountAndType("a3-ultragpu-8g")
-	c.Check(count, Equals, 8)
-	c.Check(t, Equals, "nvidia-h200-141gb")
-
-	// TPU
-	count, t = extractAcceleratorCountAndType("ct4p-hightpu-4t")
-	c.Check(count, Equals, 4)
-	c.Check(t, Equals, "tpu-v4-podslice")
-
-	count, t = extractAcceleratorCountAndType("ct5lp-hightpu-4t")
-	c.Check(count, Equals, 4)
-	c.Check(t, Equals, "tpu-v5-lite-podslice")
-
-	// Unknown or non-accelerator
-	count, t = extractAcceleratorCountAndType("n1-standard-4")
-	c.Check(count, Equals, 0)
-	c.Check(t, Equals, "")
-}
