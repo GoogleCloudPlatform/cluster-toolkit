@@ -54,7 +54,25 @@ steps:
   - |
     set -e -u -o pipefail
     echo "Sourcing find_available_zone.sh to determine zone."
-    
+    # source /workspace/tools/cloud-build/find_available_zone.sh
+    ZONE="us-central1-b"
+    PROVISIONING_MODELS="SPOT"
+    if [ -z "$${ZONE:-}" ]; then
+      echo "ERROR: ZONE not found" >&2
+      exit 1
+    fi
+    set -x
+    cd /workspace
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
+    REGION="$${ZONE%-*}"
+    BUILD_ID_SHORT="$${BUILD_ID:0:6}"
 
     BLUEPRINT="/workspace/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
 
