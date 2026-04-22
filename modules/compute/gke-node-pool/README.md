@@ -295,7 +295,9 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
+| <a name="module_dranet_version_compare"></a> [dranet\_version\_compare](#module\_dranet\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
+| <a name="module_gpu_direct_version_compare"></a> [gpu\_direct\_version\_compare](#module\_gpu\_direct\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
 
