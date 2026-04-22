@@ -424,8 +424,8 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
     }
     precondition {
-      condition     = var.is_reservation_active || (var.static_node_count == null && var.autoscaling_min_node_count == null && var.autoscaling_max_node_count == null)
-      error_message = "When `is_reservation_active` is set to `false`, you cannot use `static_node_count`, `autoscaling_min_node_count`, or `autoscaling_max_node_count`. These variables must be `null` when `is_reservation_active` is `false`."
+      condition     = var.is_reservation_active || (var.static_node_count == null && var.autoscaling_min_node_count == null && var.autoscaling_max_node_count == null && var.initial_node_count == null)
+      error_message = "When `is_reservation_active` is set to `false`, you cannot use `static_node_count`, `autoscaling_min_node_count`, `autoscaling_max_node_count`, or `initial_node_count`. These variables must be `null` when `is_reservation_active` is `false`."
     }
   }
 }
