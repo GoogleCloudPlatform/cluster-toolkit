@@ -1028,3 +1028,146 @@ func TestGetBillingAccountId(t *testing.T) {
 		})
 	}
 }
+
+func TestGetModules(t *testing.T) {
+	// Backup the original standardModules to restore it after the test
+	originalStandardModules := standardModules
+	defer func() { standardModules = originalStandardModules }()
+
+	tests := []struct {
+		name         string
+		input        []string
+		mockStandard []string
+		expected     string
+	}{
+		{
+			name:         "success: empty input",
+			input:        []string{},
+			mockStandard: []string{"modules/network/vpc"},
+			// If the blueprint has no modules, return empty string
+			expected: "",
+		},
+		{
+			name:  "error: standardModules fetch failed (UNVERIFIED)",
+			input: []string{"modules/network/vpc", "my/custom/module"},
+			// Simulates a failure to fetch standard modules (empty standardModules list)
+			mockStandard: []string{},
+			// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED"
+			expected: "UNVERIFIED",
+		},
+		{
+			name:         "success: all standard modules",
+			input:        []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockStandard: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			// Standard modules are preserved
+			expected: "modules/network/vpc,community/modules/compute/mig",
+		},
+		{
+			name:         "success: mix of standard and custom modules",
+			input:        []string{"modules/network/vpc", "my/custom/module"},
+			mockStandard: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			// Unrecognized module is replaced with "Custom"
+			expected: "modules/network/vpc,Custom",
+		},
+		{
+			name:         "success: only custom modules",
+			input:        []string{"my/custom/module1", "my/custom/module2"},
+			mockStandard: []string{"modules/network/vpc"},
+			expected:     "Custom,Custom",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Mock the package-level variable for the current test case
+			standardModules = tc.mockStandard
+
+			result := getModules(tc.input)
+			if result != tc.expected {
+				t.Errorf("getModules() = %q; want %q", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetDeploymentFile(t *testing.T) {
+	// Backup the original standardDeploymentFiles to restore it after the test
+	originalStandardDeploymentFiles := standardDeploymentFiles
+	defer func() { standardDeploymentFiles = originalStandardDeploymentFiles }()
+
+	// Mock the predefined list of standard files for controlled testing
+	standardDeploymentFiles = []string{
+		"examples/hpc-slurm.yaml",
+		"community/examples/batch-job.yaml",
+	}
+
+	tests := []struct {
+		name           string
+		setupCommand   func() *cobra.Command
+		expectedResult string
+	}{
+		{
+			name: "success: flag set with a recognized standard deployment file",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "examples/hpc-slurm.yaml")
+				return cmd
+			},
+			expectedResult: "examples/hpc-slurm.yaml",
+		},
+		{
+			name: "success: flag set with a recognized standard deployment file containing a ./ prefix",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				// Setting the value with the "./" prefix
+				_ = cmd.Flags().Set("deployment-file", "./examples/hpc-slurm.yaml")
+				return cmd
+			},
+			// The method should trim the "./" prefix and successfully match the file
+			expectedResult: "examples/hpc-slurm.yaml",
+		},
+		{
+			name: "failure: flag set with a custom/unrecognized deployment file",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "my-custom-cluster.yaml")
+				return cmd
+			},
+			// Should return empty string because it's not in standardDeploymentFiles
+			expectedResult: "",
+		},
+		{
+			name: "failure: flag exists but is empty",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				// Not setting a value, so it defaults to ""
+				return cmd
+			},
+			expectedResult: "",
+		},
+		{
+			name: "failure: deployment-file flag does not exist on the command",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				// The flag is entirely missing
+				return cmd
+			},
+			expectedResult: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := tc.setupCommand()
+			result := getDeploymentFile(cmd)
+
+			if result != tc.expectedResult {
+				t.Errorf("getDeploymentFile() = %q; want %q", result, tc.expectedResult)
+			}
+		})
+	}
+}
