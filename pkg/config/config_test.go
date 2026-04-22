@@ -1079,6 +1079,8 @@ func TestGetPredefinedModules(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Clear the cache before each individual test case
+			cachedTree = nil
 			// Set up the mock transport for the current test case
 			http.DefaultTransport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
@@ -1156,6 +1158,8 @@ func TestGetPredefinedExampleFiles(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Clear the cache before each individual test case
+			cachedTree = nil
 			// Set up the mock transport for the current test case
 			http.DefaultTransport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
@@ -1176,5 +1180,57 @@ func TestGetPredefinedExampleFiles(t *testing.T) {
 				t.Errorf("expected files %v, got %v", tc.expected, files)
 			}
 		})
+	}
+}
+
+func TestGetPredefined_Caching(t *testing.T) {
+	// Save the original transport to restore it after the test
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Ensure the cache is clean before and after this test runs
+	cachedTree = nil
+	defer func() { cachedTree = nil }()
+
+	apiCallCount := 0
+
+	// Mock transport that counts how many times the API was called
+	http.DefaultTransport = &mockTransport{
+		roundTripFunc: func(req *http.Request) (*http.Response, error) {
+			apiCallCount++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"tree": [
+						{"path": "modules/network/vpc/main.tf", "type": "blob"},
+						{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+					]
+				}`)),
+			}, nil
+		},
+	}
+
+	// First call should trigger an API request and populate the cache
+	modules := GetPredefinedModules()
+	if len(modules) == 0 {
+		t.Errorf("Expected modules to be returned, got empty list")
+	}
+	if apiCallCount != 1 {
+		t.Errorf("Expected exactly 1 API call on first execution, got %d", apiCallCount)
+	}
+
+	// Second call (for example files) should use the cache and NOT trigger an API request
+	examples := GetPredefinedExampleFiles()
+	if len(examples) == 0 {
+		t.Errorf("Expected examples to be returned, got empty list")
+	}
+	if apiCallCount != 1 {
+		t.Errorf("Expected still 1 API call after second execution, got %d", apiCallCount)
+	}
+
+	// Third call (same function again) should also use the cache
+	GetPredefinedModules()
+	if apiCallCount != 1 {
+		t.Errorf("Expected still 1 API call after third execution, got %d", apiCallCount)
 	}
 }

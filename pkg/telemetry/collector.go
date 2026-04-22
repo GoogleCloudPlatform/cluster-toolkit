@@ -131,6 +131,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
 		path = flag.Value.String()
 	}
+	path = strings.TrimPrefix(path, "./")
 	if slices.Contains(standardDeploymentFiles, path) {
 		return path
 	}

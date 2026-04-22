@@ -985,9 +985,18 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-// fetchGitFiles queries the GitHub API and decodes the JSON into a TreeResponse
+// cachedTree stores the GitHub API response to avoid redundant network calls.
+var cachedTree *TreeResponse
+
+// fetchGitFiles queries the GitHub API and decodes the JSON into a TreeResponse.
 func fetchGitFiles(version string) (*TreeResponse, error) {
+	// Return the cached response if we've already fetched it
+	if cachedTree != nil {
+		return cachedTree, nil
+	}
+
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+	// Ensure the network call has a timeout of up to 10 seconds to prevent blocking CLI execution.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -1007,7 +1016,9 @@ func fetchGitFiles(version string) (*TreeResponse, error) {
 		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
-	return &treeResp, nil
+	// Cache the response before returning it
+	cachedTree = &treeResp
+	return cachedTree, nil
 }
 
 // GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
