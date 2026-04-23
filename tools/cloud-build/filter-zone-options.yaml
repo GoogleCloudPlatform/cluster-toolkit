@@ -13,6 +13,9 @@
 # limitations under the License.
 
 ---
+substitutions:
+  _GCS_BUCKET: "gs://hpc-ctk1357"
+
 steps:
 - id: filter-zones
   name: gcr.io/cloud-builders/gcloud
@@ -22,7 +25,7 @@ steps:
   - |
     set -e -u -o pipefail
 
-    GCS_BUCKET="gs://hpc-ctk1357"
+    GCS_BUCKET="${_GCS_BUCKET}"
     BUILD_YAML_DIR="tools/cloud-build/daily-tests/builds"
 
     # Variables to hold the available locations returned by GCP APIs
@@ -40,7 +43,7 @@ steps:
       echo "=== Fetching Resource Availability ==="
 
       echo "Fetching Filestore locations..."
-      AVAILABLE_FILESTORE=$$(gcloud filestore locations list --format="value(name)")
+      AVAILABLE_FILESTORE=$$(gcloud filestore locations list --format="value(locationId)")
 
       echo "Fetching Managed Lustre locations..."
       AVAILABLE_LUSTRE=$$(gcloud lustre locations list --format="value(locationId)")
@@ -82,7 +85,7 @@ steps:
           if [[ -f "$$bp" ]]; then
             echo "  Parsing Blueprint for CPUs: $$bp"
             local cpus
-            cpus=$$(grep -E -o '\b[a-z0-9]+-standard-[0-9]+\b' "$$bp" || true)
+            cpus=$$(grep -E -o '\b[a-z0-9]+-[a-z]+-[0-9]+\b' "$$bp" || true)
             for cpu in $$cpus; do
               # Skip accelerator hardware (GPUs/TPUs) and focus on standard CPUs
               if [[ "$$cpu" =~ ^(a2-|a3-|a4-|tpu|ct6e|g4-) ]]; then
