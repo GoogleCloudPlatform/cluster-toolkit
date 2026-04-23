@@ -299,12 +299,72 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 		executor: mock,
 	}
 
-	err := orc.CheckAndInstallKueue("")
+	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
 	if err != nil {
 		t.Fatalf("CheckAndInstallKueue failed: %v", err)
 	}
 
 	if !deleteCalled {
 		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
+	}
+}
+
+func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
+	applyCalled := false
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 1, Stderr: "not found"}
+			}
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+				applyCalled = true
+				return shell.CommandResult{ExitCode: 0}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.ensurePriorityClassesInstalled()
+	if err != nil {
+		t.Fatalf("ensurePriorityClassesInstalled failed: %v", err)
+	}
+
+	if !applyCalled {
+		t.Errorf("expected priority classes to be installed, but they weren't")
+	}
+}
+
+func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
+	applyCalled := false
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+				applyCalled = true
+				return shell.CommandResult{ExitCode: 0}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.ensurePriorityClassesInstalled()
+	if err != nil {
+		t.Fatalf("ensurePriorityClassesInstalled failed: %v", err)
+	}
+
+	if applyCalled {
+		t.Errorf("expected priority classes to be skipped, but they were installed")
 	}
 }

@@ -158,7 +158,7 @@ func resetSubmitCmdFlags() {
 	buildContext = ""
 	commandToRun = ""
 	acceleratorType = ""
-	outputManifest = ""
+	dryRunManifest = ""
 	clusterName = ""
 	location = ""
 	projectID = ""
@@ -167,7 +167,8 @@ func resetSubmitCmdFlags() {
 	numSlicesOrNodes = 1
 	vmsPerSlice = 1
 	maxRestarts = 1
-	ttlSecondsAfterFinished = 3600
+	ttlAfterFinished = "1h"
+	gracePeriodStr = "30s"
 	placementPolicy = ""
 	nodeConstraint = nil
 	cpuAffinityStr = ""
@@ -225,6 +226,13 @@ func TestParseVolumeFlag(t *testing.T) {
 			wantErr:   true,
 			checkFunc: nil,
 		},
+		{
+			name:      "Invalid Format (Missing destination for URI)",
+			vStrs:     []string{"gs://my-bucket"},
+			wantCount: 0,
+			wantErr:   true,
+			checkFunc: nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -250,14 +258,42 @@ type mockOrchestrator struct {
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
-	if job.OutputManifest != "" {
+	if job.DryRunManifest != "" {
 		var content string
 		if job.IsPathwaysJob {
 			content = "name: " + job.WorkloadName + "\nimage: proxy:latest\n--gcs_location=gs://my-bucket"
 		} else {
 			content = "name: " + job.WorkloadName + "\nimage: busybox"
 		}
-		return os.WriteFile(job.OutputManifest, []byte(content), 0644)
+		return os.WriteFile(job.DryRunManifest, []byte(content), 0644)
 	}
 	return nil
+}
+
+func TestParseDurationToSeconds(t *testing.T) {
+	tests := []struct {
+		name    string
+		dStr    string
+		want    int
+		wantErr bool
+	}{
+		{"Seconds", "30s", 30, false},
+		{"Minutes", "5m", 300, false},
+		{"Hours", "1h", 3600, false},
+		{"Raw Integer", "3600", 3600, false},
+		{"Invalid Format", "abc", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseDurationToSeconds(tt.dStr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseDurationToSeconds() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("parseDurationToSeconds() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

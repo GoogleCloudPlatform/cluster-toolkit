@@ -119,7 +119,8 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
 * `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
 * `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
-* `--ttl int`: Time (in seconds) to retain the JobSet after it finishes. (Default: `3600` seconds / 1 hour)
+* `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
+* `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
 * `--mount stringArray`: Mount a storage volume (e.g., `gs://bucket:/data` or `/host/path:/data`). Can be specified multiple times.
 
 ## 7. Submit the Sample Job with `gcluster job submit`
@@ -312,10 +313,19 @@ Verify it's gone by running `gcluster job list` again.
 
 ### 8.3 Job Retention (TTL)
 
-By default, finished jobs are kept for 1 hour (3600 seconds). You can change this using `--ttl`.
+By default, finished jobs are kept for 1 hour. You can change this using `--gke-ttl-after-finished` and pass flexible durations.
 
 ```bash
-./gcluster job submit ... --ttl 600 # Keep for only 10 minutes
+./gcluster job submit ... --gke-ttl-after-finished 10m # Keep for only 10 minutes
+./gcluster job submit ... --gke-ttl-after-finished 2h  # Keep for 2 hours
+```
+
+### 8.4 Graceful Termination (Grace Period)
+
+You can give your workloads a buffer period to save checkpoints or perform cleanups before they are forcefully killed using `--grace-period`.
+
+```bash
+./gcluster job submit ... --grace-period 2m # Allow 2 minutes for cleanup
 ```
 
 ### 8.4 Topology & Scheduler

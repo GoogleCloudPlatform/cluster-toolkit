@@ -16,6 +16,7 @@ package job
 
 import (
 	"fmt"
+	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
 
@@ -30,14 +31,15 @@ var (
 	buildContext    string
 	commandToRun    string
 	acceleratorType string
-	outputManifest  string
+	dryRunManifest  string
 
-	workloadName            string
-	kueueQueueName          string
-	numSlicesOrNodes        int
-	vmsPerSlice             int
-	maxRestarts             int
-	ttlSecondsAfterFinished int
+	workloadName     string
+	kueueQueueName   string
+	numSlicesOrNodes int
+	vmsPerSlice      int
+	maxRestarts      int
+	ttlAfterFinished string
+	gracePeriodStr   string
 
 	placementPolicy string
 	nodeConstraint  map[string]string
@@ -99,7 +101,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "b", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
 	SubmitCmd.Flags().StringVarP(&commandToRun, "command", "e", "", "Command to execute in the container (e.g., 'python train.py'). Required.")
 	SubmitCmd.Flags().StringVarP(&acceleratorType, "accelerator", "a", "", "Type of accelerator to request (e.g., 'nvidia-tesla-a100').")
-	SubmitCmd.Flags().StringVarP(&outputManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
+	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
@@ -107,7 +109,8 @@ func init() {
 	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
 	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 0, "Number of VMs (pods) per slice. Defaults to auto-calculated value for TPUs.")
 	SubmitCmd.Flags().IntVar(&maxRestarts, "max-restarts", 1, "Maximum number of restarts for the JobSet before failing.")
-	SubmitCmd.Flags().IntVar(&ttlSecondsAfterFinished, "ttl", 3600, "Time (in seconds) to retain the JobSet after it finishes.")
+	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
+	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
@@ -143,6 +146,15 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
+	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished)
+	if err != nil {
+		return err
+	}
+
+	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr)
+	if err != nil {
+		return err
+	}
 
 	affinity := map[string]string{}
 	if cpuAffinityStr != "" {
@@ -151,7 +163,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	vols, err := parseVolumeFlag(volumeStr)
 	if err != nil {
-		return fmt.Errorf("invalid volume configuration: %w", err)
+		return err
 	}
 
 	if timeoutStr != "-1s" {
@@ -159,37 +171,38 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	jobDef := orchestrator.JobDefinition{
-		ImageName:               imageName,
-		BaseImage:               baseImage,
-		BuildContext:            buildContext,
-		Platform:                platform,
-		CommandToRun:            commandToRun,
-		AcceleratorType:         acceleratorType,
-		OutputManifest:          outputManifest,
-		ProjectID:               projectID,
-		ClusterName:             clusterName,
-		ClusterLocation:         location,
-		WorkloadName:            workloadName,
-		KueueQueueName:          kueueQueueName,
-		NumSlices:               numSlicesOrNodes,
-		VmsPerSlice:             vmsPerSlice,
-		MaxRestarts:             maxRestarts,
-		TtlSecondsAfterFinished: ttlSecondsAfterFinished,
-		PlacementPolicy:         placementPolicy,
-		NodeConstraint:          nodeConstraint,
-		Affinity:                affinity,
-		RestartOnExitCodes:      restartOnExitCodes,
-		ImagePullSecrets:        imagePullSecrets,
-		ServiceAccountName:      serviceAccountName,
-		Topology:                topology,
-		GKEScheduler:            gkeScheduler,
-		AwaitJobCompletion:      awaitJobCompletion,
-		Timeout:                 timeoutStr,
-		PriorityClassName:       priorityClassName,
-		IsPathwaysJob:           isPathwaysJob,
-		Pathways:                pathways,
-		Volumes:                 vols,
-		Verbose:                 verbose,
+		ImageName:                     imageName,
+		BaseImage:                     baseImage,
+		BuildContext:                  buildContext,
+		Platform:                      platform,
+		CommandToRun:                  commandToRun,
+		AcceleratorType:               acceleratorType,
+		DryRunManifest:                dryRunManifest,
+		ProjectID:                     projectID,
+		ClusterName:                   clusterName,
+		ClusterLocation:               location,
+		WorkloadName:                  workloadName,
+		KueueQueueName:                kueueQueueName,
+		NumSlices:                     numSlicesOrNodes,
+		VmsPerSlice:                   vmsPerSlice,
+		MaxRestarts:                   maxRestarts,
+		TtlSecondsAfterFinished:       ttlSeconds,
+		TerminationGracePeriodSeconds: gracePeriodSeconds,
+		PlacementPolicy:               placementPolicy,
+		NodeConstraint:                nodeConstraint,
+		Affinity:                      affinity,
+		RestartOnExitCodes:            restartOnExitCodes,
+		ImagePullSecrets:              imagePullSecrets,
+		ServiceAccountName:            serviceAccountName,
+		Topology:                      topology,
+		GKEScheduler:                  gkeScheduler,
+		AwaitJobCompletion:            awaitJobCompletion,
+		Timeout:                       timeoutStr,
+		PriorityClassName:             priorityClassName,
+		IsPathwaysJob:                 isPathwaysJob,
+		Pathways:                      pathways,
+		Volumes:                       vols,
+		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
@@ -199,7 +212,7 @@ func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 	var vols []orchestrator.VolumeDefinition
 	for i, vStr := range vStrs {
 		idx := strings.LastIndex(vStr, ":")
-		if idx <= 0 || idx == len(vStr)-1 {
+		if idx <= 0 || idx == len(vStr)-1 || strings.HasPrefix(vStr[idx+1:], "//") {
 			return nil, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>", vStr)
 		}
 		src := vStr[:idx]
@@ -220,6 +233,20 @@ func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 		})
 	}
 	return vols, nil
+}
+
+func parseDurationToSeconds(dStr string) (int, error) {
+	d, err := time.ParseDuration(dStr)
+	if err == nil {
+		return int(d.Seconds()), nil
+	}
+
+	var seconds int
+	if _, err := fmt.Sscanf(dStr, "%d", &seconds); err == nil {
+		return seconds, nil
+	}
+
+	return 0, fmt.Errorf("invalid duration format for --gke-ttl-after-finished: %s. Expected formats: 1h, 30m, 3600", dStr)
 }
 
 func validateImageFlags() error {

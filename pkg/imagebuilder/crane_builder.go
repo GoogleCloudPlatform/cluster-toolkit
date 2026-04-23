@@ -70,7 +70,7 @@ func BuildContainerImageFromBaseImage(
 		return "", err
 	}
 
-	imageName, err := generateImageName(project, location)
+	imageName, err := GenerateImageName(project, location)
 	if err != nil {
 		return "", err
 	}
@@ -136,7 +136,7 @@ func BuildContainerImageFromBaseImage(
 	return imageName, nil
 }
 
-func generateImageName(project, location string) (string, error) {
+func GenerateImageName(project, location string) (string, error) {
 	userName := os.Getenv("USER")
 	if userName == "" {
 		userName = "defaultName"

@@ -5,6 +5,10 @@ metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+{{- if .ExclusiveTopologyAnnotation }}
+  annotations:
+    {{.ExclusiveTopologyAnnotation}}
+{{- end }}
 spec:
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   failurePolicy:
@@ -37,6 +41,7 @@ spec:
             spec:
               hostNetwork: true
               dnsPolicy: ClusterFirstWithHostNet
+              terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
 {{- if .SchedulerName }}
               schedulerName: {{.SchedulerName}}
 {{- end }}

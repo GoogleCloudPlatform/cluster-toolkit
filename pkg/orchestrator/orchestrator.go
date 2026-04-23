@@ -49,17 +49,18 @@ type JobDefinition struct {
 	Platform        string
 	CommandToRun    string
 	AcceleratorType string
-	OutputManifest  string
+	DryRunManifest  string
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
 
-	WorkloadName            string
-	KueueQueueName          string
-	NumSlices               int
-	VmsPerSlice             int
-	MaxRestarts             int
-	TtlSecondsAfterFinished int
+	WorkloadName                  string
+	KueueQueueName                string
+	NumSlices                     int
+	VmsPerSlice                   int
+	MaxRestarts                   int
+	TtlSecondsAfterFinished       int
+	TerminationGracePeriodSeconds int
 
 	PlacementPolicy    string
 	NodeConstraint     map[string]string
