@@ -192,6 +192,7 @@ module "install_kueue" {
 }
 
 resource "time_sleep" "wait_for_webhook" {
+  count           = local.install_kueue ? 1 : 0
   create_duration = "60s"
   depends_on      = [module.install_kueue]
 }
