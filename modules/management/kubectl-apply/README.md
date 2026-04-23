@@ -84,7 +84,7 @@ You can specify a particular kueue version that you would like to use using the 
     settings:
       kueue:
         install: true
-        version: v0.17.1
+        version: 0.17.1
         config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml.tftpl"))
         config_template_vars: {name: "dev-config", public: "false"}
       jobset:
