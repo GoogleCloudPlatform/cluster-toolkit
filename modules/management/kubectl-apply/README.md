@@ -153,7 +153,7 @@ The module applies manifests from the `apply_manifests` list in parallel. This c
 
 There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
 
-```Error: resource [kueue.x-k8s.io/v1beta1/ClusterQueue] isn't valid for cluster```
+```Error: resource [kueue.x-k8s.io/v1beta2/ClusterQueue] isn't valid for cluster```
 
 ##### **Recommended Workaround: Two-Stage Apply**
 
