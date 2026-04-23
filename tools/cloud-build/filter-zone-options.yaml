@@ -78,7 +78,7 @@ steps:
 
         # Extract CPUs from blueprint dependencies
         local bps
-        bps=$$(grep -E -o '\b(examples|community/examples|tools/cloud-build/daily-tests/blueprints)/[a-zA-Z0-9_\-/]+\.yaml\b' "$$yaml" || true)
+        bps=$$(grep -E -o '\b(examples|community/examples|tools/cloud-build/daily-tests/blueprints)/[a-zA-Z0-9_/-]+\.yaml\b' "$$yaml" || true)
         for bp in $$bps; do
           if [[ -f "$$bp" ]]; then
             echo "  Parsing Blueprint for CPUs: $$bp"
@@ -132,7 +132,7 @@ steps:
           local cache_var="ZONES_FOR_$${cpu//-/_}"
           if [[ -z "$${!cache_var:-}" ]]; then
             echo "  Fetching zones for CPU type $${cpu}..."
-            eval "$${cache_var}=\"\\\$(gcloud compute machine-types list --filter=\"name:$${cpu}\" --format=\"value(zone)\")\""
+            declare -g "$${cache_var}=$$(gcloud compute machine-types list --filter="name:$${cpu}" --format="value(zone)")"
           fi
 
           if ! echo "$${!cache_var}" | grep -q "^$${zone}$$"; then
