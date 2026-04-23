@@ -595,17 +595,19 @@ variable "cluster_autoscaling" {
   service_account_email: The service account tied to node-provisioning. Defaults to the deployment service account.
   oauth_scopes:          Scopes assigned to nodes provisioned by NAP.
   limits:                Explicit upper bounds to apply during scaling.
-    autoprovisioning_machine_type: GCE machine type tier.
+    autoprovisioning_machine_type: GCE machine type tier (used as input).
+    autoprovisioning_resource_type: The underlying specific GKE accelerator resource name (inferred by expansion).
     autoprovisioning_max_count:    The ceiling for specific accelerator types.
 
-  Note: `autoprovisioning_machine_type` is used dynamically by the expansion framework to query 
-  and infer target resourceType (e.g. `nvidia-h100-80gb`) mappings for the actual API payloads.
+  Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve 
+  the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.
   EOT
   type = object({
     enabled = bool
     limits = list(object({
-      autoprovisioning_machine_type = string
-      autoprovisioning_max_count    = optional(number)
+      autoprovisioning_machine_type  = optional(string)
+      autoprovisioning_resource_type = optional(string)
+      autoprovisioning_max_count     = optional(number)
     }))
     service_account_email = optional(string, "")
     oauth_scopes          = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])

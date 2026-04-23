@@ -157,7 +157,7 @@ resource "google_container_cluster" "gke_cluster" {
         ] : [],
         local.has_autoscaling_limits ? [
           for limit in var.cluster_autoscaling.limits : {
-            type = limit.autoprovisioning_machine_type
+            type = limit.autoprovisioning_resource_type
             min  = 0
             max  = limit.autoprovisioning_max_count
           }
