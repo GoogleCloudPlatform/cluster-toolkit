@@ -22,11 +22,9 @@ locals {
   #     type  = "https://www.googleapis.com/compute/beta/projects/PROJECT/zones/ZONE/acceleratorTypes/nvidia-tesla-a100"
   #   },
   # ]
-  accelerators_json    = jsondecode(file("${path.module}/../../../pkg/config/accelerators.json"))
   accelerator_machines = try(
     jsondecode(var.machine_configs).gpus,
     var.machine_configs.gpus,
-    local.accelerators_json.gpus,
     {}
   )
 
