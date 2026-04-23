@@ -67,7 +67,7 @@ locals {
 
 # GKE Node Auto-Provisioning (NAP) locals
 locals {
-  is_accelerator_enabled = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
+  has_autoscaling_limits = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
   nap_service_account    = var.cluster_autoscaling.service_account_email != "" ? var.cluster_autoscaling.service_account_email : local.sa_email
 
   nap_cpu_max    = 1000000
@@ -162,11 +162,11 @@ resource "google_container_cluster" "gke_cluster" {
     }
 
     dynamic "resource_limits" {
-      for_each = local.is_accelerator_enabled ? var.cluster_autoscaling.limits : []
+      for_each = local.has_autoscaling_limits ? var.cluster_autoscaling.limits : []
       content {
         resource_type = resource_limits.value.autoprovisioning_machine_type
         minimum       = 0
-        maximum       = resource_limits.value.autoprovisioning_max_accelerator_count
+        maximum       = resource_limits.value.autoprovisioning_max_count
       }
     }
 

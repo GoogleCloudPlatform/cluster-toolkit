@@ -111,13 +111,13 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module) (cty.V
 		return cty.Value{}, false, err
 	}
 
-	resMap["autoprovisioning_max_accelerator_count"] = cty.NumberIntVal(int64(totalAccelerators))
+	resMap["autoprovisioning_max_count"] = cty.NumberIntVal(int64(totalAccelerators))
 	resMap["autoprovisioning_machine_type"] = cty.StringVal(accType)
 	return cty.ObjectVal(resMap), true, nil
 }
 
 func extractMaxCount(resMap map[string]cty.Value) (int, bool) {
-	if mcVal, ok := resMap["autoprovisioning_max_accelerator_count"]; ok && !mcVal.IsNull() && mcVal.IsKnown() {
+	if mcVal, ok := resMap["autoprovisioning_max_count"]; ok && !mcVal.IsNull() && mcVal.IsKnown() {
 		if mcVal.Type() == cty.Number {
 			f, _ := mcVal.AsBigFloat().Float64()
 			return int(f), true
@@ -129,10 +129,10 @@ func extractMaxCount(resMap map[string]cty.Value) (int, bool) {
 func validateAndExtractTotalAccelerators(maxCount int, maxCountPassed bool, acceleratorsPerVM int, machineType string) (int, error) {
 	if maxCountPassed {
 		if maxCount <= 0 {
-			return 0, fmt.Errorf("autoprovisioning_max_accelerator_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
+			return 0, fmt.Errorf("autoprovisioning_max_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
 		}
 		if maxCount%acceleratorsPerVM != 0 {
-			return 0, fmt.Errorf("autoprovisioning_max_accelerator_count (%d) for machine type %s must be a multiple of its native accelerator count (%d)", maxCount, machineType, acceleratorsPerVM)
+			return 0, fmt.Errorf("autoprovisioning_max_count (%d) for machine type %s must be a multiple of its native capacity (%d)", maxCount, machineType, acceleratorsPerVM)
 		}
 		return maxCount, nil
 	}

@@ -47,8 +47,8 @@ func TestExpandClusterAutoscaling_GPU(t *testing.T) {
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
 			cty.ObjectVal(map[string]cty.Value{
-				"autoprovisioning_machine_type":          cty.StringVal("a3-highgpu-8g"),
-				"autoprovisioning_max_accelerator_count": cty.NumberIntVal(16),
+				"autoprovisioning_machine_type": cty.StringVal("a3-highgpu-8g"),
+				"autoprovisioning_max_count":    cty.NumberIntVal(16),
 			}),
 		}),
 	})
@@ -74,9 +74,9 @@ func TestExpandClusterAutoscaling_GPU(t *testing.T) {
 		t.Errorf("expected machine type nvidia-h100-80gb, got %s", resMap["autoprovisioning_machine_type"].AsString())
 	}
 
-	f, _ := resMap["autoprovisioning_max_accelerator_count"].AsBigFloat().Float64()
+	f, _ := resMap["autoprovisioning_max_count"].AsBigFloat().Float64()
 	if f != 16 {
-		t.Errorf("expected max accelerator count 16, got %v", f)
+		t.Errorf("expected max count 16, got %v", f)
 	}
 }
 
@@ -108,9 +108,9 @@ func TestExpandClusterAutoscaling_GPU_DefaultCount(t *testing.T) {
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	f, _ := resMap["autoprovisioning_max_accelerator_count"].AsBigFloat().Float64()
+	f, _ := resMap["autoprovisioning_max_count"].AsBigFloat().Float64()
 	if f != 8 {
-		t.Errorf("expected max accelerator count 8, got %v", f)
+		t.Errorf("expected max count 8, got %v", f)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestExpandClusterAutoscaling_InvalidCount(t *testing.T) {
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
 			cty.ObjectVal(map[string]cty.Value{
-				"autoprovisioning_machine_type":          cty.StringVal("a3-highgpu-8g"),
-				"autoprovisioning_max_accelerator_count": cty.NumberIntVal(10), // Not a multiple of 8
+				"autoprovisioning_machine_type": cty.StringVal("a3-highgpu-8g"),
+				"autoprovisioning_max_count":    cty.NumberIntVal(10), // Not a multiple of 8
 			}),
 		}),
 	})
@@ -140,8 +140,8 @@ func TestExpandClusterAutoscaling_TPU(t *testing.T) {
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
 			cty.ObjectVal(map[string]cty.Value{
-				"autoprovisioning_machine_type":          cty.StringVal("ct6e-standard-4t"),
-				"autoprovisioning_max_accelerator_count": cty.NumberIntVal(4),
+				"autoprovisioning_machine_type": cty.StringVal("ct6e-standard-4t"),
+				"autoprovisioning_max_count":    cty.NumberIntVal(4),
 			}),
 		}),
 	})
