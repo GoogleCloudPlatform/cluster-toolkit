@@ -986,6 +986,11 @@ type TreeResponse struct {
 // cachedTree stores the GitHub API response to avoid redundant network calls.
 var cachedTree *TreeResponse
 
+// Create an HTTP Client that can be used for Github network calls.
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 // fetchGitTreeFiles queries the GitHub API and decodes the JSON into a TreeResponse.
 func fetchGitTreeFiles(version string) (*TreeResponse, error) {
 	// Return the cached response if we've already fetched it
@@ -993,15 +998,10 @@ func fetchGitTreeFiles(version string) (*TreeResponse, error) {
 		return cachedTree, nil
 	}
 
-	// Query the GitHub API for the recursive file tree of this specific version tag
+	// Query GitHub for the recursive file tree of this specific version tag
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 
-	// Ensure the network call has a timeout of up to 10 seconds to prevent blocking CLI execution.
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}
@@ -1026,13 +1026,12 @@ func fetchGitTreeFiles(version string) (*TreeResponse, error) {
 func GetPredefinedModules() []string {
 	var predefinedModules []string
 	moduleSet := make(map[string]bool)
-	version := GetToolkitVersion()
-	treeResp, err := fetchGitTreeFiles(version)
+	treeResp, err := fetchGitTreeFiles(latestToolkitVersion)
 
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// We only care about Terraform or Packer configuration files files ("blob") inside the known module directories
+			// We only care about Terraform or Packer configuration files ("blob") inside the known module directories
 			if item.Type == "blob" && (strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) && (strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
 				moduleDir := path.Dir(item.Path)
 				if !moduleSet[moduleDir] {
@@ -1050,13 +1049,12 @@ func GetPredefinedModules() []string {
 func GetPredefinedExampleFiles() []string {
 	var predefinedFiles []string
 	fileSet := make(map[string]bool)
-	version := GetToolkitVersion()
-	treeResp, err := fetchGitTreeFiles(version)
+	treeResp, err := fetchGitTreeFiles(latestToolkitVersion)
 
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// We care about YAML files ("blob") inside examples/ and community/examples/ folders.
+			// We care about YAML files ("blob") inside the known example directories.
 			if item.Type == "blob" && (strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) && strings.HasSuffix(item.Path, ".yaml") {
 				if !fileSet[item.Path] {
 					fileSet[item.Path] = true
@@ -1066,4 +1064,29 @@ func GetPredefinedExampleFiles() []string {
 		}
 	}
 	return predefinedFiles
+}
+
+// GetPredefinedBlueprintNames fetches all blueprint names from the examples and community/examples folders for the current toolkit version from GitHub.
+// This field corresponds to the "blueprint_name" parameter in the YAML file.
+func GetPredefinedBlueprintNames() []string {
+	var blueprintNames []string
+	nameSet := make(map[string]bool)
+	exampleFiles := GetPredefinedExampleFiles()
+
+	for _, file := range exampleFiles {
+		// Query Github for raw file content at this specific version tag
+		url := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", latestToolkitVersion, file)
+
+		yamlResp, err := httpClient.Get(url)
+		if err == nil && yamlResp.StatusCode == http.StatusOK {
+			var bp Blueprint
+			// Reuse the existing Blueprint struct to decode the yaml.
+			if err := yaml.NewDecoder(yamlResp.Body).Decode(&bp); err == nil && bp.BlueprintName != "" && !nameSet[bp.BlueprintName] {
+				nameSet[bp.BlueprintName] = true
+				blueprintNames = append(blueprintNames, bp.BlueprintName)
+			}
+		}
+		yamlResp.Body.Close()
+	}
+	return blueprintNames
 }

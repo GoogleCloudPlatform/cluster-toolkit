@@ -38,6 +38,7 @@ import (
 var (
 	fetchStandardModules         = config.GetPredefinedModules
 	fetchStandardDeploymentFiles = config.GetPredefinedExampleFiles
+	fetchStandardBlueprintNames  = config.GetPredefinedBlueprintNames
 
 	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
 
@@ -65,6 +66,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
 	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
@@ -130,6 +132,20 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getBlueprintName(bp config.Blueprint) string {
+	bpName := bp.BlueprintName
+	if bpName == "" {
+		return bpName
+	}
+
+	// Lazily load the standard blueprint names here
+	if slices.Contains(fetchStandardBlueprintNames(), bpName) {
+		return bpName
+	}
+
+	return "Custom"
 }
 
 func getDeploymentFile(cmd *cobra.Command) string {
