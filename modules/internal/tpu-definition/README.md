@@ -51,7 +51,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -69,7 +69,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_machine_configs"></a> [machine\_configs](#input\_machine\_configs) | Definition of GCE machine types and counts | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The machine type of the node pool. | `string` | n/a | yes |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | The placement policy for the node pool. | <pre>object({<br/>    type         = string<br/>    name         = optional(string)<br/>    tpu_topology = optional(string)<br/>  })</pre> | n/a | yes |
@@ -77,7 +77,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_is_tpu"></a> [is\_tpu](#output\_is\_tpu) | Boolean value indicating if the node pool is for TPUs. |
 | <a name="output_kubernetes_label"></a> [kubernetes\_label](#output\_kubernetes\_label) | A map of Kubernetes labels to apply to the node pool for TPU discovery. |
 | <a name="output_tpu_accelerator_type"></a> [tpu\_accelerator\_type](#output\_tpu\_accelerator\_type) | The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice'). |
