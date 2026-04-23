@@ -17,18 +17,16 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
-
-	"encoding/json"
-	"net/http"
-	"path"
-
 	"time"
 
 	"github.com/agext/levenshtein"
@@ -1032,17 +1030,12 @@ func GetPredefinedModules() []string {
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// We only care about files ("blob") inside the known module directories
-			if item.Type == "blob" {
-				if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
-					// Identify module directories by Terraform or Packer configuration files
-					if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
-						moduleDir := path.Dir(item.Path)
-						if !moduleSet[moduleDir] {
-							moduleSet[moduleDir] = true
-							predefinedModules = append(predefinedModules, moduleDir)
-						}
-					}
+			// We only care about Terraform or Packer configuration files files ("blob") inside the known module directories
+			if item.Type == "blob" && (strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) && (strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+				moduleDir := path.Dir(item.Path)
+				if !moduleSet[moduleDir] {
+					moduleSet[moduleDir] = true
+					predefinedModules = append(predefinedModules, moduleDir)
 				}
 			}
 		}
@@ -1061,15 +1054,11 @@ func GetPredefinedExampleFiles() []string {
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// We only care about files ("blob") inside the known directories
-			if item.Type == "blob" {
-				if strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/") {
-					if strings.HasSuffix(item.Path, ".yaml") {
-						if !fileSet[item.Path] {
-							fileSet[item.Path] = true
-							predefinedFiles = append(predefinedFiles, item.Path)
-						}
-					}
+			// We care about YAML files ("blob") inside examples/ and community/examples/ folders.
+			if item.Type == "blob" && (strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) && strings.HasSuffix(item.Path, ".yaml") {
+				if !fileSet[item.Path] {
+					fileSet[item.Path] = true
+					predefinedFiles = append(predefinedFiles, item.Path)
 				}
 			}
 		}
