@@ -29,40 +29,14 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-// stateFilePath returns the full path to the prerequisite state file.
-func stateFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not get user home directory: %w", err)
-	}
-	stateDir := filepath.Join(homeDir, stateDirName)
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return "", fmt.Errorf("could not create state directory %s: %w", stateDir, err)
-	}
-	return filepath.Join(stateDir, stateFileName), nil
+type PrereqStore interface {
+	Load() PrereqState
+	Save(PrereqState)
 }
 
-// savePrereqState saves the current prerequisite state to a file.
-func savePrereqState(state PrereqState) {
-	filePath, err := stateFilePath()
-	if err != nil {
-		logging.Error("Failed to get state file path for saving: %v", err)
-		return
-	}
+type FilePrereqStore struct{}
 
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		logging.Error("Failed to marshal prerequisite state: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		logging.Error("Failed to write prerequisite state to %s: %v", filePath, err)
-	}
-}
-
-// loadPrereqState loads the prerequisite state from a file.
-func loadPrereqState() PrereqState {
+func (f *FilePrereqStore) Load() PrereqState {
 	filePath, err := stateFilePath()
 	if err != nil {
 		logging.Error("Failed to get state file path for loading: %v", err)
@@ -83,6 +57,39 @@ func loadPrereqState() PrereqState {
 		return PrereqState{}
 	}
 	return state
+}
+
+func (f *FilePrereqStore) Save(state PrereqState) {
+	filePath, err := stateFilePath()
+	if err != nil {
+		logging.Error("Failed to get state file path for saving: %v", err)
+		return
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		logging.Error("Failed to marshal prerequisite state: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		logging.Error("Failed to write prerequisite state to %s: %v", filePath, err)
+	}
+}
+
+var store PrereqStore = &FilePrereqStore{}
+
+// stateFilePath returns the full path to the prerequisite state file.
+func stateFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not get user home directory: %w", err)
+	}
+	stateDir := filepath.Join(homeDir, stateDirName)
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return "", fmt.Errorf("could not create state directory %s: %w", stateDir, err)
+	}
+	return filepath.Join(stateDir, stateFileName), nil
 }
 
 // isStateStale checks if the loaded state is older than the defined freshness threshold
@@ -153,7 +160,7 @@ func printMissingPrereqs(cmd *cobra.Command, missing []missingPrereq) {
 	fmt.Fprintln(cmd.OutOrStdout())
 }
 
-func checkK8sDependencies(newState *PrereqState, missing *[]missingPrereq) {
+func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	// Check kubectl
 	if shell.ExecuteCommand("kubectl", "version", "--client", "--output=json").ExitCode != 0 {
 		var cmds []string
@@ -164,7 +171,7 @@ func checkK8sDependencies(newState *PrereqState, missing *[]missingPrereq) {
 		}
 		*missing = append(*missing, missingPrereq{name: "kubectl", commands: cmds})
 	} else {
-		newState.KubectlInstalled = true
+		state.KubectlInstalled = true
 	}
 
 	// Check plugin
@@ -177,24 +184,24 @@ func checkK8sDependencies(newState *PrereqState, missing *[]missingPrereq) {
 		}
 		*missing = append(*missing, missingPrereq{name: "gke-gcloud-auth-plugin", commands: cmds})
 	} else {
-		newState.GKEGCloudAuthPluginInstalled = true
+		state.GKEGCloudAuthPluginInstalled = true
 	}
 }
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
 func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
-	if os.Getenv("GCLUSTER_SKIP_PREREQ_CHECKS") == "true" || dryRunManifest != "" {
+	if dryRunManifest != "" {
 		return nil
 	}
 
-	logging.Info("Checking prerequisites...")
+	state := store.Load()
 
-	state := loadPrereqState()
-	newState := state
-
-	if isStateStale(state, *projectID) {
-		newState = PrereqState{}
+	if !isStateStale(state, *projectID) {
+		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
+		return nil
 	}
+	logging.Info("Prerequisites state is stale or project ID changed, performing fresh check.")
+	state = PrereqState{}
 
 	var missing []missingPrereq
 
@@ -202,26 +209,26 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
 	if err := ensureGCloudSDKInstalled(); err != nil {
 		return err
 	}
-	newState.GCloudSDKInstalled = true
+	state.GCloudSDKInstalled = true
 
 	// Check GCloud Auth
 	if err := ensureGCloudAuthenticated(); err != nil {
 		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
 	} else {
-		newState.GCloudAuthenticated = true
+		state.GCloudAuthenticated = true
 	}
 
 	// Check ADC
 	if adcCmd := getADCSetupCommand(); adcCmd != "" {
 		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
 	} else {
-		newState.ADCConfigured = true
+		state.ADCConfigured = true
 	}
 
-	checkK8sDependencies(&newState, &missing)
+	checkK8sDependencies(&state, &missing)
 
 	// Check Docker creds
-	if !newState.DockerCredsConfigured {
+	if !state.DockerCredsConfigured {
 		missing = append(missing, missingPrereq{
 			name: "Docker Credentials",
 			commands: []string{
@@ -229,7 +236,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
 				"gcloud auth configure-docker us-central1-docker.pkg.dev --quiet",
 			},
 		})
-		newState.DockerCredsConfigured = true
+		state.DockerCredsConfigured = true
 	}
 
 	// Check Artifact Registry API
@@ -241,13 +248,13 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
 				commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", *projectID)},
 			})
 		} else {
-			newState.ArtifactRegistryAPIEnabled = true
+			state.ArtifactRegistryAPIEnabled = true
 		}
 	}
 
-	newState.LastCheckedTimestamp = time.Now()
-	newState.LastCheckedProjectID = *projectID
-	savePrereqState(newState)
+	state.LastCheckedTimestamp = time.Now()
+	state.LastCheckedProjectID = *projectID
+	store.Save(state)
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)

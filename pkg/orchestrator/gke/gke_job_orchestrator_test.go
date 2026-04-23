@@ -516,6 +516,178 @@ func TestFetchMachineCapacity(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
+	tests := []struct {
+		name          string
+		np            gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantCpus      int
+		wantErr       bool
+	}{
+		{
+			name: "x86 with hyperthreading disabled",
+			np: gkeJobNodePool{
+				Config: gkeNodePoolConfig{
+					MachineType: "c2-standard-60",
+					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
+						ThreadsPerCore: "1",
+					},
+				},
+				InitialNodeCount: 1,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
+				},
+			},
+			wantCpus: 30, // Halved!
+			wantErr:  false,
+		},
+		{
+			name: "x86 with hyperthreading enabled",
+			np: gkeJobNodePool{
+				Config: gkeNodePoolConfig{
+					MachineType: "c2-standard-60",
+					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
+						ThreadsPerCore: "2",
+					},
+				},
+				InitialNodeCount: 1,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
+				},
+			},
+			wantCpus: 60, // Not halved!
+			wantErr:  false,
+		},
+		{
+			name: "ARM64 with threadsPerCore=1",
+			np: gkeJobNodePool{
+				Config: gkeNodePoolConfig{
+					MachineType: "t2a-standard-16",
+					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
+						ThreadsPerCore: "1",
+					},
+				},
+				InitialNodeCount: 1,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe t2a-standard-16 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 16, "memoryMb": 64000}`},
+				},
+			},
+			wantCpus: 16, // Not halved because it's ARM!
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc.machineTypeToThreadsPerCore = make(map[string]string)
+			if tt.np.Config.AdvancedMachineFeatures != nil {
+				orc.machineTypeToThreadsPerCore[tt.np.Config.MachineType] = tt.np.Config.AdvancedMachineFeatures.ThreadsPerCore
+			}
+
+			cpus, _, _, _, _, _, _, err := orc.processNodePoolCapacity(tt.np, "us-central1-a")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if cpus != tt.wantCpus {
+					t.Errorf("Expected cpus %d, got %d", tt.wantCpus, cpus)
+				}
+			}
+		})
+	}
+}
+
+func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
+	tests := []struct {
+		name           string
+		job            orchestrator.JobDefinition
+		threadsPerCore string
+		mockResponses  map[string][]shell.CommandResult
+		wantIsCPU      bool
+		wantCapacity   int
+		wantErr        bool
+	}{
+		{
+			name: "x86 with hyperthreading disabled in map",
+			job: orchestrator.JobDefinition{
+				AcceleratorType: "c2-standard-60",
+				ClusterLocation: "us-central1-a",
+			},
+			threadsPerCore: "1",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
+				},
+			},
+			wantIsCPU:    true,
+			wantCapacity: 30, // Halved!
+			wantErr:      false,
+		},
+		{
+			name: "Fallback to Compute API when not in map",
+			job: orchestrator.JobDefinition{
+				AcceleratorType: "c2-standard-60",
+				ClusterLocation: "us-central1-a",
+			},
+			threadsPerCore: "",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
+				},
+			},
+			wantIsCPU:    true,
+			wantCapacity: 60, // Not halved!
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			orc := &GKEOrchestrator{
+				executor: mockExecutor,
+			}
+			orc.machineTypeToThreadsPerCore = make(map[string]string)
+			if tt.threadsPerCore != "" {
+				orc.machineTypeToThreadsPerCore[tt.job.AcceleratorType] = tt.threadsPerCore
+			}
+			orc.machineCapCache = make(map[string]MachineTypeCap)
+
+			isCPU, capacity, err := orc.determineIfCPUMachine(tt.job)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if isCPU != tt.wantIsCPU {
+					t.Errorf("Expected isCPU %t, got %t", tt.wantIsCPU, isCPU)
+				}
+				if capacity != tt.wantCapacity {
+					t.Errorf("Expected capacity %d, got %d", tt.wantCapacity, capacity)
+				}
+			}
+		})
+	}
+}
+
 func TestVerifySuperSlicingActive(t *testing.T) {
 	tests := []struct {
 		name          string

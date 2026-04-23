@@ -15,6 +15,7 @@
 package job
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
@@ -84,6 +85,30 @@ func TestCancelCmd_MissingArgs(t *testing.T) {
 	}
 
 	if !strings.Contains(err.Error(), "accepts 1 arg") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCancelCmd_JobNotFound(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		g := gke.NewGKEOrchestrator()
+		g.SetExecutor(&mockCancelExecutor{})
+		g.SetKubeClient(&mockKubeClient{err: fmt.Errorf("job not found in any namespace")})
+		return g
+	}
+
+	_, err := executeCommand(JobCmd, "cancel", "non-existent-job", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
+
+	if err == nil {
+		t.Fatalf("expected error for non-existent job, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "job not found in any namespace") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
