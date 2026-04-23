@@ -15,8 +15,6 @@
 package job
 
 import (
-	"fmt"
-	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -32,7 +30,6 @@ var CancelJobCmd = &cobra.Command{
 
 func runCancelJob(cmd *cobra.Command, args []string) error {
 	jobName := args[0]
-	logging.Info("Cancelling job %s...", jobName)
 
 	opts := orchestrator.CancelOptions{
 		ClusterName:     clusterName,
@@ -40,8 +37,5 @@ func runCancelJob(cmd *cobra.Command, args []string) error {
 		ProjectID:       projectID,
 	}
 
-	if err := orc.CancelJob(jobName, opts); err != nil {
-		return fmt.Errorf("failed to cancel job: %w", err)
-	}
-	return nil
+	return orc.CancelJob(jobName, opts)
 }

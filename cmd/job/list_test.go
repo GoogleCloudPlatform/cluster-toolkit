@@ -15,6 +15,7 @@
 package job
 
 import (
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockCancelExecutor{}) // Use the mock from cancel_test.go if available
 		return g
@@ -48,7 +49,7 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 func TestListWorkloadsCmd_InvalidStatus(t *testing.T) {
 	resetSubmitCmdFlags()
 
-	_, err := executeCommand(JobCmd, "list", "--status", "InvalidStatus")
+	_, err := executeCommand(JobCmd, "list", "--status", "InvalidStatus", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 	if err == nil {
 		t.Fatalf("expected error for invalid status, got nil")
 	}

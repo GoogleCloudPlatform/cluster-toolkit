@@ -15,8 +15,6 @@
 package job
 
 import (
-	"fmt"
-	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -38,7 +36,6 @@ func init() {
 
 func runLogsCmd(cmd *cobra.Command, args []string) error {
 	jobName := args[0]
-	logging.Info("Fetching logs for job %s...", jobName)
 
 	opts := orchestrator.LogsOptions{
 		ClusterName:     clusterName,
@@ -49,9 +46,10 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 
 	output, err := orc.GetJobLogs(jobName, opts)
 	if err != nil {
-		return fmt.Errorf("failed to get logs: %w", err)
+		return err
 	}
 
 	cmd.Println(output)
+
 	return nil
 }

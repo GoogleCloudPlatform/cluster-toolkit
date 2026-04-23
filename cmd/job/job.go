@@ -15,6 +15,8 @@
 package job
 
 import (
+	"fmt"
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/gke"
 
 	"github.com/spf13/cobra"
@@ -26,11 +28,11 @@ var (
 	projectID   string
 )
 
-var gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+var gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 	return gke.NewGKEOrchestrator()
 }
 
-var orc *gke.GKEOrchestrator
+var orc orchestrator.JobOrchestrator
 
 // JobCmd represents the base command for job-related operations
 var JobCmd = &cobra.Command{
@@ -39,20 +41,40 @@ var JobCmd = &cobra.Command{
 	Long:  `[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. This is the alpha version of the feature and is under active development. The feature is not yet supported for production use.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
+
+		ctx := loadContext()
+		if clusterName == "" {
+			clusterName = ctx.ClusterName
+		}
+		if location == "" {
+			location = ctx.Location
+		}
+		if projectID == "" {
+			projectID = ctx.ProjectID
+		}
+
+		if clusterName == "" {
+			return fmt.Errorf("cluster name is required; please specify it using the --cluster flag or set a default value using 'gcluster job config set cluster <value>'")
+		}
+		if location == "" {
+			return fmt.Errorf("location is required; please specify it using the --location flag or set a default value using 'gcluster job config set location <value>'")
+		}
+		if projectID == "" {
+			return fmt.Errorf("project ID is required; please specify it using the --project flag or set a default value using 'gcluster job config set project <value>'")
+		}
+
 		return nil
 	},
 }
 
 func init() {
-	JobCmd.PersistentFlags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster. Required.")
-	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster. Required.")
+	JobCmd.PersistentFlags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster.")
+	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
-
-	_ = JobCmd.MarkPersistentFlagRequired("cluster")
-	_ = JobCmd.MarkPersistentFlagRequired("location")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)
 	JobCmd.AddCommand(ListWorkloadsCmd)
 	JobCmd.AddCommand(LogsCmd)
+	JobCmd.AddCommand(ConfigCmd)
 }

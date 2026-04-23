@@ -17,8 +17,7 @@ package job
 import (
 	"bytes"
 	"hpc-toolkit/pkg/orchestrator"
-	"hpc-toolkit/pkg/orchestrator/gke"
-	"hpc-toolkit/pkg/shell"
+
 	"os"
 	"strings"
 	"testing"
@@ -49,10 +48,8 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
-		g := gke.NewGKEOrchestrator()
-		g.SetExecutor(&mockExecutorForTest{})
-		return g
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
 	}
 
 	// Reset flags before each test
@@ -113,10 +110,8 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
-		g := gke.NewGKEOrchestrator()
-		g.SetExecutor(&mockExecutorForTest{})
-		return g
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
 	}
 
 	// Reset flags before each test
@@ -188,22 +183,6 @@ func resetSubmitCmdFlags() {
 	pathways = orchestrator.PathwaysJobDefinition{}
 }
 
-type mockExecutorForTest struct{}
-
-func (m *mockExecutorForTest) ExecuteCommand(name string, args ...string) shell.CommandResult {
-	if name == "gcloud" && len(args) > 3 && args[0] == "compute" && args[1] == "machine-types" && args[2] == "describe" {
-		return shell.CommandResult{
-			ExitCode: 0,
-			Stdout:   `{"guestCpus": 4}`,
-		}
-	}
-	return shell.CommandResult{ExitCode: 1, Stderr: "unhandled mock command"}
-}
-
-func (m *mockExecutorForTest) ExecuteCommandStream(name string, args ...string) error {
-	return nil
-}
-
 func TestParseVolumeFlag(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -264,4 +243,21 @@ func TestParseVolumeFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+type mockOrchestrator struct {
+	orchestrator.JobOrchestrator
+}
+
+func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	if job.OutputManifest != "" {
+		var content string
+		if job.IsPathwaysJob {
+			content = "name: " + job.WorkloadName + "\nimage: proxy:latest\n--gcs_location=gs://my-bucket"
+		} else {
+			content = "name: " + job.WorkloadName + "\nimage: busybox"
+		}
+		return os.WriteFile(job.OutputManifest, []byte(content), 0644)
+	}
+	return nil
 }

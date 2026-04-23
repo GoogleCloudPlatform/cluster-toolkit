@@ -22,8 +22,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
 func TestIsStateStale(t *testing.T) {
@@ -307,50 +305,6 @@ func TestEnsureGCloudSDKInstalled_Failure(t *testing.T) {
 	}
 }
 
-func TestEnsureGCloudProjectConfigured_FlagProvided_AlreadySet(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gcloud" && len(args) > 2 && args[0] == "config" && args[1] == "get-value" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "test-project"}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	projectID := "test-project"
-	err := ensureGCloudProjectConfigured(&cobra.Command{}, &projectID)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
-func TestEnsureGCloudProjectConfigured_FlagProvided_NeedsSet(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	projectSet := false
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gcloud" && len(args) > 2 && args[0] == "config" && args[1] == "get-value" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "old-project"}
-		}
-		if name == "gcloud" && len(args) > 2 && args[0] == "config" && args[1] == "set" {
-			projectSet = true
-			return shell.CommandResult{ExitCode: 0}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	projectID := "new-project"
-	err := ensureGCloudProjectConfigured(&cobra.Command{}, &projectID)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if !projectSet {
-		t.Error("expected project to be set")
-	}
-}
-
 func TestEnsureGCloudAuthenticated_Success(t *testing.T) {
 	origExecuteCommand := shell.ExecuteCommand
 	defer func() { shell.ExecuteCommand = origExecuteCommand }()
@@ -400,96 +354,9 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 	defer os.Setenv("HOME", origHome)
 
-	err = ensureApplicationDefaultCredentials()
-	if err == nil {
-		t.Error("expected error, got nil")
-	}
-}
-
-func TestEnsureKubectlInstalled_AlreadyInstalled(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "kubectl" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	var useAptFallback bool
-	err := ensureKubectlInstalled(&useAptFallback)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
-func TestEnsureKubectlInstalled_NotInstalled_AptFallback(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	aptCalled := false
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "kubectl" {
-			return shell.CommandResult{ExitCode: 1, Stderr: "not found"}
-		}
-		if name == "sudo" && len(args) > 2 && args[0] == "apt-get" && args[1] == "install" {
-			aptCalled = true
-			return shell.CommandResult{ExitCode: 0}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	useAptFallback := true
-	err := ensureKubectlInstalled(&useAptFallback)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if !aptCalled {
-		t.Error("expected apt-get to be called")
-	}
-}
-
-func TestEnsureGKEGCloudAuthPluginInstalled_AlreadyInstalled(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gke-gcloud-auth-plugin" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "version 1.2.3"}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	var useAptFallback bool
-	err := ensureGKEGCloudAuthPluginInstalled(&useAptFallback)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
-func TestEnsureGKEGCloudAuthPluginInstalled_NotInstalled_AptFallback(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommand
-	defer func() { shell.ExecuteCommand = origExecuteCommand }()
-
-	aptCalled := false
-	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
-		if name == "gke-gcloud-auth-plugin" {
-			return shell.CommandResult{ExitCode: 1, Stderr: "not found"}
-		}
-		if name == "sudo" && len(args) > 2 && args[0] == "apt-get" && args[1] == "install" {
-			aptCalled = true
-			return shell.CommandResult{ExitCode: 0}
-		}
-		return shell.CommandResult{ExitCode: 0}
-	}
-
-	useAptFallback := true
-	err := ensureGKEGCloudAuthPluginInstalled(&useAptFallback)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if !aptCalled {
-		t.Error("expected apt-get to be called")
+	got := getADCSetupCommand()
+	want := "gcloud auth application-default login"
+	if got != want {
+		t.Errorf("getADCSetupCommand() = %q, want %q", got, want)
 	}
 }

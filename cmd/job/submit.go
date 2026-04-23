@@ -16,9 +16,7 @@ package job
 
 import (
 	"fmt"
-	"net/url"
 
-	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"strings"
@@ -77,24 +75,19 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validateImageFlags(); err != nil {
 			return err
 		}
-		err := ensurePrerequisites(cmd, &projectID)
-		if err != nil {
-			return fmt.Errorf("prerequisite checks failed for 'gcluster job submit'. Please ensure your gcloud configuration and cluster context are valid: %w", err)
+
+		if err := ensurePrerequisites(cmd, &projectID); err != nil {
+			return err
 		}
 
-		allowedPriorities := map[string]bool{
-			"very-low":  true,
-			"low":       true,
-			"medium":    true,
-			"high":      true,
-			"very-high": true,
-		}
-
-		if priorityClassName != "" && !allowedPriorities[priorityClassName] {
+		priorityClassName = strings.ToLower(priorityClassName)
+		switch priorityClassName {
+		case "", "very-low", "low", "medium", "high", "very-high":
+			// valid case, do nothing
+		default:
 			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: very-low, low, medium, high, very-high", priorityClassName)
 		}
 
-		logging.Info("Prerequisite checks completed successfully.")
 		return nil
 	},
 	SilenceUsage: true,
@@ -145,13 +138,11 @@ func init() {
 	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>).")
 
 	_ = SubmitCmd.MarkFlagRequired("command")
-	_ = SubmitCmd.MarkFlagRequired("cluster")
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("accelerator")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
-	logging.Info("Executing gcluster job submit command...")
 
 	affinity := map[string]string{}
 	if cpuAffinityStr != "" {
@@ -201,14 +192,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Verbose:                 verbose,
 	}
 
-	if err := submitGKEJob(jobDef); err != nil {
-		return fmt.Errorf("failed to submit job to GKE cluster '%s' in location '%s': %w", clusterName, location, err)
-	}
-
-	if outputManifest == "" {
-		printConsoleLinks(jobDef)
-	}
-	return nil
+	return orc.SubmitJob(jobDef)
 }
 
 func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
@@ -252,59 +236,4 @@ func validateImageFlags() error {
 		return fmt.Errorf("a --build-context must be provided when --base-image is used for a Crane build")
 	}
 	return nil
-}
-
-func submitGKEJob(jobDef orchestrator.JobDefinition) error {
-	if outputManifest == "" {
-		return orc.SubmitJob(jobDef)
-	}
-
-	fullImageName, err := orc.BuildContainerImage(jobDef)
-	if err != nil {
-		return fmt.Errorf("failed to build container image: %v", err)
-	}
-
-	var manifestContent string
-	if jobDef.IsPathwaysJob {
-		manifestContent, err = orc.GeneratePathwaysManifest(jobDef, fullImageName)
-		if err != nil {
-			return fmt.Errorf("failed to generate pathways manifest: %v", err)
-		}
-	} else {
-		manifestOpts, profile, err := orc.PrepareManifestOptions(jobDef, fullImageName)
-		if err != nil {
-			return fmt.Errorf("failed to prepare manifest options: %v", err)
-		}
-		manifestContent, err = orc.GenerateGKEManifest(manifestOpts, profile)
-
-		if err != nil {
-			return fmt.Errorf("failed to generate GKE manifest: %v", err)
-		}
-	}
-	return orc.ApplyManifest(manifestContent, outputManifest, jobDef.WorkloadName)
-}
-
-func printConsoleLinks(job orchestrator.JobDefinition) {
-	jobName := job.WorkloadName + "-main-job-0"
-	if job.IsPathwaysJob {
-		jobName = job.WorkloadName + "-pathways-head-0"
-	}
-	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/default/%s/details?project=%s",
-		job.ClusterLocation, job.ClusterName, jobName, job.ProjectID)
-
-	logging.Info("Follow your workload details here: %s", gkeLink)
-
-	logFilter := fmt.Sprintf(`resource.type="k8s_container"
-resource.labels.project_id="%s"
-resource.labels.location="%s"
-resource.labels.cluster_name="%s"
-resource.labels.namespace_name="default"
-resource.labels.pod_name:"%s-"
-severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, job.WorkloadName)
-
-	encodedFilter := url.QueryEscape(logFilter)
-	logsLink := fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
-		encodedFilter, job.ProjectID)
-
-	logging.Info("View your workload logs in real-time here: %s", logsLink)
 }
