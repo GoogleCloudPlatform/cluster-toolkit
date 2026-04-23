@@ -156,14 +156,29 @@ func isInternalEmail(email string) bool {
 	}
 
 	// Allowlist specific internal Cluster Toolkit project IDs that tests use.
-	internalProjects := []string{
+	internalProjectNames := []string{
 		"hpc-toolkit-dev",
 		"hpc-toolkit-demo",
 		"hpc-toolkit-gsc",
 	}
 
-	for _, project := range internalProjects {
-		pattern := ".*" + project + ".*gserviceaccount.com"
+	for _, projectName := range internalProjectNames {
+		pattern := ".*" + projectName + ".*gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	// Allowlist specific internal Cluster Toolkit project numbers that tests use.
+	internalProjectNumbers := []string{
+		"508417052821",
+		"858831239249",
+		"266450182917",
+	}
+	for _, projectNum := range internalProjectNumbers {
+		pattern := ".*" + projectNum + ".*@cloudbuild.gserviceaccount.com"
 		matched, err := regexp.MatchString(pattern, email)
 
 		if err == nil && matched {

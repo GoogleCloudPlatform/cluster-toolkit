@@ -1181,6 +1181,12 @@ func TestGetIsGoogler(t *testing.T) {
 			expected:   true,
 		},
 		{
+			name:       "Success - Internal ADC project number is present",
+			setupADC:   true,
+			adcContent: `{"client_email": "508417052821@cloudbuild.gserviceaccount.com"}`,
+			expected:   true,
+		},
+		{
 			name:           "Success - Fallback to gcloud when ADC is external",
 			setupADC:       true,
 			adcContent:     `{"client_email": "external@example.com"}`,
@@ -1313,13 +1319,19 @@ func TestIsInternalEmail(t *testing.T) {
 		email    string
 		expected bool
 	}{
+		// Positive test cases
 		{"user@google.com", true},
 		{"user@sub.google.com", true},
 		{"test-sa@hpc-toolkit-dev.iam.gserviceaccount.com", true},
 		{"test-sa@hpc-toolkit-demo.iam.gserviceaccount.com", true},
-		{"test-sa@hpc-toolkit-gsc.iam.gserviceaccount.com", true},
+		{"test-sa@hpc-toolkit-gsc.dev.gserviceaccount.com", true},
+		{"508417052821@cloudbuild.gserviceaccount.com", true},
+		{"858831239249.foo.@cloudbuild.gserviceaccount.com", true},
+		{"266450182917@cloudbuild.gserviceaccount.com", true},
+		// Negative test cases
 		{"user@example.com", false},
 		{"test-sa@other-external-project.iam.gserviceaccount.com", false},
+		{"1234567890@cloudbuild.gserviceaccount.com", false},
 		{"", false},
 	}
 
