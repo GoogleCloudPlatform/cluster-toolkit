@@ -993,7 +993,9 @@ func fetchGitFiles(version string) (*TreeResponse, error) {
 		return cachedTree, nil
 	}
 
+	// Query the GitHub API for the recursive file tree of this specific version tag
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+
 	// Ensure the network call has a timeout of up to 10 seconds to prevent blocking CLI execution.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
