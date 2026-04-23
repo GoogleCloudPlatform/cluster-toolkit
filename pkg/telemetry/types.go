@@ -72,6 +72,11 @@ type ClientInfo struct {
 	ClientType string `json:"client_type"`
 }
 
+// ServiceAccountKey matches the structure of a GCP service account JSON key.
+type ServiceAccountKey struct {
+	ClientEmail string `json:"client_email"`
+}
+
 const (
 	COMMAND_FLAGS      = "CLUSTER_TOOLKIT_COMMAND_FLAGS"
 	IS_GKE             = "CLUSTER_TOOLKIT_IS_GKE"

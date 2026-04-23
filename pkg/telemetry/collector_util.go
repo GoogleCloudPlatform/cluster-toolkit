@@ -17,6 +17,7 @@ package telemetry
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
@@ -126,6 +127,66 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 		return "", err
 	}
 	return project.Name, nil
+}
+
+// checkADCForInternalUser parses the ADC JSON file to extract the client email.
+func checkADCForInternalUser(credentialsPath string) (bool, error) {
+	data, err := os.ReadFile(credentialsPath)
+	if err != nil {
+		return false, err // Fail open (treat as external) if file can't be read
+	}
+
+	var key ServiceAccountKey
+	if err := json.Unmarshal(data, &key); err != nil {
+		return false, err
+	}
+
+	return isInternalEmail(key.ClientEmail), nil
+}
+
+// isInternalEmail contains the logic to identify Google emails and internal SA domains.
+func isInternalEmail(email string) bool {
+	if email == "" {
+		return false
+	}
+
+	// Direct Google employees workstation accounts
+	if strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, ".google.com") {
+		return true
+	}
+
+	// Allowlist specific internal Cluster Toolkit project IDs that tests use.
+	internalProjectNames := []string{
+		"hpc-toolkit-dev",
+		"hpc-toolkit-demo",
+		"hpc-toolkit-gsc",
+	}
+
+	for _, projectName := range internalProjectNames {
+		pattern := ".*" + projectName + ".*gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	// Allowlist specific internal Cluster Toolkit project numbers that tests use.
+	internalProjectNumbers := []string{
+		"508417052821",
+		"858831239249",
+		"266450182917",
+	}
+	for _, projectNum := range internalProjectNumbers {
+		pattern := ".*" + projectNum + ".*@cloudbuild.gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.

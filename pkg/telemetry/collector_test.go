@@ -22,6 +22,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -1118,6 +1120,225 @@ func TestGetModules(t *testing.T) {
 
 			if result != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
+// TestGetIsGoogler tests the full logic of the getIsGoogler method including fallbacks.
+func TestGetIsGoogler(t *testing.T) {
+	// Save the original environment variables to restore them after the tests
+	originalCreds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	originalPath := os.Getenv("PATH")
+	defer func() {
+		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", originalCreds)
+		os.Setenv("PATH", originalPath)
+	}()
+
+	tempDir := t.TempDir()
+
+	// Helper to create a mock gcloud executable in the temp directory
+	createFakeGcloud := func(output string, exitCode int) {
+		mockGcloudPath := filepath.Join(tempDir, "gcloud")
+		var script string
+		if exitCode == 0 {
+			script = fmt.Sprintf("#!/bin/sh\necho '%s'\n", output)
+		} else {
+			script = fmt.Sprintf("#!/bin/sh\nexit %d\n", exitCode)
+		}
+
+		err := os.WriteFile(mockGcloudPath, []byte(script), 0755)
+		if err != nil {
+			t.Fatalf("Failed to write fake gcloud script: %v", err)
+		}
+
+		// Prepend the temp directory to the PATH to intercept `exec.Command("gcloud", ...)`
+		os.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
+	}
+
+	// Helper to create a fake Application Default Credentials JSON file
+	createFakeADC := func(content string) string {
+		adcPath := filepath.Join(tempDir, "adc.json")
+		err := os.WriteFile(adcPath, []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write fake ADC file: %v", err)
+		}
+		return adcPath
+	}
+
+	tests := []struct {
+		name           string
+		setupADC       bool
+		adcContent     string
+		gcloudOutput   string
+		gcloudExitCode int
+		expected       bool
+	}{
+		{
+			name:       "Success - Internal ADC is present",
+			setupADC:   true,
+			adcContent: `{"client_email": "test-sa@hpc-toolkit-dev.iam.gserviceaccount.com"}`,
+			expected:   true,
+		},
+		{
+			name:       "Success - Internal ADC project number is present",
+			setupADC:   true,
+			adcContent: `{"client_email": "508417052821@cloudbuild.gserviceaccount.com"}`,
+			expected:   true,
+		},
+		{
+			name:           "Success - Fallback to gcloud when ADC is external",
+			setupADC:       true,
+			adcContent:     `{"client_email": "external@example.com"}`,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Success - Fallback to gcloud when ADC is invalid",
+			setupADC:       true,
+			adcContent:     `{invalid_json}`,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Success - Internal user via gcloud directly (No ADC)",
+			setupADC:       false,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Failure - External user via gcloud directly (No ADC)",
+			setupADC:       false,
+			gcloudOutput:   "user@example.com",
+			gcloudExitCode: 0,
+			expected:       false,
+		},
+		{
+			name:           "Failure - External ADC and gcloud fails execution",
+			setupADC:       true,
+			adcContent:     `{"client_email": "external@example.com"}`,
+			gcloudExitCode: 1, // Represents a failure when running the CLI
+			expected:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock ADC file if required
+			if tt.setupADC {
+				adcPath := createFakeADC(tt.adcContent)
+				os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", adcPath)
+			} else {
+				os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
+			}
+
+			// Mock gcloud command
+			createFakeGcloud(tt.gcloudOutput, tt.gcloudExitCode)
+
+			got := getIsGoogler()
+			if got != tt.expected {
+				t.Errorf("getIsGoogler() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCheckADCForInternalUser tests the JSON file parsing logic for Application Default Credentials.
+func TestCheckADCForInternalUser(t *testing.T) {
+	tempDir := t.TempDir()
+
+	createADC := func(content string) string {
+		path := filepath.Join(tempDir, "adc.json")
+		_ = os.WriteFile(path, []byte(content), 0644)
+		return path
+	}
+
+	tests := []struct {
+		name        string
+		content     string
+		fileExists  bool
+		expected    bool
+		expectError bool
+	}{
+		{
+			name:        "Valid internal ADC user",
+			content:     `{"client_email": "test-sa@hpc-toolkit-dev.iam.gserviceaccount.com"}`,
+			fileExists:  true,
+			expected:    true,
+			expectError: false,
+		},
+		{
+			name:        "Valid external ADC user",
+			content:     `{"client_email": "external@example.com"}`,
+			fileExists:  true,
+			expected:    false,
+			expectError: false,
+		},
+		{
+			name:        "Malformed JSON payload",
+			content:     `{invalid}`,
+			fileExists:  true,
+			expected:    false,
+			expectError: true,
+		},
+		{
+			name:        "ADC file missing",
+			fileExists:  false,
+			expected:    false,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var path string
+			if tt.fileExists {
+				path = createADC(tt.content)
+			} else {
+				path = filepath.Join(tempDir, "non_existent_adc.json")
+			}
+
+			got, err := checkADCForInternalUser(path)
+			if (err != nil) != tt.expectError {
+				t.Errorf("checkADCForInternalUser() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+			if got != tt.expected {
+				t.Errorf("checkADCForInternalUser() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsInternalEmail tests the allowlisting and domain verification logic.
+func TestIsInternalEmail(t *testing.T) {
+	tests := []struct {
+		email    string
+		expected bool
+	}{
+		// Positive test cases
+		{"user@google.com", true},
+		{"user@sub.google.com", true},
+		{"test-sa@hpc-toolkit-dev.iam.gserviceaccount.com", true},
+		{"test-sa@hpc-toolkit-demo.iam.gserviceaccount.com", true},
+		{"test-sa@hpc-toolkit-gsc.dev.gserviceaccount.com", true},
+		{"508417052821@cloudbuild.gserviceaccount.com", true},
+		{"858831239249.foo.@cloudbuild.gserviceaccount.com", true},
+		{"266450182917@cloudbuild.gserviceaccount.com", true},
+		// Negative test cases
+		{"user@example.com", false},
+		{"test-sa@other-external-project.iam.gserviceaccount.com", false},
+		{"1234567890@cloudbuild.gserviceaccount.com", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.email, func(t *testing.T) {
+			if got := isInternalEmail(tt.email); got != tt.expected {
+				t.Errorf("isInternalEmail(%q) = %v, want %v", tt.email, got, tt.expected)
 			}
 		})
 	}
