@@ -103,7 +103,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 Here are the flags currently supported by `gcluster job submit`:
 
-* `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `us-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
+* `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `<region>-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
 * `-B, --base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
@@ -248,7 +248,7 @@ Use `--node-constraint` to target specific hardware (e.g., C2 nodes). This maps 
 ```
 
 **Example 2: Use Placement Policy**
-Use `--placement-policy` to specify a GKE Placement Policy (e.g., for compact placement to reduce latency).
+Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
 
 ```bash
 ./gcluster job submit \
@@ -507,6 +507,7 @@ echo "  gcluster job submit --image $IMAGE_NAME --command 'bash run_maxtext.sh <
 CLUSTER_NAME="v6e-cluster"
 LOCATION="us-central1"
 OUTPUT_DIR="gs://$PROJECT/maxtext_output"
+SA_NAME="v6e-cluster-gke-wl-sa"
 
 # Look up project
 PROJECT=$(gcloud config get-value project)
@@ -519,12 +520,12 @@ fi
 IMAGE_NAME=gcr.io/$PROJECT/maxtext-runner:latest
 
 echo "Ensuring permissions for $SA_NAME..."
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA_NAME@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
 
 echo "Submitting MaxText job to cluster $CLUSTER_NAME..."
 

@@ -44,15 +44,16 @@ type DefaultKubeClient struct {
 type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
-	executor                 Executor
-	clusterZones             []string
-	nodePoolSAs              []string
-	capacity                 ClusterCapacity
-	clusterDesc              gkeCluster
-	dynClient                dynamic.Interface
-	kubeClient               KubeClient
-	acceleratorToMachineType map[string]string
-	machineCapCache          map[string]MachineTypeCap
+	executor                    Executor
+	clusterZones                []string
+	nodePoolSAs                 []string
+	capacity                    ClusterCapacity
+	clusterDesc                 gkeCluster
+	dynClient                   dynamic.Interface
+	kubeClient                  KubeClient
+	acceleratorToMachineType    map[string]string
+	machineCapCache             map[string]MachineTypeCap
+	machineTypeToThreadsPerCore map[string]string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -167,10 +168,15 @@ type gkeAccelerator struct {
 	AcceleratorType  string      `json:"acceleratorType"`
 }
 
+type gkeAdvancedMachineFeatures struct {
+	ThreadsPerCore string `json:"threadsPerCore"`
+}
+
 type gkeNodePoolConfig struct {
-	ServiceAccount string           `json:"serviceAccount"`
-	MachineType    string           `json:"machineType"`
-	Accelerators   []gkeAccelerator `json:"accelerators"`
+	ServiceAccount          string                      `json:"serviceAccount"`
+	MachineType             string                      `json:"machineType"`
+	Accelerators            []gkeAccelerator            `json:"accelerators"`
+	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
 }
 
 type gkeAutoscaling struct {

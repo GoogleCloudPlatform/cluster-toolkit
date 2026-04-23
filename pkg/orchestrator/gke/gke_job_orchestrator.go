@@ -183,11 +183,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	// Find the job to get its namespace
 	foundNamespace, err := g.kubeClient.GetJobNamespace(name)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			foundNamespace = "default"
-		} else {
-			return err
-		}
+		return err
 	}
 
 	status, err := g.getJobSetStatus(name, foundNamespace)
@@ -428,7 +424,11 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	var nodePoolSAs []string
 	flavors := make(map[string]FlavorCapacity)
 
+	g.machineTypeToThreadsPerCore = make(map[string]string)
 	for _, np := range clusterDesc.NodePools {
+		if np.Config.AdvancedMachineFeatures != nil {
+			g.machineTypeToThreadsPerCore[np.Config.MachineType] = np.Config.AdvancedMachineFeatures.ThreadsPerCore
+		}
 		cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, err := g.processNodePoolCapacity(np, location)
 		if err != nil {
 			logging.Info("Warning: %v", err)
@@ -462,6 +462,13 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	return capacity, nodePoolSAs, nil
 }
 
+func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
+	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok && tpc == "1" && !strings.HasPrefix(machineType, "t2a") {
+		return guestCpus / 2
+	}
+	return guestCpus
+}
+
 func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location string) (cpus, memMb, gpus, tpus int, flavor string, nodeLabels map[string]string, sa string, err error) {
 	sa = strings.TrimSpace(np.Config.ServiceAccount)
 	if sa == "default" {
@@ -484,7 +491,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 		return 0, 0, 0, 0, "flavor-default", nodeLabels, sa, err
 	}
 
-	cpus = cap.GuestCpus * nodeCount
+	cpus = g.getEffectiveCPUs(np.Config.MachineType, cap.GuestCpus) * nodeCount
 	memMb = cap.MemoryMb * nodeCount
 
 	flavor = "flavor-default"
@@ -627,7 +634,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) erro
 		return err
 	}
 
-	hasCoverage, err := g.checkClusterQueueCoverage(cqName)
+	hasCoverage, isEmpty, err := g.checkClusterQueueCoverage(cqName)
 	if err != nil {
 		return err
 	}
@@ -664,27 +671,27 @@ func (g *GKEOrchestrator) getClusterQueueName(localQueueName string) (string, er
 	return cqName, nil
 }
 
-func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string) (bool, error) {
+func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string) (bool, bool, error) {
 	res := g.executor.ExecuteCommand("kubectl", "get", "clusterqueue", cqName, "-o", "json")
 	if res.ExitCode != 0 {
-		return false, fmt.Errorf("failed to get clusterqueue %s: %s", cqName, res.Stderr)
+		return false, false, fmt.Errorf("failed to get clusterqueue %s: %s", cqName, res.Stderr)
 	}
 
 	var cq map[string]interface{}
 	if err := json.Unmarshal([]byte(res.Stdout), &cq); err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	spec, ok := cq["spec"].(map[string]interface{})
 	if !ok {
-		return false, nil
+		return false, true, nil
 	}
 	rgList, ok := spec["resourceGroups"].([]interface{})
 	if !ok || len(rgList) == 0 {
-		return false, nil
+		return false, true, nil
 	}
 
-	return g.hasRequiredResources(rgList), nil
+	return g.hasRequiredResources(rgList), false, nil
 }
 
 func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
@@ -1209,7 +1216,7 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 	}
 	if count > 0 {
 		logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
-		return true, count, nil
+		return true, g.getEffectiveCPUs(job.AcceleratorType, count), nil
 	}
 	return false, 0, nil
 }

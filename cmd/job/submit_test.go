@@ -17,10 +17,10 @@ package job
 import (
 	"bytes"
 	"hpc-toolkit/pkg/orchestrator"
-
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -43,7 +43,20 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 	}
 	defer os.Remove(tmpfile.Name())
 
-	os.Setenv("GCLUSTER_SKIP_PREREQ_CHECKS", "true")
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
 
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
@@ -105,7 +118,20 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 	defer os.Remove(tmpfile.Name())
 
-	os.Setenv("GCLUSTER_SKIP_PREREQ_CHECKS", "true")
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
 
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
@@ -268,6 +294,18 @@ func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return os.WriteFile(job.DryRunManifest, []byte(content), 0644)
 	}
 	return nil
+}
+
+type MockPrereqStore struct {
+	State PrereqState
+}
+
+func (m *MockPrereqStore) Load() PrereqState {
+	return m.State
+}
+
+func (m *MockPrereqStore) Save(state PrereqState) {
+	m.State = state
 }
 
 func TestParseDurationToSeconds(t *testing.T) {

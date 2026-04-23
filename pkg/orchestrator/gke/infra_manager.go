@@ -40,6 +40,7 @@ var templatesFS embed.FS
 // ATTENTION: If you update this version, please also update the corresponding
 // default version in modules/management/kubectl-apply/variables.tf.
 const defaultKueueVersion = "v0.17.1"
+const defaultJobSetVersion = "v0.10.1"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	if installed, err := g.isJobSetCRDInstalled(); err != nil {
@@ -54,7 +55,7 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 		logging.Info("JobSet Webhook endpoints not found. Proceeding with re-installation/fix...")
 	}
 
-	jobSetManifestsURL := "https://github.com/kubernetes-sigs/jobset/releases/download/v0.10.1/manifests.yaml"
+	jobSetManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/jobset/releases/download/%s/manifests.yaml", defaultJobSetVersion)
 	return g.installJobSetCRD(jobSetManifestsURL)
 }
 

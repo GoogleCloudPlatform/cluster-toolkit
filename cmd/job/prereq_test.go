@@ -123,7 +123,7 @@ func TestLoadPrereqState_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded := loadPrereqState()
+	loaded := store.Load()
 	if !loaded.GCloudSDKInstalled {
 		t.Errorf("expected loaded state to be true for GCloudSDKInstalled, got false")
 	}
@@ -149,7 +149,7 @@ func TestSavePrereqState_Success(t *testing.T) {
 		LastCheckedTimestamp: time.Now(),
 	}
 
-	savePrereqState(state)
+	store.Save(state)
 
 	stateDir := filepath.Join(tempDir, stateDirName)
 	statePath := filepath.Join(stateDir, stateFileName)
@@ -238,7 +238,7 @@ func TestLoadPrereqState_CorruptedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded := loadPrereqState()
+	loaded := store.Load()
 	if loaded.GCloudSDKInstalled {
 		t.Errorf("expected empty state for corrupted file, got GCloudSDKInstalled=true")
 	}
@@ -271,7 +271,7 @@ func TestSavePrereqState_WriteError(t *testing.T) {
 	}
 
 	// This should log an error but not panic
-	savePrereqState(state)
+	store.Save(state)
 }
 
 func TestEnsureGCloudSDKInstalled_Success(t *testing.T) {
