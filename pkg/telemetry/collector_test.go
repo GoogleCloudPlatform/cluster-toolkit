@@ -1129,14 +1129,24 @@ func TestGetDeploymentFile(t *testing.T) {
 			expectedResult: "examples/hpc-slurm.yaml",
 		},
 		{
-			name: "failure: flag set with a custom/unrecognized deployment file",
+			name: "success: flag set with redundant slashes and relative paths",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "examples//foo/../hpc-slurm.yaml")
+				return cmd
+			},
+			expectedResult: "examples/hpc-slurm.yaml",
+		},
+		{
+			name: "success: flag set with a custom/unrecognized deployment file",
 			setupCommand: func() *cobra.Command {
 				cmd := &cobra.Command{}
 				cmd.Flags().String("deployment-file", "", "Path to deployment file")
 				_ = cmd.Flags().Set("deployment-file", "my-custom-cluster.yaml")
 				return cmd
 			},
-			expectedResult: "",
+			expectedResult: "Custom",
 		},
 		{
 			name: "failure: flag exists but is empty",
@@ -1161,7 +1171,6 @@ func TestGetDeploymentFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := tc.setupCommand()
 			result := getDeploymentFile(cmd)
-
 			if result != tc.expectedResult {
 				t.Errorf("getDeploymentFile() = %q; want %q", result, tc.expectedResult)
 			}

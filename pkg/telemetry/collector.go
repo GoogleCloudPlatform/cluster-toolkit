@@ -18,6 +18,8 @@ import (
 	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
+	"path"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -127,19 +129,20 @@ func getCmdFlags(cmd *cobra.Command) string {
 }
 
 func getDeploymentFile(cmd *cobra.Command) string {
-	var path string
-	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
-		path = flag.Value.String()
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
+		return ""
 	}
-	path = strings.TrimPrefix(path, "./")
 
-	if path != "" {
-		// Lazily load the predefined files here
-		if slices.Contains(fetchStandardDeploymentFiles(), path) {
-			return path
-		}
+	// Normalize the path to handle variations like "./", redundant slashes, or Windows "\"
+	deploymentFile := path.Clean(filepath.ToSlash(flag.Value.String()))
+
+	// Lazily load the predefined files and check for a match
+	if slices.Contains(fetchStandardDeploymentFiles(), deploymentFile) {
+		return deploymentFile
 	}
-	return ""
+
+	return "Custom"
 }
 
 func getIsGke(modulesList []string) string {
