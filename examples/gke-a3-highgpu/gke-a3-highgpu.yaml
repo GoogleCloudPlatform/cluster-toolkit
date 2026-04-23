@@ -159,7 +159,7 @@ deployment_groups:
       kueue:
         install: true
         wait: true
-        version: "0.14.4"
+        version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3_highgpu_pool.static_gpu_count)
