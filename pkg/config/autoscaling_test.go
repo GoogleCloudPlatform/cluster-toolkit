@@ -70,8 +70,8 @@ func TestExpandClusterAutoscaling_GPU(t *testing.T) {
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	if resMap["autoprovisioning_machine_type"].AsString() != "nvidia-h100-80gb" {
-		t.Errorf("expected machine type nvidia-h100-80gb, got %s", resMap["autoprovisioning_machine_type"].AsString())
+	if resMap["autoprovisioning_resource_type"].AsString() != "nvidia-h100-80gb" {
+		t.Errorf("expected resource type nvidia-h100-80gb, got %s", resMap["autoprovisioning_resource_type"].AsString())
 	}
 
 	f, _ := resMap["autoprovisioning_max_count"].AsBigFloat().Float64()
@@ -163,7 +163,7 @@ func TestExpandClusterAutoscaling_TPU(t *testing.T) {
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	if resMap["autoprovisioning_machine_type"].AsString() != "ct6e-standard-4t" {
-		t.Errorf("expected machine type ct6e-standard-4t, got %s", resMap["autoprovisioning_machine_type"].AsString())
+	if resMap["autoprovisioning_resource_type"].AsString() != "ct6e-standard-4t" {
+		t.Errorf("expected resource type ct6e-standard-4t, got %s", resMap["autoprovisioning_resource_type"].AsString())
 	}
 }
