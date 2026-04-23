@@ -109,38 +109,39 @@ type JobProfile struct {
 }
 
 type ManifestOptions struct {
-	WorkloadName            string
-	FullImageName           string
-	CommandToRun            string
-	AcceleratorType         string
-	ResourcesString         string
-	ProjectID               string
-	ClusterName             string
-	ClusterLocation         string
-	KueueQueueName          string
-	NumSlices               int
-	VmsPerSlice             int
-	MaxRestarts             int
-	TtlSecondsAfterFinished int
-	NodeSelector            string
-	Affinity                string
-	PodFailurePolicy        string
-	ImagePullSecrets        string
-	ServiceAccountName      string
-	TopologyAnnotation      string
-	Topology                string
-	SchedulerName           string
-	SchedulingGates         string
-	Tolerations             string
-	AwaitJobCompletion      bool
-	PriorityClassName       string
-	VolumesYAML             string
-	VolumeMountsYAML        string
-	GCSFuseEnabled          bool
-	IsSuperSlicing          bool
-	IsCPUMachine            bool
-	Pathways                orchestrator.PathwaysJobDefinition
-	Verbose                 bool
+	WorkloadName                  string
+	FullImageName                 string
+	CommandToRun                  string
+	AcceleratorType               string
+	ResourcesString               string
+	ProjectID                     string
+	ClusterName                   string
+	ClusterLocation               string
+	KueueQueueName                string
+	NumSlices                     int
+	VmsPerSlice                   int
+	MaxRestarts                   int
+	TtlSecondsAfterFinished       int
+	TerminationGracePeriodSeconds int
+	NodeSelector                  string
+	Affinity                      string
+	PodFailurePolicy              string
+	ImagePullSecrets              string
+	ServiceAccountName            string
+	TopologyAnnotation            string
+	Topology                      string
+	SchedulerName                 string
+	SchedulingGates               string
+	Tolerations                   string
+	AwaitJobCompletion            bool
+	PriorityClassName             string
+	VolumesYAML                   string
+	VolumeMountsYAML              string
+	GCSFuseEnabled                bool
+	IsSuperSlicing                bool
+	IsCPUMachine                  bool
+	Pathways                      orchestrator.PathwaysJobDefinition
+	Verbose                       bool
 }
 
 type FlavorCapacity struct {

@@ -39,7 +39,7 @@ var templatesFS embed.FS
 // defaultKueueVersion is the fallback version of Kueue to install.
 // ATTENTION: If you update this version, please also update the corresponding
 // default version in modules/management/kubectl-apply/variables.tf.
-const defaultKueueVersion = "v0.13.3"
+const defaultKueueVersion = "v0.17.1"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	if installed, err := g.isJobSetCRDInstalled(); err != nil {
@@ -58,25 +58,22 @@ func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
 	return g.installJobSetCRD(jobSetManifestsURL)
 }
 
-func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
+func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName string, clusterLocation string) error {
 	kueueCRDInstalled, _ := g.isKueueInstalled()
 	kueueDeploymentInstalled, _ := g.isKueueDeploymentInstalled()
-
 	currentVersion, _ := g.GetKueueVersion()
 
-	targetVersion := version
-	if targetVersion == "" {
-		targetVersion = defaultKueueVersion
+	if version == "" {
+		version = defaultKueueVersion
 	}
 
+	var reinstallReason string
 	needReinstall := false
 
-	var reinstallReason string
-
 	// 1. Minimum version check for KUEUE
-	if currentVersion != "" && g.isVersionBelow(currentVersion, targetVersion) {
+	if currentVersion != "" && g.isVersionBelow(currentVersion, version) {
 		needReinstall = true
-		reinstallReason = fmt.Sprintf("Current Kueue version %s is below target %s.", currentVersion, targetVersion)
+		reinstallReason = fmt.Sprintf("Current Kueue version %s is below target %s.", currentVersion, version)
 	}
 
 	// 2. Check if basic installation is missing
@@ -86,19 +83,27 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 	}
 
 	// 3. Check if webhook is healthy (only if not already deciding to reinstall)
-	if !needReinstall {
-		if err := g.waitForKueueWebhook(); err != nil {
-			needReinstall = true
-			reinstallReason = "Kueue webhook health check failed. Treating as broken."
-		}
+	if !needReinstall && g.waitForKueueWebhook() != nil {
+		needReinstall = true
+		reinstallReason = "Kueue webhook health check failed. Treating as broken."
 	}
 
 	if needReinstall {
-		if err := g.handleKueueReinstallation(targetVersion, reinstallReason); err != nil {
+		isSuperSlicing, _ := g.checkSuperSlicingViaGKE(clusterName, clusterLocation)
+		if isSuperSlicing {
+			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Super-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+		}
+
+		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
 			return err
 		}
 	}
 
+	logging.Info("Kueue is already installed.")
+	return nil
+}
+
+func (g *GKEOrchestrator) ensurePriorityClassesInstalled() error {
 	priorityClassesInstalled, err := g.arePriorityClassesInstalled()
 	if err != nil {
 		return err
@@ -106,10 +111,10 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string) error {
 
 	if !priorityClassesInstalled {
 		logging.Info("Required PriorityClasses not found. Installing them...")
-		return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
+		return g.installPriorityClasses()
 	}
 
-	logging.Info("Kueue and required PriorityClasses are already installed.")
+	logging.Info("The required PriorityClasses are already installed.")
 	return nil
 }
 
@@ -262,10 +267,8 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 }
 
-func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
-	logging.Info("Installing Kueue resources (PriorityClasses, ClusterQueue, LocalQueue)...")
-
-	// Install PriorityClasses
+func (g *GKEOrchestrator) installPriorityClasses() error {
+	logging.Info("Installing Kueue PriorityClasses...")
 	priorityClassesTmpl, err := template.ParseFS(templatesFS, "templates/priority_classes.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse priority_classes.tmpl: %w", err)
@@ -274,7 +277,13 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	if err := priorityClassesTmpl.Execute(&priorityClassesBuf, nil); err != nil {
 		return fmt.Errorf("failed to execute priority_classes.tmpl template: %w", err)
 	}
-	if err := g.applyManifests(priorityClassesBuf.Bytes(), "priority-classes.yaml"); err != nil {
+	return g.applyManifests(priorityClassesBuf.Bytes(), "priority-classes.yaml")
+}
+
+func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
+	logging.Info("Installing Kueue resources (ClusterQueue, LocalQueue)...")
+
+	if err := g.installPriorityClasses(); err != nil {
 		return err
 	}
 
@@ -531,6 +540,7 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 	major, minor, _ := parseVersion(version)
 	useEndpointSlice := major > 0 || (major == 0 && minor > 13)
 
+	endpointsReady := false
 	for i := 0; i < 40; i++ {
 		ready, err := g.checkKueueEndpoints(useEndpointSlice)
 		if err != nil {
@@ -538,12 +548,40 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 		}
 		if ready {
 			logging.Info("Kueue webhook service endpoints are available.")
-			return nil
+			endpointsReady = true
+			break
 		}
 		time.Sleep(3 * time.Second)
 	}
 
-	return fmt.Errorf("timed out waiting for kueue-webhook-service endpoints to be available")
+	if !endpointsReady {
+		return fmt.Errorf("timed out waiting for kueue-webhook-service endpoints to be available")
+	}
+
+	// Active probe to ensure webhook is processing requests
+	logging.Info("Probing Kueue webhook readiness...")
+	probeManifest := `apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: gcluster-webhook-probe
+`
+	probeFile := filepath.Join(os.TempDir(), "gcluster-webhook-probe.yaml")
+	if err := os.WriteFile(probeFile, []byte(probeManifest), 0644); err != nil {
+		return fmt.Errorf("failed to write probe manifest: %w", err)
+	}
+	defer os.Remove(probeFile)
+
+	for i := 0; i < 20; i++ {
+		res := g.executor.ExecuteCommand("kubectl", "apply", "-f", probeFile)
+		if res.ExitCode == 0 {
+			logging.Info("Kueue webhook is fully operational.")
+			g.executor.ExecuteCommand("kubectl", "delete", "-f", probeFile, "--ignore-not-found")
+			return nil
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	return fmt.Errorf("timed out waiting for Kueue webhook to become operational")
 }
 
 func (g *GKEOrchestrator) getKueuePodDetails() string {
@@ -811,7 +849,8 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 func (g *GKEOrchestrator) ValidateClusterState(workloadName string, clusterName string, clusterLocation string, projectID string) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
-		func() error { return g.CheckAndInstallKueue("") },
+		func() error { return g.CheckAndInstallKueue("", clusterName, clusterLocation) },
+		func() error { return g.ensurePriorityClassesInstalled() },
 		g.checkAndInstallJobSetCRD,
 		func() error { return g.validateJobConflicts(workloadName, clusterName, clusterLocation, projectID) },
 	}
@@ -834,4 +873,26 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	}
 	logging.Info("Cluster connectivity verified.")
 	return nil
+}
+
+func (g *GKEOrchestrator) checkSuperSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
+	poolName := os.Getenv("GKE_NODE_POOL_NAME")
+	if poolName == "" {
+		return false, nil
+	}
+
+	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+clusterName, "--location="+clusterLocation, "--format=json(placementPolicy)")
+	if result.ExitCode != 0 {
+		return false, fmt.Errorf("failed to describe node pool: %s", result.Stderr)
+	}
+
+	var policy map[string]interface{}
+	if err := json.Unmarshal([]byte(result.Stdout), &policy); err == nil {
+		if placement, ok := policy["placementPolicy"].(map[string]interface{}); ok {
+			if mode, ok := placement["acceleratorTopologyMode"].(string); ok && mode == "PROVISION_ONLY" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

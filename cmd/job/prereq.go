@@ -183,7 +183,7 @@ func checkK8sDependencies(newState *PrereqState, missing *[]missingPrereq) {
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
 func ensurePrerequisites(cmd *cobra.Command, projectID *string) error {
-	if os.Getenv("GCLUSTER_SKIP_PREREQ_CHECKS") == "true" {
+	if os.Getenv("GCLUSTER_SKIP_PREREQ_CHECKS") == "true" || dryRunManifest != "" {
 		return nil
 	}
 

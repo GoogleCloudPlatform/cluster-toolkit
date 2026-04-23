@@ -105,11 +105,11 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if job.OutputManifest == "" {
+	if job.DryRunManifest == "" {
 		g.printConsoleLinks(job)
 	}
 
-	if job.AwaitJobCompletion && job.OutputManifest == "" {
+	if job.AwaitJobCompletion && job.DryRunManifest == "" {
 		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
 		if err != nil {
 			return err
@@ -223,7 +223,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers")
+		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "--max-log-requests=50")
 		if res.ExitCode == 0 {
 			break
 		}
@@ -245,7 +245,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "-f")
+		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "-f", "--max-log-requests=10")
 		return "", err
 	}
 
@@ -262,14 +262,14 @@ func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinit
 		if err != nil {
 			return err
 		}
-		return g.ApplyManifest(manifestContent, job.OutputManifest, job.WorkloadName)
+		return g.ApplyManifest(manifestContent, job.DryRunManifest, job.WorkloadName)
 	}
 
 	manifestOpts, profile, err := g.PrepareManifestOptions(job, fullImageName)
 	if err != nil {
 		return err
 	}
-	return g.generateAndApplyManifest(manifestOpts, profile, job.OutputManifest)
+	return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
 }
 
 func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
@@ -294,7 +294,7 @@ severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, job.Wor
 	logsLink := fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
 		encodedFilter, job.ProjectID)
 
-	logging.Info("View your workload logs in real-time here: %s", logsLink)
+	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 }
 
 func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
@@ -303,7 +303,7 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 		return err
 	}
 	if status != "" {
-		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s', or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation)
+		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", workloadName, status, workloadName, clusterName, clusterLocation, projectID)
 	}
 	return nil
 }
@@ -406,9 +406,11 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 		return err
 	}
 
-	// Centralized Cluster Validation
-	if err := g.ValidateClusterState(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
-		return err
+	// Centralized Cluster Validation (Skip for dry-runs to avoid cluster mutations)
+	if job.DryRunManifest == "" {
+		if err := g.ValidateClusterState(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+			return err
+		}
 	}
 
 	if err := g.configureClusterEnvironment(job); err != nil {
@@ -550,12 +552,25 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	}
 	job.KueueQueueName = localQueue
 
-	if err := g.EnsureResourceFlavors(); err != nil {
-		logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
-	}
+	if job.DryRunManifest == "" {
+		if err := g.EnsureResourceFlavors(); err != nil {
+			logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
+		}
 
-	if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
-		logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
+		exists, err := g.checkLocalQueueExists(localQueue)
+		if err != nil {
+			logging.Info("Warning: Failed to check if LocalQueue exists: %v", err)
+		}
+		if !exists {
+			logging.Info("LocalQueue '%s' does not exist. Attempting to create default queues...", localQueue)
+			if err := g.createDefaultQueues(localQueue); err != nil {
+				logging.Info("Warning: Failed to create default queues: %v. Workload might remain suspended.", err)
+			}
+		}
+
+		if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
+			logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
+		}
 	}
 
 	return nil
@@ -1002,6 +1017,17 @@ func (g *GKEOrchestrator) checkTopologyContainment(requested, container string, 
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
+	if job.DryRunManifest != "" {
+		if job.BaseImage != "" {
+			logging.Info("[Dry Run] Skipping Crane build, generating predicted URI...")
+			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation)
+		}
+		if job.ImageName != "" {
+			logging.Info("[Dry Run] Using pre-existing container image: %s", job.ImageName)
+			return job.ImageName, nil
+		}
+	}
+
 	if job.BaseImage != "" {
 		logging.Info("Building container image using Crane (Go implementation) on top of %s...", job.BaseImage)
 
@@ -1087,56 +1113,65 @@ func isTPUFallback(mapped string) bool {
 }
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string) interface{} {
+	exclusiveTopology := ""
+	if !opts.IsSuperSlicing {
+		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+	}
+
 	return struct {
-		WorkloadName            string
-		KueueQueueName          string
-		TtlSecondsAfterFinished int
-		MaxRestarts             int
-		NumSlices               int
-		VmsPerSlice             int
-		FullImageName           string
-		Command                 []string
-		ResourcesYAML           string
-		AcceleratorTypeLabel    string
-		NodeSelector            string
-		Affinity                string
-		PodFailurePolicy        string
-		ImagePullSecrets        string
-		ServiceAccountName      string
-		TopologyAnnotation      string
-		SchedulerName           string
-		SchedulingGates         string
-		Tolerations             string
-		PriorityClassName       string
-		VolumesYAML             string
-		VolumeMountsYAML        string
-		GCSFuseEnabled          bool
-		Pathways                orchestrator.PathwaysJobDefinition
+		WorkloadName                  string
+		KueueQueueName                string
+		TtlSecondsAfterFinished       int
+		TerminationGracePeriodSeconds int
+		MaxRestarts                   int
+		NumSlices                     int
+		VmsPerSlice                   int
+		FullImageName                 string
+		Command                       []string
+		ResourcesYAML                 string
+		AcceleratorTypeLabel          string
+		NodeSelector                  string
+		Affinity                      string
+		PodFailurePolicy              string
+		ImagePullSecrets              string
+		ServiceAccountName            string
+		TopologyAnnotation            string
+		SchedulerName                 string
+		SchedulingGates               string
+		Tolerations                   string
+		PriorityClassName             string
+		VolumesYAML                   string
+		VolumeMountsYAML              string
+		GCSFuseEnabled                bool
+		Pathways                      orchestrator.PathwaysJobDefinition
+		ExclusiveTopologyAnnotation   string
 	}{
-		WorkloadName:            opts.WorkloadName,
-		KueueQueueName:          opts.KueueQueueName,
-		TtlSecondsAfterFinished: opts.TtlSecondsAfterFinished,
-		MaxRestarts:             opts.MaxRestarts,
-		NumSlices:               opts.NumSlices,
-		VmsPerSlice:             opts.VmsPerSlice,
-		FullImageName:           opts.FullImageName,
-		Command:                 command,
-		ResourcesYAML:           resourcesYAML,
-		AcceleratorTypeLabel:    g.GenerateGKENodeSelectorLabel(opts.AcceleratorType),
-		NodeSelector:            opts.NodeSelector,
-		Affinity:                opts.Affinity,
-		PodFailurePolicy:        opts.PodFailurePolicy,
-		ImagePullSecrets:        opts.ImagePullSecrets,
-		ServiceAccountName:      opts.ServiceAccountName,
-		TopologyAnnotation:      opts.TopologyAnnotation,
-		SchedulerName:           opts.SchedulerName,
-		SchedulingGates:         opts.SchedulingGates,
-		Tolerations:             opts.Tolerations,
-		PriorityClassName:       opts.PriorityClassName,
-		VolumesYAML:             opts.VolumesYAML,
-		VolumeMountsYAML:        opts.VolumeMountsYAML,
-		GCSFuseEnabled:          opts.GCSFuseEnabled,
-		Pathways:                opts.Pathways,
+		WorkloadName:                  opts.WorkloadName,
+		KueueQueueName:                opts.KueueQueueName,
+		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
+		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
+		MaxRestarts:                   opts.MaxRestarts,
+		NumSlices:                     opts.NumSlices,
+		VmsPerSlice:                   opts.VmsPerSlice,
+		FullImageName:                 opts.FullImageName,
+		Command:                       command,
+		ResourcesYAML:                 resourcesYAML,
+		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.AcceleratorType),
+		NodeSelector:                  opts.NodeSelector,
+		Affinity:                      opts.Affinity,
+		PodFailurePolicy:              opts.PodFailurePolicy,
+		ImagePullSecrets:              opts.ImagePullSecrets,
+		ServiceAccountName:            opts.ServiceAccountName,
+		TopologyAnnotation:            opts.TopologyAnnotation,
+		SchedulerName:                 opts.SchedulerName,
+		SchedulingGates:               opts.SchedulingGates,
+		Tolerations:                   opts.Tolerations,
+		PriorityClassName:             opts.PriorityClassName,
+		VolumesYAML:                   opts.VolumesYAML,
+		VolumeMountsYAML:              opts.VolumeMountsYAML,
+		GCSFuseEnabled:                opts.GCSFuseEnabled,
+		Pathways:                      opts.Pathways,
+		ExclusiveTopologyAnnotation:   exclusiveTopology,
 	}
 }
 
