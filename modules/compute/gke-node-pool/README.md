@@ -328,7 +328,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | -------- |
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#input\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. It accepts values like `PROVISION_ONLY` or `AUTO_CONNECT`. Note that `enable_queued_provisioning` (DWS) is not supported when `accelerator_topology_mode` is set to `PROVISION_ONLY`. | `string` | `null` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_auto_repair"></a> [auto\_repair](#input\_auto\_repair) | Whether the nodes will be automatically repaired. | `bool` | `true` | no |
