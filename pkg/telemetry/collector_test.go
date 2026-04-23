@@ -19,8 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"

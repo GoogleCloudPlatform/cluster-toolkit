@@ -19,8 +19,8 @@ import (
 	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
-  	"os"
-	  "os/exec"
+	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -134,6 +134,7 @@ func getCmdFlags(cmd *cobra.Command) string {
 
 func getDeploymentFile(cmd *cobra.Command) string {
 	flag := cmd.Flag("deployment-file")
+	// Early return if deployment file flag is empty
 	if flag == nil || flag.Value.String() == "" {
 		return ""
 	}
@@ -141,7 +142,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	// Normalize the path to handle variations like "./", redundant slashes, or Windows "\"
 	deploymentFile := path.Clean(filepath.ToSlash(flag.Value.String()))
 
-	// Lazily load the predefined files and check for a match
+	// Lazily load the predefined files and check if given file is a standard file
 	if slices.Contains(fetchStandardDeploymentFiles(), deploymentFile) {
 		return deploymentFile
 	}
