@@ -16,11 +16,9 @@
 
 locals {
   # Load shared JSON
-  accelerators_json = jsondecode(file("${path.module}/../../../pkg/config/accelerators.json"))
   tpu_accelerators = try(
     jsondecode(var.machine_configs).tpus,
     var.machine_configs.tpus,
-    local.accelerators_json.tpus,
     {}
   )
 
