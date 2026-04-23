@@ -150,23 +150,23 @@ resource "google_container_cluster" "gke_cluster" {
     autoscaling_profile = var.autoscaling_profile
 
     dynamic "resource_limits" {
-      for_each = var.cluster_autoscaling.enabled ? [
-        { type = "cpu", min = 1, max = local.nap_cpu_max },
-        { type = "memory", min = 1, max = local.nap_memory_max }
-      ] : []
+      for_each = concat(
+        var.cluster_autoscaling.enabled ? [
+          { type = "cpu", min = 1, max = local.nap_cpu_max },
+          { type = "memory", min = 1, max = local.nap_memory_max }
+        ] : [],
+        local.has_autoscaling_limits ? [
+          for limit in var.cluster_autoscaling.limits : {
+            type = limit.autoprovisioning_machine_type
+            min  = 0
+            max  = limit.autoprovisioning_max_count
+          }
+        ] : []
+      )
       content {
         resource_type = resource_limits.value.type
         minimum       = resource_limits.value.min
         maximum       = resource_limits.value.max
-      }
-    }
-
-    dynamic "resource_limits" {
-      for_each = local.has_autoscaling_limits ? var.cluster_autoscaling.limits : []
-      content {
-        resource_type = resource_limits.value.autoprovisioning_machine_type
-        minimum       = 0
-        maximum       = resource_limits.value.autoprovisioning_max_count
       }
     }
 
