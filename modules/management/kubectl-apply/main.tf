@@ -191,6 +191,11 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+resource "time_sleep" "wait_for_webhook" {
+  create_duration = "60s"
+  depends_on      = [module.install_kueue]
+}
+
 module "configure_kueue" {
   source           = "./helm_install"
   count            = local.configure_kueue ? 1 : 0
@@ -207,7 +212,7 @@ module "configure_kueue" {
     })
   ]
 
-  depends_on = [module.install_kueue]
+  depends_on = [time_sleep.wait_for_webhook]
 
 }
 
