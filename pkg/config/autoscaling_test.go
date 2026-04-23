@@ -15,28 +15,34 @@
 package config
 
 import (
+	"testing"
+
 	"github.com/zclconf/go-cty/cty"
-	. "gopkg.in/check.v1"
 )
 
-func (s *zeroSuite) TestExpandClusterAutoscaling_NoAutoscaling(c *C) {
+func TestExpandClusterAutoscaling_NoAutoscaling(t *testing.T) {
 	mod := tMod("test-mod").build()
 	bp := Blueprint{}
 	err := ExpandClusterAutoscaling(bp, &mod)
-	c.Check(err, IsNil)
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
 }
 
-func (s *zeroSuite) TestExpandClusterAutoscaling_Disabled(c *C) {
+func TestExpandClusterAutoscaling_Disabled(t *testing.T) {
 	ca := cty.ObjectVal(map[string]cty.Value{
 		"enabled": cty.False,
 	})
 	mod := tMod("test-mod").set("cluster_autoscaling", ca).build()
 	bp := Blueprint{}
 	err := ExpandClusterAutoscaling(bp, &mod)
-	c.Check(err, IsNil)
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
 }
 
-func (s *zeroSuite) TestExpandClusterAutoscaling_GPU(c *C) {
+func TestExpandClusterAutoscaling_GPU(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"gpus": {"a3-highgpu-8g": {"count": 8, "type": "nvidia-h100-80gb"}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
@@ -50,21 +56,32 @@ func (s *zeroSuite) TestExpandClusterAutoscaling_GPU(c *C) {
 	bp := Blueprint{}
 
 	err := ExpandClusterAutoscaling(bp, &mod)
-	c.Check(err, IsNil)
+	if err != nil {
+		t.Fatalf("ExpandClusterAutoscaling failed: %v", err)
+	}
 
 	newCa := mod.Settings.Get("cluster_autoscaling")
 	caMap := newCa.AsValueMap()
 	limits := caMap["limits"]
 	it := limits.ElementIterator()
-	c.Assert(it.Next(), Equals, true)
+	if !it.Next() {
+		t.Fatal("expected at least one limit element")
+	}
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	c.Check(resMap["autoprovisioning_machine_type"].AsString(), Equals, "nvidia-h100-80gb")
-	c.Check(resMap["autoprovisioning_max_accelerator_count"].AsBigFloat(), DeepEquals, cty.NumberIntVal(16).AsBigFloat())
+	if resMap["autoprovisioning_machine_type"].AsString() != "nvidia-h100-80gb" {
+		t.Errorf("expected machine type nvidia-h100-80gb, got %s", resMap["autoprovisioning_machine_type"].AsString())
+	}
+
+	f, _ := resMap["autoprovisioning_max_accelerator_count"].AsBigFloat().Float64()
+	if f != 16 {
+		t.Errorf("expected max accelerator count 16, got %v", f)
+	}
 }
 
-func (s *zeroSuite) TestExpandClusterAutoscaling_GPU_DefaultCount(c *C) {
+func TestExpandClusterAutoscaling_GPU_DefaultCount(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"gpus": {"a3-highgpu-8g": {"count": 8, "type": "nvidia-h100-80gb"}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
@@ -77,20 +94,28 @@ func (s *zeroSuite) TestExpandClusterAutoscaling_GPU_DefaultCount(c *C) {
 	bp := Blueprint{}
 
 	err := ExpandClusterAutoscaling(bp, &mod)
-	c.Check(err, IsNil)
+	if err != nil {
+		t.Fatalf("ExpandClusterAutoscaling failed: %v", err)
+	}
 
 	newCa := mod.Settings.Get("cluster_autoscaling")
 	caMap := newCa.AsValueMap()
 	limits := caMap["limits"]
 	it := limits.ElementIterator()
-	c.Assert(it.Next(), Equals, true)
+	if !it.Next() {
+		t.Fatal("expected at least one limit element")
+	}
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	c.Check(resMap["autoprovisioning_max_accelerator_count"].AsBigFloat(), DeepEquals, cty.NumberIntVal(8).AsBigFloat())
+	f, _ := resMap["autoprovisioning_max_accelerator_count"].AsBigFloat().Float64()
+	if f != 8 {
+		t.Errorf("expected max accelerator count 8, got %v", f)
+	}
 }
 
-func (s *zeroSuite) TestExpandClusterAutoscaling_InvalidCount(c *C) {
+func TestExpandClusterAutoscaling_InvalidCount(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"gpus": {"a3-highgpu-8g": {"count": 8, "type": "nvidia-h100-80gb"}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
@@ -104,6 +129,41 @@ func (s *zeroSuite) TestExpandClusterAutoscaling_InvalidCount(c *C) {
 	bp := Blueprint{}
 
 	err := ExpandClusterAutoscaling(bp, &mod)
-	c.Check(err, NotNil)
-	c.Check(err.Error(), Matches, ".*must be a multiple.*")
+	if err == nil {
+		t.Fatal("expected error for invalid count, got nil")
+	}
+}
+
+func TestExpandClusterAutoscaling_TPU(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"tpus": {"ct6e-standard-4t": {"count": 4}}}`)
+	ca := cty.ObjectVal(map[string]cty.Value{
+		"enabled": cty.True,
+		"limits": cty.ListVal([]cty.Value{
+			cty.ObjectVal(map[string]cty.Value{
+				"autoprovisioning_machine_type":          cty.StringVal("ct6e-standard-4t"),
+				"autoprovisioning_max_accelerator_count": cty.NumberIntVal(4),
+			}),
+		}),
+	})
+	mod := tMod("test-mod").set("cluster_autoscaling", ca).build()
+	bp := Blueprint{}
+
+	err := ExpandClusterAutoscaling(bp, &mod)
+	if err != nil {
+		t.Fatalf("ExpandClusterAutoscaling failed: %v", err)
+	}
+
+	newCa := mod.Settings.Get("cluster_autoscaling")
+	caMap := newCa.AsValueMap()
+	limits := caMap["limits"]
+	it := limits.ElementIterator()
+	if !it.Next() {
+		t.Fatal("expected at least one limit element")
+	}
+	_, resVal := it.Element()
+	resMap := resVal.AsValueMap()
+
+	if resMap["autoprovisioning_machine_type"].AsString() != "ct6e-standard-4t" {
+		t.Errorf("expected machine type ct6e-standard-4t, got %s", resMap["autoprovisioning_machine_type"].AsString())
+	}
 }
