@@ -986,8 +986,8 @@ type TreeResponse struct {
 // cachedTree stores the GitHub API response to avoid redundant network calls.
 var cachedTree *TreeResponse
 
-// fetchGitFiles queries the GitHub API and decodes the JSON into a TreeResponse.
-func fetchGitFiles(version string) (*TreeResponse, error) {
+// fetchGitTreeFiles queries the GitHub API and decodes the JSON into a TreeResponse.
+func fetchGitTreeFiles(version string) (*TreeResponse, error) {
 	// Return the cached response if we've already fetched it
 	if cachedTree != nil {
 		return cachedTree, nil
@@ -1027,7 +1027,7 @@ func GetPredefinedModules() []string {
 	var predefinedModules []string
 	moduleSet := make(map[string]bool)
 	version := GetToolkitVersion()
-	treeResp, err := fetchGitFiles(version)
+	treeResp, err := fetchGitTreeFiles(version)
 
 	if err == nil {
 		// Parse the remote tree
@@ -1051,7 +1051,7 @@ func GetPredefinedExampleFiles() []string {
 	var predefinedFiles []string
 	fileSet := make(map[string]bool)
 	version := GetToolkitVersion()
-	treeResp, err := fetchGitFiles(version)
+	treeResp, err := fetchGitTreeFiles(version)
 
 	if err == nil {
 		// Parse the remote tree
