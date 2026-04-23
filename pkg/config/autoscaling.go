@@ -112,7 +112,7 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module) (cty.V
 	}
 
 	resMap["autoprovisioning_max_count"] = cty.NumberIntVal(int64(totalAccelerators))
-	resMap["autoprovisioning_machine_type"] = cty.StringVal(accType)
+	resMap["autoprovisioning_resource_type"] = cty.StringVal(accType)
 	return cty.ObjectVal(resMap), true, nil
 }
 
