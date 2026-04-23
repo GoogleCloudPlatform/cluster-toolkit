@@ -64,7 +64,6 @@ steps:
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
-    sed -i -e '/- id: sysnet/,/- id: gpunets/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
