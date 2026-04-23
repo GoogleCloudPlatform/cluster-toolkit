@@ -15,6 +15,7 @@
 package job
 
 import (
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
 	"strings"
@@ -28,7 +29,7 @@ func TestCancelCmd_Success(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
-	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockCancelExecutor{})
 		g.SetKubeClient(&mockKubeClient{namespace: "default"})

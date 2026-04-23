@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -57,7 +56,6 @@ func init() {
 }
 
 func runListWorkloads(cmd *cobra.Command, args []string) error {
-	logging.Info("Listing jobs...")
 
 	opts := orchestrator.ListOptions{
 		ClusterName:     clusterName,
@@ -69,7 +67,7 @@ func runListWorkloads(cmd *cobra.Command, args []string) error {
 
 	jobs, err := orc.ListJobs(opts)
 	if err != nil {
-		return fmt.Errorf("failed to list jobs: %w", err)
+		return err
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
@@ -78,5 +76,6 @@ func runListWorkloads(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", job.Name, job.Status, job.CreationTime, job.CompletionTime)
 	}
 	w.Flush()
+
 	return nil
 }

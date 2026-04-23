@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -91,10 +92,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if err := g.grantNodePoolImagePullPermission(job); err != nil {
-		return err
-	}
-
 	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
 	}
@@ -104,6 +101,162 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
+	if err := g.generateAndSubmitManifests(job, fullImageName); err != nil {
+		return err
+	}
+
+	if job.OutputManifest == "" {
+		g.printConsoleLinks(job)
+	}
+
+	if job.AwaitJobCompletion && job.OutputManifest == "" {
+		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
+		if err != nil {
+			return err
+		}
+	}
+	logging.Info("gcluster job submit workflow completed.")
+	success = true
+	return nil
+}
+
+// ListJobs retrieves a list of jobs in the GKE cluster.
+// It filters jobs based on the provided ListOptions.
+func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	logging.Info("Listing jobs in cluster '%s'...", opts.ClusterName)
+	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+		return nil, err
+	}
+
+	client, err := g.getDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+
+	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), metav1.ListOptions{
+		LabelSelector: "gcluster.google.com/workload",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list jobsets across all namespaces: %w", err)
+	}
+
+	var jobs []orchestrator.JobStatus
+	for _, item := range list.Items {
+		name := item.GetName()
+		if opts.NameContains != "" && !strings.Contains(name, opts.NameContains) {
+			continue
+		}
+
+		creationParams := item.GetCreationTimestamp()
+		creationTime := creationParams.Time.Format(time.RFC3339)
+
+		statusStr, completionTime := g.parseJobStatus(item.Object)
+
+		if opts.Status != "" && !strings.EqualFold(statusStr, opts.Status) {
+			continue
+		}
+
+		jobs = append(jobs, orchestrator.JobStatus{
+			Name:           name,
+			Status:         statusStr,
+			CreationTime:   creationTime,
+			CompletionTime: completionTime,
+		})
+	}
+
+	return jobs, nil
+}
+
+// CancelJob deletes a job from the GKE cluster by name.
+// Jobs are filtered via cluster name and location provided through CancelOptions.
+func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
+	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+		return err
+	}
+
+	if _, err := g.getDynamicClient(); err != nil {
+		return fmt.Errorf("failed to initialize k8s client: %w", err)
+	}
+
+	// Find the job to get its namespace
+	foundNamespace, err := g.kubeClient.GetJobNamespace(name)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			foundNamespace = "default"
+		} else {
+			return err
+		}
+	}
+
+	status, err := g.getJobSetStatus(name, foundNamespace)
+	actionVerb := "Cancel"
+	if err == nil && (status == "Completed" || status == "Failed") {
+		actionVerb = "Cleanup"
+		logging.Info("Cleaning up resources for the '%s' job '%s' in cluster '%s'...", status, name, opts.ClusterName)
+	} else {
+		logging.Info("Canceling job '%s' in cluster '%s'...", name, opts.ClusterName)
+	}
+
+	err = g.kubeClient.DeleteJobSet(foundNamespace, name)
+	if err != nil {
+		return fmt.Errorf("%s operation failed for %s in namespace %s: %w", strings.ToLower(actionVerb), name, foundNamespace, err)
+	}
+	logging.Info("%s operation on Job '%s' completed successfully.", actionVerb, name)
+	return nil
+}
+
+// GetJobLogs fetches the logs for a specific job in the GKE cluster.
+func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
+	logging.Info("Fetching logs for job '%s' in cluster '%s'...", name, opts.ClusterName)
+	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+		return "", err
+	}
+
+	foundNamespace, err := g.getJobNamespace(name)
+	if err != nil {
+		return "", err
+	}
+
+	// Retry loop for pulling logs, especially to handle ImagePullBackOff/waiting states
+	maxRetries := 12 // 12 * 5s = 1 minute timeout
+	var res shell.CommandResult
+	for i := 0; i < maxRetries; i++ {
+		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers")
+		if res.ExitCode == 0 {
+			break
+		}
+
+		if strings.Contains(res.Stderr, "is waiting to start") {
+			if i == 0 {
+				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
+			}
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		return "", fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
+	}
+
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+	}
+
+	if opts.Follow {
+		logging.Info("Streaming logs for job '%s'...", name)
+		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "-f")
+		return "", err
+	}
+
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
+	}
+
+	return res.Stdout, nil
+}
+
+func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string) error {
 	if job.IsPathwaysJob {
 		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName)
 		if err != nil {
@@ -116,21 +269,32 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
+	return g.generateAndApplyManifest(manifestOpts, profile, job.OutputManifest)
+}
 
-	err = g.generateAndApplyManifest(manifestOpts, profile, job.OutputManifest)
-	if err != nil {
-		return err
+func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
+	jobName := job.WorkloadName + "-main-job-0"
+	if job.IsPathwaysJob {
+		jobName = job.WorkloadName + "-pathways-head-0"
 	}
+	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/default/%s/details?project=%s",
+		job.ClusterLocation, job.ClusterName, jobName, job.ProjectID)
 
-	if job.AwaitJobCompletion && job.OutputManifest == "" {
-		err = g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
-		if err != nil {
-			return err
-		}
-	}
-	logging.Info("gcluster job submit workflow completed.")
-	success = true
-	return nil
+	logging.Info("Follow your workload details here: %s", gkeLink)
+
+	logFilter := fmt.Sprintf(`resource.type="k8s_container"
+resource.labels.project_id="%s"
+resource.labels.location="%s"
+resource.labels.cluster_name="%s"
+resource.labels.namespace_name="default"
+resource.labels.pod_name:"%s-"
+severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, job.WorkloadName)
+
+	encodedFilter := url.QueryEscape(logFilter)
+	logsLink := fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
+		encodedFilter, job.ProjectID)
+
+	logging.Info("View your workload logs in real-time here: %s", logsLink)
 }
 
 func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName string, clusterLocation string, projectID string) error {
@@ -420,17 +584,21 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
 		return fmt.Errorf("failed to apply clusterqueue: %w", err)
 	}
 
-	// Render and apply LocalQueue using raw string to avoid template dependency issues
-	localQueueManifest := fmt.Sprintf(`apiVersion: kueue.x-k8s.io/v1beta1
-kind: LocalQueue
-metadata:
-  name: %s
-  namespace: default
-spec:
-  clusterQueue: %s
-`, localQueueName, defaultClusterQueue)
+	// Render and apply LocalQueue
+	localQueueTmpl, err := template.ParseFS(templatesFS, "templates/local_queue.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
+	}
+	var localQueueBuf bytes.Buffer
+	if err := localQueueTmpl.Execute(&localQueueBuf, struct {
+		Namespace        string
+		LocalQueueName   string
+		ClusterQueueName string
+	}{"default", localQueueName, defaultClusterQueue}); err != nil {
+		return fmt.Errorf("failed to execute local_queue.tmpl template: %w", err)
+	}
 
-	if err := g.applyManifests([]byte(localQueueManifest), "local-queue.yaml"); err != nil {
+	if err := g.applyManifests(localQueueBuf.Bytes(), "local-queue.yaml"); err != nil {
 		return fmt.Errorf("failed to apply localqueue: %w", err)
 	}
 
@@ -544,39 +712,6 @@ func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) 
 	}
 	logging.Info("Using GCP Project ID inferred from gcloud config: %s", projectID)
 	return projectID, nil
-}
-
-func (g *GKEOrchestrator) grantNodePoolImagePullPermission(job orchestrator.JobDefinition) error {
-	if len(g.nodePoolSAs) == 0 {
-		logging.Info("No custom node pool service accounts found to grant Artifact Registry permissions.")
-		return nil
-	}
-
-	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
-	if repoName == "" {
-		repoName = "gcluster"
-	}
-
-	region := extractRegion(job.ClusterLocation)
-
-	seen := make(map[string]bool)
-
-	for _, sa := range g.nodePoolSAs {
-		if !seen[sa] {
-			seen[sa] = true
-			logging.Info("Adding roles/artifactregistry.reader to service account %s on repository %s in project %s...", sa, repoName, job.ProjectID)
-			iamRes := g.executor.ExecuteCommand("gcloud", "artifacts", "repositories", "add-iam-policy-binding", repoName,
-				"--location", region,
-				"--project", job.ProjectID,
-				"--member", "serviceAccount:"+sa,
-				"--role", "roles/artifactregistry.reader",
-			)
-			if iamRes.ExitCode != 0 {
-				return fmt.Errorf("failed to add Artifact Registry reader IAM binding for service account %s: %s", sa, iamRes.Stderr)
-			}
-		}
-	}
-	return nil
 }
 
 func extractRegion(location string) string {
@@ -1395,135 +1530,6 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 	return string(b)
 }
 
-// ListJobs retrieves a list of jobs in the GKE cluster.
-// It filters jobs based on the provided ListOptions.
-func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
-	logging.Info("Listing jobs in cluster '%s'...", opts.ClusterName)
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return nil, err
-	}
-
-	client, err := g.getDynamicClient()
-	if err != nil {
-		return nil, err
-	}
-
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-
-	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), metav1.ListOptions{
-		LabelSelector: "gcluster.google.com/workload",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list jobsets across all namespaces: %w", err)
-	}
-
-	var jobs []orchestrator.JobStatus
-	for _, item := range list.Items {
-		name := item.GetName()
-		if opts.NameContains != "" && !strings.Contains(name, opts.NameContains) {
-			continue
-		}
-
-		creationParams := item.GetCreationTimestamp()
-		creationTime := creationParams.Time.Format(time.RFC3339)
-
-		statusStr, completionTime := g.parseJobStatus(item.Object)
-
-		if opts.Status != "" && !strings.EqualFold(statusStr, opts.Status) {
-			continue
-		}
-
-		jobs = append(jobs, orchestrator.JobStatus{
-			Name:           name,
-			Status:         statusStr,
-			CreationTime:   creationTime,
-			CompletionTime: completionTime,
-		})
-	}
-
-	return jobs, nil
-}
-
-// CancelJob deletes a job from the GKE cluster by name.
-// Jobs are filtered via cluster name and location provided through CancelOptions.
-func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
-	logging.Info("Deleting job '%s' in cluster '%s'...", name, opts.ClusterName)
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return err
-	}
-
-	if _, err := g.getDynamicClient(); err != nil {
-		return fmt.Errorf("failed to initialize k8s client: %w", err)
-	}
-
-	// Find the job to get its namespace
-	foundNamespace, err := g.kubeClient.GetJobNamespace(name)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			foundNamespace = "default"
-		} else {
-			return err
-		}
-	}
-
-	err = g.kubeClient.DeleteJobSet(foundNamespace, name)
-	if err != nil {
-		return fmt.Errorf("failed to delete jobset %s in namespace %s: %w", name, foundNamespace, err)
-	}
-
-	logging.Info("Job '%s' deleted successfully.", name)
-	return nil
-}
-
-// GetJobLogs fetches the logs for a specific job in the GKE cluster.
-func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
-	logging.Info("Fetching logs for job '%s' in cluster '%s'...", name, opts.ClusterName)
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return "", err
-	}
-
-	foundNamespace, err := g.getJobNamespace(name)
-	if err != nil {
-		return "", err
-	}
-
-	// Retry loop for pulling logs, especially to handle ImagePullBackOff/waiting states
-	maxRetries := 12 // 12 * 5s = 1 minute timeout
-	var res shell.CommandResult
-	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers")
-		if res.ExitCode == 0 {
-			break
-		}
-
-		if strings.Contains(res.Stderr, "is waiting to start") {
-			if i == 0 {
-				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
-			}
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		return "", fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
-	}
-
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
-	}
-
-	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "-f")
-		return "", err
-	}
-
-	if strings.TrimSpace(res.Stdout) == "" {
-		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
-	}
-
-	return res.Stdout, nil
-}
-
 func (g *GKEOrchestrator) getJobNamespace(name string) (string, error) {
 	if g.kubeClient == nil {
 		_, err := g.getDynamicClient()
@@ -1740,7 +1746,7 @@ func (d *DefaultKubeClient) GetJobNamespace(workloadName string) (string, error)
 	if len(list.Items) == 1 {
 		return list.Items[0].GetNamespace(), nil
 	} else if len(list.Items) > 1 {
-		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces. Please specify a single job", workloadName)
+		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported. Please ensure job names are unique across the cluster", workloadName)
 	}
 	return "", fmt.Errorf("jobset %s not found in any namespace", workloadName)
 }

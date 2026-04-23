@@ -4,38 +4,33 @@ This guide provides a step-by-step process to deploy a GKE cluster, submit a sam
 
 ## 1. Prerequisites (Automated by `gcluster job submit`)
 
-`gcluster job submit` now automates the setup and verification of most prerequisites. The tool will check for required installations and configurations, guide you through interactive steps, and remember successful checks to optimize subsequent runs.
+`gcluster job submit` automates the check for required prerequisites. The tool will identify missing dependencies and print the necessary installation or remediation commands directly to your console for review and execution.
 
 However, a few foundational components are still assumed or require your initial attention:
 
 * **Go (1.20 or later):** Required for building the `gcluster` binary. The `make` command used in step 3 will handle Go module dependencies.
-* **Google Cloud SDK (`gcloud`):** While `gcluster job submit` will guide you through authentication and project configuration, the `gcloud` CLI tool itself must be installed and available in your system's PATH. Download and install it from [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install).
-  * **Manual Authentication:** For interactive steps like `gcloud auth login` or `gcloud auth application-default login`, `gcluster job submit` will detect if you are unauthenticated and provide instructions to run these commands manually in your terminal. This is because these commands typically require browser interaction that cannot be automated.
-* **A GCP Project:** You will need a Google Cloud Project with billing enabled and necessary APIs enabled (e.g., Kubernetes Engine API, Artifact Registry API, Cloud Resource Manager API). `gcluster job submit` will prompt you to set a default project if none is configured and will automatically enable necessary APIs like Artifact Registry.
-* **Docker:** While `gcluster job submit` uses Crane internally for image building, having Docker installed can be useful for debugging or local container image development. `gcluster job submit` will configure container credential helpers for Google Container Registry and Artifact Registry automatically.
-* **`make`:** (Usually pre-installed on Linux/macOS, or install via package manager).
+* **Google Cloud SDK (`gcloud`):** `gcluster` requires `gcloud` to be installed and available in your system's PATH to run prerequisite checks. If missing, checks will abort. Download and install it from [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install).
+* **A GCP Project:** You will need a Google Cloud Project with billing enabled and necessary APIs enabled. `gcluster` will check if a project is resolved from flags or persistent configuration.
 
 ### Automated Prerequisite Checks Overview
 
-When you run `gcluster job submit` for the first time, or if its cached state is stale (after 24 hours) or the `--project` flag changes, the tool will perform the following checks and actions:
+When you run `gcluster job submit` (or other job commands), the tool will check for:
 
-* **Google Cloud SDK:** Verifies `gcloud` is installed.
-* **GCP Project Configuration:**
-  * If `--project` flag is not used, it attempts to infer from your `gcloud` configuration.
-  * If no project is configured, it will prompt you to enter your GCP Project ID and automatically configure `gcloud`.
-* **Gcloud Authentication:**
-  * Checks if `gcloud` is authenticated. If not, it will instruct you to run `gcloud auth login` manually.
-  * Checks for Application Default Credentials (ADC). If not configured, it will instruct you to run `gcloud auth application-default login` manually.
-* **`kubectl` Installation:**
-  * Checks if `kubectl` is installed.
-  * If not, it will prompt you to install it via `gcloud components install kubectl`.
-  * If `gcloud components install kubectl` fails (e.g., component manager disabled), it will offer to install `kubectl` via `sudo apt-get install kubectl` (for Debian/Ubuntu systems).
-* **Container Credential Helper:** Configures Docker to authenticate to Google Container Registry and Artifact Registry.
-* **Artifact Registry API:** Ensures `artifactregistry.googleapis.com` is enabled for your project, enabling it automatically if necessary.
-* **Artifact Registry Repository:** Assumes a repository named `gcluster` (or specified by `GCLUSTER_IMAGE_REPO`) exists in the cluster's region. The tool will grant read permissions to the node pool service account on this specific repository.
-* **Kueue Installation:** Checks if Kueue is installed on the cluster. If not, it automatically installs Kueue and configures necessary resources like PriorityClasses, ClusterQueue, and LocalQueue.
+* **Google Cloud SDK**: Verifies `gcloud` is installed.
+* **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
+* **`kubectl` Installation**: Checks if `kubectl` is installed.
+* **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
+* **Container Credential Helper**: Checks if Docker is configured for GCR and Artifact Registry.
+* **Artifact Registry API**: Checks if `artifactregistry.googleapis.com` is enabled.
 
-**State Persistence:** To avoid redundant checks, `gcluster job submit` saves the successful prerequisite status in `~/.gcluster/job_prereq_state.json`. Checks will only be re-run if this state is older than 24 hours or if you specify a different GCP project.
+If any non-foundational component is missing or unconfigured, `gcluster` will:
+1. Accumulate the required commands to fix the environment (tailored to your OS where possible).
+2. Write these commands to a setup script at `~/.gcluster/setup_prereqs.sh`.
+3. Fail the command with a clear error message instructing you to inspect and run the script: `bash ~/.gcluster/setup_prereqs.sh`.
+
+This ensures full transparency and gives you control over what gets installed on your system.
+
+**State Persistence:** Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
 
 ## 2. Clone the Repository
 
@@ -78,22 +73,22 @@ For this example, we'll deploy a basic GKE cluster using the `hpc-gke.yaml` blue
 * **Ensure `gcloud` is configured with your project ID and a region/zone where GKE is available.**
 
     ```bash
-        gcloud config set project <YOUR_GCP_PROJECT_ID>
-        gcloud config set compute/region us-central1 # Or your preferred region
+        gcloud config set project <PROJECT_ID>
+        gcloud config set compute/region <REGION/ZONE> # Or your preferred region
         ```
 
     * **Create the deployment directory:**
 
     ```bash
-    ./gcluster create examples/hpc-gke.yaml --vars="project_id=<YOUR_GCP_PROJECT_ID>,deployment_name=my-test-cluster,region=us-central1,gcp_public_cidrs_access_enabled=false,authorized_cidr=$(curl -s ifconfig.me)/32"
+    ./gcluster create examples/hpc-gke.yaml --vars="project_id=<PROJECT_ID>,deployment_name=<CLUSTER_NAME>,region=<REGION/ZONE>,gcp_public_cidrs_access_enabled=false,authorized_cidr=$(curl -s ifconfig.me)/32"
     ```
 
-    *Replace `<YOUR_GCP_PROJECT_ID>` with your actual GCP Project ID.*
+    *Replace `<PROJECT_ID>` with your actual GCP Project ID.*
 
 * **Deploy the GKE cluster:**
 
     ```bash
-    ./gcluster deploy my-test-cluster
+    ./gcluster deploy <CLUSTER_NAME>
     ```
 
     *This command will show a Terraform plan. You will be prompted to confirm the changes (type `a` and press Enter).*
@@ -114,9 +109,9 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
 * `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
-* `-c, --cluster string`: Name of the GKE cluster to deploy the job to. (Required)
-* `-l, --location string`: Location (Zone or Region) of the GKE cluster. (Required)
-* `-p, --project string`: Google Cloud Project ID. If not provided, it will be inferred from your `gcloud` configuration.
+* `-c, --cluster string`: Name of the GKE cluster to deploy the job to. Optional if set in configuration.
+* `-l, --location string`: Location (Zone or Region) of the GKE cluster. Optional if set in configuration.
+* `-p, --project string`: Google Cloud Project ID. Optional if set in configuration.
 * `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
 * `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
 * `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
@@ -141,13 +136,28 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 By specifying the `--accelerator` flag, you can use the exact same command to deploy to a standard CPU cluster (using machine type like `n2-standard-32`) or an accelerated GPU/TPU cluster (using accelerator type like `nvidia-l4`). The orchestrator will calculate the necessary resource requests and limits based on the specified accelerator or machine type.
 
+> [!TIP]
+> **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
+>
+> ```bash
+> ./gcluster job config set project <PROJECT_ID>
+> ./gcluster job config set cluster <CLUSTER_NAME>
+> ./gcluster job config set location <REGION/ZONE>
+> ```
+>
+> To view your current configuration, run:
+>
+> ```bash
+> ./gcluster job config list
+> ```
+
 * **Submit the Job:**
 
     ```bash
     ./gcluster job submit \
-      --project <YOUR_GCP_PROJECT_ID> \
-      --cluster my-test-cluster \
-      --location us-central1 \
+      --project <PROJECT_ID> \
+      --cluster <CLUSTER_NAME> \
+      --location <REGION/ZONE> \
       --base-image python:3.9-slim \
       --build-context job_details \
       --command "python app.py" \
@@ -155,7 +165,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
       --accelerator n2-standard-32
     ```
 
-    *Replace `<YOUR_GCP_PROJECT_ID>` with your actual GCP Project ID.*
+    *Replace `<PROJECT_ID>` with your actual GCP Project ID.*
 
     This command will:
     1. Verify/install the JobSet CRD on your cluster.
@@ -170,13 +180,14 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag:
 
 ```bash
 ./gcluster job submit \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1 \
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE> \
+  --name my-storage-job \
+  --command "python app.py" \
+  --accelerator n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
-  --name my-storage-job \
   --mount "gs://<YOUR_BUCKET_NAME>:/data"
 ```
 
@@ -189,9 +200,9 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
     ```bash
     ./gcluster job list \
-      --project <YOUR_GCP_PROJECT_ID> \
-      --cluster my-test-cluster \
-      --cluster-location us-central1
+      --project <PROJECT_ID> \
+      --cluster <CLUSTER_NAME> \
+      --location <REGION/ZONE>
     ```
 
     Look for `my-python-app-job` with a `Succeeded` status.
@@ -201,9 +212,9 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
     ```bash
     ./gcluster job logs my-python-app-job \
-      --project <YOUR_GCP_PROJECT_ID> \
-      --cluster my-test-cluster \
-      --cluster-location us-central1
+      --project <PROJECT_ID> \
+      --cluster <CLUSTER_NAME> \
+      --location <REGION/ZONE>
     ```
 
     You should see the output:
@@ -248,16 +259,14 @@ Use `--placement-policy` to specify a GKE Placement Policy (e.g., for compact pl
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
 **Example 3: Pod Failure Policy**
-Use `--restart-on-exit-codes` to ignore specific exit codes (e.g., treating exit code 1 as success or retriable non-failure).
+Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `max-restarts` budget).
 
 ```bash
 ./gcluster job submit \
   ... \
   --name my-robust-job \
-  --restart-on-exit-codes 0,1,137
+  --restart-on-exit-codes 1,137
 ```
-
-(Note: Exit code 0 is always ignored by default)
 
 **Example 4: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
@@ -275,13 +284,14 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
 ./gcluster job submit \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1 \
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE> \
+  --name my-kueue-job \
+  --command "python app.py" \
+  --accelerator n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
-  --name my-kueue-job \
   --queue "my-local-queue"
 ```
 
@@ -293,9 +303,9 @@ You can clean up specific job without destroying the entire cluster.
 
 ```bash
 ./gcluster job cancel my-python-app-job \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE>
 ```
 
 Verify it's gone by running `gcluster job list` again.
@@ -315,9 +325,9 @@ Request a specific TPU slice topology using `--topology`.
 
 ```bash
 ./gcluster job submit \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1 \
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE> \
   --name my-topology-job \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -331,13 +341,14 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
 
 ```bash
 ./gcluster job submit \
-  --project <YOUR_GCP_PROJECT_ID> \
-  --cluster my-test-cluster \
-  --cluster-location us-central1 \
+  --project <PROJECT_ID> \
+  --cluster <CLUSTER_NAME> \
+  --location <REGION/ZONE> \
+  --name my-scheduler-job \
+  --command "python app.py" \
+  --accelerator n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python app.py" \
-  --name my-scheduler-job \
   --gke-scheduler gke.io/topology-aware-auto
 ```
 
@@ -483,9 +494,9 @@ echo "  gcluster job submit --image $IMAGE_NAME --command 'bash run_maxtext.sh <
 #!/bin/bash
 
 # Configuration - UPDATE THESE
-CLUSTER_NAME="v6e-xpkgsc"
-ZONE="southamerica-west1"
-OUTPUT_DIR="gs://gke-aishared-gsc-dev/maxtext_output"
+CLUSTER_NAME="v6e-cluster"
+LOCATION="us-central1"
+OUTPUT_DIR="gs://$PROJECT/maxtext_output"
 
 # Look up project
 PROJECT=$(gcloud config get-value project)
@@ -498,12 +509,12 @@ fi
 IMAGE_NAME=gcr.io/$PROJECT/maxtext-runner:latest
 
 echo "Ensuring permissions for $SA_NAME..."
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-xpkgsc-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:v6e-cluster-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
 
 echo "Submitting MaxText job to cluster $CLUSTER_NAME..."
 
@@ -517,7 +528,7 @@ fi
 $GCLUSTER job submit \
     --name maxtext-llama3-1-final-v6e8-2 \
     --cluster $CLUSTER_NAME \
-    --cluster-location $ZONE \
+    --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --accelerator v6e-8 \
@@ -544,10 +555,10 @@ You can verify the job status and check logs using `gcluster` or `kubectl`.
 
 ```bash
 # List jobs
-./gcluster job list --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-location southamerica-west1
+./gcluster job list --project $PROJECT --cluster $CLUSTER_NAME --location $LOCATION
 
 # View logs
-./gcluster job logs maxtext-llama3-1-final-v6e8-2 --project <YOUR_PROJECT_ID> --cluster v6e-xpkgsc --cluster-location southamerica-west1
+./gcluster job logs maxtext-llama3-1-final-v6e8-2 --project $PROJECT --cluster $CLUSTER_NAME --location $LOCATION
 ```
 
 **Using `kubectl`**:
@@ -732,9 +743,9 @@ echo "  gcluster job submit --image $IMAGE_NAME --command 'bash run_maxtext.sh <
 #!/bin/bash
 
 # Configuration - UPDATE THESE
-CLUSTER_NAME="tpu7xpkv"
-ZONE="us-central1-c"
-OUTPUT_DIR="gs://gke-aishared-gsc-dev/maxtext_output_7x"
+CLUSTER_NAME="tpu7x-cluster"
+LOCATION="<REGION/ZONE>"
+OUTPUT_DIR="gs://$PROJECT/maxtext_output_7x"
 
 # Look up project
 PROJECT=$(gcloud config get-value project)
@@ -746,17 +757,17 @@ fi
 
 IMAGE_NAME=gcr.io/$PROJECT/maxtext-runner:latest
 
-echo "Ensuring permissions for tpu7xpkv-gke-wl-sa..."
-# Note: Ensure the SA matches the one created by the 7x blueprint (tpu7xpkv-gke-wl-sa)
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
+echo "Ensuring permissions for tpu7x-cluster-gke-wl-sa..."
+# Note: Ensure the SA matches the one created by the 7x blueprint (tpu7x-cluster-gke-wl-sa)
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.logWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.admin" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/monitoring.metricWriter" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/logging.viewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-wl-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
 
 echo "Ensuring permissions for node pool service account..."
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
-gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7xpkv-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/artifactregistry.reader" --quiet > /dev/null
+gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:tpu7x-cluster-gke-np-sa@${PROJECT}.iam.gserviceaccount.com" --role="roles/storage.objectViewer" --quiet > /dev/null
 
 echo "Submitting MaxText job to cluster $CLUSTER_NAME..."
 
@@ -770,7 +781,7 @@ fi
 $GCLUSTER job submit \
     --name maxtext-llama3-1-final-tpu7x-32 \
     --cluster $CLUSTER_NAME \
-    --cluster-location us-central1 \
+    --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --accelerator tpu7x-32 \
@@ -797,10 +808,10 @@ TPU v7x utilizes Megacore, which initializes 2 logical devices per chip. For a 3
 
 ```bash
 # List jobs
-./gcluster job list --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-location us-central1
+./gcluster job list --project $PROJECT --cluster $CLUSTER_NAME --location $LOCATION
 
 # View logs
-./gcluster job logs maxtext-llama3-1-final-tpu7x-32 --project <YOUR_PROJECT_ID> --cluster tpu7xpkv --cluster-location us-central1
+./gcluster job logs maxtext-llama3-1-final-tpu7x-32 --project $PROJECT --cluster $CLUSTER_NAME --location $LOCATION
 ```
 
 **Verification Highlights**:
@@ -816,12 +827,29 @@ completed step: 4, seconds: 1.182, TFLOP/s/device: 167.154, Tokens/s/device: 346
 completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 3452.840, loss: 9.184
 ```
 
-## 11. Cleanup
+## 11. Troubleshooting: ImagePullBackOff
+
+If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
+
+A project administrator can grant the necessary access manually by running:
+
+```bash
+gcloud artifacts repositories add-iam-policy-binding <REPOSITORY_NAME> \
+    --location <REGION/ZONE> \
+    --project <PROJECT_ID> \
+    --member "serviceAccount:<GKE_NODE_SERVICE_ACCOUNT>" \
+    --role "roles/artifactregistry.reader"
+```
+
+> [!TIP]
+> You can find the service account used by your node pool in the GKE console or by running `kubectl get nodes -o jsonpath='{.items[*].spec.providerID}'`.
+
+## 12. Cleanup
 
 To avoid incurring unnecessary costs, destroy the deployed GKE cluster and its resources:
 
 ```bash
-./gcluster destroy my-test-cluster
+./gcluster destroy <CLUSTER_NAME>
 ```
 
 *You will be prompted to confirm the destruction (type `a` and press Enter).*
