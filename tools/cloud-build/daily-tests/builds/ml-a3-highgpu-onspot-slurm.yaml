@@ -88,6 +88,7 @@ steps:
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
       --extra-vars="region=$${REGION} zone=$${ZONE}"\
       --extra-vars="enable_spot=$${ENABLE_SPOT} "\
