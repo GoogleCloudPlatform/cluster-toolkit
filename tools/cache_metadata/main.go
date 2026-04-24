@@ -49,39 +49,22 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-// fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
-func fetchGitTree(version string) (*TreeResponse, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
-
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
-	}
-
-	var treeResp TreeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
-	}
-
-	return &treeResp, nil
-}
-
 func main() {
 	version := flag.String("version", "", "The toolkit version tag (e.g., v1.88.0)")
 	flag.Parse()
-
 	if *version == "" {
 		log.Fatal("Error: -version flag is required")
 	}
 
+	// Fetch the tree once to avoid redundant API calls
+	treeResp, err := fetchGitTree(*version)
+	if err != nil {
+		log.Fatalf("Error fetching git tree for version %s: %v", *version, err)
+	}
+
 	// Fetch required metadata to be stored in Firestore
-	standardModules := fetchStandardModules(*version)
-	standardExampleFiles := fetchStandardExampleFiles(*version)
+	standardModules := fetchStandardModules(treeResp, *version)
+	standardExampleFiles := fetchStandardExampleFiles(treeResp, *version)
 	standardBlueprintNames := fetchStandardBlueprintNames(*version, standardExampleFiles)
 
 	// Write to Firestore
@@ -105,13 +88,31 @@ func main() {
 	fmt.Printf("Successfully cached metadata for version %s in Firestore.\n", *version)
 }
 
-func fetchStandardModules(version string) []string {
+// fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
+func fetchGitTree(version string) (*TreeResponse, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
+
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	return &treeResp, nil
+}
+
+func fetchStandardModules(treeResp *TreeResponse, version string) []string {
 	moduleSet := make(map[string]bool)
 	predefinedModules := make([]string, 0)
-	treeResp, err := fetchGitTree(version)
-	if err != nil {
-		log.Fatalf("Error fetching git tree for version: %v", err)
-	}
 
 	// Parse the remote tree
 	for _, item := range treeResp.Tree {
@@ -135,12 +136,8 @@ func fetchStandardModules(version string) []string {
 	return predefinedModules
 }
 
-func fetchStandardExampleFiles(version string) []string {
+func fetchStandardExampleFiles(treeResp *TreeResponse, version string) []string {
 	predefinedExampleFiles := make([]string, 0)
-	treeResp, err := fetchGitTree(version)
-	if err != nil {
-		log.Fatalf("Error fetching git tree for examples: %v", err)
-	}
 
 	// Parse the remote tree
 	for _, item := range treeResp.Tree {
@@ -150,7 +147,6 @@ func fetchStandardExampleFiles(version string) []string {
 			strings.HasSuffix(item.Path, ".yaml") {
 			predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
 		}
-
 	}
 
 	if len(predefinedExampleFiles) == 0 {
@@ -160,47 +156,6 @@ func fetchStandardExampleFiles(version string) []string {
 	}
 
 	return predefinedExampleFiles
-}
-
-// worker fetches YAML files from GitHub and extracts the blueprint_name
-func worker(id int, version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for examplePath := range jobs {
-		// Create a context with a strict 10-second timeout for each file fetch
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-
-		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-		if err != nil {
-			log.Printf("Warning [Worker %d]: failed to create request %s: %v", id, rawURL, err)
-			cancel()
-			continue
-		}
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			log.Printf("Warning [Worker %d]: failed to fetch raw yaml %s: %v", id, rawURL, err)
-			cancel()
-			continue
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			body, err := io.ReadAll(resp.Body)
-			if err == nil {
-				var bp *config.Blueprint
-				// Unmarshal gracefully ignores all fields except blueprint_name
-				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
-					results <- bp.BlueprintName
-				}
-			}
-		} else {
-			log.Printf("Warning [Worker %d]: received status %d when fetching %s", id, resp.StatusCode, rawURL)
-		}
-
-		resp.Body.Close()
-		cancel() // Release the context resources
-	}
 }
 
 func fetchStandardBlueprintNames(version string, standardExampleFiles []string) []string {
@@ -253,4 +208,45 @@ func fetchStandardBlueprintNames(version string, standardExampleFiles []string) 
 	}
 
 	return blueprintNames
+}
+
+// worker fetches YAML files from GitHub and extracts the blueprint_name
+func worker(id int, version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for examplePath := range jobs {
+		// Create a context with a strict 10-second timeout for each file fetch
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			log.Printf("Warning [Worker %d]: failed to create request %s: %v", id, rawURL, err)
+			cancel()
+			continue
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Printf("Warning [Worker %d]: failed to fetch raw yaml %s: %v", id, rawURL, err)
+			cancel()
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				var bp *config.Blueprint
+				// Unmarshal gracefully ignores all fields except blueprint_name
+				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
+					results <- bp.BlueprintName
+				}
+			}
+		} else {
+			log.Printf("Warning [Worker %d]: received status %d when fetching %s", id, resp.StatusCode, rawURL)
+		}
+
+		resp.Body.Close()
+		cancel() // Release the context resources
+	}
 }
