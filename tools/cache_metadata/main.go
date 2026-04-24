@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hpc-toolkit/pkg/config"
+	"io"
 	"log"
 	"net/http"
 	"path"
@@ -26,6 +28,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -41,14 +44,15 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
 // fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
 func fetchGitTree(version string) (*TreeResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
 
-	resp, err := client.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}
@@ -77,6 +81,7 @@ func main() {
 	// Fetch required metadata to be stored in Firestore
 	standardModules := fetchStandardModules(*version)
 	standardExampleFiles := fetchStandardExampleFiles(*version)
+	standardBlueprintNames := fetchStandardBlueprintNames(*version, standardExampleFiles)
 
 	// Write to Firestore
 	ctx := context.Background()
@@ -87,8 +92,9 @@ func main() {
 	defer client.Close()
 
 	_, err = client.Collection(releasesCollection).Doc(*version).Set(ctx, map[string]interface{}{
-		"modules":  standardModules,
-		"examples": standardExampleFiles,
+		"modules":         standardModules,
+		"examples":        standardExampleFiles,
+		"blueprint_names": standardBlueprintNames,
 	})
 
 	if err != nil {
@@ -153,4 +159,45 @@ func fetchStandardExampleFiles(version string) []string {
 	}
 
 	return predefinedExampleFiles
+}
+
+func fetchStandardBlueprintNames(version string, standardExampleFiles []string) []string {
+	blueprintNamesSet := make(map[string]bool)
+	blueprintNames := make([]string, 0)
+
+	for _, examplePath := range standardExampleFiles {
+		// Fetch the raw content of the YAML file from GitHub
+		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
+		resp, err := httpClient.Get(rawURL)
+		if err != nil {
+			log.Printf("Warning: failed to fetch raw yaml %s: %v", rawURL, err)
+			continue
+		}
+
+		// Read and parse the YAML
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				var bp *config.Blueprint
+				// Unmarshal will gracefully ignore all fields except blueprint_name
+				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
+					if !blueprintNamesSet[bp.BlueprintName] {
+						blueprintNamesSet[bp.BlueprintName] = true
+						blueprintNames = append(blueprintNames, bp.BlueprintName)
+					}
+				}
+			}
+		} else {
+			log.Printf("Warning: received status %d when fetching %s", resp.StatusCode, rawURL)
+		}
+		resp.Body.Close()
+	}
+
+	if len(blueprintNames) == 0 {
+		log.Printf("No blueprint names found to cache for version %s", version)
+	} else {
+		fmt.Printf("Successfully fetched %d standard blueprint names for version %s.\n", len(blueprintNames), version)
+	}
+
+	return blueprintNames
 }
