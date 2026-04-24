@@ -66,7 +66,6 @@ steps:
     bash tools/add_ttl_label.sh $${BLUEPRINT}
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
 
-    sed -i -e '/- id: a4x-slurm-net-0/,/- id: a4x-slurm-net-1/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     # Adding this as filestore APIs are not available on us-west8-a. Should be removed once reservation is moved or updated to non us-west8-a region
     sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
     sed -i '/- homefs/d' $${BLUEPRINT}
