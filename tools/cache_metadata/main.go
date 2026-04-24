@@ -1,0 +1,165 @@
+// Copyright 2026 "Google LLC"
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"cloud.google.com/go/firestore"
+)
+
+const (
+	projectID          = "hpc-toolkit-gsc"
+	releasesCollection = "release_metadata"
+)
+
+// TreeResponse represents the expected JSON structure from the GitHub Git Trees API
+type TreeResponse struct {
+	Tree []struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	} `json:"tree"`
+}
+
+var cachedTree *TreeResponse
+
+// fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
+func fetchGitTree(version string) (*TreeResponse, error) {
+	if cachedTree != nil {
+		return cachedTree, nil
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
+
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	// Cache the response before returning it so subsequent calls are instant
+	cachedTree = &treeResp
+	return cachedTree, nil
+}
+
+func main() {
+	version := flag.String("version", "", "The toolkit version tag (e.g., v1.88.0)")
+	flag.Parse()
+
+	if *version == "" {
+		log.Fatal("Error: -version flag is required")
+	}
+
+	// Fetch required metadata to be stored in Firestore
+	standardModules := fetchStandardModules(*version)
+	standardExampleFiles := fetchStandardExampleFiles(*version)
+
+	// Write to Firestore
+	ctx := context.Background()
+	client, err := firestore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Fatalf("Failed to create Firestore client: %v", err)
+	}
+	defer client.Close()
+
+	_, err = client.Collection(releasesCollection).Doc(*version).Set(ctx, map[string]interface{}{
+		"modules":  standardModules,
+		"examples": standardExampleFiles,
+	})
+
+	if err != nil {
+		log.Fatalf("Failed to write cache to Firestore: %v", err)
+	}
+
+	fmt.Printf("Successfully cached metadata for version %s in Firestore.\n", *version)
+}
+
+func fetchStandardModules(version string) []string {
+	moduleSet := make(map[string]bool)
+	predefinedModules := make([]string, 0)
+	treeResp, err := fetchGitTree(version)
+	if err != nil {
+		log.Fatalf("Error fetching git tree for version: %v", err)
+	}
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// Check for Terraform and Packer files in the module directories.
+		if item.Type == "blob" &&
+			(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
+			(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+			moduleDir := filepath.ToSlash(filepath.Dir(item.Path))
+			if !moduleSet[moduleDir] {
+				moduleSet[moduleDir] = true
+				predefinedModules = append(predefinedModules, moduleDir)
+			}
+		}
+	}
+	if len(predefinedModules) == 0 {
+		log.Printf("No modules found to cache for version %s", version)
+	} else {
+		fmt.Printf("Successfully fetched %d standard modules for version %s.\n", len(predefinedModules), version)
+	}
+
+	return predefinedModules
+}
+
+func fetchStandardExampleFiles(version string) []string {
+	predefinedExampleFiles := make([]string, 0)
+	treeResp, err := fetchGitTree(version)
+	if err != nil {
+		log.Fatalf("Error fetching git tree for examples: %v", err)
+	}
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// Check for YAML files in the example directories.
+		if item.Type == "blob" &&
+			(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+			strings.HasSuffix(item.Path, ".yaml") {
+			examplePath := filepath.ToSlash(item.Path)
+			predefinedExampleFiles = append(predefinedExampleFiles, examplePath)
+		}
+
+	}
+
+	if len(predefinedExampleFiles) == 0 {
+		log.Printf("No examples found to cache for version %s", version)
+	} else {
+		fmt.Printf("Successfully fetched %d standard example files for version %s.\n", len(predefinedExampleFiles), version)
+	}
+
+	return predefinedExampleFiles
+}
