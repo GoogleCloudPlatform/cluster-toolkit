@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -41,14 +41,8 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-var cachedTree *TreeResponse
-
 // fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
 func fetchGitTree(version string) (*TreeResponse, error) {
-	if cachedTree != nil {
-		return cachedTree, nil
-	}
-
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -69,9 +63,7 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
-	// Cache the response before returning it so subsequent calls are instant
-	cachedTree = &treeResp
-	return cachedTree, nil
+	return &treeResp, nil
 }
 
 func main() {
@@ -120,7 +112,7 @@ func fetchStandardModules(version string) []string {
 		if item.Type == "blob" &&
 			(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
 			(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
-			moduleDir := filepath.ToSlash(filepath.Dir(item.Path))
+			moduleDir := path.Dir(item.Path)
 			if !moduleSet[moduleDir] {
 				moduleSet[moduleDir] = true
 				predefinedModules = append(predefinedModules, moduleDir)
@@ -149,8 +141,7 @@ func fetchStandardExampleFiles(version string) []string {
 		if item.Type == "blob" &&
 			(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
 			strings.HasSuffix(item.Path, ".yaml") {
-			examplePath := filepath.ToSlash(item.Path)
-			predefinedExampleFiles = append(predefinedExampleFiles, examplePath)
+			predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
 		}
 
 	}
