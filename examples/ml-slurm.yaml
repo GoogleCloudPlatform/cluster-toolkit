@@ -61,7 +61,7 @@ deployment_groups:
     use: [network, private_service_access]
     settings:
       local_mount: /home
-      size_gb: 2560
+      size_gb: 2590
       filestore_tier: BASIC_SSD
 
   - id: script

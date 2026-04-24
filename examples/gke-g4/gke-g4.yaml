@@ -16,7 +16,6 @@ blueprint_name: gke-g4
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
-  # Your GCP Project ID
   project_id:
 
   # This should be unique across all of your Cluster Toolkit Deployments.
