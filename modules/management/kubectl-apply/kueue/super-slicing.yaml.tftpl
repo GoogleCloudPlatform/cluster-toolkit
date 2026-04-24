@@ -1,0 +1,35 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: Topology
+metadata:
+  name: ${try(super_slice_topology_name, "super-slice-topology")}
+spec:
+  levels:
+  - nodeLabel: cloud.google.com/gce-topology-block
+  - nodeLabel: cloud.google.com/gke-tpu-partition-4x4x4-id
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: AdmissionCheck
+metadata:
+  name: ss-kueue-operator
+spec:
+  controllerName: accelerator.gke.io/slice
+%{ for cq_name in super_slice_cluster_queue_names }
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: ${cq_name}
+spec:
+  admissionChecks:
+  - ss-kueue-operator
+%{ endfor }
+%{ for rf_name in super_slice_resource_flavor_names }
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: ${rf_name}
+spec:
+  topologyName: ${try(super_slice_topology_name, "super-slice-topology")}
+%{ endfor }

@@ -19,8 +19,37 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+
+
+  install_kueue             = try(var.kueue.install, false)
+  install_jobset            = try(var.jobset.install, false)
+  install_gpu_operator      = try(var.gpu_operator.install, false)
+  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  install_gib               = try(var.gib.install, false)
+  install_asapd_lite        = try(var.asapd_lite.install, false)
+
+  enable_slice_controller      = var.kueue.enable_slice_controller
+  kueue_super_slicing_cpu      = "16"
+  kueue_super_slicing_memory   = "64Gi"
+  kueue_super_slicing_replicas = 3
+  jobset_super_slicing_cpu     = "4"
+  jobset_super_slicing_memory  = "16Gi"
+  kueue_cpu                    = var.kueue.controller_cpu != null ? var.kueue.controller_cpu : (local.enable_slice_controller ? local.kueue_super_slicing_cpu : null)
+  kueue_memory                 = var.kueue.controller_memory != null ? var.kueue.controller_memory : (local.enable_slice_controller ? local.kueue_super_slicing_memory : null)
+  kueue_replicas               = var.kueue.controller_replicas != null ? var.kueue.controller_replicas : (local.enable_slice_controller ? local.kueue_super_slicing_replicas : null)
+  kueue_custom_resources       = var.kueue.controller_replicas != null || var.kueue.controller_cpu != null || var.kueue.controller_memory != null || local.enable_slice_controller
+
+  jobset_cpu              = var.jobset.controller_cpu != null ? var.jobset.controller_cpu : (local.enable_slice_controller ? local.jobset_super_slicing_cpu : null)
+  jobset_memory           = var.jobset.controller_memory != null ? var.jobset.controller_memory : (local.enable_slice_controller ? local.jobset_super_slicing_memory : null)
+  jobset_custom_resources = var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slice_controller
+
   kueue_config_content = join("\n---\n", compact([
-    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+    local.enable_slice_controller ? templatefile("${path.module}/kueue/super-slicing.yaml.tftpl", {
+      super_slice_topology_name         = "super-slice-topology"
+      super_slice_cluster_queue_names   = coalesce(try(var.kueue.super_slicing_config.cluster_queue_names, []), [])
+      super_slice_resource_flavor_names = coalesce(try(var.kueue.super_slicing_config.resource_flavor_names, []), [])
+    }) : "",
+    var.kueue.enable_pathways_for_tpus ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
       pathways_cpu_quota     = 480
       pathways_memory_quota  = "2000G"
@@ -31,7 +60,7 @@ locals {
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || var.kueue.enable_pathways_for_tpus || local.enable_slice_controller)
 
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
@@ -42,25 +71,40 @@ locals {
     ) : ""
   )
 
-  kueue_docs            = [for doc in split("\n---", local.kueue_config_content) : trimspace(doc) if length(trimspace(doc)) > 0]
-  parsed_kueue_docs     = [for doc in local.kueue_docs : yamldecode(doc)]
-  cluster_queues        = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") == "ClusterQueue"]
-  other_docs            = [for doc in local.parsed_kueue_docs : doc if try(doc.kind, "") != "ClusterQueue"]
-  merged_cluster_queues = { for cq in local.cluster_queues : cq.metadata.name => cq... }
+  # 1. Combine splitting and decoding into one step
+  kueue_parsed = [for doc in split("\n---", local.kueue_config_content) : yamldecode(doc) if trimspace(doc) != ""]
+
+  # 2. Group ClusterQueues and ResourceFlavors by name directly from the parsed list
+  cluster_queue_groups   = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ClusterQueue" }
+  resource_flavor_groups = { for doc in local.kueue_parsed : doc.metadata.name => doc... if try(doc.kind, "") == "ResourceFlavor" }
+
+  # 3. Merge ClusterQueues by inheriting cqs[0] and overwriting only the spec
   final_cluster_queues = [
-    for name, cqs in local.merged_cluster_queues : {
-      apiVersion = cqs[0].apiVersion
-      kind       = cqs[0].kind
-      metadata   = cqs[0].metadata
+    for name, cqs in local.cluster_queue_groups : merge(cqs[0], {
       spec = merge(
         try(cqs[0].spec, {}),
-        {
-          resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
-        }
+        { resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])]) },
+        # Aggregated admissionChecks logic
+        length(distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))) > 0 ? {
+          admissionChecks = distinct(compact(flatten([for cq in cqs : try(cq.spec.admissionChecks, [])])))
+        } : {}
       )
-    }
+    })
   ]
-  final_kueue_manifests = concat([for doc in local.other_docs : yamlencode(doc)], [for doc in local.final_cluster_queues : yamlencode(doc)])
+
+  # Merge ResourceFlavors by inheriting rfs[0] and merging the spec across all instances
+  final_resource_flavors = [
+    for name, rfs in local.resource_flavor_groups : merge(rfs[0], {
+      spec = merge([for rf in rfs : try(rf.spec, {})]...)
+    })
+  ]
+
+  # 4. Construct final manifest list
+  final_kueue_manifests = concat(
+    [for doc in local.kueue_parsed : yamlencode(doc) if try(doc.kind, "") != "ClusterQueue" && try(doc.kind, "") != "ResourceFlavor"],
+    [for doc in local.final_cluster_queues : yamlencode(doc)],
+    [for doc in local.final_resource_flavors : yamlencode(doc)]
+  )
 
   # 1. First, Identify manifests that are explicitly enabled.
   enabled_manifests = {
@@ -79,7 +123,7 @@ locals {
     for index, manifest in local.enabled_manifests : index => manifest
     if try(manifest.source, null) != null &&
     !contains(keys(local.url_manifests), index) &&
-    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
+    (try(endswith(manifest.source, "/"), false) || try((!fileexists(manifest.source) && can(fileset(manifest.source, "*"))), false))
   }
 
   # Pre-calculate normalized names for each manifest
@@ -129,13 +173,6 @@ locals {
       namespace        = manifest.namespace
     }
   })
-
-  install_kueue             = try(var.kueue.install, false)
-  install_jobset            = try(var.jobset.install, false)
-  install_gpu_operator      = try(var.gpu_operator.install, false)
-  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
-  install_gib               = try(var.gib.install, false)
-  install_asapd_lite        = try(var.asapd_lite.install, false)
 }
 
 data "http" "manifest_from_url" {
@@ -171,6 +208,38 @@ module "kubectl_apply_manifests" {
   ]
 }
 
+
+module "super_slicing_kueue_version_check" {
+  source = "../../internal/semver_compare"
+
+  current_version = var.kueue.version
+  minimum_version = "0.15.2"
+}
+
+resource "terraform_data" "kueue_slice_controller_version_check" {
+  count = local.install_kueue ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = !local.enable_slice_controller || module.super_slicing_kueue_version_check.is_greater_than_or_equal
+      error_message = "Kueue super-slicing requires Kueue version >= 0.15.2."
+    }
+  }
+}
+
+resource "terraform_data" "kueue_super_slicing_validations" {
+  count = local.enable_slice_controller ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = var.kueue.accelerator_topology_mode == "PROVISION_ONLY"
+      error_message = "accelerator_topology_mode must be set to 'PROVISION_ONLY' when using Kueue super-slicing."
+    }
+    precondition {
+      condition     = can(regex("tpuv7x-4x4x4|tpu7x-standard-4t", coalesce(var.kueue.machine_type, "")))
+      error_message = "Kueue super-slicing requires machine_type containing 'tpuv7x-4x4x4' or 'tpu7x-standard-4t'."
+    }
+  }
+}
+
 module "install_kueue" {
   source           = "./helm_install"
   count            = local.install_kueue ? 1 : 0
@@ -182,14 +251,38 @@ module "install_kueue" {
   chart_version    = var.kueue.version
   namespace        = "kueue-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/kueue/kueue-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/kueue/kueue-helm-values.yaml"),
+    local.kueue_custom_resources ? yamlencode({
+      controllerManager = merge(
+        local.kueue_replicas != null ? { replicas = local.kueue_replicas } : {},
+        {
+          manager = {
+            resources = {
+              limits = {
+                for k, v in {
+                  cpu    = local.kueue_cpu
+                  memory = local.kueue_memory
+                } : k => v if v != null
+              }
+              requests = {
+                for k, v in {
+                  cpu    = local.kueue_cpu
+                  memory = local.kueue_memory
+                } : k => v if v != null
+              }
+            }
+          }
+        }
+      )
+    }) : ""
+  ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
   depends_on = [var.gke_cluster_exists]
 }
+
 
 module "configure_kueue" {
   source           = "./helm_install"
@@ -222,9 +315,27 @@ module "install_jobset" {
   chart_version    = var.jobset.version
   namespace        = "jobset-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/jobset/jobset-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/jobset/jobset-helm-values.yaml"),
+    local.jobset_custom_resources ? yamlencode({
+      controller = {
+        resources = {
+          limits = {
+            for k, v in {
+              cpu    = local.jobset_cpu
+              memory = local.jobset_memory
+            } : k => v if v != null
+          }
+          requests = {
+            for k, v in {
+              cpu    = local.jobset_cpu
+              memory = local.jobset_memory
+            } : k => v if v != null
+          }
+        }
+      }
+    }) : ""
+  ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 

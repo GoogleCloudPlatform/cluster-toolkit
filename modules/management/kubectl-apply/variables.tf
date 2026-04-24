@@ -21,7 +21,7 @@ locals {
 
   # Note: The apiVersion associated with the Topology kind should be
   # kueue.x-k8s.io/v1beta1 when using v0.14.0 or higher. Refer: https://github.com/kubernetes-sigs/kueue/blob/main/CHANGELOG/CHANGELOG-0.14.md#api-change
-  kueue_supported_versions = ["0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
+  kueue_supported_versions = ["0.16.0", "0.15.3", "0.15.2", "0.15.1", "0.15.0", "0.14.4", "0.14.3", "0.14.2", "0.14.1", "0.13.9", "0.13.8", "0.13.7", "0.13.6", "0.13.3", "0.13.2", "0.13.1", "0.13.0"]
 
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
@@ -120,12 +120,22 @@ variable "apply_manifests" {
 
 
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars. Additional fields: enable_slice_controller sets up super-slicing; controller_replicas, controller_cpu, and controller_memory allow overriding manager resources."
   type = object({
-    install                  = optional(bool, false)
-    version                  = optional(string, "0.13.3")
-    config_path              = optional(string, null)
-    config_template_vars     = optional(map(any), null)
+    install                   = optional(bool, false)
+    version                   = optional(string, "0.13.3")
+    config_path               = optional(string, null)
+    config_template_vars      = optional(map(any), null)
+    enable_slice_controller   = optional(bool, false)
+    machine_type              = optional(string, null)
+    accelerator_topology_mode = optional(string, null)
+    super_slicing_config = optional(object({
+      cluster_queue_names   = optional(list(string), [])
+      resource_flavor_names = optional(list(string), [])
+    }), {})
+    controller_replicas      = optional(number, null)
+    controller_cpu           = optional(string, null)
+    controller_memory        = optional(string, null)
     enable_pathways_for_tpus = optional(bool, false)
   })
   default = {}
@@ -138,10 +148,12 @@ variable "gke_cluster_exists" {
 }
 
 variable "jobset" {
-  description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
+  description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. Additional fields: controller_cpu, and controller_memory allow overriding manager resources."
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "0.10.1")
+    install           = optional(bool, false)
+    version           = optional(string, "0.10.1")
+    controller_cpu    = optional(string, null)
+    controller_memory = optional(string, null)
   })
   default = {}
 }
