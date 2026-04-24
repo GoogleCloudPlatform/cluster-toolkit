@@ -45,6 +45,21 @@ jobs:
       id: extract_tag
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
-    - name: Populate Firestore Cache
+    - name: Populate Firestore Cache (with up to 3 retries)
       run: |
-        go run tools/cache_metadata/main.go -version ${{ env.VERSION }}
+        for i in 1 2 3; do
+          echo "Attempt $i..."
+          if go run tools/cache_metadata/main.go -version ${{ env.VERSION }}; then
+            echo "Success!"
+            exit 0
+          fi
+
+          echo "Attempt $i failed."
+          if [ $i -lt 3 ]; then
+            echo "Waiting 10 seconds before retrying..."
+            sleep 10
+          fi
+        done
+
+        echo "All 3 attempts failed. Aborting."
+        exit 1
