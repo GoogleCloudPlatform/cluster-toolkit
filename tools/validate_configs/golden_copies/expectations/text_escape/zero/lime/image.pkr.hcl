@@ -92,7 +92,7 @@ locals {
   enable_vtpm                 = var.enable_shielded_vm && var.shielded_instance_config.enable_vtpm
 
   override_gcloud_path = var.gcloud_path_override == null ? "" : var.gcloud_path_override
-  compute_version = var.compute_endpoint_version == null ? "" : var.compute_endpoint_version
+  compute_version      = var.compute_endpoint_version == null ? "" : var.compute_endpoint_version
 }
 
 source "googlecompute" "toolkit_image" {
