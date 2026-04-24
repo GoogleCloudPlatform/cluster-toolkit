@@ -112,7 +112,7 @@ steps:
       if [[ "$$file" == *.txt ]]; then
         ext=".txt"
       fi
-      local dest_file="$${file%.txt}_2$${ext}"
+      local dest_file="$${file%.txt}$${ext}"
 
       echo "Processing $${file} -> $${dest_file}"
       echo "Requirements: Filestore=$$req_filestore, Lustre=$$req_lustre, CPUs=[$$req_cpus]"
@@ -124,7 +124,7 @@ steps:
 
       # Truncate or create the local buffer file
       > "filtered.txt"
-      while IFS= read -r zone; do
+      while IFS= read -r zone || [[ -n "${zone}" ]]; do
         zone=$$(echo "$${zone}" | tr -d '\r')
         [[ -z "$${zone}" ]] && continue
 
