@@ -174,7 +174,7 @@ variable "static_node_count" {
 }
 
 variable "is_reservation_active" {
-  description = "Whether the specified reservation is already created."
+  description = "Whether the specified reservation is already created. When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
   type        = bool
   default     = true
 }

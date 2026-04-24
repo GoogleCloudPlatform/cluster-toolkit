@@ -111,7 +111,7 @@ fixed number of attached GPUs, let's call these machine types as "pre-defined gp
 > **Note**: It is not necessary to define the [`guest_accelerator`] setting when
 > using pre-defined gpu machine families as information about GPUs, such as type, count and
 > `gpu_driver_installation_config`, is automatically inferred from the machine type.
-> Optional fields such as `gpu_partition_size` need to be specified only if they have
+> `guest_accelerator` block is specified, optional fields such as `gpu_partition_size` need to be specified only if they have
 > non-default values.
 
 The following scenarios require the [`guest_accelerator`] block is specified:
@@ -257,6 +257,19 @@ reservation_affinity:
     project: shared_reservation_owner_project_id
 ```
 
+### Target a future reservation OR reservations that are not fulfilled yet
+To create a GKE nodepool with a future reservation or reservations that are not fulfilled yet, set the `is_reservation_active` input variable to `false`. Note that to use this variable, these input variables should not be set or be set to 0 or null: `static_node_count`, `autoscaling_min_node_count`, `autoscaling_max_node_count` and `initial_node_count`.
+
+```yaml
+is_reservation_active: false
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: future_or_placeholder_reservation_name
+```
+
+Once the future reservation is active or the reservation is fulfilled, set the `is_reservation_active` input variable to `true`. Also set the node count information with either the `static_node_count` to define the required number of static nodes, or the `autoscaling_min_node_count` and `autoscaling_max_node_count` to use node scaling. Remember to use the `-w` flag in the `gcluster deploy` command and DO NOT change the `deployment_name` variable.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -341,7 +354,7 @@ limitations under the License.
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
 | <a name="input_internal_ghpc_module_id"></a> [internal\_ghpc\_module\_id](#input\_internal\_ghpc\_module\_id) | DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide). | `string` | n/a | yes |
-| <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. | `bool` | `true` | no |
+| <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. When is\_reservation\_active is set to false, static\_node\_count, autoscaling\_min\_node\_count, autoscaling\_max\_node\_count, and initial\_node\_count must all be either null or 0. | `bool` | `true` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_linux_node_config"></a> [linux\_node\_config](#input\_linux\_node\_config) | Linux node configuration (e.g., sysctls, hugepages). | <pre>object({<br/>    sysctls = optional(map(string), {<br/>      "net.ipv4.tcp_rmem" = "4096 87380 16777216"<br/>      "net.ipv4.tcp_wmem" = "4096 16384 16777216"<br/>    })<br/>    hugepages_config = optional(object({<br/>      hugepage_size_2m = optional(number)<br/>      hugepage_size_1g = optional(number)<br/>    }))<br/>  })</pre> | `{}` | no |

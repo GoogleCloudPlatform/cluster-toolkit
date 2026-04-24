@@ -55,8 +55,8 @@ locals {
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 
   # Merge all Kubernetes labels
-  # Note: cloud.google.com/gke-queued is added manually because while GKE 
-  # automatically applies the taint, the label is required for workloads 
+  # Note: cloud.google.com/gke-queued is added manually because while GKE
+  # automatically applies the taint, the label is required for workloads
   # using nodeSelectors to correctly target these provisioned nodes.
   kubernetes_labels = merge(
     var.kubernetes_labels,
@@ -96,7 +96,7 @@ resource "google_container_node_pool" "node_pool" {
   node_locations = var.zones
 
   node_count = var.static_node_count
-  # Per-zone limits (min_node_count/max_node_count) are required to workaround a 
+  # Per-zone limits (min_node_count/max_node_count) are required to workaround a
   # Terraform provider bug when using TPU Flex Start.
   dynamic "autoscaling" {
     for_each = local.static_node_set ? [] : [1]
@@ -422,6 +422,15 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
       error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
+    }
+    precondition {
+      condition = var.is_reservation_active || (
+        (var.static_node_count == null || var.static_node_count == 0) &&
+        (var.autoscaling_min_node_count == null || var.autoscaling_min_node_count == 0) &&
+        (var.autoscaling_max_node_count == null || var.autoscaling_max_node_count == 0) &&
+        (var.initial_node_count == null || var.initial_node_count == 0)
+      )
+      error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
   }
 }
