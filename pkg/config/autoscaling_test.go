@@ -109,8 +109,8 @@ func TestExpandClusterAutoscaling_GPU_DefaultCount(t *testing.T) {
 	resMap := resVal.AsValueMap()
 
 	f, _ := resMap["autoprovisioning_max_count"].AsBigFloat().Float64()
-	if f != 8 {
-		t.Errorf("expected max count 8, got %v", f)
+	if f != 1000 {
+		t.Errorf("expected max count 1000, got %v", f)
 	}
 }
 

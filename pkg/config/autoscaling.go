@@ -136,7 +136,9 @@ func validateAndExtractTotalAccelerators(maxCount int, maxCountPassed bool, acce
 		}
 		return maxCount, nil
 	}
-	return acceleratorsPerVM, nil
+	// Default to a large number (e.g., 1000) to allow Node Auto-Provisioning 
+	// to scale beyond a single VM capacity.
+	return 1000, nil
 }
 
 func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (int, string, error) {
