@@ -42,7 +42,6 @@ custom_vars:
   - /home
 cli_deployment_vars:
   test_name: "{{ test_name }}"
-  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   a4x_reservation_name: "nvidia-gb200-uyrez5en64cu7"
