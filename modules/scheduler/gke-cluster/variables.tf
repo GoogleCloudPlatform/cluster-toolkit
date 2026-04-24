@@ -594,6 +594,8 @@ variable "cluster_autoscaling" {
   enabled:               Enable/disable GKE Cluster autoscaling and auto-provisioning.
   service_account_email: The service account tied to node-provisioning. Defaults to the deployment service account.
   oauth_scopes:          Scopes assigned to nodes provisioned by NAP.
+  autoprovisioning_disk_size_gb: The disk size of auto-provisioned nodes (GB). Default 100.
+  autoprovisioning_disk_type:    The disk type of auto-provisioned nodes. Default pd-balanced.
   limits:                Explicit upper bounds to apply during scaling.
     autoprovisioning_machine_type: GCE machine type tier (used as input).
     autoprovisioning_resource_type: The underlying specific GKE accelerator resource name (inferred by expansion).
@@ -609,11 +611,28 @@ variable "cluster_autoscaling" {
       autoprovisioning_resource_type = optional(string)
       autoprovisioning_max_count     = optional(number)
     }))
-    service_account_email = optional(string, "")
-    oauth_scopes          = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+    service_account_email         = optional(string, "")
+    oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+    autoprovisioning_disk_size_gb = optional(number, 100)
+    autoprovisioning_disk_type    = optional(string, "pd-balanced")
   })
   default = {
     enabled = false
     limits  = []
   }
+  validation {
+    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
+    error_message = "autoprovisioning_disk_type must be one of pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
+  }
+}
+variable "autoprovisioning_cpu_max" {
+  description = "Maximum number of CPU cores that the cluster can scale up to via Node Auto-Provisioning."
+  type        = number
+  default     = 1000000
+}
+
+variable "autoprovisioning_memory_max" {
+  description = "Maximum amount of memory (in GB) that the cluster can scale up to via Node Auto-Provisioning."
+  type        = number
+  default     = 10000000
 }
