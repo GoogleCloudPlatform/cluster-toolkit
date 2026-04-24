@@ -79,7 +79,9 @@ steps:
     echo '    outputs: [instructions]'                         >> $${EXAMPLE_BP}
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
+    python3 tools/fix_vpc_name.py $${EXAMPLE_BP} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-h4d.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
