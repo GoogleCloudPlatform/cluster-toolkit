@@ -76,7 +76,7 @@ func Execute() error {
 
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from official release"
+			GitTagVersion = "(official binary distribution)"
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"

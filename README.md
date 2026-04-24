@@ -71,9 +71,8 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     ARCH="amd64"
     # Download and extract the platform-specific bundle
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.zip
-    unzip gcluster_bundle_${OS}_${ARCH}.zip -d gcluster-bundle/
-    cd gcluster-bundle
-    chmod +x gcluster
+    unzip gcluster_bundle_${OS}_${ARCH}.zip -d cluster-toolkit/
+    cd cluster-toolkit
     ```
 
     For versions v1.89.0 and newer (Multi-architecture Tarball):
@@ -86,7 +85,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     OS="linux"
     ARCH="amd64"
     # Download and extract the platform-specific bundle in a single step
-    mkdir -p gcluster-bundle && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C gcluster-bundle && cd gcluster-bundle && chmod +x gcluster
+    mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}_${ARCH}.tgz | tar -xz -C cluster-toolkit && cd cluster-toolkit
     ```
 
     For versions v1.82.0 through v1.84.0:
@@ -99,9 +98,8 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     OS="linux"
     # Download and extract
     curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${TAG}/gcluster_bundle_${OS}.zip
-    unzip gcluster_bundle_${OS}.zip -d gcluster-bundle/
-    cd gcluster-bundle
-    chmod +x gcluster
+    unzip gcluster_bundle_${OS}.zip -d cluster-toolkit/
+    cd cluster-toolkit
     ```
 
 2. Verify the Installation:
