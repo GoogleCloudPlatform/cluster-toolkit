@@ -19,7 +19,31 @@ def modify_vpcs(blueprint_path, prefix):
     with open(blueprint_path, 'r') as f:
         data = yaml.safe_load(f)
 
-    vpc_count = 0
+    # Find network used by filestore
+    primary_network_id = None
+    if data and 'deployment_groups' in data:
+        for group in data['deployment_groups']:
+            for module in group.get('modules', []):
+                if module.get('source') == 'modules/file-system/filestore':
+                    uses = module.get('use', [])
+                    for u in uses:
+                        for g2 in data['deployment_groups']:
+                            for m2 in g2.get('modules', []):
+                                if m2.get('id') == u and m2.get('source') == 'modules/network/vpc':
+                                    primary_network_id = u
+                                    break
+                            if primary_network_id:
+                                break
+                        if primary_network_id:
+                            break
+                if primary_network_id:
+                    break
+            if primary_network_id:
+                break
+
+    print(f"Identified primary network (used by filestore): {primary_network_id}")
+
+    vpc_count = 1 # Start other VPCs from 1
     # Iterate through all deployment groups and modules
     if data and 'deployment_groups' in data:
         for group in data['deployment_groups']:
@@ -28,10 +52,16 @@ def modify_vpcs(blueprint_path, prefix):
                 if 'modules/network/vpc' in module.get('source', ''):
                     if 'settings' not in module:
                         module['settings'] = {}
-                    # Set the consecutive name using the $(vars.test_name) variable
-                    module['settings']['network_name'] = f"{prefix}$(vars.test_name)-{vpc_count}"
-                    print(f"Updated module '{module.get('id')}' to: {prefix}$(vars.test_name)-{vpc_count}")
-                    vpc_count += 1
+                    
+                    mod_id = module.get('id')
+                    if mod_id == primary_network_id:
+                        name = f"{prefix}$(vars.test_name)-0"
+                    else:
+                        name = f"{prefix}$(vars.test_name)-{vpc_count}"
+                        vpc_count += 1
+                        
+                    module['settings']['network_name'] = name
+                    print(f"Updated module '{mod_id}' to: {name}")
 
     with open(blueprint_path, 'w') as f:
         yaml.dump(data, f, sort_keys=False)
