@@ -142,8 +142,13 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	// Normalize the path to handle variations like "./", redundant slashes, or Windows "\"
 	deploymentFile := path.Clean(filepath.ToSlash(flag.Value.String()))
 
+	standardFiles := fetchStandardDeploymentFiles()
+	if len(standardFiles) == 0 {
+		return "UNVERIFIED"
+	}
+
 	// Lazily load the predefined files and check if given file is a standard file
-	if slices.Contains(fetchStandardDeploymentFiles(), deploymentFile) {
+	if slices.Contains(standardFiles, deploymentFile) {
 		return deploymentFile
 	}
 

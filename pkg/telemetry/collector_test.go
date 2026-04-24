@@ -1167,6 +1167,19 @@ func TestGetDeploymentFile(t *testing.T) {
 			},
 			expectedResult: "",
 		},
+		{
+			name: "failure: cannot get standard deployment files, file unverified",
+			setupCommand: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", "", "Path to deployment file")
+				_ = cmd.Flags().Set("deployment-file", "examples/hpc-slurm.yaml")
+				fetchStandardDeploymentFiles = func() []string {
+					return []string{}
+				}
+				return cmd
+			},
+			expectedResult: "UNVERIFIED",
+		},
 	}
 
 	for _, tc := range tests {
