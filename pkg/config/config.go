@@ -27,6 +27,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agext/levenshtein"
@@ -983,42 +984,43 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-// cachedTree stores the GitHub API response to avoid redundant network calls.
-var cachedTree *TreeResponse
+var (
+	cachedTree           *TreeResponse // cachedTree stores the GitHub API response to avoid redundant network calls.
+	cachedBlueprintNames []string      // cachedBlueprintNames caches the fetched names to avoid redundant HTTP calls.
+	blueprintOnce        = &sync.Once{}
+	treeOnce             = &sync.Once{}
+	treeErr              error
+)
 
 // Create an HTTP Client that can be used for Github network calls.
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-// fetchGitTreeFiles queries the GitHub API and decodes the JSON into a TreeResponse.
+// fetchGitTreeFiles queries the GitHub API and decodes the JSON into a TreeResponse safely.
 func fetchGitTreeFiles(version string) (*TreeResponse, error) {
-	// Return the cached response if we've already fetched it
-	if cachedTree != nil {
-		return cachedTree, nil
-	}
+	treeOnce.Do(func() {
+		url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+		resp, err := httpClient.Get(url)
+		if err != nil {
+			treeErr = fmt.Errorf("failed to fetch from GitHub API: %v", err)
+			return
+		}
+		defer resp.Body.Close()
 
-	// Query GitHub for the recursive file tree of this specific version tag
-	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+		if resp.StatusCode != http.StatusOK {
+			treeErr = fmt.Errorf("GitHub API returned status: %s", resp.Status)
+			return
+		}
 
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
-	}
-
-	var treeResp TreeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
-	}
-
-	// Cache the response before returning it
-	cachedTree = &treeResp
-	return cachedTree, nil
+		var treeResp TreeResponse
+		if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+			treeErr = fmt.Errorf("failed to decode JSON response: %v", err)
+			return
+		}
+		cachedTree = &treeResp
+	})
+	return cachedTree, treeErr
 }
 
 // GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
@@ -1066,27 +1068,57 @@ func GetPredefinedExampleFiles() []string {
 	return predefinedFiles
 }
 
-// GetPredefinedBlueprintNames fetches all blueprint names from the examples and community/examples folders for the current toolkit version from GitHub.
+// GetPredefinedBlueprintNames fetches all blueprint names concurrently (with a limit) from the examples and community/examples folders for the current toolkit version from GitHub and caches the result.
 // This field corresponds to the "blueprint_name" parameter in the YAML file.
 func GetPredefinedBlueprintNames() []string {
-	var blueprintNames []string
-	nameSet := make(map[string]bool)
-	exampleFiles := GetPredefinedExampleFiles()
+	blueprintOnce.Do(func() {
+		var blueprintNames []string
+		nameSet := make(map[string]bool)
+		exampleFiles := GetPredefinedExampleFiles()
 
-	for _, file := range exampleFiles {
-		// Query Github for raw file content at this specific version tag
-		url := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", latestToolkitVersion, file)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
 
-		yamlResp, err := httpClient.Get(url)
-		if err == nil && yamlResp.StatusCode == http.StatusOK {
-			var bp Blueprint
-			// Reuse the existing Blueprint struct to decode the yaml.
-			if err := yaml.NewDecoder(yamlResp.Body).Decode(&bp); err == nil && bp.BlueprintName != "" && !nameSet[bp.BlueprintName] {
-				nameSet[bp.BlueprintName] = true
-				blueprintNames = append(blueprintNames, bp.BlueprintName)
-			}
+		// Create a buffered channel to act as a semaphore.
+		// This limits us to a maximum of 10 concurrent HTTP requests at a time.
+		sem := make(chan struct{}, 10)
+
+		for _, file := range exampleFiles {
+			wg.Add(1)
+			go func(f string) {
+				defer wg.Done()
+
+				// Acquire a token from the semaphore before starting the work
+				sem <- struct{}{}
+				// Ensure the token is released back to the semaphore when the goroutine exits
+				defer func() { <-sem }()
+
+				url := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", latestToolkitVersion, f)
+				yamlResp, err := httpClient.Get(url)
+
+				if err != nil {
+					return
+				}
+				defer yamlResp.Body.Close()
+
+				if yamlResp.StatusCode == http.StatusOK {
+					var bp Blueprint
+					// Reuse the existing Blueprint struct to decode the yaml.
+					if err := yaml.NewDecoder(yamlResp.Body).Decode(&bp); err == nil && bp.BlueprintName != "" {
+						// Lock before modifying the shared map and slice
+						mu.Lock()
+						if !nameSet[bp.BlueprintName] {
+							nameSet[bp.BlueprintName] = true
+							blueprintNames = append(blueprintNames, bp.BlueprintName)
+						}
+						mu.Unlock()
+					}
+				}
+			}(file)
 		}
-		yamlResp.Body.Close()
-	}
-	return blueprintNames
+
+		wg.Wait() // Wait for all HTTP requests to finish
+		cachedBlueprintNames = blueprintNames
+	})
+	return cachedBlueprintNames
 }
