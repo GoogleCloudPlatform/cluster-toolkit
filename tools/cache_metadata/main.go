@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -161,36 +162,88 @@ func fetchStandardExampleFiles(version string) []string {
 	return predefinedExampleFiles
 }
 
-func fetchStandardBlueprintNames(version string, standardExampleFiles []string) []string {
-	blueprintNamesSet := make(map[string]bool)
-	blueprintNames := make([]string, 0)
+// worker fetches YAML files from GitHub and extracts the blueprint_name
+func worker(id int, version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	for _, examplePath := range standardExampleFiles {
-		// Fetch the raw content of the YAML file from GitHub
+	for examplePath := range jobs {
+		// Create a context with a strict 10-second timeout for each file fetch
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
 		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
-		resp, err := httpClient.Get(rawURL)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
-			log.Printf("Warning: failed to fetch raw yaml %s: %v", rawURL, err)
+			log.Printf("Warning [Worker %d]: failed to create request %s: %v", id, rawURL, err)
+			cancel()
 			continue
 		}
 
-		// Read and parse the YAML
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Printf("Warning [Worker %d]: failed to fetch raw yaml %s: %v", id, rawURL, err)
+			cancel()
+			continue
+		}
+
 		if resp.StatusCode == http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err == nil {
 				var bp *config.Blueprint
-				// Unmarshal will gracefully ignore all fields except blueprint_name
+				// Unmarshal gracefully ignores all fields except blueprint_name
 				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
-					if !blueprintNamesSet[bp.BlueprintName] {
-						blueprintNamesSet[bp.BlueprintName] = true
-						blueprintNames = append(blueprintNames, bp.BlueprintName)
-					}
+					results <- bp.BlueprintName
 				}
 			}
 		} else {
-			log.Printf("Warning: received status %d when fetching %s", resp.StatusCode, rawURL)
+			log.Printf("Warning [Worker %d]: received status %d when fetching %s", id, resp.StatusCode, rawURL)
 		}
+
 		resp.Body.Close()
+		cancel() // Release the context resources
+	}
+}
+
+func fetchStandardBlueprintNames(version string, standardExampleFiles []string) []string {
+	blueprintNamesSet := make(map[string]bool)
+	blueprintNames := make([]string, 0)
+
+	numJobs := len(standardExampleFiles)
+	if numJobs == 0 {
+		log.Printf("No blueprint names found to cache for version %s", version)
+		return blueprintNames
+	}
+
+	jobs := make(chan string, numJobs)
+	results := make(chan string, numJobs)
+	var wg sync.WaitGroup
+
+	// Set up a bounded worker pool (e.g., 10 concurrent connections)
+	numWorkers := min(numJobs, 10)
+
+	// 1. Start the worker goroutines
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go worker(w, version, jobs, results, &wg)
+	}
+
+	// 2. Feed the jobs channel with the file paths
+	for _, examplePath := range standardExampleFiles {
+		jobs <- examplePath
+	}
+	close(jobs) // Signal that no more jobs will be sent
+
+	// 3. Wait for all workers to finish in the background, then close the results channel
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// 4. Collect results synchronously (prevents race conditions on the map)
+	for bpName := range results {
+		if !blueprintNamesSet[bpName] {
+			blueprintNamesSet[bpName] = true
+			blueprintNames = append(blueprintNames, bpName)
+		}
 	}
 
 	if len(blueprintNames) == 0 {
