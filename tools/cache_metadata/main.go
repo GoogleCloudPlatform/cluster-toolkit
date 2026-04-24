@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"hpc-toolkit/pkg/config"
 	"io"
 	"log"
 	"net/http"
@@ -43,6 +42,11 @@ type TreeResponse struct {
 		Path string `json:"path"`
 		Type string `json:"type"`
 	} `json:"tree"`
+}
+
+// MinimalBlueprint is a lightweight struct to extract only the blueprint_name
+type MinimalBlueprint struct {
+	BlueprintName string `yaml:"blueprint_name"`
 }
 
 var httpClient = &http.Client{
@@ -236,7 +240,7 @@ func worker(id int, version string, jobs <-chan string, results chan<- string, w
 		if resp.StatusCode == http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
 			if err == nil {
-				var bp *config.Blueprint
+				var bp MinimalBlueprint
 				// Unmarshal gracefully ignores all fields except blueprint_name
 				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
 					results <- bp.BlueprintName
