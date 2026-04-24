@@ -27,7 +27,6 @@ cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
-  network_name: "{{ network }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
 custom_vars:
