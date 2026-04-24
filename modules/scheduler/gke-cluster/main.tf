@@ -70,8 +70,10 @@ locals {
   has_autoscaling_limits = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
   nap_service_account    = var.cluster_autoscaling.service_account_email != "" ? var.cluster_autoscaling.service_account_email : local.sa_email
 
-  nap_cpu_max    = 1000000
-  nap_memory_max = 10000000
+  # These maximum values represent massive upper bounds for the GKE Node Auto-Provisioning 
+  # and Cluster Autoscaler to allow essentially unlimited CPU and memory scaling for the cluster.
+  nap_cpu_max    = var.autoprovisioning_cpu_max
+  nap_memory_max = var.autoprovisioning_memory_max
 }
 
 data "google_project" "project" {
@@ -181,8 +183,8 @@ resource "google_container_cluster" "gke_cluster" {
           auto_repair  = true
         }
 
-        disk_size = 100
-        disk_type = "hyperdisk-balanced"
+        disk_size = var.cluster_autoscaling.autoprovisioning_disk_size_gb
+        disk_type = var.cluster_autoscaling.autoprovisioning_disk_type
       }
     }
   }
