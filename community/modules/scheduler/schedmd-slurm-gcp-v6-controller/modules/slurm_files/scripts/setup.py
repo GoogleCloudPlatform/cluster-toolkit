@@ -588,6 +588,19 @@ def setup_cloud_ops() -> None:
     with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
         file = yaml.safe_load(f)
 
+    # Guard: skip if config is empty or missing the expected slurm receivers structure.
+    # This happens when the ops agent is installed with a default empty config (comments only).
+    if (
+        not isinstance(file, dict)
+        or not isinstance(logging := file.get("logging"), dict)
+        or not isinstance(receivers := logging.get("receivers"), dict)
+        or "setup" not in receivers
+    ):
+        log.warning(
+            "google-cloud-ops-agent config is missing expected structure, skipping cloud ops customization"
+        )
+        return
+
     # Update setup receiver path
     file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]
 
