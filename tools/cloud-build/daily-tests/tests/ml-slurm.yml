@@ -23,4 +23,3 @@ packer_group_name: packer
 packer_module_id: custom-image
 cli_deployment_vars:
   test_name: "{{ test_name }}"
-  network_name: "{{ network }}"
