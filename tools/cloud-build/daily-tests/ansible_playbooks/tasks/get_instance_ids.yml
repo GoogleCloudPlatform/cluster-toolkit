@@ -30,7 +30,9 @@
   ansible.builtin.debug:
     var: instances.stdout
 - name: Print Cloud Logging command
-  when: instances is defined and (instances.stdout | from_json | length > 0)
+  when: instances.stdout is defined and (instances.stdout | string | length > 0)
+  loop: "{{ instances.stdout | from_json | default([]) }}"
+
   ansible.builtin.debug:
     msg: gcloud logging --project {{ project }} read 'logName="projects/{{ project }}/logs/google_metadata_script_runner" AND resource.labels.instance_id="{{ item.id }}"' --format="table(timestamp, jsonPayload.message)" --freshness 24h | tac
   loop: "{{ instances.stdout | from_json | default([]) }}"
