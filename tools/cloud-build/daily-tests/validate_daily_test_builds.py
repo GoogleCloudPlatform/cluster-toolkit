@@ -53,7 +53,8 @@ def validate_build_file(file_path: Path) -> bool:
                     file=sys.stderr,
                 )
                 return False
-            expected_script = f"tools/cloud-build/check_running_build.sh {file_path}"
+            is_onspot = "true" if "onspot" in file_path.name else "false"
+            expected_script = f"tools/cloud-build/check_running_build.sh {file_path} '${{_TEST_PREFIX}}' {is_onspot}"
             if script != expected_script:
                 print(
                     f"Error: Invalid 'script' in 'check_for_running_build' step in {file_path}",
