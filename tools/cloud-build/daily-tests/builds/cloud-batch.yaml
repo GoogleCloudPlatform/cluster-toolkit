@@ -36,7 +36,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/cloud-batch.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 # Test Cloud Batch Example
 - id: cloud-batch

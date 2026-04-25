@@ -50,7 +50,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/hcls.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: hcls-v6
   waitFor: ["check_for_running_build"]

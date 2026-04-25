@@ -42,7 +42,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/gke-storage.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 ## Test GKE
 - id: gke-storage

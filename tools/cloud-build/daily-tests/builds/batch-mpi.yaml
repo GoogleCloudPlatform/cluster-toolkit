@@ -48,7 +48,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/batch-mpi.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 # Test Batch MPI
 - id: batch-mpi

@@ -37,7 +37,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/slurm-gcp-v6-reconfig-size.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: slurm-reconfig
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

@@ -36,7 +36,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/pfs-managed-lustre-vm.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: managed-lustre-vm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

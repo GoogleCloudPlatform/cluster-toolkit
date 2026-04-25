@@ -37,7 +37,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/slurm-gcp-v6-topology.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: slurm-topology
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

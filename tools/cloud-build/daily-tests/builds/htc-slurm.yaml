@@ -40,7 +40,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/htc-slurm.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: htc-slurm-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

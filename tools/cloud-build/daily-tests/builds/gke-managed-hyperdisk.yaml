@@ -39,7 +39,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/gke-managed-hyperdisk.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 # Test GKE
 - id: gke-managed-hyperdisk

@@ -31,7 +31,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/ofe-deployment.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 - id: ofe-deployment
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

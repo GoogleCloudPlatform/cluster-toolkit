@@ -35,7 +35,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/chrome-remote-desktop.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 # Test chrome-remote-desktop module
 - id: chrome-remote-desktop

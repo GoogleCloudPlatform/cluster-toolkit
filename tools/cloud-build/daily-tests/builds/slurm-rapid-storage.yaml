@@ -39,7 +39,7 @@ steps:
     tools/cloud-build/check_running_build.sh \
       "tools/cloud-build/daily-tests/builds/slurm-rapid-storage.yaml" \
       "${_TEST_PREFIX}" \
-      false
+      true
 
 ## Test SLURM Rapid Storage
 - id: slurm-rapid-storage
