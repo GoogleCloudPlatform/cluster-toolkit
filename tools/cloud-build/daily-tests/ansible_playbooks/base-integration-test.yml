@@ -120,7 +120,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={{ network }}
+        - --network={% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}

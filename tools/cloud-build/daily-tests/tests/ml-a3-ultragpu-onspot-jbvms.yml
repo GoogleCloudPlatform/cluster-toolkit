@@ -32,6 +32,7 @@ custom_vars:
     a3ultra_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   a3u_provisioning_model: SPOT
