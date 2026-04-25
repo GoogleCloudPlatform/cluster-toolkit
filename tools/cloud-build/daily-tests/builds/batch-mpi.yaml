@@ -67,7 +67,7 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/serverless-batch-mpi.yaml
     bash tools/add_ttl_label.sh $${SG_EXAMPLE}
-    python3 tools/fix_vpc_name.py $${SG_EXAMPLE} "${_TEST_PREFIX}"
+
 
     sed -i "s/#   spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
     sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}
@@ -79,6 +79,5 @@ steps:
     echo '      timeout: 10800'                                   >> $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
