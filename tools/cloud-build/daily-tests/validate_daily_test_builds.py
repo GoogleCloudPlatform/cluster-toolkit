@@ -46,22 +46,28 @@ def validate_build_file(file_path: Path) -> bool:
 
     for step in steps:
         if isinstance(step, dict) and step.get("id") == "check_for_running_build":
-            script = step.get("script")
-            if not script:
-                print(
-                    f"Error: 'script' not found in 'check_for_running_build' step in {file_path}",
-                    file=sys.stderr,
-                )
+            entrypoint = step.get("entrypoint")
+            args = step.get("args")
+            if not entrypoint or not args:
+                print(f"Error: 'entrypoint' or 'args' not found in 'check_for_running_build' step in {file_path}", file=sys.stderr)
                 return False
+            if entrypoint != "/bin/bash":
+                print(f"Error: Invalid 'entrypoint' in 'check_for_running_build' step in {file_path}. Expected /bin/bash, got {entrypoint}", file=sys.stderr)
+                return False
+            if not isinstance(args, list) or len(args) != 2 or args[0] != "-c":
+                print(f"Error: Invalid 'args' structure in 'check_for_running_build' step in {file_path}. Expected ['-c', '...']", file=sys.stderr)
+                return False
+                
+            script_content = args[1]
             is_onspot = "true" if "onspot" in file_path.name else "false"
-            expected_script = f"tools/cloud-build/check_running_build.sh {file_path} '${{_TEST_PREFIX}}' {is_onspot}"
-            if script != expected_script:
-                print(
-                    f"Error: Invalid 'script' in 'check_for_running_build' step in {file_path}",
-                    file=sys.stderr,
-                )
-                print(f"  Expected: {expected_script}", file=sys.stderr)
-                print(f"  Got:      {script}", file=sys.stderr)
+            
+            if "check_running_build.sh" not in script_content or \
+               str(file_path) not in script_content or \
+               "${_TEST_PREFIX}" not in script_content or \
+               is_onspot not in script_content:
+                print(f"Error: Invalid script content in 'check_for_running_build' step in {file_path}", file=sys.stderr)
+                print(f"  Expected to contain: check_running_build.sh, {file_path}, ${_TEST_PREFIX}, {is_onspot}", file=sys.stderr)
+                print(f"  Got: {script_content}", file=sys.stderr)
                 return False
             return True
 
