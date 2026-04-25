@@ -22,7 +22,7 @@ timeout: 3600s  # 1hr
 steps:
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml '${_TEST_PREFIX}' false"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/gcluster-dockerfile.yaml \"${_TEST_PREFIX}\" false"
 
 # uses a pre-built Google Cloud image containing Docker CLI tool.
 - id: build-docker-image
