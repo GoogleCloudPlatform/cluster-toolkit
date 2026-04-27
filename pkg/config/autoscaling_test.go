@@ -163,7 +163,7 @@ func TestExpandClusterAutoscaling_TPU(t *testing.T) {
 	_, resVal := it.Element()
 	resMap := resVal.AsValueMap()
 
-	if resMap["autoprovisioning_resource_type"].AsString() != "ct6e-standard-4t" {
-		t.Errorf("expected resource type ct6e-standard-4t, got %s", resMap["autoprovisioning_resource_type"].AsString())
+	if resMap["autoprovisioning_resource_type"].AsString() != "tpu-v6e-slice" {
+		t.Errorf("expected resource type tpu-v6e-slice, got %s", resMap["autoprovisioning_resource_type"].AsString())
 	}
 }

@@ -17,12 +17,18 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
 
 // ExpandClusterAutoscaling intercepts the cluster_autoscaling variable,
 // parses machine_type in Go, and injects internal variables for maximum chips and accelerator type.
+type cachedAccInfo struct {
+	count int
+	t     string
+}
+
 func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 	caMap, limitsVal, ok, err := validateAndGetLimits(bp, mod)
 	if err != nil {
@@ -34,10 +40,11 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 
 	it := limitsVal.ElementIterator()
 	var newLimits []cty.Value
+	accCache := make(map[string]cachedAccInfo)
 
 	for it.Next() {
 		_, resVal := it.Element()
-		processedLimit, ok, err := processAutoscalingLimit(resVal, bp, mod)
+		processedLimit, ok, err := processAutoscalingLimit(resVal, bp, mod, accCache)
 		if err != nil {
 			return err
 		}
@@ -85,7 +92,7 @@ func validateAndGetLimits(bp Blueprint, mod *Module) (map[string]cty.Value, cty.
 	return caMap, limitsVal, true, nil
 }
 
-func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module) (cty.Value, bool, error) {
+func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCache map[string]cachedAccInfo) (cty.Value, bool, error) {
 	if !resVal.Type().IsObjectType() {
 		return cty.Value{}, false, nil
 	}
@@ -98,10 +105,21 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module) (cty.V
 	machineType := mtVal.AsString()
 
 	maxCount, maxCountPassed := extractMaxCount(resMap)
-	acceleratorsPerVM, accType, err := getAcceleratorCountAndType(machineType, bp, mod)
-	if err != nil {
-		return cty.Value{}, false, err
+	var acceleratorsPerVM int
+	var accType string
+
+	if cached, exists := accCache[machineType]; exists {
+		acceleratorsPerVM = cached.count
+		accType = cached.t
+	} else {
+		var err error
+		acceleratorsPerVM, accType, err = getAcceleratorCountAndType(machineType, bp, mod)
+		if err != nil {
+			return cty.Value{}, false, err
+		}
+		accCache[machineType] = cachedAccInfo{count: acceleratorsPerVM, t: accType}
 	}
+
 	if acceleratorsPerVM == 0 {
 		return cty.Value{}, false, nil
 	}
@@ -136,7 +154,7 @@ func validateAndExtractTotalAccelerators(maxCount int, maxCountPassed bool, acce
 		}
 		return maxCount, nil
 	}
-	// Default to a large number (e.g., 1000) to allow Node Auto-Provisioning 
+	// Default to a large number (e.g., 1000) to allow Node Auto-Provisioning
 	// to scale beyond a single VM capacity.
 	return 1000, nil
 }
@@ -149,13 +167,16 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 	}
 	mod.Settings = mod.Settings.With("machine_type", cty.StringVal(machineType))
 
+	// Defensively restore the original machine_type setting in all circumstances
+	defer func() {
+		if hasMt {
+			mod.Settings = mod.Settings.With("machine_type", origMt)
+		}
+	}()
+
 	cfgJson, err := getMachineConfigJSON(mod, bp)
 	if err != nil {
 		return 0, "", err
-	}
-
-	if hasMt {
-		mod.Settings = mod.Settings.With("machine_type", origMt)
 	}
 
 	var data struct {
@@ -174,7 +195,23 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 	if acc, ok := data.GPUs[machineType]; ok {
 		return acc.Count, acc.Type, nil
 	} else if acc, ok := data.TPUs[machineType]; ok {
-		return acc.Count, machineType, nil
+		// Map TPU machine type to GKE accelerator identifier
+		tpuAccMap := map[string]string{
+			"ct4p":  "tpu-v4-podslice",
+			"ct5lp": "tpu-v5-lite-podslice",
+			"ct5p":  "tpu-v5p-slice",
+			"ct6e":  "tpu-v6e-slice",
+			"tpu7x": "tpu7x",
+		}
+		accType := machineType
+		// Robustly extract prefix (e.g., "ct6e" from "ct6e-standard-4t")
+		parts := strings.Split(machineType, "-")
+		if len(parts) > 0 {
+			if mapped, exists := tpuAccMap[parts[0]]; exists {
+				accType = mapped
+			}
+		}
+		return acc.Count, accType, nil
 	}
 
 	return 0, "", nil
