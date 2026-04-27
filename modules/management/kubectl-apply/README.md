@@ -279,5 +279,5 @@ limitations under the License.
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_kubectl_apply_ready"></a> [kubectl\_apply\_ready](#output\_kubectl\_apply\_ready) | Ensures sequential ordering with other Helm chart modules to avoid race conditions or deployment conflicts. |
+| <a name="output_k8s_prerequisites_ready"></a> [k8s\_prerequisites\_ready](#output\_k8s\_prerequisites\_ready) | Ensures sequential ordering with other Helm chart modules to avoid race conditions or deployment conflicts. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

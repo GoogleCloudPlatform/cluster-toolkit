@@ -49,7 +49,8 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
-  # user_namespace: # Set the namespace to be configured for running workloads
+  # The namespace to be configured for running workloads
+  user_namespace: default
 
 
 deployment_groups:
@@ -113,6 +114,7 @@ deployment_groups:
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: true
       configure_workload_identity_sa: true
+      namespace: $(vars.user_namespace)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
@@ -163,6 +165,7 @@ deployment_groups:
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
+          namespace: $(vars.user_namespace)
       jobset:
         install: true
       # cert_manager:

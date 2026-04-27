@@ -53,7 +53,8 @@ vars:
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
-  # user_namespace: # Set the namespace to be configured for running workloads
+  # The namespace to be configured for running workloads
+  user_namespace: default
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -171,6 +172,7 @@ deployment_groups:
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: true
       configure_workload_identity_sa: true
+      namespace: $(vars.user_namespace)
       enable_filestore_csi: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true
@@ -294,6 +296,7 @@ deployment_groups:
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-v6e-pool.node_count_static * gke-tpu-v6e-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
+          namespace: $(vars.user_namespace)
       jobset:
         install: true
       # cert_manager:

@@ -31,11 +31,20 @@ cli_deployment_vars:
   tpu_topology: "{{ tpu_topology }}"
   static_node_count: "{{ static_node_count }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
+  user_namespace: ai-workloads
 custom_vars:
   project: "{{ project }}"
+  user_namespace: ai-workloads
   expected_tpu_count: 8
   instance_labels:
     tpu7x_onspot: true
   enable_spot: true
+  gcs_bucket: "ml-diagnostics-test"
+  image_tag: "us-central1-docker.pkg.dev/hpc-toolkit-dev/ml-diagnostics-test/sample-diagnostics-job:1.0.0"
+  tpu_accelerator: tpu7x
+  tpu_topology: 2x2x1
+  k8s_service_account: workload-identity-k8s-sa
+  jobset_name: sample-tpu-jobset
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
+- test-validation/test-gke-ml-diagnostics.yml
