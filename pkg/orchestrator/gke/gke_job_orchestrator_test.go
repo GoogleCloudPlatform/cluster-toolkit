@@ -17,6 +17,7 @@ package gke
 import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"os"
 	"strings"
 	"testing"
 )
@@ -93,7 +94,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			memoryLimit:     "",
 			gpuLimit:        "1",
 			wantLabels:      []string{"cloud.google.com/gke-accelerator: nvidia-h100-mega-80gb"},
-			wantLimits:      []string{"nvidia.com/gpu: 1"},
+			wantLimits:      []string{`nvidia.com/gpu: "1"`},
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
 		},
 		{
@@ -103,7 +104,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			memoryLimit:     "",
 			gpuLimit:        "1",
 			wantLabels:      []string{"cloud.google.com/gke-accelerator: nvidia-gb200"},
-			wantLimits:      []string{"nvidia.com/gpu: 1"},
+			wantLimits:      []string{`nvidia.com/gpu: "1"`},
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
 		},
 		{
@@ -113,7 +114,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			memoryLimit:     "",
 			gpuLimit:        "1",
 			wantLabels:      []string{"cloud.google.com/gke-accelerator: nvidia-l4"},
-			wantLimits:      []string{"nvidia.com/gpu: 1"},
+			wantLimits:      []string{`nvidia.com/gpu: "1"`},
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
 		},
 		{
@@ -123,7 +124,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			memoryLimit:     "",
 			tpuLimit:        "4",
 			wantLabels:      []string{"cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice"},
-			wantLimits:      []string{"google.com/tpu: 4"},
+			wantLimits:      []string{`google.com/tpu: "4"`},
 			dontWantLimits:  []string{"nvidia.com/gpu", "cpu:", "memory:"},
 		},
 		{
@@ -138,7 +139,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			memoryLimit:     "",
 			gpuLimit:        "1",
 			wantLabels:      []string{"cloud.google.com/gke-accelerator: nvidia-unknown-new-gpu"},
-			wantLimits:      []string{"nvidia.com/gpu: 1"},
+			wantLimits:      []string{`nvidia.com/gpu: "1"`},
 			dontWantLimits:  []string{"google.com/tpu", "cpu:", "memory:"},
 		},
 		{
@@ -147,7 +148,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			cpuLimit:        "",
 			memoryLimit:     "",
 			wantLabels:      []string{},
-			wantLimits:      []string{"cpu: 1"},
+			wantLimits:      []string{`cpu: "1"`},
 			dontWantLimits:  []string{"nvidia.com/gpu", "google.com/tpu"},
 			wantErr:         false,
 		},
@@ -339,6 +340,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 			ServerImage:      "server:latest",
 			WorkerImage:      "worker:latest",
 			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
 		},
 	}
 
@@ -350,6 +352,11 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest")
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	err = os.WriteFile("gcluster_pathways_manifest.yaml", []byte(manifest), 0644)
+	if err != nil {
+		t.Fatalf("failed to write manifest to file: %v", err)
 	}
 
 	if !strings.Contains(manifest, "name: pathways-test") {
@@ -364,8 +371,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		t.Errorf("manifest does not contain correct proxy image")
 	}
 
-	if !strings.Contains(manifest, "--gcs_location=gs://my-bucket") {
+	if !strings.Contains(manifest, "--gcs_scratch_location=gs://my-bucket") {
 		t.Errorf("manifest does not contain correct GCS location")
+	}
+
+	if !strings.Contains(manifest, "cloud.google.com/gke-nodepool: pathways-np") {
+		t.Errorf("manifest does not contain correct head node pool in nodeSelector")
 	}
 }
 
@@ -611,6 +622,95 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 	}
 }
 
+func TestAutoDetectCPUNodePool(t *testing.T) {
+	tests := []struct {
+		name      string
+		nodePools []gkeJobNodePool
+		wantPool  string
+	}{
+		{
+			name: "Single CPU pool (not matching expected names)",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "cpu-pool", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "",
+		},
+		{
+			name: "Single CPU pool (matching cpu-np)",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "cpu-np", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "cpu-np",
+		},
+		{
+			name: "Multiple CPU pools, prefer cpu-np",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "my-cpu-pool", Config: gkeNodePoolConfig{}},
+				{Name: "cpu-np", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "cpu-np",
+		},
+		{
+			name: "Multiple CPU pools, prefer pathways-np",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "my-cpu-pool", Config: gkeNodePoolConfig{}},
+				{Name: "pathways-np", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "pathways-np",
+		},
+		{
+			name: "Multiple CPU pools, return first matching",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "pathways-np", Config: gkeNodePoolConfig{}},
+				{Name: "cpu-np", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "pathways-np",
+		},
+		{
+			name: "Ambiguous CPU pools (none matching preferred names)",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "cpu-pool-1", Config: gkeNodePoolConfig{}},
+				{Name: "cpu-pool-2", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "",
+		},
+		{
+			name: "Exclude system pools by taint",
+			nodePools: []gkeJobNodePool{
+				{Name: "system", Config: gkeNodePoolConfig{Taints: []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true"}}}},
+				{Name: "cpu-np", Config: gkeNodePoolConfig{}},
+			},
+			wantPool: "cpu-np",
+		},
+		{
+			name: "Exclude pools with accelerators",
+			nodePools: []gkeJobNodePool{
+				{Name: "cpu-np", Config: gkeNodePoolConfig{}},
+				{Name: "gpu-pool", Config: gkeNodePoolConfig{Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-l4"}}}},
+			},
+			wantPool: "cpu-np",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{}
+			orc.clusterDesc.NodePools = tt.nodePools
+
+			got := orc.autoDetectCPUNodePool()
+			if got != tt.wantPool {
+				t.Errorf("autoDetectCPUNodePool() = %v, want %v", got, tt.wantPool)
+			}
+		})
+	}
+}
+
 func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -788,8 +888,8 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	if !strings.Contains(manifest, "export NCCL_DEBUG=INFO") {
-		t.Errorf("manifest missing expected GPU verbose export.\nManifest: %s", manifest)
+	if !strings.Contains(manifest, "name: NCCL_DEBUG") || !strings.Contains(manifest, "value: \"INFO\"") {
+		t.Errorf("manifest missing expected GPU verbose env var.\nManifest: %s", manifest)
 	}
 }
 
@@ -808,8 +908,8 @@ func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	if !strings.Contains(manifest, "export TPU_STDERR_LOG_LEVEL=0") {
-		t.Errorf("manifest missing expected TPU verbose export.\nManifest: %s", manifest)
+	if !strings.Contains(manifest, "name: TPU_STDERR_LOG_LEVEL") || !strings.Contains(manifest, "value: \"0\"") {
+		t.Errorf("manifest missing expected TPU verbose env var.\nManifest: %s", manifest)
 	}
 }
 
@@ -1176,6 +1276,21 @@ func TestResolveTopologyForChips(t *testing.T) {
 }
 
 func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
+	pipeRead, pipeWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pipeRead.Close()
+	defer pipeWrite.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	if _, err := pipeWrite.Write([]byte("y\n")); err != nil {
+		t.Fatal(err)
+	}
+
 	responses := map[string][]shell.CommandResult{
 		"kubectl get localqueue default-queue -n default": {
 			{ExitCode: 1, Stderr: "Error from server (NotFound): localqueues.kueue.x-k8s.io \"default-queue\" not found"},
@@ -1210,7 +1325,7 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 		KueueQueueName: "default-queue",
 	}
 
-	err := orc.configureClusterEnvironment(job)
+	err = orc.configureClusterEnvironment(job)
 	if err != nil {
 		t.Fatalf("configureClusterEnvironment failed: %v", err)
 	}

@@ -14,6 +14,8 @@
 
 package orchestrator
 
+var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}
+
 type PathwaysJobDefinition struct {
 	// Core Pathways Images
 	ProxyServerImage string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest
@@ -22,7 +24,7 @@ type PathwaysJobDefinition struct {
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false
-	GCSLocation      string // Default: gs://cloud-pathways-staging/tmp
+	GCSLocation      string // Required for Pathways jobs.
 	ElasticSlices    int    // Default: 0
 	MaxSliceRestarts int    // Default: 1
 
@@ -33,6 +35,8 @@ type PathwaysJobDefinition struct {
 
 	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
+
+	HeadNodePool string // Resolved node pool to use for the Pathways head job.
 }
 
 type VolumeDefinition struct {
@@ -40,6 +44,7 @@ type VolumeDefinition struct {
 	Source    string // The raw <src>
 	MountPath string // The <dest>
 	Type      string // "gcsfuse", "hostPath", "pvc"
+	ReadOnly  bool
 }
 
 type JobDefinition struct {

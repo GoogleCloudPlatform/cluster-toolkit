@@ -210,70 +210,90 @@ func resetSubmitCmdFlags() {
 	pathways = orchestrator.PathwaysJobDefinition{}
 }
 
-func TestParseVolumeFlag(t *testing.T) {
+func TestParseVolumeFlag_PVC(t *testing.T) {
+	got, err := parseVolumeFlag([]string{"my-pvc:/mnt/data"})
+	if err != nil {
+		t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(got))
+	}
+	if got[0].Type != "pvc" || got[0].MountPath != "/mnt/data" || got[0].ReadOnly != true {
+		t.Errorf("unexpected volume definition: %+v", got[0])
+	}
+}
+
+func TestParseVolumeFlag_GCS(t *testing.T) {
 	tests := []struct {
-		name      string
-		vStrs     []string
-		wantCount int
-		wantErr   bool
-		checkFunc func([]orchestrator.VolumeDefinition) bool
+		name     string
+		vStr     string
+		readOnly bool
+	}{
+		{"Valid GCS Fuse", "gs://my-bucket:/mnt/gcs", true},
+		{"Valid GCS Fuse with ro", "gs://my-bucket:/mnt/gcs:ro", true},
+		{"Valid GCS Fuse with rw", "gs://my-bucket:/mnt/gcs:rw", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseVolumeFlag([]string{tt.vStr})
+			if err != nil {
+				t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("expected 1 volume, got %d", len(got))
+			}
+			if got[0].Type != "gcsfuse" || got[0].MountPath != "/mnt/gcs" || got[0].ReadOnly != tt.readOnly {
+				t.Errorf("unexpected volume definition: %+v", got[0])
+			}
+		})
+	}
+}
+
+func TestParseVolumeFlag_HostPath(t *testing.T) {
+	got, err := parseVolumeFlag([]string{"/home/user/data:/mnt/host"})
+	if err != nil {
+		t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(got))
+	}
+	if got[0].Type != "hostPath" || got[0].MountPath != "/mnt/host" || got[0].ReadOnly != true {
+		t.Errorf("unexpected volume definition: %+v", got[0])
+	}
+}
+
+func TestParseVolumeFlag_Invalid(t *testing.T) {
+	tests := []struct {
+		name  string
+		vStrs []string
 	}{
 		{
-			name:      "Valid PVC (default)",
-			vStrs:     []string{"my-pvc:/mnt/data"},
-			wantCount: 1,
-			wantErr:   false,
-			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
-				return v[0].Type == "pvc" && v[0].MountPath == "/mnt/data"
-			},
+			name:  "Invalid mode",
+			vStrs: []string{"gs://my-bucket:/mnt/gcs:invalid"},
 		},
 		{
-			name:      "Valid GCS Fuse",
-			vStrs:     []string{"gs://my-bucket:/mnt/gcs"},
-			wantCount: 1,
-			wantErr:   false,
-			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
-				return v[0].Type == "gcsfuse" && v[0].MountPath == "/mnt/gcs"
-			},
+			name:  "Duplicate source",
+			vStrs: []string{"gs://my-bucket:/mnt/gcs1", "gs://my-bucket:/mnt/gcs2"},
 		},
 		{
-			name:      "Valid Host Path",
-			vStrs:     []string{"/home/user/data:/mnt/host"},
-			wantCount: 1,
-			wantErr:   false,
-			checkFunc: func(v []orchestrator.VolumeDefinition) bool {
-				return v[0].Type == "hostPath" && v[0].MountPath == "/mnt/host"
-			},
+			name:  "Duplicate destination",
+			vStrs: []string{"gs://my-bucket1:/mnt/gcs", "gs://my-bucket2:/mnt/gcs"},
 		},
 		{
-			name:      "Invalid Format (No separator)",
-			vStrs:     []string{"invalid-format"},
-			wantCount: 0,
-			wantErr:   true,
-			checkFunc: nil,
+			name:  "Invalid Format (No separator)",
+			vStrs: []string{"invalid-format"},
 		},
 		{
-			name:      "Invalid Format (Missing destination for URI)",
-			vStrs:     []string{"gs://my-bucket"},
-			wantCount: 0,
-			wantErr:   true,
-			checkFunc: nil,
+			name:  "Invalid Format (Missing destination for URI)",
+			vStrs: []string{"gs://my-bucket"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseVolumeFlag(tt.vStrs)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseVolumeFlag() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if !tt.wantErr {
-				if len(got) != tt.wantCount {
-					t.Errorf("parseVolumeFlag() got %v volumes, want %v", len(got), tt.wantCount)
-				}
-				if tt.checkFunc != nil && !tt.checkFunc(got) {
-					t.Errorf("parseVolumeFlag() did not match assertions: %+v", got)
-				}
+			_, err := parseVolumeFlag(tt.vStrs)
+			if err == nil {
+				t.Fatalf("parseVolumeFlag() expected error, got nil")
 			}
 		})
 	}
@@ -333,5 +353,84 @@ func TestParseDurationToSeconds(t *testing.T) {
 				t.Errorf("parseDurationToSeconds() got = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
+	os.Setenv("GCLUSTER_IMAGE_REPO", "")
+	defer os.Setenv("GCLUSTER_IMAGE_REPO", origRepo)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "fail-test",
+		"--base-image", "python:3.9-slim",
+		"--build-context", "job_details",
+		"--command", "echo hello",
+		"--accelerator", "n2-standard-4",
+		"--cluster", "test-cluster",
+	)
+
+	if err == nil {
+		t.Fatal("expected error for missing GCLUSTER_IMAGE_REPO, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "GCLUSTER_IMAGE_REPO environment variable is required") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	origUser := os.Getenv("USER")
+	origUsername := os.Getenv("USERNAME")
+	os.Setenv("USER", "")
+	os.Setenv("USERNAME", "")
+	defer os.Setenv("USER", origUser)
+	defer os.Setenv("USERNAME", origUsername)
+
+	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
+	os.Setenv("GCLUSTER_IMAGE_REPO", "gcluster")
+	defer os.Setenv("GCLUSTER_IMAGE_REPO", origRepo)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "fail-test",
+		"--base-image", "python:3.9-slim",
+		"--build-context", "job_details",
+		"--command", "echo hello",
+		"--accelerator", "n2-standard-4",
+		"--cluster", "test-cluster",
+	)
+
+	if err == nil {
+		t.Fatal("expected error for missing user identity, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to determine user identity") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

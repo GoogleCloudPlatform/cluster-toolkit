@@ -60,6 +60,22 @@ spec:
                 - {{ printf "%q" . }}
                 {{- end }}
 {{.ResourcesYAML}}
+                env:
+                {{- if .Verbose }}
+                {{- if .IsTPU }}
+                - name: TPU_STDERR_LOG_LEVEL
+                  value: "0"
+                - name: TPU_MIN_LOG_LEVEL
+                  value: "0"
+                - name: TF_CPP_MIN_LOG_LEVEL
+                  value: "0"
+                - name: TPU_VMODULE
+                  value: "real_program_continuator=1"
+                {{- else if .IsGPU }}
+                - name: NCCL_DEBUG
+                  value: "INFO"
+                {{- end }}
+                {{- end }}
                 volumeMounts:
                 - name: temp-storage
                   mountPath: /mnt/data

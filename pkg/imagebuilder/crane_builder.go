@@ -139,15 +139,19 @@ func BuildContainerImageFromBaseImage(
 func GenerateImageName(project, location string) (string, error) {
 	userName := os.Getenv("USER")
 	if userName == "" {
-		userName = "defaultName"
+		// Check USERNAME for Windows compatibility
+		userName = os.Getenv("USERNAME")
+	}
+	if userName == "" {
+		return "", fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME)")
 	}
 
 	repoName := os.Getenv("GCLUSTER_IMAGE_REPO")
 	if repoName == "" {
-		repoName = "gcluster"
+		return "", fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required but not set. Please set it in your environment (e.g., export GCLUSTER_IMAGE_REPO=<repo>)")
 	}
 
-	region := extractRegion(location)
+	region := shell.ExtractRegion(location)
 
 	tagRandomPrefix, err := shell.RandomString(4)
 	if err != nil {
@@ -309,12 +313,4 @@ func createFilteredTar(sourceDir string, ignoreMatcher *patternmatcher.PatternMa
 	}
 
 	return tmpFile.Name(), nil
-}
-
-func extractRegion(location string) string {
-	parts := strings.Split(location, "-")
-	if len(parts) == 3 {
-		return parts[0] + "-" + parts[1]
-	}
-	return location
 }

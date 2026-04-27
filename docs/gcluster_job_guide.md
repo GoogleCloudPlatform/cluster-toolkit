@@ -121,17 +121,30 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
 * `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
-* `--mount stringArray`: Mount a storage volume (e.g., `gs://bucket:/data` or `/host/path:/data`). Can be specified multiple times.
+* `--mount stringArray`: Mount a storage volume (format: `<src>:<dest>[:<mode>]`, mode can be `'ro'` or `'rw'`, default `'ro'`). Can be specified multiple times.
+* `--pathways`: If present, gcluster will generate a manifest for a Pathways job.
+* `--pathways-gcs-location string`: Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.
+* `--pathways-proxy-server-image string`: The image for the Pathways proxy server.
+* `--pathways-server-image string`: The image for the Pathways server.
+* `--pathways-worker-image string`: The image for the Pathways worker.
+* `--pathways-headless`: If present, the user's workload container will not be deployed within the `pathways-head` job.
+* `--pathways-elastic-slices int`: Configures the number of elastic slices.
+* `--pathways-max-slice-restarts int`: Maximum times the workers in a slice can be restarted.
+* `--pathways-proxy-args string`: Arbitrary additional command-line arguments for `pathways-proxy`.
+* `--pathways-server-args string`: Arbitrary additional command-line arguments for `pathways-rm`.
+* `--pathways-worker-args string`: Arbitrary additional command-line arguments for `pathways-worker`.
+* `--pathways-colocated-python-sidecar-image string`: Image for an optional Python-based sidecar container.
+* `--pathways-head-np string`: The node pool to use for the Pathways head job.
 
 ## 7. Submit the Sample Job with `gcluster job submit`
 
 Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image using Crane and push it to Artifact Registry in your project.
 
 > [!IMPORTANT]
-> The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/gcluster/<user>-runner:<tag>`.
+> The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`.
 
-* The **repository** defaults to `gcluster`. You can override this by setting the `GCLUSTER_IMAGE_REPO` environment variable. The repository **must exist** before submitting the job.
-* The fallback username will be `defaultName` if the `USER` environment variable is not set.
+* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the Artifact Registry repository name when using `--build-context` for on-the-fly builds. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job.
+* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context`. `gcluster` uses this to ensure unique image tagging. The command will fail if both are missing.
 
 ### Unified Job Submission
 
@@ -177,7 +190,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
 
 ### 7.1 Example: Submit Job with Persistent Storage (Mounting Bucket)
 
-You can mount Cloud Storage buckets or host paths using the `--mount` flag:
+You can mount Cloud Storage buckets or host paths using the `--mount` flag. By default, mounts are read-only. You can specify read-write mode by appending `:rw` to the mount string:
 
 ```bash
 ./gcluster job submit \
@@ -189,7 +202,7 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag:
   --accelerator n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --mount "gs://<YOUR_BUCKET_NAME>:/data"
+  --mount "gs://<YOUR_BUCKET_NAME>:/data:rw"
 ```
 
 ## 8. Verify the Job
