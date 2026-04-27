@@ -218,7 +218,7 @@ limitations under the License.
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 | <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
-| <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.9 |
+| <a name="requirement_time"></a> [time](#requirement\_time) | ~> 0.13 |
 
 ## Providers
 
@@ -227,7 +227,7 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
-| <a name="provider_time"></a> [time](#provider\_time) | ~> 0.9 |
+| <a name="provider_time"></a> [time](#provider\_time) | ~> 0.13 |
 
 ## Modules
 

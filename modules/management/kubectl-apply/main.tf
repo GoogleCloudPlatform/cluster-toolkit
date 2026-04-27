@@ -33,6 +33,8 @@ locals {
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
 
+  webhook_wait_duration = "60s"
+
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
     (
@@ -191,9 +193,10 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+# Added to resolve transient kueue webhook failures where Kueue requires a few extra seconds to fully boot its internal systems.
 resource "time_sleep" "wait_for_webhook" {
   count           = local.install_kueue ? 1 : 0
-  create_duration = "60s"
+  create_duration = local.webhook_wait_duration
   depends_on      = [module.install_kueue]
 }
 
