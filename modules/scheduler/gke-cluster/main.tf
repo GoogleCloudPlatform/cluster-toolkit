@@ -179,8 +179,8 @@ resource "google_container_cluster" "gke_cluster" {
         oauth_scopes    = var.cluster_autoscaling.oauth_scopes
 
         management {
-          auto_upgrade = true
-          auto_repair  = true
+          auto_upgrade = var.cluster_autoscaling.autoprovisioning_auto_upgrade
+          auto_repair  = var.cluster_autoscaling.autoprovisioning_auto_repair
         }
 
         disk_size = var.cluster_autoscaling.autoprovisioning_disk_size_gb

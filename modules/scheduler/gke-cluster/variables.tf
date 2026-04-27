@@ -615,6 +615,8 @@ variable "cluster_autoscaling" {
     oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
     autoprovisioning_disk_size_gb = optional(number, 100)
     autoprovisioning_disk_type    = optional(string, "pd-balanced")
+    autoprovisioning_auto_upgrade = optional(bool, true)
+    autoprovisioning_auto_repair  = optional(bool, true)
   })
   default = {
     enabled = false
@@ -623,6 +625,10 @@ variable "cluster_autoscaling" {
   validation {
     condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
     error_message = "autoprovisioning_disk_type must be one of pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
+  }
+  validation {
+    condition     = coalesce(var.cluster_autoscaling.autoprovisioning_disk_size_gb, 100) >= 10
+    error_message = "autoprovisioning_disk_size_gb must be at least 10 GB."
   }
 }
 variable "autoprovisioning_cpu_max" {
