@@ -124,7 +124,7 @@ func (g *GKEOrchestrator) ensurePriorityClassesInstalled() error {
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
 	promptMsg := fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
 	if !shell.PromptYesNo(promptMsg) {
-		logging.Fatal("User declined to re-install Kueue. Exiting.")
+		return fmt.Errorf("user declined to re-install Kueue. Exiting.")
 	}
 
 	logging.Info("Proceeding with clean re-installation of Kueue...")
@@ -255,7 +255,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 		return err
 	}
 
-	if err := g.applyManifests(cleanedManifests, "jobset.yaml"); err != nil {
+	if err := g.applyManifests(cleanedManifests, "kueue.yaml"); err != nil {
 		return err
 	}
 
@@ -365,7 +365,7 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	}
 
 	cqMap := map[string]interface{}{
-		"apiVersion": "kueue.x-k8s.io/v1beta1",
+		"apiVersion": "kueue.x-k8s.io/" + kueueAPIVersion,
 		"kind":       "ClusterQueue",
 		"metadata": map[string]interface{}{
 			"name": name,
@@ -419,7 +419,7 @@ func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, m
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {
 	rfMap := map[string]interface{}{
-		"apiVersion": "kueue.x-k8s.io/v1beta1",
+		"apiVersion": "kueue.x-k8s.io/" + kueueAPIVersion,
 		"kind":       "ResourceFlavor",
 		"metadata": map[string]interface{}{
 			"name": name,
@@ -461,7 +461,7 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 		return err
 	}
 
-	if err := g.applyManifests(cleanedManifests, "kueue.yaml"); err != nil {
+	if err := g.applyManifests(cleanedManifests, "jobset.yaml"); err != nil {
 		return err
 	}
 
@@ -561,15 +561,21 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 
 	// Active probe to ensure webhook is processing requests
 	logging.Info("Probing Kueue webhook readiness...")
-	probeManifest := `apiVersion: kueue.x-k8s.io/v1beta1
+	probeManifest := `apiVersion: kueue.x-k8s.io/` + kueueAPIVersion + `
 kind: ResourceFlavor
 metadata:
   name: gcluster-webhook-probe
 `
-	probeFile := filepath.Join(os.TempDir(), "gcluster-webhook-probe.yaml")
-	if err := os.WriteFile(probeFile, []byte(probeManifest), 0644); err != nil {
+	f, err := os.CreateTemp("", "gcluster-webhook-probe-*.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to create probe manifest file: %w", err)
+	}
+	probeFile := f.Name()
+	if _, err := f.Write([]byte(probeManifest)); err != nil {
+		f.Close()
 		return fmt.Errorf("failed to write probe manifest: %w", err)
 	}
+	f.Close()
 	defer os.Remove(probeFile)
 
 	for i := 0; i < 20; i++ {

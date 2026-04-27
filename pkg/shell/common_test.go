@@ -130,3 +130,39 @@ func (s *MySuite) TestRandomString(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(res, Not(Equals), res2)
 }
+
+func (s *MySuite) TestAskForConfirmation_Yes(c *C) {
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer pipeRead.Close()
+	defer pipeWrite.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	if _, err := pipeWrite.Write([]byte("y\n")); err != nil {
+		c.Fatal(err)
+	}
+
+	got := PromptYesNo("Test prompt")
+	c.Assert(got, Equals, true)
+}
+
+func (s *MySuite) TestAskForConfirmation_No(c *C) {
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer pipeRead.Close()
+	defer pipeWrite.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	if _, err := pipeWrite.Write([]byte("n\n")); err != nil {
+		c.Fatal(err)
+	}
+
+	got := PromptYesNo("Test prompt")
+	c.Assert(got, Equals, false)
+}

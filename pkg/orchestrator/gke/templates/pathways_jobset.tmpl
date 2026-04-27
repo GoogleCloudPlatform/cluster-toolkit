@@ -6,6 +6,7 @@ metadata:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
 spec:
+  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   network:
     enableDNSHostnames: true
     publishNotReadyAddresses: true
@@ -25,7 +26,11 @@ spec:
   - name: pathways-head
     replicas: 1
     template:
+      metadata:
+        annotations:
+          alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname
       spec:
+        completionMode: Indexed
         parallelism: 1
         completions: 1
         backoffLimit: 0
@@ -41,6 +46,13 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
+{{- if .ServiceAccountName }}
+            serviceAccountName: {{.ServiceAccountName}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+            imagePullSecrets:
+{{.ImagePullSecrets}}
+{{- end }}
 {{- if not .Pathways.Headless}}
             initContainers:
 {{- else }}
@@ -63,6 +75,10 @@ spec:
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
+              resources:
+                limits:
+                  cpu: "16"
+                  memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               args:
@@ -92,6 +108,10 @@ spec:
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
+              resources:
+                limits:
+                  cpu: "8"
+                  memory: "32Gi"
               volumeMounts:
               - mountPath: /tmp
                 name: shared-tmp
@@ -126,6 +146,7 @@ spec:
     replicas: {{.NumSlices}}
     template:
       spec:
+        completionMode: Indexed
         parallelism: {{.VmsPerSlice}}
         completions: {{.VmsPerSlice}}
         backoffLimit: 0
@@ -146,6 +167,17 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
+{{- if .ServiceAccountName }}
+            serviceAccountName: {{.ServiceAccountName}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+            imagePullSecrets:
+{{.ImagePullSecrets}}
+{{- end }}
+{{- if .PriorityClassName }}
+            priorityClassName: {{.PriorityClassName}}
+{{- end }}
+            terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
@@ -167,6 +199,8 @@ spec:
               {{- end }}
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
+              - name: MEGASCALE_GRPC_ENABLE_XOR_TRACER
+                value: "false"
               - name: MEGASCALE_NUM_SLICES
                 valueFrom:
                   fieldRef:

@@ -68,7 +68,7 @@ func TestBuildResourcesString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := g.buildResourcesString(tt.cpu, tt.mem, tt.gpu, tt.tpu)
+			got, err := g.buildResourcesString(tt.cpu, tt.mem, tt.gpu, tt.tpu, 16)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildResourcesString() error = %v, wantErr %v", err, tt.wantErr)
 				return

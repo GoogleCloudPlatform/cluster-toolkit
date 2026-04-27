@@ -55,7 +55,9 @@ Supported keys:
 			return fmt.Errorf("invalid configuration key: %s. Supported keys: project, cluster, location", key)
 		}
 
-		saveContext(ctx)
+		if err := saveContext(ctx); err != nil {
+			return err
+		}
 		logging.Info("Configuration updated successfully.")
 		return nil
 	},

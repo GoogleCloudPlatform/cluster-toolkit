@@ -381,6 +381,8 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 		"--command", "echo hello",
 		"--accelerator", "n2-standard-4",
 		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
 	)
 
 	if err == nil {
@@ -424,6 +426,8 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 		"--command", "echo hello",
 		"--accelerator", "n2-standard-4",
 		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
 	)
 
 	if err == nil {
