@@ -596,6 +596,8 @@ variable "cluster_autoscaling" {
   oauth_scopes:          Scopes assigned to nodes provisioned by NAP.
   autoprovisioning_disk_size_gb: The disk size of auto-provisioned nodes (GB). Default 100.
   autoprovisioning_disk_type:    The disk type of auto-provisioned nodes. Default pd-balanced.
+  autoprovisioning_cpu_max:      The maximum number of CPU cores limit. Default 1,000,000.
+  autoprovisioning_memory_max:   The maximum Memory limit in GB. Default 10,000,000.
   limits:                Explicit upper bounds to apply during scaling.
     autoprovisioning_machine_type: GCE machine type tier (used as input).
     autoprovisioning_resource_type: The underlying specific GKE accelerator resource name (inferred by expansion).
@@ -617,6 +619,8 @@ variable "cluster_autoscaling" {
     autoprovisioning_disk_type    = optional(string, "pd-balanced")
     autoprovisioning_auto_upgrade = optional(bool, true)
     autoprovisioning_auto_repair  = optional(bool, true)
+    autoprovisioning_cpu_max      = optional(number, 1000000)
+    autoprovisioning_memory_max   = optional(number, 10000000)
   })
   default = {
     enabled = false
@@ -630,15 +634,4 @@ variable "cluster_autoscaling" {
     condition     = coalesce(var.cluster_autoscaling.autoprovisioning_disk_size_gb, 100) >= 10
     error_message = "autoprovisioning_disk_size_gb must be at least 10 GB."
   }
-}
-variable "autoprovisioning_cpu_max" {
-  description = "Maximum number of CPU cores that the cluster can scale up to via Node Auto-Provisioning."
-  type        = number
-  default     = 1000000
-}
-
-variable "autoprovisioning_memory_max" {
-  description = "Maximum amount of memory (in GB) that the cluster can scale up to via Node Auto-Provisioning."
-  type        = number
-  default     = 10000000
 }
