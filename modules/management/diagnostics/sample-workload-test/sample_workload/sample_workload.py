@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example training script."""
+"""Example training script demonstrating Google Cloud ML Diagnostics (Diagon++) integration."""
 
 import logging
 import os
@@ -24,12 +24,14 @@ from jax.sharding import PartitionSpec as P
 import numpy as np
 import random
 
+# Import ML Diagnostics SDK modules
 from google_cloud_mldiagnostics import machinelearning_run
 from google_cloud_mldiagnostics import metrics
 from google_cloud_mldiagnostics import xprof
 from google_cloud_mldiagnostics import metric_types
 
 
+# Define a simple dummy model for demonstration
 def predict(params, inputs):
   for W, b in params:
     outputs = jnp.dot(inputs, W) + b
@@ -66,11 +68,13 @@ def main():
       level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
   )
   logging.info("Starting JAX training job.")
+  
+  # Initialize JAX distributed for multi-node TPU communication
   jax.distributed.initialize()
   logging.info("✅ JAX distributed environment initialized successfully!")
 
-  
-  # --- Training loop starts ---
+  # Initialize ML Diagnostics Run
+  # This connects the workload to the Diagon++ managed service using the provided GCP configuration.
   machinelearning_run(
       name="workload-diagon",
       run_group="test_rungroup",
@@ -97,8 +101,11 @@ def main():
   params = jax.device_put(params, replicated_sharding)
 
   step_size = 1e-5
+  
+  # Initialize and start XProf profiling
   prof = xprof()
   prof.start()
+  
   for step in range(1000):
     start_time = time.time()
     grads = gradfun(params, batch)
@@ -107,19 +114,25 @@ def main():
         for (W, b), (dW, db) in zip(params, grads)
     ]
     time.sleep(0.5)  # Simulate some extra work
+    
     if (step + 1) % 10 == 0:
-      # Here we are not calculating the metrics following their definition strictly. We populate relatively random numbers only for test.
+      # Record key metrics to Cloud Monitoring / Pantheon Dashboard
+      # Note: These are dummy values generated for verification purposes.
+      
       # Model quality metrics
       metrics.record(metric_types.MetricType.LEARNING_RATE, step_size, step=step + 1)
       metrics.record(metric_types.MetricType.LOSS, float(loss_jit(params, batch)), step=step + 1)
       metrics.record(metric_types.MetricType.GRADIENT_NORM, float(np.sqrt(sum(jnp.vdot(g, g) for p in grads for g in p))), step=step + 1)
       metrics.record(metric_types.MetricType.TOTAL_WEIGHTS, sum(jnp.size(p) for layer in params for p in layer), step=step + 1)
+      
       # Model performance metrics
       metrics.record(metric_types.MetricType.STEP_TIME, (time.time() - start_time)/10, step=step + 1)
       metrics.record(metric_types.MetricType.THROUGHPUT, 1000 * random.normalvariate(0.5, 0.1), step=step + 1)
       metrics.record(metric_types.MetricType.LATENCY, 1 * random.normalvariate(0.5, 0.1), step=step + 1)
       metrics.record(metric_types.MetricType.TFLOPS, 200 * random.uniform(0.5, 1), step=step + 1)
       metrics.record(metric_types.MetricType.MFU, 100 * random.uniform(0.5, 1), step=step + 1)
+      
+  # Stop profiling and finalize logs/traces
   prof.stop()
 
   logging.info("🎉 Training finished successfully!")
