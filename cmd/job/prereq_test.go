@@ -15,6 +15,7 @@
 package job
 
 import (
+	"bytes"
 	"encoding/json"
 	"hpc-toolkit/pkg/shell"
 	"os"
@@ -22,6 +23,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestIsStateStale(t *testing.T) {
@@ -360,3 +363,44 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 		t.Errorf("getADCSetupCommand() = %q, want %q", got, want)
 	}
 }
+
+func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 0}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	cmd := &cobra.Command{}
+	projectID := "test-project"
+	location := "us-central1-a"
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := ensurePrerequisites(cmd, &projectID, location)
+	if err == nil {
+		t.Error("expected error because prerequisites are missing, got nil")
+	}
+
+	output := buf.String()
+	expectedCmd := "gcloud auth configure-docker us-central1-docker.pkg.dev --quiet"
+	if !strings.Contains(output, expectedCmd) {
+		t.Errorf("expected output to contain %q, but got:\n%s", expectedCmd, output)
+	}
+}
+
+type mockPrereqStore struct{}
+
+func (m *mockPrereqStore) Load() PrereqState {
+	return PrereqState{
+		LastCheckedTimestamp: time.Now().Add(-48 * time.Hour), // Stale
+	}
+}
+
+func (m *mockPrereqStore) Save(state PrereqState) {}

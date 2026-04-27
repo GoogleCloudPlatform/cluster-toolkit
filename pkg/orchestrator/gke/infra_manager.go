@@ -30,6 +30,8 @@ import (
 	"text/template"
 	"time"
 
+	"hpc-toolkit/pkg/orchestrator"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -228,16 +230,14 @@ func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
 }
 
 func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
-	priorityClasses := []string{"very-low", "low", "medium", "high", "very-high"}
-	for _, pc := range priorityClasses {
-		res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", pc)
-		if res.ExitCode != 0 {
-			if strings.Contains(res.Stderr, "not found") || strings.Contains(res.Stdout, "NotFound") {
-				logging.Info("PriorityClass %s not found.", pc)
-				return false, nil
-			}
-			return false, fmt.Errorf("failed to check for PriorityClass %s: %s\n%s", pc, res.Stderr, res.Stdout)
-		}
+	args := []string{"get", "priorityclass"}
+	args = append(args, orchestrator.ValidPriorityClasses...)
+	args = append(args, "-o", "name")
+
+	res := g.executor.ExecuteCommand("kubectl", args...)
+	if res.ExitCode != 0 {
+		logging.Info("One or more PriorityClasses not found.")
+		return false, nil
 	}
 	return true, nil
 }
@@ -387,7 +387,7 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 
 func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, mainCovered, pathwaysCovered map[string]bool) ([]map[string]interface{}, bool) {
 	var resources []map[string]interface{}
-	isPathways := (name == "cpu-user")
+	isPathways := (name == "pathways-flavor")
 
 	if fc.CPUs > 0 {
 		if isPathways {

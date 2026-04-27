@@ -70,7 +70,7 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 					CPUs:     100,
 					MemoryGi: 400,
 				},
-				"cpu-user": { // Pathways flavor
+				"pathways-flavor": { // Pathways flavor
 					CPUs:     480,
 					MemoryGi: 2000,
 				},
@@ -315,7 +315,8 @@ func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				return shell.CommandResult{ExitCode: 1, Stderr: "not found"}
+				// Return failure with "not found" to simulate missing priority classes
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): priorityclass \"very-low\" not found"}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
 				applyCalled = true
@@ -345,6 +346,7 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
+				// Return success to simulate all are present
 				return shell.CommandResult{ExitCode: 0}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {

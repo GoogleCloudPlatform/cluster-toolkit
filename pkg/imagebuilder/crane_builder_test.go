@@ -303,6 +303,15 @@ func getFilesFromTar(t *testing.T, tarPath string) map[string]bool {
 func TestBuildContainerImageFromBaseImage_Success(t *testing.T) {
 	// Preserve originals
 	origPull := cranePull
+
+	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
+	os.Setenv("GCLUSTER_IMAGE_REPO", "gcluster")
+	defer os.Setenv("GCLUSTER_IMAGE_REPO", origRepo)
+
+	origUser := os.Getenv("USER")
+	os.Setenv("USER", "testuser")
+	defer os.Setenv("USER", origUser)
+
 	origPush := cranePush
 	origAppend := appendLayers
 	origLayerOpener := layerFromOpener
@@ -421,4 +430,72 @@ func findSymlinkInTar(t *testing.T, tr *tar.Reader, linkName, expectedTarget str
 		}
 	}
 	return false
+}
+
+func TestWriteFileContent_OpenError(t *testing.T) {
+	err := writeFileContent(nil, "non-existent-file")
+	if err == nil {
+		t.Error("expected error opening non-existent file, got nil")
+	}
+}
+
+func TestReadDockerignorePatterns_OpenError(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "dockerignore-open-error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dockerignorePath := filepath.Join(tempDir, ".dockerignore")
+	// Create a directory instead of a file to simulate a read error
+	if err := os.Mkdir(dockerignorePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = ReadDockerignorePatterns(tempDir, nil)
+	if err == nil {
+		t.Error("expected error reading unreadable .dockerignore, got nil")
+	}
+}
+
+func TestCreateFilteredTar_IgnoreDir(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tar-test-ignore-dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a directory to ignore
+	ignoredDir := filepath.Join(tempDir, "ignored_dir")
+	if err := os.Mkdir(ignoredDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ignoredDir, "file.txt"), []byte("ignored content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a file that should not be ignored
+	if err := os.WriteFile(filepath.Join(tempDir, "keep.txt"), []byte("keep content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	matcher, err := patternmatcher.New([]string{"ignored_dir/"})
+	if err != nil {
+		t.Fatalf("failed to create matcher: %v", err)
+	}
+
+	tarPath, err := createFilteredTar(tempDir, matcher)
+	if err != nil {
+		t.Fatalf("createFilteredTar() error = %v", err)
+	}
+	defer os.Remove(tarPath)
+
+	foundFiles := getFilesFromTar(t, tarPath)
+
+	if !foundFiles["keep.txt"] {
+		t.Error("keep.txt not found in tarball")
+	}
+	if foundFiles["ignored_dir/file.txt"] {
+		t.Error("ignored_dir/file.txt should have been ignored but was found in tarball")
+	}
 }

@@ -46,7 +46,6 @@ const (
 
 	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
 	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
-	defaultPathwaysGCSLocation = "gs://cloud-pathways-staging/tmp"
 )
 
 func NewGKEOrchestrator() *GKEOrchestrator {
@@ -284,7 +283,7 @@ resource.labels.location="%s"
 resource.labels.cluster_name="%s"
 resource.labels.namespace_name="default"
 resource.labels.pod_name:"%s-"
-severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, job.WorkloadName)
+severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, jobName)
 
 	encodedFilter := url.QueryEscape(logFilter)
 	logsLink := fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
@@ -317,7 +316,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 	if job.Pathways.GCSLocation == "" {
-		job.Pathways.GCSLocation = defaultPathwaysGCSLocation
+		return "", fmt.Errorf("pathways-gcs-location is required when using --pathways")
 	}
 
 	tmpl, err := template.ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
@@ -334,7 +333,11 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	if err == nil {
-		opts.ResourcesString = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		if err != nil {
+			return "", err
+		}
+		opts.ResourcesString = resStr
 	} else {
 		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
 	}
@@ -366,7 +369,7 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 	return nil
 }
 
-func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
 	projectID, err := g.getProjectID(job.ProjectID)
 	if err != nil {
 		return err
@@ -396,6 +399,44 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	g.capacity = capacity
 	g.nodePoolSAs = nodePoolSAs
 	logging.Info("Calculated cluster capacity: %+v", g.capacity)
+
+	if job.IsPathwaysJob {
+		if job.Pathways.HeadNodePool != "" {
+			g.resolvedHeadNodePool = job.Pathways.HeadNodePool
+		} else {
+			g.resolvedHeadNodePool = g.autoDetectCPUNodePool()
+		}
+		if g.resolvedHeadNodePool == "" {
+			return fmt.Errorf("failed to auto-detect a suitable CPU node pool (expected 'cpu-np' or 'pathways-np') for Pathways head job. You can explicitly specify your head node pool name using the --pathways-head-np flag")
+		}
+		job.Pathways.HeadNodePool = g.resolvedHeadNodePool
+	}
+
+	return nil
+}
+
+func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
+	for _, np := range g.clusterDesc.NodePools {
+		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !g.isSystemPool(np) {
+			return np.Name
+		}
+	}
+	return ""
+}
+
+func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
+	for _, taint := range np.Config.Taints {
+		if taint.Key == "components.gke.io/gke-managed-components" && taint.Value == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinition) error {
+	if err := g.populateClusterMetadata(job); err != nil {
+		return err
+	}
 
 	logging.Info("Configuring kubectl for GKE cluster '%s'...", job.ClusterName)
 	if err := g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
@@ -431,8 +472,7 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		}
 		cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, err := g.processNodePoolCapacity(np, location)
 		if err != nil {
-			logging.Info("Warning: %v", err)
-			continue
+			return ClusterCapacity{}, nil, fmt.Errorf("failed to determine capacity for node pool '%s': %w. This may cause job scheduling to fail due to inaccurate cluster capacity calculations. Please verify that the cluster is accessible and that you have correct permissions.", np.Name, err)
 		}
 
 		totalCPUs += cpus
@@ -495,6 +535,9 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	memMb = cap.MemoryMb * nodeCount
 
 	flavor = "flavor-default"
+	if np.Name == g.resolvedHeadNodePool {
+		flavor = "pathways-flavor"
+	}
 	if len(np.Config.Accelerators) > 0 {
 		var err error
 		gpus, tpus, flavor, nodeLabels, err = g.processAccelerators(np.Config.Accelerators, nodeCount, np.Config.MachineType)
@@ -569,9 +612,13 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 			logging.Info("Warning: Failed to check if LocalQueue exists: %v", err)
 		}
 		if !exists {
-			logging.Info("LocalQueue '%s' does not exist. Attempting to create default queues...", localQueue)
-			if err := g.createDefaultQueues(localQueue); err != nil {
-				logging.Info("Warning: Failed to create default queues: %v. Workload might remain suspended.", err)
+			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue)
+			if shell.PromptYesNo(promptMsg) {
+				if err := g.createDefaultQueues(localQueue); err != nil {
+					logging.Info("Warning: Failed to create default queues: %v. Workload might remain suspended.", err)
+				}
+			} else {
+				return fmt.Errorf("LocalQueue '%s' does not exist and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue)
 			}
 		}
 
@@ -734,15 +781,6 @@ func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) 
 	}
 	logging.Info("Using GCP Project ID inferred from gcloud config: %s", projectID)
 	return projectID, nil
-}
-
-func extractRegion(location string) string {
-	parts := strings.Split(location, "-")
-	if len(parts) == 3 {
-		// likely a zone, return region (first two parts)
-		return parts[0] + "-" + parts[1]
-	}
-	return location
 }
 
 func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, error) {
@@ -1119,40 +1157,13 @@ func isTPUFallback(mapped string) bool {
 	return strings.Contains(lower, "tpu") || (len(lower) >= 2 && lower[0] == 'v' && lower[1] >= '0' && lower[1] <= '9')
 }
 
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string) interface{} {
+func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsSuperSlicing {
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
-	return struct {
-		WorkloadName                  string
-		KueueQueueName                string
-		TtlSecondsAfterFinished       int
-		TerminationGracePeriodSeconds int
-		MaxRestarts                   int
-		NumSlices                     int
-		VmsPerSlice                   int
-		FullImageName                 string
-		Command                       []string
-		ResourcesYAML                 string
-		AcceleratorTypeLabel          string
-		NodeSelector                  string
-		Affinity                      string
-		PodFailurePolicy              string
-		ImagePullSecrets              string
-		ServiceAccountName            string
-		TopologyAnnotation            string
-		SchedulerName                 string
-		SchedulingGates               string
-		Tolerations                   string
-		PriorityClassName             string
-		VolumesYAML                   string
-		VolumeMountsYAML              string
-		GCSFuseEnabled                bool
-		Pathways                      orchestrator.PathwaysJobDefinition
-		ExclusiveTopologyAnnotation   string
-	}{
+	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
 		KueueQueueName:                opts.KueueQueueName,
 		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
@@ -1179,6 +1190,9 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
 		Pathways:                      opts.Pathways,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
+		Verbose:                       opts.Verbose,
+		IsTPU:                         isTPU,
+		IsGPU:                         isGPU,
 	}
 }
 
@@ -1281,7 +1295,7 @@ func (g *GKEOrchestrator) addVolumeOptions(opts *ManifestOptions, vols []orchest
 			gcsFuseEnabled = true
 			volSpec["csi"] = map[string]interface{}{
 				"driver":   "gcsfuse.csi.storage.gke.io",
-				"readOnly": true,
+				"readOnly": v.ReadOnly,
 				"volumeAttributes": map[string]interface{}{
 					"bucketName": strings.TrimPrefix(v.Source, "gs://"),
 				},
@@ -1800,29 +1814,16 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta1", Resource: "workloads"}
-	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
+	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-name=%s", workloadName),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list workloads in namespace %s: %w", namespace, err)
 	}
 
 	var matchedWorkloads []string
 	for _, item := range workloadList.Items {
-		ownerRefs := item.GetOwnerReferences()
-		for _, ref := range ownerRefs {
-			if ref.Kind == "JobSet" && ref.Name == workloadName {
-				matchedWorkloads = append(matchedWorkloads, item.GetName())
-				break
-			}
-		}
-	}
-
-	if len(matchedWorkloads) == 0 {
-		// Fallback to name search
-		for _, item := range workloadList.Items {
-			if strings.Contains(item.GetName(), "jobset-"+workloadName) {
-				matchedWorkloads = append(matchedWorkloads, item.GetName())
-			}
-		}
+		matchedWorkloads = append(matchedWorkloads, item.GetName())
 	}
 	return matchedWorkloads, nil
 }

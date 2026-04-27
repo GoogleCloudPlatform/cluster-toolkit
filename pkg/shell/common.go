@@ -219,3 +219,13 @@ func PromptYesNo(prompt string) bool {
 		fmt.Println("Invalid input. Please enter 'Y' or 'n'.")
 	}
 }
+
+// ExtractRegion extracts the region from a location (region or zone).
+func ExtractRegion(location string) string {
+	parts := strings.Split(location, "-")
+	if len(parts) == 3 {
+		// likely a zone, return region (first two parts)
+		return parts[0] + "-" + parts[1]
+	}
+	return location
+}

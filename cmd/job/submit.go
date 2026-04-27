@@ -16,6 +16,8 @@ package job
 
 import (
 	"fmt"
+	"os"
+	"slices"
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
@@ -78,16 +80,14 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		if err := ensurePrerequisites(cmd, &projectID); err != nil {
+		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
 			return err
 		}
 
 		priorityClassName = strings.ToLower(priorityClassName)
-		switch priorityClassName {
-		case "", "very-low", "low", "medium", "high", "very-high":
-			// valid case, do nothing
-		default:
-			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: very-low, low, medium, high, very-high", priorityClassName)
+		if priorityClassName != "" && !slices.Contains(orchestrator.ValidPriorityClasses, priorityClassName) {
+			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: %s",
+				priorityClassName, strings.Join(orchestrator.ValidPriorityClasses, ", "))
 		}
 
 		return nil
@@ -130,15 +130,16 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
-	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "A Google Cloud Storage (GCS) bucket location to be used by Pathways for temporary files, checkpoints, and inter-worker communication.")
+	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
 	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Used with --pathways-elastic-slices.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
+	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
-	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>).")
+	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
 
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("name")
@@ -210,15 +211,25 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 	var vols []orchestrator.VolumeDefinition
-	for i, vStr := range vStrs {
-		idx := strings.LastIndex(vStr, ":")
-		if idx <= 0 || idx == len(vStr)-1 || strings.HasPrefix(vStr[idx+1:], "//") {
-			return nil, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>", vStr)
-		}
-		src := vStr[:idx]
-		dest := vStr[idx+1:]
+	seenSources := make(map[string]bool)
+	seenDestinations := make(map[string]bool)
 
-		volType := "pvc" // Default
+	for i, vStr := range vStrs {
+		src, dest, readOnly, err := parseSingleVolume(vStr)
+		if err != nil {
+			return nil, err
+		}
+
+		if seenSources[src] {
+			return nil, fmt.Errorf("duplicate volume source: %s", src)
+		}
+		if seenDestinations[dest] {
+			return nil, fmt.Errorf("duplicate volume destination: %s", dest)
+		}
+		seenSources[src] = true
+		seenDestinations[dest] = true
+
+		volType := "pvc"
 		if strings.HasPrefix(src, "gs://") {
 			volType = "gcsfuse"
 		} else if strings.HasPrefix(src, "/") {
@@ -230,9 +241,49 @@ func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
 			Source:    src,
 			MountPath: dest,
 			Type:      volType,
+			ReadOnly:  readOnly,
 		})
 	}
 	return vols, nil
+}
+
+func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error) {
+	readOnly = true
+	idx := strings.LastIndex(vStr, ":")
+	if idx <= 0 || idx == len(vStr)-1 {
+		return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
+	}
+
+	lastPart := vStr[idx+1:]
+	srcDestPart := vStr[:idx]
+
+	if lastPart == "ro" || lastPart == "rw" {
+		readOnly = (lastPart == "ro")
+		idx = strings.LastIndex(srcDestPart, ":")
+		if idx <= 0 || idx == len(srcDestPart)-1 {
+			return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
+		}
+		src = srcDestPart[:idx]
+		dest = srcDestPart[idx+1:]
+	} else {
+		src = srcDestPart
+		dest = lastPart
+
+		if strings.HasPrefix(vStr, "gs://") && !strings.HasPrefix(src, "gs://") {
+			return "", "", false, fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
+		}
+
+		if strings.Contains(src, ":") {
+			if strings.HasPrefix(src, "gs://") {
+				if strings.Contains(src[5:], ":") {
+					return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
+				}
+			} else {
+				return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
+			}
+		}
+	}
+	return src, dest, readOnly, nil
 }
 
 func parseDurationToSeconds(dStr string) (int, error) {
@@ -250,17 +301,34 @@ func parseDurationToSeconds(dStr string) (int, error) {
 }
 
 func validateImageFlags() error {
-	if imageName == "" && baseImage == "" {
-		return fmt.Errorf("either --image or --base-image must be provided")
+	if err := validateImageSources(); err != nil {
+		return err
 	}
-	if imageName != "" && baseImage != "" {
-		return fmt.Errorf("cannot provide both --image and --base-image")
+	return validateBuildContext()
+}
+
+func validateImageSources() error {
+	if (imageName == "" && baseImage == "") || (buildContext != "" && baseImage == "") {
+		return fmt.Errorf("either --image or --base-image must be provided")
 	}
 	if imageName != "" && buildContext != "" {
 		return fmt.Errorf("--build-context cannot be provided when --image is used as no build is performed")
 	}
 	if baseImage != "" && buildContext == "" {
 		return fmt.Errorf("a --build-context must be provided when --base-image is used for a Crane build")
+	}
+	return nil
+}
+
+func validateBuildContext() error {
+	if buildContext == "" {
+		return nil
+	}
+	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment (e.g., export GCLUSTER_IMAGE_REPO=<repo>)")
+	}
+	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
+		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
 	}
 	return nil
 }

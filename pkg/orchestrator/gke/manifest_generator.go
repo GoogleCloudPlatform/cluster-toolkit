@@ -23,6 +23,8 @@ import (
 	"strings"
 	"text/template"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	k8syaml "sigs.k8s.io/yaml"
 )
 
@@ -37,14 +39,9 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		opts.AcceleratorType = ""
 	}
 
-	resourcesString := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
-
-	if opts.Verbose {
-		if tpuLimit != "" {
-			opts.CommandToRun = "export TPU_STDERR_LOG_LEVEL=0 && export TPU_MIN_LOG_LEVEL=0 && export TF_CPP_MIN_LOG_LEVEL=0 && export TPU_VMODULE=real_program_continuator=1 && " + opts.CommandToRun
-		} else if gpuLimit != "" {
-			opts.CommandToRun = "export NCCL_DEBUG=INFO && " + opts.CommandToRun
-		}
+	resourcesString, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+	if err != nil {
+		return "", err
 	}
 
 	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
@@ -54,7 +51,9 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", fmt.Errorf("failed to parse jobset template: %w", err)
 	}
 
-	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString)
+	isTPU := tpuLimit != ""
+	isGPU := gpuLimit != ""
+	data := g.prepareJobSetTemplateData(opts, cmdSlice, resourcesString, isTPU, isGPU)
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -63,28 +62,55 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	return buf.String(), nil
 }
 
-func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) string {
-	var limits []string
+func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) (string, error) {
+	limits := corev1.ResourceList{}
 	if cpu != "" {
-		limits = append(limits, fmt.Sprintf("                    cpu: %s", cpu))
+		q, err := resource.ParseQuantity(cpu)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse CPU quantity %q: %w", cpu, err)
+		}
+		limits[corev1.ResourceCPU] = q
 	}
 	if mem != "" {
-		limits = append(limits, fmt.Sprintf("                    memory: %s", mem))
+		q, err := resource.ParseQuantity(mem)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse memory quantity %q: %w", mem, err)
+		}
+		limits[corev1.ResourceMemory] = q
 	}
 	if gpu != "" {
-		limits = append(limits, fmt.Sprintf("                    nvidia.com/gpu: %s", gpu))
+		q, err := resource.ParseQuantity(gpu)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse GPU quantity %q: %w", gpu, err)
+		}
+		limits[corev1.ResourceName("nvidia.com/gpu")] = q
 	}
 	if tpu != "" {
-		limits = append(limits, fmt.Sprintf("                    google.com/tpu: %s", tpu))
+		q, err := resource.ParseQuantity(tpu)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse TPU quantity %q: %w", tpu, err)
+		}
+		limits[corev1.ResourceName("google.com/tpu")] = q
 	}
 
-	if len(limits) > 0 {
-		return "                resources:\n                  limits:\n" + strings.Join(limits, "\n")
+	if len(limits) == 0 {
+		return "", nil
 	}
-	return ""
+
+	resources := corev1.ResourceRequirements{
+		Limits: limits,
+	}
+
+	b, err := k8syaml.Marshal(resources)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal resources: %w", err)
+	}
+
+	return g.indentYaml("resources:\n"+string(b), 16), nil
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
+	originalAccelType := job.AcceleratorType
 	if err := g.resolveAcceleratorShorthand(&job); err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
@@ -101,12 +127,21 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		return ManifestOptions{}, JobProfile{}, err
 	}
 
+	if job.IsPathwaysJob && originalAccelType == "" {
+		return ManifestOptions{}, JobProfile{}, fmt.Errorf("accelerator type is required for Pathways workloads")
+	}
+
+	parts := strings.Split(originalAccelType, "-")
+	instanceType := parts[0]
+	pathwaysInstanceType := fmt.Sprintf("%s:%s", instanceType, schedOpts.Topology)
+
 	opts := ManifestOptions{
 		IsSuperSlicing:                isSuperSlicing,
 		WorkloadName:                  job.WorkloadName,
 		FullImageName:                 fullImageName,
 		CommandToRun:                  job.CommandToRun,
 		AcceleratorType:               job.AcceleratorType,
+		PathwaysInstanceType:          pathwaysInstanceType,
 		ProjectID:                     job.ProjectID,
 		ClusterName:                   job.ClusterName,
 		ClusterLocation:               job.ClusterLocation,
@@ -245,11 +280,14 @@ func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefi
 
 	g.dynamicallyCalculateVmsPerSlice(job, topology, mappedLabel)
 
-	isSuperSlicing, _ := g.verifySuperSlicingActive(ManifestOptions{
+	isSuperSlicing, err := g.verifySuperSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
 		ClusterLocation: job.ClusterLocation,
 		AcceleratorType: job.AcceleratorType,
 	})
+	if err != nil {
+		logging.Warn("Failed to verify if Super-slicing is active: %v. Assuming not active.", err)
+	}
 
 	return schedOpts, isSuperSlicing, nil
 }
@@ -309,7 +347,11 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
 			opts.AcceleratorType = ""
 		}
-		opts.ResourcesString = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		if err != nil {
+			return profile, err
+		}
+		opts.ResourcesString = resStr
 	}
 
 	return profile, nil

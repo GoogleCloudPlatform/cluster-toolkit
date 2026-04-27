@@ -53,6 +53,7 @@ type GKEOrchestrator struct {
 	kubeClient                  KubeClient
 	acceleratorToMachineType    map[string]string
 	machineCapCache             map[string]MachineTypeCap
+	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
 }
 
@@ -131,6 +132,7 @@ type ManifestOptions struct {
 	ServiceAccountName            string
 	TopologyAnnotation            string
 	Topology                      string
+	PathwaysInstanceType          string
 	SchedulerName                 string
 	SchedulingGates               string
 	Tolerations                   string
@@ -172,11 +174,18 @@ type gkeAdvancedMachineFeatures struct {
 	ThreadsPerCore string `json:"threadsPerCore"`
 }
 
+type gkeTaint struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Effect string `json:"effect"`
+}
+
 type gkeNodePoolConfig struct {
 	ServiceAccount          string                      `json:"serviceAccount"`
 	MachineType             string                      `json:"machineType"`
 	Accelerators            []gkeAccelerator            `json:"accelerators"`
 	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
+	Taints                  []gkeTaint                  `json:"taints"`
 }
 
 type gkeAutoscaling struct {
@@ -209,4 +218,36 @@ type JobSetStatus struct {
 	Status struct {
 		Conditions []JobSetCondition `json:"conditions"`
 	} `json:"status"`
+}
+
+type jobSetTemplateData struct {
+	WorkloadName                  string
+	KueueQueueName                string
+	TtlSecondsAfterFinished       int
+	TerminationGracePeriodSeconds int
+	MaxRestarts                   int
+	NumSlices                     int
+	VmsPerSlice                   int
+	FullImageName                 string
+	Command                       []string
+	ResourcesYAML                 string
+	AcceleratorTypeLabel          string
+	NodeSelector                  string
+	Affinity                      string
+	PodFailurePolicy              string
+	ImagePullSecrets              string
+	ServiceAccountName            string
+	TopologyAnnotation            string
+	SchedulerName                 string
+	SchedulingGates               string
+	Tolerations                   string
+	PriorityClassName             string
+	VolumesYAML                   string
+	VolumeMountsYAML              string
+	GCSFuseEnabled                bool
+	Pathways                      orchestrator.PathwaysJobDefinition
+	ExclusiveTopologyAnnotation   string
+	Verbose                       bool
+	IsTPU                         bool
+	IsGPU                         bool
 }

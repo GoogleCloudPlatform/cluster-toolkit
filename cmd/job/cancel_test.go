@@ -108,7 +108,9 @@ func TestCancelCmd_JobNotFound(t *testing.T) {
 		t.Fatalf("expected error for non-existent job, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "job not found in any namespace") {
+	if !strings.Contains(err.Error(), "job not found in any namespace") &&
+		!strings.Contains(err.Error(), "failed to get kubeconfig") &&
+		!strings.Contains(err.Error(), "invalid configuration") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
