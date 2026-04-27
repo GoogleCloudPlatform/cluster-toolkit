@@ -19,6 +19,7 @@ gcluster [SUBCOMMAND]
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command
+* [`destroy`](#gcluster-destroy): Destroys all resources in a Toolkit deployment directory
 
 ### Flags - gcluster
 
@@ -40,6 +41,14 @@ gcluster --version
 ```bash
 gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 ```
+
+### Flags - deploy
+
+* `--only <strings>`: Only apply to groups with the given names (comma-separated).
+* `--skip <strings>`: Skip groups with the given names (comma-separated).
+* `--auto-approve`: Automatically approve proposed changes without prompting.
+
+Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group deployments.
 
 ## gcluster create
 
@@ -111,3 +120,21 @@ details for a specific command, for example `expand`, run the following command:
 ```bash
 gcluster help expand
 ```
+
+## gcluster destroy
+
+`gcluster destroy` destroys all resources in a Toolkit deployment directory.
+
+### Usage - destroy
+
+```bash
+gcluster destroy DEPLOYMENT_DIRECTORY [flags]
+```
+
+### Flags - destroy
+
+* `--only <strings>`: Only destroy groups with the given names (comma-separated).
+* `--skip <strings>`: Skip destroying groups with the given names (comma-separated).
+* `--robust`: Perform a robust destroy, including firewall rule cleanup.
+
+Refer to the [Selective Deployment and Exclusion Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/machine-learning/README.md#selective-deployment-and-destruction-using---only-and---skip-flags) for more information on managing or skipping specific group destruction.
