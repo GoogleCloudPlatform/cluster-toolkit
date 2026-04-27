@@ -34,7 +34,7 @@ data "google_client_config" "default" {}
 
 data "kubernetes_all_namespaces" "all" {
   count      = var.mldiagnostics.enable ? 1 : 0
-  depends_on = [var.kubectl_apply_ready]
+  depends_on = [var.k8s_prerequisites_ready]
 }
 
 data "kubernetes_service_account_v1" "workload_sa" {
@@ -43,7 +43,7 @@ data "kubernetes_service_account_v1" "workload_sa" {
     name      = var.k8s_service_account_name
     namespace = var.namespace
   }
-  depends_on = [var.kubectl_apply_ready]
+  depends_on = [var.k8s_prerequisites_ready]
 }
 
 resource "kubernetes_labels" "workload_namespace_labels" {
@@ -77,7 +77,7 @@ module "install_mldiagnostics_webhook" {
   chart_version    = var.mldiagnostics.injection_webhook_version
   namespace        = local.mldiagnostics_namespace
   create_namespace = true
-  depends_on       = [var.gke_cluster_exists, var.kubectl_apply_ready, kubernetes_labels.workload_namespace_labels]
+  depends_on       = [var.gke_cluster_exists, var.k8s_prerequisites_ready, kubernetes_labels.workload_namespace_labels]
 }
 
 module "install_mldiagnostics_connection_operator" {
@@ -92,5 +92,5 @@ module "install_mldiagnostics_connection_operator" {
   namespace        = local.mldiagnostics_namespace
   create_namespace = false
   set_values       = [{ name = "fullnameOverride", value = "mld-op" }]
-  depends_on       = [var.gke_cluster_exists, var.kubectl_apply_ready, module.install_mldiagnostics_webhook]
+  depends_on       = [var.gke_cluster_exists, var.k8s_prerequisites_ready, module.install_mldiagnostics_webhook]
 }

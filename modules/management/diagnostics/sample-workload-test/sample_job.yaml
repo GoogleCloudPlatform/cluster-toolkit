@@ -54,7 +54,7 @@ spec:
             containers:
             - name: jax-job
               # image: us-central1-docker.pkg.dev/<project_name>/mldiagnostics-test/<image-name>:latest
-              image: #Add Image tag here
+              image: <workload_image>
               env:
               - name: PROJECT_ID
                 value: <project_id>

@@ -29,7 +29,7 @@ variable "gke_cluster_exists" {
   default     = false
 }
 
-variable "kubectl_apply_ready" {
+variable "k8s_prerequisites_ready" {
   description = "A static flag that signals to downstream modules that upstream dependencies are ready."
   type        = any
   default     = false
@@ -75,7 +75,7 @@ resource "terraform_data" "validate_namespace" {
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
 }
 
 # Validate that the workload service account exists in user namespace and is annotated for Workload Identity
@@ -89,7 +89,7 @@ resource "terraform_data" "validate_sa" {
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
 }
 
 # Validate that the cert-manager namespace exists
@@ -103,5 +103,5 @@ resource "terraform_data" "validate_cert_manager" {
     }
   }
 
-  depends_on = [var.gke_cluster_exists, var.kubectl_apply_ready]
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
 }

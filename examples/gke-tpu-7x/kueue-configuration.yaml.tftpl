@@ -41,7 +41,7 @@ spec:
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue
 metadata:
-  namespace: "${try(namespace, "default")}"
+  namespace: ${namespace}
   name: "user-queue"
 spec:
   clusterQueue: "cluster-queue"
