@@ -39,7 +39,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		opts.AcceleratorType = ""
 	}
 
-	resourcesString, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+	resourcesString, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	return buf.String(), nil
 }
 
-func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) (string, error) {
+func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent int) (string, error) {
 	limits := corev1.ResourceList{}
 	if cpu != "" {
 		q, err := resource.ParseQuantity(cpu)
@@ -106,7 +106,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string) (strin
 		return "", fmt.Errorf("failed to marshal resources: %w", err)
 	}
 
-	return g.indentYaml("resources:\n"+string(b), 16), nil
+	return g.indentYaml("resources:\n"+string(b), indent), nil
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
@@ -347,7 +347,7 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
 			opts.AcceleratorType = ""
 		}
-		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
 		if err != nil {
 			return profile, err
 		}

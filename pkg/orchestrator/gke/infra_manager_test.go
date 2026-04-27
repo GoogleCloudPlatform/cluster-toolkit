@@ -370,3 +370,24 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 		t.Errorf("expected priority classes to be skipped, but they were installed")
 	}
 }
+
+func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+
+	_, _ = w.Write([]byte("no\n"))
+	w.Close()
+
+	orc := &GKEOrchestrator{}
+
+	err := orc.handleKueueReinstallation("v0.15.2", "Test reason")
+	if err == nil {
+		t.Fatal("expected error when user declines, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "user declined to re-install Kueue") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

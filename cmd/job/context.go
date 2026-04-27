@@ -57,22 +57,20 @@ func loadContext() Context {
 	return ctx
 }
 
-func saveContext(ctx Context) {
+func saveContext(ctx Context) error {
 	filePath, err := contextFilePath()
 	if err != nil {
-		logging.Error("Failed to get context file path for saving: %v", err)
-		return
+		return fmt.Errorf("failed to get context file path for saving: %w", err)
 	}
 
 	data, err := json.MarshalIndent(ctx, "", "  ")
 	if err != nil {
-		logging.Error("Failed to marshal context: %v", err)
-		return
+		return fmt.Errorf("failed to marshal context: %w", err)
 	}
 
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		logging.Error("Failed to write context to %s: %v", filePath, err)
-		return
+		return fmt.Errorf("failed to write context to %s: %w", filePath, err)
 	}
 	logging.Info("CLI context saved to %s", filePath)
+	return nil
 }

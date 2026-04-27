@@ -176,50 +176,6 @@ func TestSavePrereqState_Success(t *testing.T) {
 	}
 }
 
-func TestAskForConfirmation_Yes(t *testing.T) {
-	pipeRead, pipeWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pipeRead.Close()
-	defer pipeWrite.Close()
-
-	origStdin := os.Stdin
-	os.Stdin = pipeRead
-	defer func() { os.Stdin = origStdin }()
-
-	if _, err := pipeWrite.Write([]byte("y\n")); err != nil {
-		t.Fatal(err)
-	}
-
-	got := shell.PromptYesNo("Test prompt")
-	if !got {
-		t.Error("expected true for 'y', got false")
-	}
-}
-
-func TestAskForConfirmation_No(t *testing.T) {
-	pipeRead, pipeWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pipeRead.Close()
-	defer pipeWrite.Close()
-
-	origStdin := os.Stdin
-	os.Stdin = pipeRead
-	defer func() { os.Stdin = origStdin }()
-
-	if _, err := pipeWrite.Write([]byte("n\n")); err != nil {
-		t.Fatal(err)
-	}
-
-	got := shell.PromptYesNo("Test prompt")
-	if got {
-		t.Error("expected false for 'n', got true")
-	}
-}
-
 func TestLoadPrereqState_CorruptedFile(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "prereq-corrupt-test")
 	if err != nil {

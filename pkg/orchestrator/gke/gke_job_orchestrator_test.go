@@ -359,24 +359,25 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		t.Fatalf("failed to write manifest to file: %v", err)
 	}
 
-	if !strings.Contains(manifest, "name: pathways-test") {
-		t.Errorf("manifest does not contain correct workload name")
+	expectedSubstrs := []string{
+		"name: pathways-test",
+		"replicas: 2",
+		"image: proxy:latest",
+		"--gcs_scratch_location=gs://my-bucket",
+		"cloud.google.com/gke-nodepool: pathways-np",
+		"completionMode: Indexed",
+		"alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname",
+		"MEGASCALE_GRPC_ENABLE_XOR_TRACER",
+		`cpu: "16"`,
+		`memory: "100Gi"`,
+		`cpu: "8"`,
+		`memory: "32Gi"`,
 	}
 
-	if !strings.Contains(manifest, "replicas: 2") {
-		t.Errorf("manifest does not contain correct number of replicas")
-	}
-
-	if !strings.Contains(manifest, "image: proxy:latest") {
-		t.Errorf("manifest does not contain correct proxy image")
-	}
-
-	if !strings.Contains(manifest, "--gcs_scratch_location=gs://my-bucket") {
-		t.Errorf("manifest does not contain correct GCS location")
-	}
-
-	if !strings.Contains(manifest, "cloud.google.com/gke-nodepool: pathways-np") {
-		t.Errorf("manifest does not contain correct head node pool in nodeSelector")
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
 	}
 }
 
@@ -1304,7 +1305,7 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 			{ExitCode: 0, Stdout: "cluster-queue"},
 		},
 		"kubectl get clusterqueue cluster-queue -o json": {
-			{ExitCode: 0, Stdout: "{\"apiVersion\":\"kueue.x-k8s.io/v1beta1\",\"kind\":\"ClusterQueue\",\"spec\":{\"resourceGroups\":[{\"coveredResources\":[\"cpu\"]}]}}"},
+			{ExitCode: 0, Stdout: "{\"apiVersion\":\"kueue.x-k8s.io/v1beta2\",\"kind\":\"ClusterQueue\",\"spec\":{\"resourceGroups\":[{\"coveredResources\":[\"cpu\"]}]}}"},
 		},
 		"kubectl patch clusterqueue cluster-queue": {
 			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/cluster-queue patched"},

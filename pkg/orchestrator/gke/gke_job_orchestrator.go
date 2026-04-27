@@ -46,6 +46,9 @@ const (
 
 	defaultPathwaysProxyImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
 	defaultPathwaysServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
+
+	// kueueAPIVersion is the GVR version used for Kueue resources.
+	kueueAPIVersion = "v1beta2"
 )
 
 func NewGKEOrchestrator() *GKEOrchestrator {
@@ -333,7 +336,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	if err == nil {
-		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit)
+		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
 		if err != nil {
 			return "", err
 		}
@@ -1393,7 +1396,7 @@ func (g *GKEOrchestrator) getCurrentNamespace() (string, error) {
 }
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
-	gvrWl := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta2", Resource: "workloads"}
+	gvrWl := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
 	listOptsWl := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
 	}
@@ -1457,18 +1460,24 @@ func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 	}
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
 
-	ns, err := g.getCurrentNamespace()
+	optsSelector := metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+	}
+	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
 	}
 
-	obj, err := client.Resource(gvr).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
-			return "", nil
-		}
-		return "", err
+	if len(list.Items) == 0 {
+		return "", nil
 	}
+
+	if len(list.Items) > 1 {
+		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported", name)
+	}
+
+	obj := list.Items[0]
+	ns := obj.GetNamespace()
 
 	metadata, ok := obj.Object["metadata"].(map[string]interface{})
 	if !ok {
@@ -1813,7 +1822,7 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 }
 
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
-	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: "v1beta1", Resource: "workloads"}
+	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
 	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-name=%s", workloadName),
 	})

@@ -57,7 +57,9 @@ func TestSaveContext(t *testing.T) {
 		Location:    "us-central1-a",
 	}
 
-	saveContext(ctx)
+	if err := saveContext(ctx); err != nil {
+		t.Fatalf("saveContext() error = %v", err)
+	}
 
 	stateDir := filepath.Join(tempDir, stateDirName)
 	filePath := filepath.Join(stateDir, contextFileName)
