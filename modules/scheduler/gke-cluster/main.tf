@@ -72,8 +72,8 @@ locals {
 
   # These maximum values represent massive upper bounds for the GKE Node Auto-Provisioning 
   # and Cluster Autoscaler to allow essentially unlimited CPU and memory scaling for the cluster.
-  nap_cpu_max    = var.autoprovisioning_cpu_max
-  nap_memory_max = var.autoprovisioning_memory_max
+  nap_cpu_max    = var.cluster_autoscaling.autoprovisioning_cpu_max
+  nap_memory_max = var.cluster_autoscaling.autoprovisioning_memory_max
 }
 
 data "google_project" "project" {
