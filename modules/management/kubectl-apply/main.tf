@@ -193,7 +193,8 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
-# Added to resolve transient kueue webhook failures where Kueue requires a few extra seconds to fully boot its internal systems.
+# This sleep ensures that subsequent configuration of Kueue custom resources 
+# do not fail due to the webhook not being available.
 resource "time_sleep" "wait_for_webhook" {
   count           = local.install_kueue ? 1 : 0
   create_duration = local.webhook_wait_duration
@@ -208,7 +209,7 @@ module "configure_kueue" {
   chart_version    = "0.1.0"
   namespace        = "kueue-system"
   create_namespace = true
-  wait             = false # Configuration resources (Queues) usually don't need wait
+  wait             = true
 
   values_yaml = [
     yamlencode({
