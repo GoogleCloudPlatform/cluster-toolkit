@@ -280,12 +280,10 @@ The blueprint provisions several key technologies to create a robust data pipeli
 Google Kubernetes Engine (GKE) supports [Dynamic Workload Scheduler (DWS)](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training), which allows you to request TPU resources using a flexible "Flex Start" model. This is ideal for training jobs that can wait for capacity and require lower costs.
 
 For a pre-configured example and detailed documentation on using Flex Start with TPU 7x, please refer to:
-
 - [GKE TPU 7x Flex Start Blueprint](../gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml)
 - [DWS Flex Start README.md](../gke-consumption-options/dws-flex-start/gke-tpu-7x/README.md)
 
 Additionally, for **Queued Provisioning (QP)** support with DWS Flex Start:
-
 - [GKE TPU 7x DWS Flex with QP Blueprint](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml)
 - [DWS Flex with QP README.md](../gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/README.md)
 
