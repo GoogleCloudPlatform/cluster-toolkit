@@ -39,6 +39,7 @@ var (
 	GitCommitInfo  string
 	GitCommitHash  string
 	GitInitialHash string
+	GitIsOfficial  string
 )
 
 var (
@@ -76,7 +77,11 @@ func Execute() error {
 
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from official release"
+			if GitIsOfficial == "true" {
+				GitTagVersion = "(official binary distribution)"
+			} else {
+				GitTagVersion = "- not built from official release"
+			}
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"
