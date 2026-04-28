@@ -1,0 +1,188 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+substitutions:
+  _GCS_BUCKET: "gs://hpc-ctk1357"
+
+steps:
+- id: filter-zones
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -e -u -o pipefail
+
+    GCS_BUCKET="${_GCS_BUCKET}"
+    BUILD_YAML_DIR="tools/cloud-build/daily-tests/builds"
+
+    # Variables to hold the available locations returned by GCP APIs
+    AVAILABLE_FILESTORE=""
+    AVAILABLE_LUSTRE=""
+
+    # Associative arrays to track which test files need which resources
+    declare -A NEEDS_FILESTORE
+    declare -A NEEDS_LUSTRE
+    declare -A NEEDS_CPUS
+    declare -A FOUND_FILES
+
+    # Query GCP API to find locations that support Filestore and Managed Lustre
+    fetch_availability() {
+      echo "=== Fetching Resource Availability ==="
+
+      echo "Fetching Filestore locations..."
+      AVAILABLE_FILESTORE=$$(gcloud filestore locations list --format="value(locationId)")
+
+      echo "Fetching Managed Lustre locations..."
+      AVAILABLE_LUSTRE=$$(gcloud lustre locations list --format="value(locationId)")
+    }
+
+    # Scan build test files for requirements
+    scan_test_requirements() {
+      echo "=== Scanning Test Files for Requirements ==="
+
+      for yaml in "$${BUILD_YAML_DIR}"/*.yaml; do
+        [[ -f "$$yaml" ]] || continue
+        [[ "$$yaml" != *"filter-zone-options.yaml"* ]] || continue
+
+        # Extract the GCS options file path
+        GCS_PATH=$$(grep -o 'OPTIONS_GCS_PATH=gs://[^"]*' "$$yaml" | cut -d= -f2 || true)
+        if [[ -z "$$GCS_PATH" ]]; then
+          continue
+        fi
+
+        FILE_NAME=$$(basename "$$GCS_PATH")
+        FOUND_FILES["$$FILE_NAME"]=1
+        echo "TEST_NAME: $$(basename "$$yaml")"
+        echo "OPTIONS FILE: $$FILE_NAME"
+
+        # Check tags in the build test file for storage requirements
+        if grep -q "m.filestore" "$$yaml"; then
+          NEEDS_FILESTORE["$$FILE_NAME"]=1
+          echo "  Filestore is required"
+        fi
+        if grep -q "m.managed-lustre" "$$yaml"; then
+          NEEDS_LUSTRE["$$FILE_NAME"]=1
+          echo "  Managed Lustre is required"
+        fi
+
+        # Extract CPUs from blueprint dependencies
+        local bps
+        bps=$$(grep -E -o '\b(examples|community/examples|tools/cloud-build/daily-tests/blueprints)/[a-zA-Z0-9_/-]+\.yaml\b' "$$yaml" || true)
+        for bp in $$bps; do
+          if [[ -f "$$bp" ]]; then
+            echo "  Parsing Blueprint for CPUs: $$bp"
+            local cpus
+            cpus=$$(grep -E -o '\b[a-z0-9]+-(standard|highmem|highcpu|megamem|ultramem)-[0-9]+\b' "$$bp" || true)
+            for cpu in $$cpus; do
+              # Skip accelerator hardware (GPUs/TPUs) and focus on standard CPUs
+              if [[ "$$cpu" =~ ^(a2-|a3-|a4-|tpu|ct6e|g4-) ]]; then
+                continue
+              fi
+              local current_cpus=$${NEEDS_CPUS[$$FILE_NAME]:-}
+              if [[ ! " $$current_cpus " =~ " $$cpu " ]]; then
+                NEEDS_CPUS["$$FILE_NAME"]="$${current_cpus} $${cpu}"
+                echo "     Requires CPU type: $$cpu"
+              fi
+            done
+          fi
+        done
+      done
+    }
+
+    # Verify the zone hosts the requested core machine types
+    filter_zones_for_file() {
+      local file=$$1
+      local req_filestore=$${NEEDS_FILESTORE[$$file]:-0}
+      local req_lustre=$${NEEDS_LUSTRE[$$file]:-0}
+      local req_cpus=$${NEEDS_CPUS[$$file]:-}
+      local ext=""
+      if [[ "$$file" == *.txt ]]; then
+        ext=".txt"
+      fi
+      local dest_file="$${file%.txt}$${ext}"
+
+      echo "Processing $${file} -> $${dest_file}"
+      echo "Requirements: Filestore=$$req_filestore, Lustre=$$req_lustre, CPUs=[$$req_cpus]"
+
+      if ! gcloud storage cp "$${GCS_BUCKET}/$${file}" "original.txt"; then
+        echo "WARNING: Failed to download $${GCS_BUCKET}/$${file}, skipping."
+        return
+      fi
+
+      # Truncate or create the local buffer file
+      > "filtered.txt"
+      while IFS= read -r zone || [[ -n "${zone}" ]]; do
+        zone=$$(echo "$${zone}" | tr -d '\r')
+        [[ -z "$${zone}" ]] && continue
+
+        # Check if the zone supports the required CPU machine types
+        local cpus_ok=true
+        for cpu in $$req_cpus; do
+          local cache_var="ZONES_FOR_$${cpu//-/_}"
+          if [[ -z "$${!cache_var:-}" ]]; then
+            echo "  Fetching zones for CPU type $${cpu}..."
+            declare -g "$${cache_var}=$$(gcloud compute machine-types list --filter="name:$${cpu}" --format="value(zone)")"
+          fi
+
+          if ! echo "$${!cache_var}" | grep -q "^$${zone}$$"; then
+            echo "  Skipping $${zone}: CPU type $${cpu} not available."
+            cpus_ok=false
+            break
+          fi
+        done
+        [[ "$$cpus_ok" == "false" ]] && continue
+
+        # Ensure Filestore support for requested zones
+        if [[ "$$req_filestore" -eq 1 ]]; then
+          if ! echo "$${AVAILABLE_FILESTORE}" | grep -q "^$${zone}$$"; then
+            echo "  Skipping $${zone}: Filestore required but not available."
+            continue
+          fi
+        fi
+
+        # Ensure Managed Lustre support for requested zones
+        if [[ "$$req_lustre" -eq 1 ]]; then
+          if ! echo "$${AVAILABLE_LUSTRE}" | grep -q "^$${zone}$$"; then
+            echo "  Skipping $${zone}: Lustre required but not available."
+            continue
+          fi
+        fi
+
+        # If all checks pass, append the zone to the buffer
+        echo "$${zone}" >> "filtered.txt"
+      done < "original.txt"
+
+      # Upload the successfully filtered zones back to GCS
+      if [ -s "filtered.txt" ]; then
+        gcloud storage cp "filtered.txt" "$${GCS_BUCKET}/$${dest_file}"
+        echo "  Updated $${GCS_BUCKET}/$${dest_file}"
+      else
+        echo "  WARNING: Filtered list for $${file} is empty. Not updating."
+      fi
+    }
+
+    # Main execution entry point
+    main() {
+      fetch_availability
+      scan_test_requirements
+
+      for file in "$${!FOUND_FILES[@]}"; do
+        echo "----------------------------------------"
+        filter_zones_for_file "$$file"
+      done
+    }
+
+    main "$@"

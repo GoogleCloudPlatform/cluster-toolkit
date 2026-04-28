@@ -171,7 +171,7 @@ resource "google_storage_bucket_object" "nodeset_tpu_config" {
 #########
 
 locals {
-  build_dir = abspath("${path.module}/build")
+  build_dir = "${path.module}/build"
 
   slurm_gcp_devel_controller_zip     = "slurm-gcp-devel-controller.zip"
   slurm_gcp_devel_compute_zip        = "slurm-gcp-devel.zip"

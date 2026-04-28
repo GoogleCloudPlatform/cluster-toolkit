@@ -120,7 +120,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={{ network }}
+        - --network={% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
@@ -143,7 +143,7 @@
       ansible.builtin.add_host:
         hostname: "{{ remote_ip }}"
         groups: [remote_host]
-      when: remote_ip | ansible.utils.ipaddr
+      when: (remote_ip | default('')) | ansible.utils.ipaddr != false
 
     - name: Wait for host tasks
       ansible.builtin.include_tasks: tasks/wait-for-host.yml

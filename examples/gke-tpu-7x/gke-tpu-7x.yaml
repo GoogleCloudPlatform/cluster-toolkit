@@ -112,13 +112,14 @@ deployment_groups:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
+      enable_pathways_for_tpus: true
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.34."
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite

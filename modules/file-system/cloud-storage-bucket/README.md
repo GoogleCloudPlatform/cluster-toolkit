@@ -106,7 +106,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.9.0 |
@@ -115,7 +115,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.9.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
@@ -127,7 +127,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_storage_anywhere_cache.cache_instances](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_anywhere_cache) | resource |
 | [google-beta_google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
@@ -136,7 +136,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_anywhere_cache"></a> [anywhere\_cache](#input\_anywhere\_cache) | Anywhere Cache configurations.<br/>When you create a cache for a bucket, the cache must be created in a zone within the location of your bucket.<br/>For example, if your bucket is located in the us-east1 region, you can create a cache in us-east1-b but not us-central1-c.<br/>If your bucket is located in the ASIA dual-region, you can create a cache in any zones that make up the asia-east1 and asia-southeast1 regions.<br/>This validation only works for single regions. | <pre>object({<br/>    zones            = list(string)<br/>    ttl              = optional(string, "86400s")<br/>    admission_policy = optional(string, "admit-on-first-miss")<br/>  })</pre> | `null` | no |
 | <a name="input_anywhere_cache_create_timeout"></a> [anywhere\_cache\_create\_timeout](#input\_anywhere\_cache\_create\_timeout) | Timeout for Anywhere Cache creation operations. Can be set to a duration like '1h' or '30m'.<br/>The maximum documented creation time is 48 hours. Please refer to the official documentation for more details on timeouts:<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_anywhere_cache#timeouts | `string` | `"240m"` | no |
 | <a name="input_autoclass"></a> [autoclass](#input\_autoclass) | Configure bucket autoclass setup<br/><br/>The autoclass config supports automatic transitions of objects in the bucket to appropriate storage classes based on each object's access pattern.<br/><br/>The terminal storage class defines that objects in the bucket eventually transition to if they are not read for a certain length of time. <br/>Supported values include: 'NEARLINE', 'ARCHIVE' (Default 'NEARLINE')<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/storage/docs/autoclass | <pre>object({<br/>    enabled                = optional(bool, false)<br/>    terminal_storage_class = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
@@ -150,6 +150,7 @@ No modules.
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mount options to be put in fstab. Note: `implicit_dirs` makes it easier to work with objects added by other tools, but there is a performance impact. See: [more information](https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/semantics.md#implicit-directories) | `string` | `"defaults,_netdev,implicit_dirs"` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name Prefix. | `string` | `null` | no |
+| <a name="input_placement_zones"></a> [placement\_zones](#input\_placement\_zones) | A list of locations for data placement. This can be a zone for a zonal bucket or a region for a regional bucket. When using this, `storage_class` must be `RAPID` for zonal buckets or `REGIONAL` for regional buckets. | `list(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which GCS bucket will be created. | `string` | n/a | yes |
 | <a name="input_public_access_prevention"></a> [public\_access\_prevention](#input\_public\_access\_prevention) | Bucket public access can be controlled by setting a value of either `inherited` or `enforced`. <br/>When set to `enforced`, public access to the bucket is blocked.<br/>If set to `inherited`, the bucket's public access prevention depends on whether it is subject to the organization policy constraint for public access prevention.<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/storage/docs/public-access-prevention | `string` | `null` | no |
 | <a name="input_random_suffix"></a> [random\_suffix](#input\_random\_suffix) | If true, a random id will be appended to the suffix of the bucket name. | `bool` | `false` | no |
@@ -164,7 +165,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_anywhere_cache_ids"></a> [anywhere\_cache\_ids](#output\_anywhere\_cache\_ids) | The IDs of the created Anywhere Cache instances. |
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Runner that performs client installation needed to use gcs fuse. |
 | <a name="output_gcs_bucket_name"></a> [gcs\_bucket\_name](#output\_gcs\_bucket\_name) | Bucket name. |

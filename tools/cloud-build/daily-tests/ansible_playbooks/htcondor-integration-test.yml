@@ -70,7 +70,7 @@
       ansible.builtin.add_host:
         hostname: "{{ access_ip.stdout }}"
         groups: [remote_host]
-      when: access_ip.stdout | ansible.utils.ipaddr
+      when: (access_ip.stdout | default('')) | ansible.utils.ipaddr != false
     ## Setup firewall for cloud build
     - name: Create firewall rule
       register: fw_result
@@ -123,7 +123,7 @@
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve --robust
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -184,7 +184,7 @@
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve --robust
       args:
         chdir: "{{ workspace }}"
       environment:

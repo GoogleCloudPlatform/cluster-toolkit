@@ -164,6 +164,7 @@ deployment_groups:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
+      enable_pathways_for_tpus: true
       enable_gcsfuse_csi: true # enable GCS Fuse for the cluster
       enable_persistent_disk_csi: true # enable Hyperdisk for the cluster
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
@@ -189,7 +190,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.34.1"
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite

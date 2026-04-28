@@ -56,8 +56,10 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     BLUEPRINT="examples/hpc-slurm.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-rocky8.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']

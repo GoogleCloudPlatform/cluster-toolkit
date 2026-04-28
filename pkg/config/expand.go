@@ -17,6 +17,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
@@ -28,9 +30,12 @@ import (
 )
 
 const (
-	blueprintLabel  string = "ghpc_blueprint"
-	deploymentLabel string = "ghpc_deployment"
+	blueprintLabel        = "ghpc_blueprint"
+	deploymentLabel       = "ghpc_deployment"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.27.0"
 )
+
+var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
@@ -160,6 +165,22 @@ func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	bp.applyUseModules(m)
 	bp.applyGlobalVarsInModule(m)
+	if err := expandHardwareSettings(bp, m); err != nil {
+		return err
+	}
+
+	// Inject machine_configs if supported by the module
+	for _, input := range m.InfoOrDie().Inputs {
+		if input.Name == "machine_configs" {
+			cfgJson, err := getMachineConfigJSON(m, bp)
+			if err != nil {
+				return err
+			}
+			m.Settings = m.Settings.With("machine_configs", cty.StringVal(cfgJson))
+			break
+		}
+	}
+
 	return validateModuleInputs(mp, *m, bp)
 }
 
@@ -199,11 +220,11 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 	return map[string]TerraformProvider{
 		"google": {
 			Source:        "hashicorp/google",
-			Version:       ">= 6.9.0, <= 7.21.0",
+			Version:       GoogleProviderVersion,
 			Configuration: gglConf},
 		"google-beta": {
 			Source:        "hashicorp/google-beta",
-			Version:       ">= 6.9.0, <= 7.21.0",
+			Version:       GoogleProviderVersion,
 			Configuration: gglConf}}
 }
 
@@ -309,9 +330,19 @@ func (bp Blueprint) applyUseModules(m *Module) error {
 
 // expandGlobalLabels sets defaults for labels based on other variables.
 func (bp *Blueprint) expandGlobalLabels() {
-	defaults := cty.ObjectVal(map[string]cty.Value{
+	defaultsMap := map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(bp.BlueprintName),
-		deploymentLabel: GlobalRef("deployment_name").AsValue()})
+		deploymentLabel: GlobalRef("deployment_name").AsValue(),
+	}
+	if bp.AddCreatorLabel {
+		creator := strings.ToLower(bp.CreatorUsername)
+		creator = validLabelValueRegex.ReplaceAllString(creator, "_")
+		if len(creator) > 63 {
+			creator = creator[:63]
+		}
+		defaultsMap["ghpc_creator"] = cty.StringVal(creator)
+	}
+	defaults := cty.ObjectVal(defaultsMap)
 
 	labels := "labels"
 	var gl cty.Value

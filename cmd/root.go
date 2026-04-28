@@ -39,6 +39,7 @@ var (
 	GitCommitInfo  string
 	GitCommitHash  string
 	GitInitialHash string
+	GitIsOfficial  string
 )
 
 var (
@@ -52,15 +53,17 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.84.0",
+		Version:     config.GetToolkitVersion(),
 		Annotations: annotation,
 	}
 )
 
 func init() {
+	addDependenciesFlags(rootCmd.PersistentFlags())
 	addColorFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
+		initDependencies(cmd)
 	}
 }
 
@@ -74,7 +77,11 @@ func Execute() error {
 
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from official release"
+			if GitIsOfficial == "true" {
+				GitTagVersion = "(official binary distribution)"
+			} else {
+				GitTagVersion = "- not built from official release"
+			}
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"

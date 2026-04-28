@@ -55,12 +55,12 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	var deplRoot string
 
 	if checkDir(cmd, args) != nil { // arg[0] is BLUEPRINT_FILE
-		deplRoot = doCreate(args[0])
+		deplRoot = doCreate(cmd, args[0])
 	} else { // arg[0] is DEPLOYMENT_DIRECTORY
 		deplRoot = args[0]
 		// check that no "create" flags were specified
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Changed && createCmd.Flag(f.Name) != nil {
+			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil {
 				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
 			}
 		})

@@ -156,7 +156,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -207,6 +207,7 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        enable_pathways_for_tpus: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)

@@ -484,6 +484,11 @@ def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
     return parse_bucket_uri(uri)
 
+def blob_fetch(file):
+    bucket_name, _ = _get_bucket_and_common_prefix()
+    return storage_client().get_bucket(bucket_name).get_blob(file)
+
+
 def blob_get(file):
     bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
@@ -670,7 +675,11 @@ class _ConfigBlobs:
     
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
-            h.update(blob.md5_hash.encode("utf-8"))
+            # Fallback to blob_fetch if md5_hash is missing (can happen with CMEK/lists)
+            hash_val = blob_fetch(blob.name).md5_hash if blob.md5_hash is None else blob.md5_hash
+            # Fallback to crc32c or empty string if it's fundamentally CMEK encrypted
+            safe_hash = hash_val or blob.crc32c or ""
+            h.update(safe_hash.encode("utf-8"))
         return h.hexdigest()
 
 @dataclass
@@ -1620,21 +1629,49 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
-    node_desc_regex = re.compile(
-        r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
-    )
-
     @lru_cache(maxsize=None)
-    def _node_desc(self, node_name):
+    def _node_desc(self, node_name: str) -> dict:
         """Get parts from node name"""
         if not node_name:
             node_name = self.hostname
-        # workaround below is for VMs whose hostname is FQDN
         node_name_short = node_name.split(".")[0]
-        m = self.node_desc_regex.match(node_name_short)
-        if not m:
-            raise Exception(f"node name {node_name} is not valid")
-        return m.groupdict()
+
+        if node_name_short.endswith("]"):
+            idx = node_name_short.rfind("-[")
+            if idx == -1:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix = node_name_short[:idx]
+            suffix = node_name_short[idx + 1 :]
+        else:
+            parts = node_name_short.rsplit("-", 1)
+            if len(parts) != 2:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix, suffix = parts
+        
+        cluster_name = self.cfg.slurm_cluster_name
+        if not prefix.startswith(f"{cluster_name}-"):
+            raise Exception(f"node name {node_name} does not start with cluster name {cluster_name}")
+            
+        matched_ns = prefix[len(cluster_name)+1:]
+        
+        valid_nodesets = [
+            getattr(ns, "nodeset_name", None) 
+            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+        ]
+        
+        if matched_ns not in valid_nodesets:
+            raise Exception(f"could not find nodeset {matched_ns} for node {node_name}")
+            
+        is_range = suffix.startswith("[") and suffix.endswith("]")
+        
+        return {
+            "prefix": prefix,
+            "cluster": cluster_name,
+            "nodeset": matched_ns,
+            "suffix": None if is_range else suffix,
+            "range": suffix if is_range else None,
+            "node": suffix
+        }
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]

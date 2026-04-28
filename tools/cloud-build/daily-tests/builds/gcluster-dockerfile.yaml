@@ -68,4 +68,4 @@ steps:
 
 - id: destroy-resources
   name: 'gcluster'
-  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve']
+  args: ['destroy', '/workspace/dockerfile-test', '--auto-approve', '--robust']

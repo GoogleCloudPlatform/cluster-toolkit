@@ -18,6 +18,8 @@ package main
 import (
 	"embed"
 	"hpc-toolkit/cmd"
+	"hpc-toolkit/pkg/dependencies"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
 )
@@ -31,14 +33,20 @@ var gitBranch string
 var gitCommitInfo string
 var gitCommitHash string
 var gitInitialHash string
+var gitIsOfficial string
 
 func main() {
+	if err := dependencies.PatchPath(); err != nil {
+		logging.Fatal("Failed to patch PATH with custom binaries directories: %v", err)
+	}
+
 	sourcereader.ModuleFS = moduleFS
 	cmd.GitTagVersion = gitTagVersion
 	cmd.GitBranch = gitBranch
 	cmd.GitCommitInfo = gitCommitInfo
 	cmd.GitCommitHash = gitCommitHash
 	cmd.GitInitialHash = gitInitialHash
+	cmd.GitIsOfficial = gitIsOfficial
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

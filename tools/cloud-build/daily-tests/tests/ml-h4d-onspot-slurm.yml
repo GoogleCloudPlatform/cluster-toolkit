@@ -39,6 +39,7 @@ custom_vars:
     h4d_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   deployment_name: "{{ deployment_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
