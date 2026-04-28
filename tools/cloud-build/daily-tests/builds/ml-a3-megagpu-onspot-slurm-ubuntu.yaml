@@ -17,7 +17,8 @@ tags:
 - m.custom-image
 - m.startup-script
 - slurm6
-- m.filestore
+- m.managed-lustre
+- m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset

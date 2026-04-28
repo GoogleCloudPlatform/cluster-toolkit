@@ -41,6 +41,16 @@ vars:
   a3mega_dws_flex_enabled: false
   a3mega_enable_spot_vm: false
 
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
+
 deployment_groups:
 - group: primary
   modules:
@@ -135,7 +145,7 @@ deployment_groups:
             "install_cuda": false,
             "install_ompi": true,
             "install_lustre": false,
-            "install_managed_lustre": false,
+            "install_managed_lustre": true,
             "install_gcsfuse": true,
             "monitoring_agent": "cloud-ops",
             "use_open_drivers": true
@@ -408,19 +418,18 @@ deployment_groups:
     source: modules/network/private-service-access
     use:
     - sysnet
+
   - id: homefs
-    source: modules/file-system/filestore
+    source: modules/file-system/managed-lustre
     use:
     - sysnet
     - private_service_access
     settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /home
-      mount_options: "defaults,hard"
-      deletion_protection:
-        enabled: true
-        reason: Avoid data loss
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: $(vars.local_mount_homefs)
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
     outputs:
     - network_storage
 
