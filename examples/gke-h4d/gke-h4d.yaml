@@ -117,7 +117,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
     settings:
-      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_machine_type: "n4-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_multi_networking: true

@@ -158,7 +158,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0, workload_service_account]
     settings:
-      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_machine_type: "n4-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
