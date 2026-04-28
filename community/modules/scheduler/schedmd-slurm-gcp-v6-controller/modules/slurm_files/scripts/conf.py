@@ -19,7 +19,6 @@ from itertools import chain
 from collections import defaultdict
 from dataclasses import dataclass, field
 import logging
-import os
 import math
 import json
 from pathlib import Path
@@ -756,8 +755,8 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
         f.write("---\n\n")
         yaml.dump(topo.render_yaml(block_is_default=block_is_default), f, sort_keys=False)
 
-    if os.path.getsize(yaml_file) % 4096 == 0:
-        with open(yaml_file, "a") as f:
+    if yaml_file.stat().st_size % 4096 == 0:
+        with yaml_file.open("a") as f:
             f.write("\n")
 
     prev_summary = TopologySummary.load(lkp)
