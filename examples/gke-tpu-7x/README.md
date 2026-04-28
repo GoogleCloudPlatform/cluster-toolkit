@@ -222,7 +222,6 @@ To avoid recurring charges for the resources used, clean up the resources provis
 
 - The formula is: (`Total Chips in Topology`) / (`Chips per Machine`)
 - This value is automatically injected into your configuration during blueprint expansion.
-- For multi-node setups, a COMPACT placement policy is automatically configured.
 
 #### Example 1: *Single-Node Slice* (The default for this blueprint)
 

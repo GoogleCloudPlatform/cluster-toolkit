@@ -71,6 +71,8 @@ This section guides you through the cluster creation process, ensuring that your
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
    * `reservation`: the name of the compute engine reservation of TPU v6e nodes.
 
+    > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
+
     To modify advanced settings, edit `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`.
 
 1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
