@@ -1079,6 +1079,8 @@ func TestGetPredefinedModules(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Clear the cache before each individual test case
+			cachedTree = nil
 			// Set up the mock transport for the current test case
 			http.DefaultTransport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
@@ -1098,7 +1100,137 @@ func TestGetPredefinedModules(t *testing.T) {
 			if !reflect.DeepEqual(modules, tc.expected) {
 				t.Errorf("expected modules %v, got %v", tc.expected, modules)
 			}
-
 		})
+	}
+}
+
+func TestGetPredefinedExampleFiles(t *testing.T) {
+	// Save the original transport to restore it after tests complete
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	tests := []struct {
+		name     string
+		mockResp *http.Response
+		mockErr  error
+		expected []string
+	}{
+		{
+			name: "success: extracts and deduplicates example yaml files",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"tree": [
+						{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+						{"path": "examples/machine-learning.yaml", "type": "blob"},
+						{"path": "community/examples/batch-job.yaml", "type": "blob"},
+						{"path": "examples/ignore_me.txt", "type": "blob"},
+						{"path": "some_other_dir/example.yaml", "type": "blob"},
+						{"path": "examples/not_a_blob/main.yaml", "type": "tree"},
+						{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+					]
+				}`)),
+			},
+			// Expected to ignore non-yaml files, files outside `examples/` directories,
+			// and `tree` types. It should also deduplicate matching paths.
+			expected: []string{"examples/hpc-slurm.yaml", "examples/machine-learning.yaml", "community/examples/batch-job.yaml"},
+		},
+		{
+			name: "error: non-200 status code",
+			mockResp: &http.Response{
+				StatusCode: http.StatusNotFound,
+				Status:     "404 Not Found",
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Not Found"}`)),
+			},
+		},
+		{
+			name: "error: invalid JSON",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
+			},
+		},
+		{
+			name:    "error: network failure or timeout",
+			mockErr: fmt.Errorf("connection timeout"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clear the cache before each individual test case
+			cachedTree = nil
+			// Set up the mock transport for the current test case
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					// Verify that the request URL contains the toolkit version
+					version := GetToolkitVersion()
+					if !strings.Contains(req.URL.String(), version) {
+						t.Errorf("Expected URL to contain version %s, got %s", version, req.URL.String())
+					}
+					return tc.mockResp, tc.mockErr
+				},
+			}
+
+			files := GetPredefinedExampleFiles()
+
+			// reflect.DeepEqual works deterministically here because the function processes
+			// the JSON array sequentially and appends exactly in the order items appear.
+			if !reflect.DeepEqual(files, tc.expected) {
+				t.Errorf("expected files %v, got %v", tc.expected, files)
+			}
+		})
+	}
+}
+
+func TestGetPredefined_Caching(t *testing.T) {
+	// Save the original transport to restore it after the test
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Ensure the cache is clean before and after this test runs
+	cachedTree = nil
+	defer func() { cachedTree = nil }()
+
+	apiCallCount := 0
+
+	// Mock transport that counts how many times the API was called
+	http.DefaultTransport = &mockTransport{
+		roundTripFunc: func(req *http.Request) (*http.Response, error) {
+			apiCallCount++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(bytes.NewBufferString(`{
+					"tree": [
+						{"path": "modules/network/vpc/main.tf", "type": "blob"},
+						{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+					]
+				}`)),
+			}, nil
+		},
+	}
+
+	// First call should trigger an API request and populate the cache
+	modules := GetPredefinedModules()
+	if len(modules) == 0 {
+		t.Errorf("Expected modules to be returned, got empty list")
+	}
+	if apiCallCount != 1 {
+		t.Errorf("Expected exactly 1 API call on first execution, got %d", apiCallCount)
+	}
+
+	// Second call (for example files) should use the cache and NOT trigger an API request
+	examples := GetPredefinedExampleFiles()
+	if len(examples) == 0 {
+		t.Errorf("Expected examples to be returned, got empty list")
+	}
+	if apiCallCount != 1 {
+		t.Errorf("Expected still 1 API call after second execution, got %d", apiCallCount)
+	}
+
+	// Third call (same function again) should also use the cache
+	GetPredefinedModules()
+	if apiCallCount != 1 {
+		t.Errorf("Expected still 1 API call after third execution, got %d", apiCallCount)
 	}
 }

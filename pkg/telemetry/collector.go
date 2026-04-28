@@ -21,6 +21,8 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -34,8 +36,11 @@ import (
 )
 
 var (
-	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
-	standardModules            = config.GetPredefinedModules()
+	fetchStandardModules         = config.GetPredefinedModules
+	fetchStandardDeploymentFiles = config.GetPredefinedExampleFiles
+
+	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
+
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -60,6 +65,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -124,6 +130,29 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getDeploymentFile(cmd *cobra.Command) string {
+	flag := cmd.Flag("deployment-file")
+	// Early return if deployment file flag is empty
+	if flag == nil || flag.Value.String() == "" {
+		return ""
+	}
+
+	// Normalize the path to handle variations like "./", redundant slashes, or Windows "\"
+	deploymentFile := path.Clean(filepath.ToSlash(flag.Value.String()))
+
+	standardFiles := fetchStandardDeploymentFiles()
+	if len(standardFiles) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Lazily load the predefined files and check if given file is a standard file
+	if slices.Contains(standardFiles, deploymentFile) {
+		return deploymentFile
+	}
+
+	return "Custom"
 }
 
 func getIsGke(modulesList []string) string {
@@ -203,6 +232,8 @@ func getModules(modulesList []string) string {
 	if len(modulesList) == 0 {
 		return ""
 	}
+
+	standardModules := fetchStandardModules()
 
 	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
 	if len(standardModules) == 0 {

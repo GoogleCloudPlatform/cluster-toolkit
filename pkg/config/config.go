@@ -17,18 +17,16 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
-
-	"encoding/json"
-	"net/http"
-	"path"
-
 	"time"
 
 	"github.com/agext/levenshtein"
@@ -985,50 +983,87 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
-// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
-func GetPredefinedModules() []string {
-	version := GetToolkitVersion()
+// cachedTree stores the GitHub API response to avoid redundant network calls.
+var cachedTree *TreeResponse
+
+// fetchGitTreeFiles queries the GitHub API and decodes the JSON into a TreeResponse.
+func fetchGitTreeFiles(version string) (*TreeResponse, error) {
+	// Return the cached response if we've already fetched it
+	if cachedTree != nil {
+		return cachedTree, nil
+	}
 
 	// Query the GitHub API for the recursive file tree of this specific version tag
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+
+	// Ensure the network call has a timeout of up to 10 seconds to prevent blocking CLI execution.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
 	}
 
 	var treeResp TreeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
+	// Cache the response before returning it
+	cachedTree = &treeResp
+	return cachedTree, nil
+}
+
+// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedModules() []string {
 	var predefinedModules []string
 	moduleSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitTreeFiles(version)
 
-	// Parse the remote tree
-	for _, item := range treeResp.Tree {
-		// We only care about files ("blob") inside the known module directories
-		if item.Type == "blob" {
-			if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
-				// Identify module directories by Terraform or Packer configuration files
-				if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
-					moduleDir := path.Dir(item.Path)
-					if !moduleSet[moduleDir] {
-						moduleSet[moduleDir] = true
-						predefinedModules = append(predefinedModules, moduleDir)
-					}
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We only care about Terraform or Packer configuration files files ("blob") inside the known module directories
+			if item.Type == "blob" && (strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) && (strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+				moduleDir := path.Dir(item.Path)
+				if !moduleSet[moduleDir] {
+					moduleSet[moduleDir] = true
+					predefinedModules = append(predefinedModules, moduleDir)
 				}
 			}
 		}
 	}
 	return predefinedModules
+}
+
+// GetPredefinedExampleFiles fetches all pre-defined deployment files for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom files are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedExampleFiles() []string {
+	var predefinedFiles []string
+	fileSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitTreeFiles(version)
+
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We care about YAML files ("blob") inside examples/ and community/examples/ folders.
+			if item.Type == "blob" && (strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) && strings.HasSuffix(item.Path, ".yaml") {
+				if !fileSet[item.Path] {
+					fileSet[item.Path] = true
+					predefinedFiles = append(predefinedFiles, item.Path)
+				}
+			}
+		}
+	}
+	return predefinedFiles
 }
