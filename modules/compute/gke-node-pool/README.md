@@ -308,7 +308,9 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
+| <a name="module_dranet_version_compare"></a> [dranet\_version\_compare](#module\_dranet\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
+| <a name="module_gpu_direct_version_compare"></a> [gpu\_direct\_version\_compare](#module\_gpu\_direct\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_tpu"></a> [tpu](#module\_tpu) | ../../internal/tpu-definition | n/a |
 
@@ -341,6 +343,7 @@ limitations under the License.
 | <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
+| <a name="input_enable_dranet"></a> [enable\_dranet](#input\_enable\_dranet) | Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). If null, automatically enabled for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster. | `bool` | `null` | no |
 | <a name="input_enable_flex_start"></a> [enable\_flex\_start](#input\_enable\_flex\_start) | If true, start the node pool with Flex Start provisioning model.<br/>To learn more about flex-start mode, please refer to<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_numa_aware_scheduling"></a> [enable\_numa\_aware\_scheduling](#input\_enable\_numa\_aware\_scheduling) | Enable [NUMA-aware](https://cloud.google.com/kubernetes-engine/distributed-cloud/bare-metal/docs/vm-runtime/numa) scheduling. | `bool` | `false` | no |

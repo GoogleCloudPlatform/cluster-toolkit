@@ -65,15 +65,32 @@ locals {
   gke_version_parts = regex(local.gke_version_regex, var.gke_version)
   gke_version_major = local.gke_version_parts[0]
 
+  dranet_min_version = "1.34.1-gke.1829001"
+
   major_minor_version_acceptable_map = try(local.gpu_direct_setting[var.machine_type].major_minor_version_acceptable_map, null)
   minor_version_acceptable           = try(contains(keys(local.major_minor_version_acceptable_map), local.gke_version_major), false) ? local.major_minor_version_acceptable_map[local.gke_version_major] : "1.0.0-gke.0"
-  minor_version_acceptable_parts     = regex(local.gke_version_regex, local.minor_version_acceptable)
-  gke_gpudirect_compatible           = local.gke_version_parts[1] > local.minor_version_acceptable_parts[1] || (local.gke_version_parts[1] == local.minor_version_acceptable_parts[1] && local.gke_version_parts[2] >= local.minor_version_acceptable_parts[2])
+}
+
+module "dranet_version_compare" {
+  source          = "../../internal/semver_compare"
+  current_version = var.gke_version
+  minimum_version = local.dranet_min_version
+}
+
+module "gpu_direct_version_compare" {
+  source          = "../../internal/semver_compare"
+  current_version = var.gke_version
+  minimum_version = local.minor_version_acceptable
+}
+
+locals {
+  is_dranet_compatible     = module.dranet_version_compare.is_greater_than_or_equal
+  gke_gpudirect_compatible = module.gpu_direct_version_compare.is_greater_than_or_equal
 }
 
 check "gpu_direct_check_multi_vpc" {
   assert {
-    condition     = length(var.additional_networks) >= local.min_additional_networks
+    condition     = local.enable_dranet_actual || length(var.additional_networks) >= local.min_additional_networks
     error_message = "To achieve optimal performance for ${var.machine_type} machine, at least ${local.min_additional_networks} additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as ${local.min_additional_networks}"
   }
 }
