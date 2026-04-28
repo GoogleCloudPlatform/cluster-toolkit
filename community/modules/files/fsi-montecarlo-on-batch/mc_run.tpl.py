@@ -70,8 +70,8 @@ class VaRSimulator:
 
   def get_stats(self):
     close = self.data
-    self.first = close[0]
-    self.last = close[-1]
+    self.first = close.iloc[0]
+    self.last = close.iloc[-1]
     self.trading_days = len(close)
     self.cagr = (self.last / self.first) ** (365.0/self.calendar_days) -1.0
     self.volatility =  self.data.pct_change().std()
