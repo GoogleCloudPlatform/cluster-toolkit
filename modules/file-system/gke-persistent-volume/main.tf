@@ -75,10 +75,23 @@ locals {
     labels   = local.labels
   }
 
+  # Check if a GCS Fuse storage profile is active
+  has_gcsfuse_storage_profile = var.gcsfuse_storage_class_name != "" && var.gcsfuse_storage_class_name != null
+
+  # Extract mount options as a list (fallback to empty list if not GCS)
+  gcs_mount_opts_raw = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
+
+  # Apply filters to clean up the options
+  gcs_mount_options = [
+    for opt in local.gcs_mount_opts_raw : opt
+    if !contains(["defaults", "_netdev"], opt) &&                  # Filter out defaults
+    !(opt == "implicit_dirs" && local.has_gcsfuse_storage_profile) # Filter implicit_dirs if profile is active
+  ]
+
   # Variables for PV templates, merging common vars with type-specific ones.
   pv_template_vars = {
     gcs = merge(local.common_pv_vars, {
-      mount_options      = var.gcs_bucket_name != null ? [for opt in split(",", var.network_storage.mount_options) : opt if !contains(["defaults", "_netdev"], opt) && !(opt == "implicit_dirs" && var.gcsfuse_storage_class_name != "" && var.gcsfuse_storage_class_name != null)] : []
+      mount_options      = local.gcs_mount_options
       bucket_name        = var.gcs_bucket_name
       namespace          = var.namespace
       pvc_name           = local.pvc_name

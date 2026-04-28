@@ -35,6 +35,8 @@ import (
 var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
 var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`)
 
+const gcsFuseProfileUserRole = "gke.gcsfuse.profileUser"
+
 func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
 		m, ok := d.(map[string]interface{})
@@ -499,7 +501,13 @@ func testDiskTypeInZoneAvailability(bp config.Blueprint, inputs config.Dict) err
 	return testResourceInZoneAvailability(bp, inputs, "test_disk_type_in_zone", "disk_type", "disk type", validateDiskTypeInZone)
 }
 
-// testGCSFuseIAMRoleExists checks if the custom IAM role 'gke.gcsfuse.profileUser' exists.
+// testGCSFuseIAMRoleExistsCheck verifies that the required custom IAM role for GCS Fuse exists.
+// High-level logic for failures:
+//   - Hard Failure (404): If the role explicitly does not exist, we block deployment because
+//     GCS Fuse Storage Profiles will fail at runtime without it.
+//   - Soft Warning (403/other): If we cannot verify the role due to permission issues (e.g., the
+//     runner lacks 'iam.roles.get'), we log a warning but do not block. This prevents blocking
+//     users who have deployment permissions but not project-wide IAM read permissions.
 func testGCSFuseIAMRoleExistsCheck(projectID string) error {
 	ctx := context.Background()
 	s, err := iam.NewService(ctx)
@@ -507,13 +515,13 @@ func testGCSFuseIAMRoleExistsCheck(projectID string) error {
 		return handleClientError(err)
 	}
 
-	roleName := fmt.Sprintf("projects/%s/roles/gke.gcsfuse.profileUser", projectID)
+	roleName := fmt.Sprintf("projects/%s/roles/%s", projectID, gcsFuseProfileUserRole)
 	_, err = s.Projects.Roles.Get(roleName).Do()
 	if err != nil {
 		var herr *googleapi.Error
 		if errors.As(err, &herr) && herr.Code == 404 {
 			return config.HintError{
-				Err: fmt.Errorf("custom IAM role 'gke.gcsfuse.profileUser' was not found in project %s", projectID),
+				Err: fmt.Errorf("custom IAM role '%s' was not found in project %s", gcsFuseProfileUserRole, projectID),
 				Hint: "GCS Fuse CSI Storage Profiles require this custom IAM role.\n" +
 					"Please refer to modules/file-system/gke-persistent-volume/README.md for instructions.",
 			}
@@ -554,7 +562,7 @@ func checkGCSFuseIAMBinding(ctx context.Context, projectID string, roleName stri
 	roleGranted := false
 
 	for _, binding := range policy.Bindings {
-		if binding.Role == roleName || binding.Role == fmt.Sprintf("projects/%s/roles/gke.gcsfuse.profileUser", projectID) {
+		if binding.Role == roleName {
 			for _, member := range binding.Members {
 				if member == agentMember {
 					roleGranted = true
