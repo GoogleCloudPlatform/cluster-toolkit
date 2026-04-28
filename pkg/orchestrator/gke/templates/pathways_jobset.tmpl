@@ -60,6 +60,8 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
+              ports:
+              - containerPort: 29000
               args:
               - --server_port=29000
               - --resource_manager_address=$(PATHWAYS_HEAD):29001
@@ -81,6 +83,9 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
+              ports:
+              - containerPort: 29001
+              - containerPort: 29002
               args:
               - --server_port=29001
               - --gcs_scratch_location={{.Pathways.GCSLocation}}
@@ -150,13 +155,6 @@ spec:
         parallelism: {{.VmsPerSlice}}
         completions: {{.VmsPerSlice}}
         backoffLimit: 0
-        podFailurePolicy:
-          rules:
-          - action: FailJob
-            onExitCodes:
-              containerName: "workload-container"
-              operator: In
-              values: [1]
         template:
           metadata:
             labels:
@@ -181,6 +179,11 @@ spec:
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
+              ports:
+              - containerPort: 29005
+              - containerPort: 29006
+              - containerPort: 8471
+              - containerPort: 8080
               args:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
