@@ -85,10 +85,10 @@ steps:
     fi
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
-
-    sed -i -e '/- id: sysnet/,/- id: gpunets/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
       --extra-vars="region=$${REGION} zone=$${ZONE}"\
       --extra-vars="enable_spot=$${ENABLE_SPOT} "\

@@ -128,13 +128,13 @@ ramble:
 
   env_vars:
     set:
-      OMPI_MCA_btl_tcp_if_include: enp0s1
+      OMPI_MCA_btl_tcp_if_include: enp0s3,enp192s2
       PMIX_MCA_gds: ^ds12
       UCX_NET_DEVICES: gpu0rdma0,gpu1rdma0,gpu2rdma0,gpu3rdma0
       PMIX_MCA_psec: native
       UCX_IB_FORK_INIT: n
       NCCL_NET: gIB
-      NCCL_SOCKET_IFNAME: enp0s1,enp192s1
+      NCCL_SOCKET_IFNAME: enp0s3,enp192s2
       LD_LIBRARY_PATH: /usr/local/gib/lib64:usr/local/nvidia/lib
 
   applications:

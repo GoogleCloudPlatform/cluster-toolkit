@@ -400,3 +400,9 @@ variable "network_storage" {
   }))
   default = []
 }
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
+}

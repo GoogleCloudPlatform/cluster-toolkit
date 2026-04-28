@@ -24,6 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
+  * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgu-yaml-) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
@@ -431,6 +432,10 @@ When you are done, clean up the resources:
 ```
 
 [ml-slurm-g4.yaml]: ../examples/ml-slurm-g4.yaml
+
+### [ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) ![community-badge] ![experimental-badge]
+
+This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using **NVIDIA G4 vGPUs** (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to recognize the fractional GPU resources, making it suitable for cost-effective ML development and inference tasks.
 
 ### [image-builder.yaml] ![core-badge]
 

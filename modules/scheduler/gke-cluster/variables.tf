@@ -80,7 +80,7 @@ variable "enable_private_ipv6_google_access" {
 }
 
 variable "release_channel" {
-  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR` and `STABLE`."
+  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
   type        = string
   default     = "UNSPECIFIED"
 }

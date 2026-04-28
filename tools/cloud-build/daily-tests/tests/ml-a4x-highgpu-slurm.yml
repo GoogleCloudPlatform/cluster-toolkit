@@ -41,7 +41,7 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
-  base_network_name: '{{ test_name }}'
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   a4x_reservation_name: "nvidia-gb200-uyrez5en64cu7"

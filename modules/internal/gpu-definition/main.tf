@@ -22,7 +22,11 @@ locals {
   #     type  = "https://www.googleapis.com/compute/beta/projects/PROJECT/zones/ZONE/acceleratorTypes/nvidia-tesla-a100"
   #   },
   # ]
-  accelerator_machines = try(jsondecode(var.machine_configs).gpus, {})
+  accelerator_machines = try(
+    jsondecode(var.machine_configs).gpus,
+    var.machine_configs.gpus,
+    {}
+  )
 
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 
