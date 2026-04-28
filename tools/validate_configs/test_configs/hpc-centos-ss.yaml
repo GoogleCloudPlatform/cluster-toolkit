@@ -75,4 +75,5 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [network1, startup, nfs, appsfs]
     settings:
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
+      disk_type: hyperdisk-balanced

@@ -60,7 +60,8 @@ steps:
     echo '    source: modules/compute/vm-instance' >> $${SG_EXAMPLE}
     echo '    use: [network1]'                     >> $${SG_EXAMPLE}
     echo '    settings:'                           >> $${SG_EXAMPLE}
-    echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
+    echo '      machine_type: n4-standard-2'       >> $${SG_EXAMPLE}
+    echo '      disk_type: hyperdisk-balanced'     >> $${SG_EXAMPLE}
     echo '      zone: asia-southeast1-b'           >> $${SG_EXAMPLE}
 
     echo '  - id: ubuntu_pool'                                         >> $${SG_EXAMPLE}

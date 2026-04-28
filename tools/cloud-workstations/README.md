@@ -17,7 +17,7 @@ WORKSTATION_NAME=hpc-toolkit-workstation
 CLUSTER_NAME=$WORKSTATION_NAME-cluster
 CONFIG_NAME=$WORKSTATION_NAME-config
 CUSTOM_IMAGE=us-docker.pkg.dev/${PROJECT_ID}/${WORKSTATION_NAME}/hpc-toolkit-workstation:latest
-MACHINE_TYPE=e2-standard-8
+MACHINE_TYPE=n4-standard-8
 SERVICE_ACCOUNT=<service account email>
 ```
 
