@@ -187,7 +187,6 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         body["minCount"] = 1
 
     zone_allow = nodeset.zone_policy_allow or []
-    zone_deny = nodeset.zone_policy_deny or []
 
     if len(zone_allow) == 1: # if only one zone is used, use zonal BulkInsert API, as less prone to errors
         api_method = lookup().compute.instances().bulkInsert
@@ -195,11 +194,10 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
     else:
         api_method = lookup().compute.regionInstances().bulkInsert
         method_args = {"region": lookup().node_region(model)}
-        
+
+        # The 'zones' parameter acts as an allow-list, implicitly denying any zones not included.
         body["locationPolicy"] = dict(
-            locations = {
-                **{ f"zones/{z}": {"preference": "ALLOW"} for z in zone_allow },
-                **{ f"zones/{z}": {"preference": "DENY"} for z in zone_deny }},
+            zones = [ { "zone": f"zones/{z}" } for z in zone_allow ],
             targetShape = nodeset.zone_target_shape,
         )
     
