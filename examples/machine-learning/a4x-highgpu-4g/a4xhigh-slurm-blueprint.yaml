@@ -25,7 +25,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20260218
+    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260316
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
@@ -181,8 +181,8 @@ deployment_groups:
               cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
+              - cuda-toolkit-13-0
+              - datacenter-gpu-manager-4-cuda13
               - datacenter-gpu-manager-4-dev
             tasks:
             - name: Download NVIDIA repository package

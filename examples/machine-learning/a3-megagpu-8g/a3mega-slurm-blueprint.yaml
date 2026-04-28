@@ -26,7 +26,7 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -83,6 +83,12 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
 
       # The following holds NVIDIA software that was already installed on the
       # accelerator base image to be the same driver version. This reduces the
@@ -153,46 +159,24 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-      - type: ansible-local
-        destination: update-gvnic.yml
-        content: |
-          ---
-          - name: Install updated gVNIC driver from GitHub
-            hosts: all
-            become: true
-            vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
-            tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |
           #!/bin/bash
           set -ex -o pipefail
-          add-nvidia-repositories -y
-          apt update -y
-          apt install -y \
-              cuda-toolkit-12-8 \
-              nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.2-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.2-1 \
-              datacenter-gpu-manager-4-core=1:4.5.2-1
+           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb
+           dpkg -i /tmp/cuda-keyring.deb
+           apt update -y
+           apt install -y \
+               cuda-toolkit-13-0 \
+               nvidia-container-toolkit \
+               datacenter-gpu-manager-4-cuda13 \
+               datacenter-gpu-manager-4-dev \
+               datacenter-gpu-manager-4-core
 
           # 2. Hold ALL components
           apt-mark hold \
-              datacenter-gpu-manager-4-cuda12 \
+              datacenter-gpu-manager-4-cuda13 \
               datacenter-gpu-manager-4-dev \
               datacenter-gpu-manager-4-core
       # this duplicates the ulimits configuration of the HPC VM Image
@@ -213,6 +197,21 @@ deployment_groups:
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
+          # Required for enroot/pyxis to work
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
+
+          # 2. Ensure /etc/hostname exists (needed by enroot/pyxis)
+          if [ ! -f /etc/hostname ]; then
+            hostname > /etc/hostname
+          fi
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |
@@ -263,31 +262,44 @@ deployment_groups:
                 state: stopped
                 enabled: false
 
-      - type: ansible-local
-        destination: install_dmabuf.yml
+      - type: shell
+        destination: install_dmabuf_patched.sh
         content: |
-          ---
-          - name: Install DMBABUF import helper
-            hosts: all
-            become: true
-            tasks:
-            - name: Setup apt-transport-artifact-registry repository
-              ansible.builtin.apt_repository:
-                repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
-                state: present
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-                - apt-transport-artifact-registry
-            - name: Setup gpudirect-tcpxo apt repository
-              ansible.builtin.apt_repository:
-                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
-                state: present
-            - name: Install DMABUF import helper DKMS package
-              ansible.builtin.apt:
-                name: dmabuf-import-helper
-                state: present
+          #!/bin/bash
+          set -ex -o pipefail
+
+          # 1. Add Artifact Registry apt repo driver repo
+          echo "deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main" > /etc/apt/sources.list.d/artifact-registry.list
+          apt-get update
+          apt-get install -y apt-transport-artifact-registry
+
+          # 2. Now add the ar+https repo
+          echo "deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main" > /etc/apt/sources.list.d/gpudirect-tcpxo.list
+
+          # 3. Install dependencies
+          apt-get update
+          apt-get install -y dkms
+
+          # 3. Download package
+          mkdir -p /tmp/dmabuf_pkg
+          cd /tmp/dmabuf_pkg
+          apt-get update # Update again to make sure we see the new repo
+          apt-get download dmabuf-import-helper
+
+          # 4. Extract package
+          dpkg -x *.deb .
+
+          # 5. Move source to /usr/src
+          rm -rf /usr/src/dmabuf-import-helper-1.1
+          mv usr/src/dmabuf-import-helper-1.1 /usr/src/
+
+          # 6. Apply fix for kernel 6.17
+          sed -i 's/MODULE_IMPORT_NS(DMA_BUF)/MODULE_IMPORT_NS("DMA_BUF")/' /usr/src/dmabuf-import-helper-1.1/import-helper.c
+
+          # 7. Build and install via DKMS
+          dkms add -m dmabuf-import-helper -v 1.1
+          dkms build -m dmabuf-import-helper -v 1.1
+          dkms install -m dmabuf-import-helper -v 1.1
       - type: ansible-local
         destination: aperture_devices.yml
         content: |
@@ -341,6 +353,14 @@ deployment_groups:
           apt-get install --assume-yes google-cloud-cli
           # Clean up the bash executable hash for subsequent steps using gsutil
           hash -r
+      - type: shell
+        destination: stop_packer_early.sh
+        content: |
+          #!/bin/bash
+          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
+          LOG_DEST=`curl -s -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null`
+          if [ -n "\$LOG_DEST" ]; then rm -f "\$LOG_DEST"; fi
+          gcloud compute instances add-metadata `hostname -s` --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: slurm-build
   modules:
