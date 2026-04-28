@@ -13,6 +13,10 @@ spec:
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   failurePolicy:
     maxRestarts: {{.MaxRestarts}}
+    rules:
+      - action: FailJobSet
+        onJobFailureReasons:
+          - PodFailurePolicy
   replicatedJobs:
     - name: main-job
       replicas: {{.NumSlices}}

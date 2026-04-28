@@ -201,7 +201,7 @@ Please select an option [d,a,s,c]: `)
 
 // PromptYesNo prompts the user with a yes/no question.
 // It returns true if the user answers 'y' or 'yes' or just presses Enter.
-func PromptYesNo(prompt string) bool {
+var PromptYesNo = func(prompt string) bool {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Printf("%s [Y/n]: ", prompt)

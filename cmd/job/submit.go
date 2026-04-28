@@ -80,6 +80,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
+		if err := validatePathwaysFlags(); err != nil {
+			return err
+		}
+
 		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
 			return err
 		}
@@ -147,12 +151,12 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
-	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished)
+	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
 	}
 
-	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr)
+	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr, "--grace-period")
 	if err != nil {
 		return err
 	}
@@ -286,7 +290,7 @@ func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error)
 	return src, dest, readOnly, nil
 }
 
-func parseDurationToSeconds(dStr string) (int, error) {
+func parseDurationToSeconds(dStr string, flagName string) (int, error) {
 	d, err := time.ParseDuration(dStr)
 	if err == nil {
 		return int(d.Seconds()), nil
@@ -297,7 +301,21 @@ func parseDurationToSeconds(dStr string) (int, error) {
 		return seconds, nil
 	}
 
-	return 0, fmt.Errorf("invalid duration format for --gke-ttl-after-finished: %s. Expected formats: 1h, 30m, 3600", dStr)
+	return 0, fmt.Errorf("invalid duration format for %s: %s. Expected formats: 1h, 30m, 3600", flagName, dStr)
+}
+
+func validatePathwaysFlags() error {
+	if isPathwaysJob {
+		if pathways.GCSLocation == "" {
+			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
+		}
+	} else {
+		// Check if any pathways-specific flag is set without --pathways
+		if pathways != (orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) {
+			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+		}
+	}
+	return nil
 }
 
 func validateImageFlags() error {

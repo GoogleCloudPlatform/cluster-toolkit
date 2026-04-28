@@ -22,6 +22,11 @@ spec:
 {{- end }}
   failurePolicy:
     maxRestarts: {{.MaxRestarts}}
+    restartStrategy: Recreate
+    rules:
+      - action: FailJobSet
+        onJobFailureReasons:
+        - PodFailurePolicy
   replicatedJobs:
   - name: pathways-head
     replicas: 1
@@ -34,6 +39,10 @@ spec:
         parallelism: 1
         completions: 1
         backoffLimit: 0
+{{- if .PodFailurePolicy }}
+        podFailurePolicy:
+{{.PodFailurePolicy}}
+{{- end }}
         template:
           metadata:
 {{- if .GCSFuseEnabled }}
@@ -71,9 +80,9 @@ spec:
               {{- end}}
               - --cluster_name={{.ClusterName}}
               - --project_id={{.ProjectID}}
-              {{- if .Pathways.ProxyArgs}}
-              - {{.Pathways.ProxyArgs}}
-              {{- end}}
+              {{- range .ProxyArgsList }}
+              - {{.}}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -92,9 +101,9 @@ spec:
               - --node_type=resource_manager
               - --instance_count={{.NumSlices}}
               - --instance_type={{.PathwaysInstanceType}}
-              {{- if .Pathways.ServerArgs}}
-              - {{.Pathways.ServerArgs}}
-              {{- end}}
+              {{- range .ServerArgsList }}
+              - {{.}}
+              {{- end }}
               env:
               - name: REPLICATED_JOB_NAME
                 valueFrom:
@@ -154,7 +163,11 @@ spec:
         completionMode: Indexed
         parallelism: {{.VmsPerSlice}}
         completions: {{.VmsPerSlice}}
-        backoffLimit: 0
+        backoffLimit: {{.WorkerBackoffLimit}}
+{{- if .PodFailurePolicy }}
+        podFailurePolicy:
+{{.PodFailurePolicy}}
+{{- end }}
         template:
           metadata:
             labels:
@@ -164,7 +177,7 @@ spec:
           spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
-            restartPolicy: Never
+            restartPolicy: OnFailure
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
@@ -190,9 +203,9 @@ spec:
                 - --gcs_scratch_location={{.Pathways.GCSLocation}}
                 - --cluster_name={{.ClusterName}}
                 - --project_id={{.ProjectID}}
-                {{- if .Pathways.WorkerArgs}}
-                - {{.Pathways.WorkerArgs}}
-                {{- end}}
+                {{- range .WorkerArgsList }}
+                - {{.}}
+                {{- end }}
               env:
               {{- if .Verbose }}
               - name: TPU_MIN_LOG_LEVEL

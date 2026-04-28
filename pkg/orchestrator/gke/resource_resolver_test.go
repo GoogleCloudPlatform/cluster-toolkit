@@ -149,3 +149,55 @@ func TestFetchMachineCapabilities_Caching(t *testing.T) {
 		t.Errorf("mockExec.callCount[%q] = %d, want 1", cmd, mockExec.callCount[cmd])
 	}
 }
+
+func TestCalculateResourceLimits_CPU(t *testing.T) {
+	tests := []struct {
+		name          string
+		capacityCount int
+		wantCPU       string
+	}{
+		{
+			name:          "Large capacity",
+			capacityCount: 32,
+			wantCPU:       "30",
+		},
+		{
+			name:          "Small capacity (rounds down to 1)",
+			capacityCount: 2,
+			wantCPU:       "1",
+		},
+		{
+			name:          "Capacity 1 (offset < 1, fallback to 1)",
+			capacityCount: 1,
+			wantCPU:       "1",
+		},
+		{
+			name:          "Capacity 0 (fallback to 1)",
+			capacityCount: 0,
+			wantCPU:       "1",
+		},
+	}
+
+	g := &GKEOrchestrator{}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := ManifestOptions{AcceleratorType: "n2-standard-32"}
+			profile := JobProfile{
+				IsCPUMachine:  true,
+				CapacityCount: tt.capacityCount,
+			}
+
+			cpu, mem, gpu, tpu, err := g.calculateResourceLimits(opts, profile)
+			if err != nil {
+				t.Fatalf("calculateResourceLimits failed: %v", err)
+			}
+			if cpu != tt.wantCPU {
+				t.Errorf("cpu = %v, want %v", cpu, tt.wantCPU)
+			}
+			if mem != "" || gpu != "" || tpu != "" {
+				t.Errorf("mem, gpu, tpu = %q, %q, %q; want empty strings", mem, gpu, tpu)
+			}
+		})
+	}
+}

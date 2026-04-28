@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -152,8 +153,6 @@ func (g *GKEOrchestrator) DeleteKueueDeployment() error {
 }
 
 func (g *GKEOrchestrator) DeleteAllKueueResources() error {
-	logging.Info("Deleting all Kueue resources and CRDs...")
-
 	crds := []string{
 		"admissionchecks.kueue.x-k8s.io",
 		"clusterqueues.kueue.x-k8s.io",
@@ -168,14 +167,9 @@ func (g *GKEOrchestrator) DeleteAllKueueResources() error {
 		"workloads.kueue.x-k8s.io",
 	}
 
-	for _, crd := range crds {
-		logging.Info("Deleting resources for CRD %s...", crd)
-		res := g.executor.ExecuteCommand("kubectl", "delete", crd, "--all", "--ignore-not-found")
-		if res.ExitCode != 0 {
-			logging.Warn("Failed to delete resources for CRD %s: %s", crd, res.Stderr)
-			// Continue with other CRDs even if one fails
-		}
-	}
+	resourceList := strings.Join(crds, ",")
+	logging.Info("Deleting all Kueue resources...")
+	g.executor.ExecuteCommand("kubectl", "delete", resourceList, "--all", "--ignore-not-found", "--wait=false")
 
 	logging.Info("Deleting Kueue CRDs...")
 	args := append([]string{"delete", "crd", "--ignore-not-found"}, crds...)
@@ -346,6 +340,7 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	for res := range mainCoveredResourcesMap {
 		mainCoveredResources = append(mainCoveredResources, res)
 	}
+	sort.Strings(mainCoveredResources)
 	if len(mainCoveredResources) > 0 {
 		resourceGroups = append(resourceGroups, map[string]interface{}{
 			"coveredResources": mainCoveredResources,
@@ -357,6 +352,7 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	for res := range pathwaysCoveredResourcesMap {
 		pathwaysCoveredResources = append(pathwaysCoveredResources, res)
 	}
+	sort.Strings(pathwaysCoveredResources)
 	if len(pathwaysCoveredResources) > 0 {
 		resourceGroups = append(resourceGroups, map[string]interface{}{
 			"coveredResources": pathwaysCoveredResources,
@@ -413,6 +409,11 @@ func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, m
 		mainCovered["google.com/tpu"] = true
 		resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
 	}
+
+	// Sort resources alphabetically by name
+	sort.Slice(resources, func(i, j int) bool {
+		return resources[i]["name"].(string) < resources[j]["name"].(string)
+	})
 
 	return resources, isPathways
 }

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
-	"os"
 	"strings"
 	"time"
 )
@@ -170,84 +169,75 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 		return false, nil
 	}
 
-	// Describe node pool to see if it uses PROVISION_ONLY!
-	poolName := os.Getenv("GKE_NODE_POOL_NAME")
-	if poolName == "" {
-		logging.Warn("GKE_NODE_POOL_NAME is not set. Assuming Super-slicing is not active for this node pool.")
-		return false, nil
-	}
-
-	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+opts.ClusterName, "--location="+opts.ClusterLocation, "--format=json(placementPolicy)")
-	if result.ExitCode != 0 {
-		logging.Warn("gcloud container node-pools describe failed: %s. Proceeding assuming no Super-slicing.", result.Stderr)
-		return false, nil
-	}
-
-	var policy map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Stdout), &policy); err == nil {
-		if placement, ok := policy["placementPolicy"].(map[string]interface{}); ok {
-			if mode, ok := placement["acceleratorTopologyMode"].(string); ok && mode == "PROVISION_ONLY" {
-				logging.Info("Super-slicing PROVISION_ONLY mode detected for node pool %s.", poolName)
-				return true, nil
-			}
-		}
-	}
-
-	// Check for topologies.kueue.x-k8s.io and AdmissionCheck
+	// Check for topologies.kueue.x-k8s.io CRD
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
 		logging.Warn("Topology CRD not found. Kueue Super-slicing not active.")
 		return false, nil
 	}
 
-	return true, nil
+	// Check for AdmissionCheck with controllerName: accelerator.gke.io/slice
+	acResult := g.executor.ExecuteCommand("kubectl", "get", "admissioncheck", "-o", "json")
+	if acResult.ExitCode != 0 {
+		logging.Warn("Failed to query AdmissionChecks. Assuming super-slicing not active.")
+		return false, nil
+	}
+
+	var acList struct {
+		Items []struct {
+			Spec struct {
+				ControllerName string `json:"controllerName"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal([]byte(acResult.Stdout), &acList); err != nil {
+		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming super-slicing not active.", err)
+		return false, nil
+	}
+
+	hasSliceController := false
+	for _, item := range acList.Items {
+		if item.Spec.ControllerName == "accelerator.gke.io/slice" {
+			hasSliceController = true
+			break
+		}
+	}
+
+	if !hasSliceController {
+		logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Super-slicing not active.")
+		return false, nil
+	}
+
+	// Check discovered node pools for super-slicing
+	requestedMachineName := g.resolveMachineName(opts.AcceleratorType)
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Config.MachineType == requestedMachineName {
+			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
+				logging.Info("Super-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
+				return true, nil
+			}
+		}
+	}
+
+	logging.Info("Node pool does not have PROVISION_ONLY mode. Super-slicing not active.")
+	return false, nil
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
-		cpuLim, err := g.calculateCPUMachineResourceLimits(opts, profile)
-		if err != nil {
-			return "", "", "", "", err
-		}
-		return cpuLim, "", "", "", nil
+		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.AcceleratorType, profile.CapacityCount)
+		offsetVCPUs := max(1, int(float64(profile.CapacityCount)*0.95))
+		return fmt.Sprintf("%d", offsetVCPUs), "", "", "", nil
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(opts.AcceleratorType)
 
-	cpuLim, memLim, gpuLim, tpuLim, shouldFallback, err := g.calculateLimitsFromGCP(opts, profile, mapped)
-	if err != nil {
-		return "", "", "", "", err
-	}
-	if !shouldFallback {
-		return cpuLim, memLim, gpuLim, tpuLim, nil
-	}
-
-	cpuLim, memLim, gpuLim, tpuLim = g.calculateFallbackLimits(mapped)
-	if cpuLim != "" || memLim != "" || gpuLim != "" || tpuLim != "" {
-		return cpuLim, memLim, gpuLim, tpuLim, nil
-	}
-
-	return "", "", "", "", fmt.Errorf("could not determine resource limits for %s", opts.AcceleratorType)
-}
-
-func (g *GKEOrchestrator) calculateLimitsFromGCP(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, shouldFallback bool, err error) {
-
 	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
-	if err == nil {
-		return cpuLim, memLim, gpuLim, tpuLim, false, nil
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.AcceleratorType, err)
 	}
-	logging.Warn("Cluster resolution failed for %s: %v. Falling back to hardcoded defaults.", opts.AcceleratorType, err)
-	return "", "", "", "", true, nil
-}
-
-func (g *GKEOrchestrator) calculateFallbackLimits(mapped string) (cpu, mem, gpu, tpu string) {
-	if strings.Contains(strings.ToLower(mapped), "nvidia") {
-		return "", "", "1", ""
-	}
-	if isTPUFallback(mapped) {
-		return "", "", "", "4"
-	}
-	return "", "", "", ""
+	return cpuLim, memLim, gpuLim, tpuLim, nil
 }
 
 func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
@@ -270,17 +260,6 @@ func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions
 		return "", "", "", "", fmt.Errorf("machine type %s resolved to %d capacity but could not be classified as GPU or TPU (mapped label: %s)", machineName, count, mapped)
 	}
 	return "", "", "", "", fmt.Errorf("failed to determine capacity for machine type %s", machineName)
-}
-
-func (g *GKEOrchestrator) calculateCPUMachineResourceLimits(opts ManifestOptions, profile JobProfile) (string, error) {
-	count := profile.CapacityCount
-	logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.AcceleratorType, count)
-
-	offsetVCPUs := int(float64(count) * 0.95)
-	if offsetVCPUs < 1 {
-		offsetVCPUs = 1
-	}
-	return fmt.Sprintf("%d", offsetVCPUs), nil
 }
 
 func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) string {

@@ -207,7 +207,7 @@ func resetSubmitCmdFlags() {
 	awaitJobCompletion = false
 	priorityClassName = "medium"
 	isPathwaysJob = false
-	pathways = orchestrator.PathwaysJobDefinition{}
+	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
 }
 
 func TestParseVolumeFlag_PVC(t *testing.T) {
@@ -344,7 +344,7 @@ func TestParseDurationToSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseDurationToSeconds(tt.dStr)
+			got, err := parseDurationToSeconds(tt.dStr, "--test-flag")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseDurationToSeconds() error = %v, wantErr %v", err, tt.wantErr)
 				return

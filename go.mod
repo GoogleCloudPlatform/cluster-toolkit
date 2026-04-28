@@ -31,7 +31,6 @@ require (
 	github.com/hashicorp/terraform-exec v0.24.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/moby/patternmatcher v0.6.0
-	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
 	google.golang.org/api v0.256.0
