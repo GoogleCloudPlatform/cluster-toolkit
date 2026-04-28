@@ -160,13 +160,18 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				WorkloadName:    "test-workload",
 				CommandToRun:    "echo hello",
 				AcceleratorType: tt.acceleratorType,
-				ClusterLocation: "us-central1",
+				ClusterLocation: "us-central1-a",
 			}
 
 			mockResponses := map[string][]shell.CommandResult{
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
-				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json":          {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe nvidia-h100-mega-80gb --zone=us-central1-a --format=json":  {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe nvidia-gb200 --zone=us-central1-a --format=json":           {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json":              {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":          {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4}]}`}},
+				"gcloud compute machine-types describe nvidia-unknown-new-gpu --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
 			}
 			orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 
@@ -261,12 +266,18 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
-	orc := NewGKEOrchestrator()
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
+		},
+	}
+	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    `python -c "print('hello')"` + " && echo \"world\"",
 		AcceleratorType: "nvidia-l4",
+		ClusterLocation: "us-central1-a",
 	}
 
 	manifest, err := orc.GenerateGKEManifest(opts, JobProfile{})
@@ -358,6 +369,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to write manifest to file: %v", err)
 	}
+	defer os.Remove("gcluster_pathways_manifest.yaml")
 
 	expectedSubstrs := []string{
 		"name: pathways-test",
@@ -372,6 +384,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "100Gi"`,
 		`cpu: "8"`,
 		`memory: "32Gi"`,
+		"restartStrategy: Recreate",
 	}
 
 	for _, substr := range expectedSubstrs {
@@ -793,8 +806,8 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 	tests := []struct {
 		name          string
 		opts          ManifestOptions
+		nodePools     []gkeJobNodePool
 		mockResponses map[string][]shell.CommandResult
-		envVars       map[string]string
 		wantResult    bool
 	}{
 		{
@@ -804,11 +817,18 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 				ClusterLocation: "us-central1-a",
 				AcceleratorType: "tpu-v6e-slice",
 			},
-			envVars: map[string]string{"GKE_NODE_POOL_NAME": "test-pool"},
-			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container node-pools describe test-pool --cluster=test-cluster --location=us-central1-a --format=json(placementPolicy)": {
-					{ExitCode: 0, Stdout: `{"placementPolicy": {"acceleratorTopologyMode": "PROVISION_ONLY"}}`},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu-v6e-slice",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						AcceleratorTopologyMode: "PROVISION_ONLY",
+					},
 				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get crd topologies.kueue.x-k8s.io": {
 					{ExitCode: 0},
 				},
@@ -822,32 +842,46 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 				ClusterLocation: "us-central1-a",
 				AcceleratorType: "nvidia-l4",
 			},
-			envVars:       nil,
+			nodePools:     nil,
 			mockResponses: nil,
 			wantResult:    false,
 		},
 		{
-			name: "Failure - No Node Pool set",
+			name: "Failure - No matching node pool",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
 				AcceleratorType: "tpu-v6e-slice",
 			},
-			envVars:       nil,
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "other-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "other-machine",
+					},
+				},
+			},
 			mockResponses: nil,
 			wantResult:    false,
 		},
 		{
-			name: "Failure - gcloud fails",
+			name: "Failure - CRD not found",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
 				AcceleratorType: "tpu-v6e-slice",
 			},
-			envVars: map[string]string{"GKE_NODE_POOL_NAME": "test-pool"},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu-v6e-slice",
+					},
+				},
+			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud container node-pools describe test-pool --cluster=test-cluster --location=us-central1-a --format=json(placementPolicy)": {
-					{ExitCode: 1, Stderr: "slow network"},
+				"kubectl get crd topologies.kueue.x-k8s.io": {
+					{ExitCode: 1},
 				},
 			},
 			wantResult: false,
@@ -856,11 +890,9 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			for k, v := range tt.envVars {
-				t.Setenv(k, v)
-			}
 			mockExecutor := NewMockExecutor(tt.mockResponses)
 			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc.clusterDesc.NodePools = tt.nodePools
 
 			got, err := orc.verifySuperSlicingActive(tt.opts)
 
@@ -875,12 +907,18 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
-	orc := NewGKEOrchestrator()
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
+		},
+	}
+	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
 		AcceleratorType: "nvidia-l4",
+		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
 
@@ -895,12 +933,18 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
-	orc := NewGKEOrchestrator()
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4}]}`},
+		},
+	}
+	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
 		AcceleratorType: "tpu-v6e-slice",
+		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
 
@@ -1403,9 +1447,15 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 		GKEScheduler:    "gke.io/topology-aware-auto",
 		NumSlices:       1,
 		VmsPerSlice:     1,
+		ClusterLocation: "us-central1-a",
 	}
 
-	orc := NewGKEOrchestrator()
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe nvidia-tesla-a100 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
+		},
+	}
+	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
 	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool"}}
 
 	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")

@@ -194,11 +194,17 @@ type gkeAutoscaling struct {
 	MaxNodeCount int  `json:"maxNodeCount"`
 }
 
+type gkePlacementPolicy struct {
+	AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
+	Type                    string `json:"type"`
+}
+
 type gkeJobNodePool struct {
-	Name             string            `json:"name"`
-	Config           gkeNodePoolConfig `json:"config"`
-	InitialNodeCount int               `json:"initialNodeCount"`
-	Autoscaling      gkeAutoscaling    `json:"autoscaling"`
+	Name             string              `json:"name"`
+	Config           gkeNodePoolConfig   `json:"config"`
+	InitialNodeCount int                 `json:"initialNodeCount"`
+	Autoscaling      gkeAutoscaling      `json:"autoscaling"`
+	PlacementPolicy  *gkePlacementPolicy `json:"placementPolicy,omitempty"`
 }
 
 type gkeCluster struct {
@@ -222,12 +228,21 @@ type JobSetStatus struct {
 
 type jobSetTemplateData struct {
 	WorkloadName                  string
+	ClusterName                   string
+	ProjectID                     string
 	KueueQueueName                string
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
 	MaxRestarts                   int
 	NumSlices                     int
 	VmsPerSlice                   int
+	WorkerBackoffLimit            int
+	PathwaysInstanceType          string
+	CommandToRun                  string
+	ResourcesString               string
+	ProxyArgsList                 []string
+	ServerArgsList                []string
+	WorkerArgsList                []string
 	FullImageName                 string
 	Command                       []string
 	ResourcesYAML                 string

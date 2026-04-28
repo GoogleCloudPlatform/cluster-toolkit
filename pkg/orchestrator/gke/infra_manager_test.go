@@ -16,7 +16,6 @@ package gke
 
 import (
 	"hpc-toolkit/pkg/shell"
-	"os"
 	"strings"
 	"testing"
 )
@@ -254,13 +253,9 @@ func TestParseVersion(t *testing.T) {
 }
 
 func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	defer func() { os.Stdin = oldStdin }()
-
-	_, _ = w.Write([]byte("yes\n"))
-	w.Close()
+	origPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = origPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
 
 	deleteCalled := false
 
@@ -372,13 +367,9 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 }
 
 func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	defer func() { os.Stdin = oldStdin }()
-
-	_, _ = w.Write([]byte("no\n"))
-	w.Close()
+	origPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = origPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return false }
 
 	orc := &GKEOrchestrator{}
 

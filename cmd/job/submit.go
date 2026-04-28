@@ -147,12 +147,12 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
-	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished)
+	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
 	}
 
-	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr)
+	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr, "--grace-period")
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,7 @@ func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error)
 	return src, dest, readOnly, nil
 }
 
-func parseDurationToSeconds(dStr string) (int, error) {
+func parseDurationToSeconds(dStr string, flagName string) (int, error) {
 	d, err := time.ParseDuration(dStr)
 	if err == nil {
 		return int(d.Seconds()), nil
@@ -297,7 +297,7 @@ func parseDurationToSeconds(dStr string) (int, error) {
 		return seconds, nil
 	}
 
-	return 0, fmt.Errorf("invalid duration format for --gke-ttl-after-finished: %s. Expected formats: 1h, 30m, 3600", dStr)
+	return 0, fmt.Errorf("invalid duration format for %s: %s. Expected formats: 1h, 30m, 3600", flagName, dStr)
 }
 
 func validateImageFlags() error {

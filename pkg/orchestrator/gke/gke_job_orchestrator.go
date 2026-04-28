@@ -335,18 +335,23 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	opts.Pathways = job.Pathways
 
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
+	var resStr string
 	if err == nil {
-		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
+		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
 		if err != nil {
 			return "", err
 		}
-		opts.ResourcesString = resStr
 	} else {
 		logging.Warn("Warning: failed to calculate resource limits for Pathways job: %v", err)
 	}
 
+	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
+	isTPU := tpuLimit != ""
+	isGPU := gpuLimit != ""
+	data := g.prepareJobSetTemplateData(opts, cmdSlice, resStr, isTPU, isGPU)
+
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, opts); err != nil {
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
 
@@ -1155,25 +1160,49 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	}
 }
 
-func isTPUFallback(mapped string) bool {
-	lower := strings.ToLower(mapped)
-	return strings.Contains(lower, "tpu") || (len(lower) >= 2 && lower[0] == 'v' && lower[1] >= '0' && lower[1] <= '9')
-}
-
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsSuperSlicing {
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
+	workerBackoffLimit := 0
+	if opts.Pathways.ElasticSlices > 0 {
+		workerBackoffLimit = opts.Pathways.MaxSliceRestarts * opts.VmsPerSlice
+	} else {
+		workerBackoffLimit = opts.VmsPerSlice * 4
+	}
+
+	var proxyArgsList []string
+	if opts.Pathways.ProxyArgs != "" {
+		proxyArgsList = strings.Fields(opts.Pathways.ProxyArgs)
+	}
+	var serverArgsList []string
+	if opts.Pathways.ServerArgs != "" {
+		serverArgsList = strings.Fields(opts.Pathways.ServerArgs)
+	}
+	var workerArgsList []string
+	if opts.Pathways.WorkerArgs != "" {
+		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
+	}
+
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
+		ClusterName:                   opts.ClusterName,
+		ProjectID:                     opts.ProjectID,
 		KueueQueueName:                opts.KueueQueueName,
 		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,
 		TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
 		MaxRestarts:                   opts.MaxRestarts,
 		NumSlices:                     opts.NumSlices,
 		VmsPerSlice:                   opts.VmsPerSlice,
+		WorkerBackoffLimit:            workerBackoffLimit,
+		ProxyArgsList:                 proxyArgsList,
+		ServerArgsList:                serverArgsList,
+		WorkerArgsList:                workerArgsList,
+		PathwaysInstanceType:          opts.PathwaysInstanceType,
+		CommandToRun:                  opts.CommandToRun,
+		ResourcesString:               resourcesYAML,
 		FullImageName:                 opts.FullImageName,
 		Command:                       command,
 		ResourcesYAML:                 resourcesYAML,
@@ -1224,7 +1253,7 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || isTPUFallback(mapped) {
+	if strings.Contains(strings.ToLower(mapped), "nvidia") || IsTPU(mapped) {
 		return false, 0, nil
 	}
 
@@ -1251,7 +1280,7 @@ func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(accelType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || isTPUFallback(mapped) {
+	if strings.Contains(strings.ToLower(mapped), "nvidia") || IsTPU(mapped) {
 		return true
 	}
 
@@ -1562,9 +1591,9 @@ func (g *GKEOrchestrator) generatePodFailurePolicy(exitCodes []int) (string, err
 	policy := map[string]interface{}{
 		"rules": []map[string]interface{}{
 			{
-				"action": "Ignore",
+				"action": "FailJob",
 				"onExitCodes": map[string]interface{}{
-					"operator": "In",
+					"operator": "NotIn",
 					"values":   validCodes,
 				},
 			},

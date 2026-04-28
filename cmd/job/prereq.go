@@ -253,14 +253,14 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 		}
 	}
 
-	state.LastCheckedTimestamp = time.Now()
-	state.LastCheckedProjectID = *projectID
-	store.Save(state)
-
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
 		return fmt.Errorf("job could not be submitted because some prerequisites are missing.")
 	}
+
+	state.LastCheckedTimestamp = time.Now()
+	state.LastCheckedProjectID = *projectID
+	store.Save(state)
 
 	logging.Info("Prerequisites checked successfully.")
 	return nil
