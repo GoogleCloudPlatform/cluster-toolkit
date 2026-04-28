@@ -666,6 +666,13 @@ deployment_groups:
           #!/bin/bash
           mkdir -p /mnt/localssd
           chmod 1777 /mnt/localssd
+      - type: shell
+        destination: install_nscd.sh
+        content: |
+          #!/bin/bash
+          sudo apt-get update && sudo apt-get install -y nscd
+          sudo systemctl enable nscd
+          sudo systemctl start nscd
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
