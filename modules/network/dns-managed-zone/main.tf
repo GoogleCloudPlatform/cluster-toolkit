@@ -33,7 +33,7 @@ resource "google_dns_managed_zone" "zone" {
   labels      = local.labels
 }
 resource "google_dns_record_set" "record" {
-  for_each     = { for rs in var.recordsets : "$${rs.name}-$${rs.type}" => rs }
+  for_each     = { for i, rs in var.recordsets : tostring(i) => rs }
   project      = google_project_service.dns_api.project
   managed_zone = google_dns_managed_zone.zone.name
   name         = each.value.name
