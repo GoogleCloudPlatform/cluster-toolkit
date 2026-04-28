@@ -1,50 +1,40 @@
-# DNS Managed Zone Module
+## Description
 
 This module creates a Google Cloud DNS Managed Zone.
 
-## Usage
+## Example usage
 
-```hcl
-module "dns_managed_zone" {
-  source = "path/to/module"
-
-  project_id = "your-project-id"
-  zone_name  = "my-zone"
-  dns_name   = "example.com."
-  
-  description = "My DNS Zone"
-  labels = {
-    env = "dev"
-  }
-  recordsets = [
-    {
-      name    = "www"
-      type    = "A"
-      ttl     = 300
-      rrdatas = ["1.2.3.4"]
-    }
-  ]
-}
+```yaml
+- id: dns_managed_zone
+  source: modules/network/dns-managed-zone
+  settings:
+    project_id: $(vars.project_id)
+    zone_name: my-zone
+    dns_name: example.com.
+    description: "My DNS Zone"
+    labels:
+      env: "dev"
+    recordsets:
+    - name: "www"
+      type: "A"
+      ttl: 300
+      rrdatas:
+      - "1.2.3.4"
 ```
 
-## Inputs
+Copyright 2026 Google LLC
 
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| `project_id` | Project ID | `string` | n/a | yes |
-| `zone_name` | The name of the DNS zone | `string` | n/a | yes |
-| `dns_name` | The DNS name of this managed zone, e.g. 'example.com.' | `string` | n/a | yes |
-| `description` | Description of the zone | `string` | `"Managed by Cluster Toolkit"` | no |
-| `labels` | Labels to apply to the zone | `map(string)` | `{}` | no |
-| `recordsets` | List of recordsets to create | <pre>list(object({<br>  name    = string<br>  type    = string<br>  ttl     = number<br>  rrdatas = list(string)<br>}))</pre> | `[]` | no |
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-## Outputs
+     http://www.apache.org/licenses/LICENSE-2.0
 
-| Name | Description |
-|------|-------------|
-| `name_servers` | The name servers for the zone |
-| `zone_name` | The name of the managed DNS zone |
-| `managed_zone_id` | The fully qualified ID of the DNS Managed Zone |
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
