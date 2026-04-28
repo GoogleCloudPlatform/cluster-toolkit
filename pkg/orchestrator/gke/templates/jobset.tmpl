@@ -39,8 +39,10 @@ spec:
 {{- end }}
 {{- end }}
             spec:
+{{- if .HostNetworkEnabled }}
               hostNetwork: true
               dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
               terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
 {{- if .SchedulerName }}
               schedulerName: {{.SchedulerName}}

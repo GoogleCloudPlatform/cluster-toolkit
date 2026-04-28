@@ -11,6 +11,9 @@ However, a few foundational components are still assumed or require your initial
 * **Go (1.20 or later):** Required for building the `gcluster` binary. The `make` command used in step 3 will handle Go module dependencies.
 * **Google Cloud SDK (`gcloud`):** `gcluster` requires `gcloud` to be installed and available in your system's PATH to run prerequisite checks. If missing, checks will abort. Download and install it from [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install).
 * **A GCP Project:** You will need a Google Cloud Project with billing enabled and necessary APIs enabled. `gcluster` will check if a project is resolved from flags or persistent configuration.
+* **Environment Variables (for On-the-Fly Builds):** If you use `--build-context` to build images on-the-fly, you must set:
+  * `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
+  * `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
 
 ### Automated Prerequisite Checks Overview
 
@@ -143,8 +146,8 @@ Now that the cluster is deployed and your application code is prepared, you can 
 > [!IMPORTANT]
 > The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`.
 
-* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the Artifact Registry repository name when using `--build-context` for on-the-fly builds. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job.
-* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context`. `gcluster` uses this to ensure unique image tagging. The command will fail if both are missing.
+* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the name of the Artifact Registry repository when using `--build-context` for on-the-fly builds (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job.
+* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context`. `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`). The command will fail if both are missing.
 
 ### Unified Job Submission
 

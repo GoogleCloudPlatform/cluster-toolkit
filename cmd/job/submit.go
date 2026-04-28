@@ -325,7 +325,7 @@ func validateBuildContext() error {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment (e.g., export GCLUSTER_IMAGE_REPO=<repo>)")
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).")
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
