@@ -245,6 +245,7 @@ type jobSetTemplateData struct {
 	VolumesYAML                   string
 	VolumeMountsYAML              string
 	GCSFuseEnabled                bool
+	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool

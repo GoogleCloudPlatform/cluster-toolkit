@@ -1191,6 +1191,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		VolumesYAML:                   opts.VolumesYAML,
 		VolumeMountsYAML:              opts.VolumeMountsYAML,
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
+		HostNetworkEnabled:            isTPU || isGPU,
 		Pathways:                      opts.Pathways,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,

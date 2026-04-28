@@ -106,7 +106,8 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 		return "", fmt.Errorf("failed to marshal resources: %w", err)
 	}
 
-	return g.indentYaml("resources:\n"+string(b), indent), nil
+	resourcesStr := "resources:\n" + g.indentYaml(string(b), 2)
+	return g.indentYaml(resourcesStr, indent), nil
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
