@@ -150,3 +150,8 @@ output "tpu_chips_per_node" {
   description = "The number of TPU chips on each node in the pool."
   value       = module.tpu.is_tpu ? module.tpu.tpu_chips_per_node : null
 }
+
+output "accelerator_topology_mode" {
+  description = "The accelerator topology mode for the resource policy."
+  value       = var.accelerator_topology_mode
+}
