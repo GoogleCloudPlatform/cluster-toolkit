@@ -1,13 +1,16 @@
-# Global Static IP Module
-This module creates Google Cloud Global Static IP addresses.
-## Usage
+## Description
 
-```hcl
-module "global_static_ip" {
-  source = "path/to/module"
-  project_id = "your-project-id"
-  ip_names   = ["ip-1", "ip-2"]
-}
+This module creates Google Cloud Global Static IP addresses.
+
+## Example usage
+
+```yaml
+- id: global_static_ip
+  source: modules/network/global-static-ip
+  settings:
+    ip_names:
+    - $(vars.deployment_name)-ip-1
+    - $(vars.deployment_name)-ip-2
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
