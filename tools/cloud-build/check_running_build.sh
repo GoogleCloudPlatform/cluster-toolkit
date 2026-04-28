@@ -16,10 +16,20 @@
 set -e
 
 TRIGGER_BUILD_CONFIG_PATH="$1"
+TEST_PREFIX="$2"
+IS_ONSPOT="${3:-false}"
 
-echo "$TRIGGER_BUILD_CONFIG_PATH"
+echo "Config Path: $TRIGGER_BUILD_CONFIG_PATH"
+echo "Test Prefix: $TEST_PREFIX"
+echo "Is On-Spot: $IS_ONSPOT"
 
-MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\"")
+if [ "$IS_ONSPOT" == "true" ] && [ -n "$TEST_PREFIX" ]; then
+	FILTER="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\" AND substitutions._TEST_PREFIX=\"$TEST_PREFIX\""
+else
+	FILTER="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\""
+fi
+
+MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="$FILTER")
 MATCHING_COUNT=$(echo "$MATCHING_BUILDS" | wc -w)
 
 if [ "$MATCHING_COUNT" -gt 1 ]; then

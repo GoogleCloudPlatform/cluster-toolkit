@@ -29,8 +29,16 @@ substitutions:
 timeout: 14400s  # 4hr
 steps:
 - id: check_for_running_build
-  name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-h4d-onspot-slurm.yaml"
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -e
+    tools/cloud-build/check_running_build.sh \
+      "tools/cloud-build/daily-tests/builds/ml-h4d-onspot-slurm.yaml" \
+      "${_TEST_PREFIX}" \
+      true
 
 - id: ml-h4d-onspot-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
