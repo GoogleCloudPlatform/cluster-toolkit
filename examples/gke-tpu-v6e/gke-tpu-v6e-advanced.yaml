@@ -299,37 +299,24 @@ deployment_groups:
       jobset:
         install: true
 
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, gke-tpu-v6e-cluster]
+    use: [training_bucket, gke-tpu-v6e-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, gke-tpu-v6e-cluster]
+    use: [checkpoint_bucket, gke-tpu-v6e-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.
