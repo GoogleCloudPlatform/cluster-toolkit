@@ -43,7 +43,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.88.0"
+	latestToolkitVersion     = "v1.89.0"
 )
 
 // map[moved module path]replacing module path
