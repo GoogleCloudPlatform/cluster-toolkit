@@ -1,0 +1,258 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: {{.WorkloadName}}
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+    kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+spec:
+  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
+  network:
+    enableDNSHostnames: true
+    publishNotReadyAddresses: true
+  coordinator:
+    replicatedJob: pathways-head
+  startupPolicy:
+    startupPolicyOrder: InOrder
+{{- if not .Pathways.Headless}}
+  successPolicy:
+    operator: All
+    targetReplicatedJobs:
+    - pathways-head
+{{- end }}
+  failurePolicy:
+    maxRestarts: {{.MaxRestarts}}
+    restartStrategy: Recreate
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      metadata:
+        annotations:
+          alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname
+      spec:
+        completionMode: Indexed
+        parallelism: 1
+        completions: 1
+        backoffLimit: 0
+        template:
+          metadata:
+{{- if .GCSFuseEnabled }}
+            annotations:
+              gke-gcsfuse/volumes: "true"
+{{- end }}
+          spec:
+            nodeSelector:
+              cloud.google.com/gke-nodepool: {{.Pathways.HeadNodePool}}
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
+            restartPolicy: Never
+{{- if .ServiceAccountName }}
+            serviceAccountName: {{.ServiceAccountName}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+            imagePullSecrets:
+{{.ImagePullSecrets}}
+{{- end }}
+{{- if not .Pathways.Headless}}
+            initContainers:
+{{- else }}
+            containers:
+{{- end }}
+            - name: pathways-proxy
+              image: {{.Pathways.ProxyServerImage}}
+              ports:
+              - containerPort: 29000
+              args:
+              - --server_port=29000
+              - --resource_manager_address=$(PATHWAYS_HEAD):29001
+              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              {{- if gt .Pathways.ElasticSlices 0}}
+              - --num_elastic_slices={{.Pathways.ElasticSlices}}
+              {{- end}}
+              - --cluster_name={{.ClusterName}}
+              - --project_id={{.ProjectID}}
+              {{- range .ProxyArgsList }}
+              - {{.}}
+              {{- end }}
+              {{- if not .Pathways.Headless}}
+              restartPolicy: Always
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "16"
+                  memory: "100Gi"
+            - name: pathways-rm
+              image: {{.Pathways.ServerImage}}
+              ports:
+              - containerPort: 29001
+              - containerPort: 29002
+              args:
+              - --server_port=29001
+              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - --node_type=resource_manager
+              - --instance_count={{.NumSlices}}
+              - --instance_type={{.PathwaysInstanceType}}
+              {{- range .ServerArgsList }}
+              - {{.}}
+              {{- end }}
+              env:
+              - name: REPLICATED_JOB_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['jobset.sigs.k8s.io/replicatedjob-name']
+              - name: JOBSET_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['jobset.sigs.k8s.io/jobset-name']
+              - name: HOST_ADDRESS
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: TPU_SKIP_MDS_QUERY
+                value: "true"
+              {{- if not .Pathways.Headless}}
+              restartPolicy: Always
+              {{- end }}
+              resources:
+                limits:
+                  cpu: "8"
+                  memory: "32Gi"
+              volumeMounts:
+              - mountPath: /tmp
+                name: shared-tmp
+            {{- if not .Pathways.Headless}}
+            containers:
+            - name: workload-container
+              image: {{.FullImageName}}
+              command:
+              - "/bin/bash"
+              - "-c"
+              - |
+                {{.CommandToRun}}
+              volumeMounts:
+              - name: dshm
+                mountPath: /dev/shm
+{{.VolumeMountsYAML}}
+            {{- end}}
+            {{- if .Pathways.ColocatedPythonSidecarImage}}
+            - name: python-sidecar
+              image: {{.Pathways.ColocatedPythonSidecarImage}}
+            {{- end}}
+            volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+            - name: shared-tmp
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
+{{.VolumesYAML}}
+  - name: worker
+    replicas: {{.NumSlices}}
+    template:
+      spec:
+        completionMode: Indexed
+        parallelism: {{.VmsPerSlice}}
+        completions: {{.VmsPerSlice}}
+        backoffLimit: {{.WorkerBackoffLimit}}
+        template:
+          metadata:
+            labels:
+              gcluster.google.com/workload: {{.WorkloadName}}
+            annotations:
+              gke-gcsfuse/volumes: "true"
+          spec:
+            hostNetwork: true
+            dnsPolicy: ClusterFirstWithHostNet
+            restartPolicy: OnFailure
+{{- if .ServiceAccountName }}
+            serviceAccountName: {{.ServiceAccountName}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+            imagePullSecrets:
+{{.ImagePullSecrets}}
+{{- end }}
+{{- if .PriorityClassName }}
+            priorityClassName: {{.PriorityClassName}}
+{{- end }}
+            terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
+            containers:
+            - name: pathways-worker
+              image: {{.Pathways.WorkerImage}}
+              ports:
+              - containerPort: 29005
+              - containerPort: 29006
+              - containerPort: 8471
+              - containerPort: 8080
+              args:
+                - --server_port=29005
+                - --resource_manager_address=$(PATHWAYS_HEAD):29001
+                - --gcs_scratch_location={{.Pathways.GCSLocation}}
+                - --cluster_name={{.ClusterName}}
+                - --project_id={{.ProjectID}}
+                {{- range .WorkerArgsList }}
+                - {{.}}
+                {{- end }}
+              env:
+              {{- if .Verbose }}
+              - name: TPU_MIN_LOG_LEVEL
+                value: "0"
+              - name: TF_CPP_MIN_LOG_LEVEL
+                value: "0"
+              {{- end }}
+              - name: XCLOUD_ENVIRONMENT
+                value: GCP
+              - name: MEGASCALE_GRPC_ENABLE_XOR_TRACER
+                value: "false"
+              - name: MEGASCALE_NUM_SLICES
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/replicatedjob-replicas']
+              - name: JOBSET_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['jobset.sigs.k8s.io/jobset-name']
+              - name: REPLICATED_JOB_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['jobset.sigs.k8s.io/replicatedjob-name']
+              - name: MEGASCALE_SLICE_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/job-index']
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: MEGASCALE_COORDINATOR_ADDRESS
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+{{.ResourcesString}}
+              volumeMounts:
+              - name: dshm
+                mountPath: /dev/shm
+              - name: shared-tmp
+                mountPath: /tmp
+            volumes:
+            - name: dshm
+              emptyDir:
+                medium: Memory
+            - name: shared-tmp
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
+{{.VolumesYAML}}
+{{- if .NodeSelector }}
+            nodeSelector:
+{{.NodeSelector}}
+{{- end }}
+{{- if .Affinity }}
+            affinity:
+{{.Affinity}}
+{{- end }}
+{{- if .Tolerations }}
+            tolerations:
+{{.Tolerations}}
+{{- end }}

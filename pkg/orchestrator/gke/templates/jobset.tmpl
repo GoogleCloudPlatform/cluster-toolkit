@@ -1,0 +1,111 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: {{.WorkloadName}}
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+    kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+{{- if .ExclusiveTopologyAnnotation }}
+  annotations:
+    {{.ExclusiveTopologyAnnotation}}
+{{- end }}
+spec:
+  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
+  failurePolicy:
+    maxRestarts: {{.MaxRestarts}}
+    rules:
+      - action: FailJobSet
+        onJobFailureReasons:
+          - PodFailurePolicy
+  replicatedJobs:
+    - name: main-job
+      replicas: {{.NumSlices}}
+      template:
+        spec:
+          parallelism: {{.VmsPerSlice}}
+          completions: {{.VmsPerSlice}}
+          backoffLimit: 0
+{{- if .PodFailurePolicy }}
+          podFailurePolicy:
+{{.PodFailurePolicy}}
+{{- end }}
+          template:
+            metadata:
+              labels:
+                gcluster.google.com/workload: {{.WorkloadName}}
+{{- if or .TopologyAnnotation .GCSFuseEnabled }}
+              annotations:
+{{- if .TopologyAnnotation }}
+{{.TopologyAnnotation}}
+{{- end }}
+{{- if .GCSFuseEnabled }}
+                gke-gcsfuse/volumes: "true"
+{{- end }}
+{{- end }}
+            spec:
+{{- if .HostNetworkEnabled }}
+              hostNetwork: true
+              dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
+              terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
+{{- if .SchedulerName }}
+              schedulerName: {{.SchedulerName}}
+{{- end }}
+{{- if .SchedulingGates }}
+{{.SchedulingGates}}
+{{- end }}
+{{- if .PriorityClassName }}
+              priorityClassName: {{.PriorityClassName}}
+{{- end }}
+              restartPolicy: Never
+              containers:
+              - name: workload-container
+                image: {{.FullImageName}}
+                command:
+                {{- range .Command }}
+                - {{ printf "%q" . }}
+                {{- end }}
+{{.ResourcesYAML}}
+                env:
+                {{- if .Verbose }}
+                {{- if .IsTPU }}
+                - name: TPU_STDERR_LOG_LEVEL
+                  value: "0"
+                - name: TPU_MIN_LOG_LEVEL
+                  value: "0"
+                - name: TF_CPP_MIN_LOG_LEVEL
+                  value: "0"
+                - name: TPU_VMODULE
+                  value: "real_program_continuator=1"
+                {{- else if .IsGPU }}
+                - name: NCCL_DEBUG
+                  value: "INFO"
+                {{- end }}
+                {{- end }}
+                volumeMounts:
+                - name: temp-storage
+                  mountPath: /mnt/data
+{{.VolumeMountsYAML}}
+              volumes:
+              - name: temp-storage
+                emptyDir: {}
+{{.VolumesYAML}}
+{{- if .NodeSelector }}
+              nodeSelector:
+{{.NodeSelector}}
+{{- end }}
+{{- if .Affinity }}
+              affinity:
+{{.Affinity}}
+{{- end }}
+{{- if .Tolerations }}
+              tolerations:
+{{.Tolerations}}
+{{- end }}
+{{- if .ImagePullSecrets }}
+              imagePullSecrets:
+{{.ImagePullSecrets}}
+{{- end }}
+{{- if .ServiceAccountName }}
+              serviceAccountName: {{.ServiceAccountName}}
+{{- end }}

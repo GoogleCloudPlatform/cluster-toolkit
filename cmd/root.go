@@ -30,6 +30,9 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
+
+	"hpc-toolkit/cmd/cluster"
+	"hpc-toolkit/cmd/job"
 )
 
 // Git references when use Makefile
@@ -65,6 +68,9 @@ func init() {
 		initColor()
 		initDependencies(cmd)
 	}
+
+	rootCmd.AddCommand(cluster.ClusterCmd)
+	rootCmd.AddCommand(job.JobCmd)
 }
 
 // Execute the root command
