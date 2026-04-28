@@ -16,3 +16,8 @@ output "global_ips" {
   value       = { for k, v in google_compute_global_address.ips : k => v.address }
   description = "A map of IP names to allocated global static IP addresses."
 }
+
+output "addresses" {
+  value       = [for v in google_compute_global_address.ips : v.address]
+  description = "A list of allocated global static IP addresses."
+}

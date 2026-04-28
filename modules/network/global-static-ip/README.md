@@ -66,5 +66,6 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_addresses"></a> [addresses](#output\_addresses) | A list of allocated global static IP addresses. |
 | <a name="output_global_ips"></a> [global\_ips](#output\_global\_ips) | A map of IP names to allocated global static IP addresses. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
