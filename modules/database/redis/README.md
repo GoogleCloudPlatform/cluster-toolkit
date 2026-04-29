@@ -9,9 +9,10 @@ This module deploys a Google Cloud Memorystore for Redis instance.
   source: modules/database/redis
   settings:
     project_id: "your-project-id"
+    deployment_name: "my-deployment"
     environment: "dev"
-    redis_region: "us-central1"
-    authorized_network: "projects/your-project-id/global/networks/your-network"
+    region: "us-central1"
+    network_self_link: "projects/your-project-id/global/networks/your-network"
 ```
 
 ## License
@@ -59,13 +60,18 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_authorized_network"></a> [authorized\_network](#input\_authorized\_network) | The VPC network to which the instance is connected. | `string` | n/a | yes |
+| <a name="input_auth_enabled"></a> [auth\_enabled](#input\_auth\_enabled) | Indicates whether OSS Redis AUTH is enabled. | `bool` | `true` | no |
 | <a name="input_connect_mode"></a> [connect\_mode](#input\_connect\_mode) | The connection mode of the Redis instance. | `string` | `"DIRECT_PEERING"` | no |
 | <a name="input_deploy_redis"></a> [deploy\_redis](#input\_deploy\_redis) | Whether to deploy Redis. | `bool` | `true` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment. | `string` | n/a | yes |
 | <a name="input_environment"></a> [environment](#input\_environment) | The environment name. | `string` | n/a | yes |
+| <a name="input_memory_size_gb"></a> [memory\_size\_gb](#input\_memory\_size\_gb) | Redis memory size in GiB. | `number` | `2` | no |
+| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The VPC network to which the instance is connected. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to deploy to. | `string` | n/a | yes |
-| <a name="input_redis_region"></a> [redis\_region](#input\_redis\_region) | The region to deploy Redis to. | `string` | n/a | yes |
+| <a name="input_redis_version"></a> [redis\_version](#input\_redis\_version) | The version of Redis software. | `string` | `"REDIS_6_X"` | no |
+| <a name="input_region"></a> [region](#input\_region) | The region to deploy Redis to. | `string` | n/a | yes |
 | <a name="input_reserved_ip_range"></a> [reserved\_ip\_range](#input\_reserved\_ip\_range) | The name of the allocated IP range for the Private Service Access. | `string` | `null` | no |
+| <a name="input_tier"></a> [tier](#input\_tier) | The service tier of the Redis instance. | `string` | `"BASIC"` | no |
 
 ## Outputs
 

@@ -22,7 +22,11 @@ variable "environment" {
   description = "The environment name."
   type        = string
 }
-variable "redis_region" {
+variable "deployment_name" {
+  description = "The name of the current deployment."
+  type        = string
+}
+variable "region" {
   description = "The region to deploy Redis to."
   type        = string
 }
@@ -31,7 +35,7 @@ variable "deploy_redis" {
   type        = bool
   default     = true
 }
-variable "authorized_network" {
+variable "network_self_link" {
   description = "The VPC network to which the instance is connected."
   type        = string
 }
@@ -44,4 +48,32 @@ variable "reserved_ip_range" {
   description = "The name of the allocated IP range for the Private Service Access."
   type        = string
   default     = null
+}
+
+variable "tier" {
+  description = "The service tier of the Redis instance."
+  type        = string
+  default     = "BASIC"
+  validation {
+    condition     = contains(["BASIC", "STANDARD_HA"], var.tier)
+    error_message = "The tier must be one of BASIC or STANDARD_HA."
+  }
+}
+
+variable "memory_size_gb" {
+  description = "Redis memory size in GiB."
+  type        = number
+  default     = 2
+}
+
+variable "redis_version" {
+  description = "The version of Redis software."
+  type        = string
+  default     = "REDIS_6_X"
+}
+
+variable "auth_enabled" {
+  description = "Indicates whether OSS Redis AUTH is enabled."
+  type        = bool
+  default     = true
 }

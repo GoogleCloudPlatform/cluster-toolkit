@@ -23,14 +23,14 @@ resource "google_project_service" "redis_api" {
 resource "google_redis_instance" "default" {
   count              = var.deploy_redis ? 1 : 0
   project            = var.project_id
-  name               = "xmc-redis-${var.environment}"
-  tier               = "BASIC"
-  memory_size_gb     = 2
-  region             = var.redis_region
-  redis_version      = "REDIS_6_X"
-  auth_enabled       = true
+  name               = "${var.deployment_name}-redis-${var.environment}"
+  tier               = var.tier
+  memory_size_gb     = var.memory_size_gb
+  region             = var.region
+  redis_version      = var.redis_version
+  auth_enabled       = var.auth_enabled
   connect_mode       = var.connect_mode
   reserved_ip_range  = var.reserved_ip_range
-  authorized_network = var.authorized_network
+  authorized_network = var.network_self_link
   depends_on         = [google_project_service.redis_api]
 }
