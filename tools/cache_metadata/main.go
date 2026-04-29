@@ -240,6 +240,11 @@ func worker(id int, version string, jobs <-chan string, results chan<- string, w
 			continue
 		}
 
+		// Inject the GITHUB_TOKEN if it exists
+		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			log.Printf("Warning [Worker %d]: failed to fetch raw yaml %s: %v", id, rawURL, err)
