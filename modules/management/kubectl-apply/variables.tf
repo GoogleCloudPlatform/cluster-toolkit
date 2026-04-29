@@ -127,6 +127,9 @@ variable "kueue" {
     config_path              = optional(string, null)
     config_template_vars     = optional(map(any), null)
     enable_pathways_for_tpus = optional(bool, false)
+    controller_cpu           = optional(number, null)
+    controller_memory        = optional(string, null)
+    controller_replicas      = optional(number, null)
   })
   default = {}
 }
@@ -140,8 +143,10 @@ variable "gke_cluster_exists" {
 variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "0.10.1")
+    install           = optional(bool, false)
+    version           = optional(string, "0.10.1")
+    controller_cpu    = optional(number, null)
+    controller_memory = optional(string, null)
   })
   default = {}
 }
