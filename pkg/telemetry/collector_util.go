@@ -53,7 +53,12 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 	return eventMetadata
 }
 
-const releasesCollection = "release_metadata"
+const (
+	releasesCollection        = "release_metadata"
+	standardModulesKey        = "standard_modules"
+	standardExamplesKey       = "standard_examples"
+	standardBlueprintNamesKey = "standard_blueprint_names"
+)
 
 // loadReleaseMetadata fetches the predefined metadata from Firestore and loads it into the global Viper registry.
 // Will move this function call within the root persistent pre-run in future PR to avoid calling multiple times.
@@ -81,9 +86,9 @@ func loadReleaseMetadata() error {
 	data := doc.Data()
 
 	// Viper will store these as []interface{} internally, which can be easily retrieved
-	viper.Set("standard_modules", data["modules"])
-	viper.Set("standard_examples", data["examples"])
-	viper.Set("standard_blueprint_names", data["blueprint_names"])
+	viper.Set(standardModulesKey, data["modules"])
+	viper.Set(standardExamplesKey, data["examples"])
+	viper.Set(standardBlueprintNamesKey, data["blueprint_names"])
 
 	return nil
 }
@@ -91,8 +96,8 @@ func loadReleaseMetadata() error {
 // getStandardModules returns the cached list of official modules from Viper
 var getStandardModules = func() []string {
 	err := loadReleaseMetadata() // Will move this function call within the root persistent pre-run in future PR to avoid calling multiple times.
-	if err == nil && viper.IsSet("standard_modules") {
-		return viper.GetStringSlice("standard_modules")
+	if err == nil && viper.IsSet(standardModulesKey) {
+		return viper.GetStringSlice(standardModulesKey)
 	}
 	return []string{}
 }
