@@ -78,8 +78,6 @@ spec:
               {{- if gt .Pathways.ElasticSlices 0}}
               - --num_elastic_slices={{.Pathways.ElasticSlices}}
               {{- end}}
-              - --cluster_name={{.ClusterName}}
-              - --project_id={{.ProjectID}}
               {{- range .ProxyArgsList }}
               - {{.}}
               {{- end }}
@@ -138,19 +136,16 @@ spec:
               - "-c"
               - |
                 {{.CommandToRun}}
+{{- if .VolumeMountsYAML }}
               volumeMounts:
-              - name: dshm
-                mountPath: /dev/shm
 {{.VolumeMountsYAML}}
+{{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
             - name: python-sidecar
               image: {{.Pathways.ColocatedPythonSidecarImage}}
             {{- end}}
             volumes:
-            - name: dshm
-              emptyDir:
-                medium: Memory
             - name: shared-tmp
               hostPath:
                 path: /tmp
@@ -201,8 +196,6 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - --gcs_scratch_location={{.Pathways.GCSLocation}}
-                - --cluster_name={{.ClusterName}}
-                - --project_id={{.ProjectID}}
                 {{- range .WorkerArgsList }}
                 - {{.}}
                 {{- end }}
@@ -243,14 +236,9 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
 {{.ResourcesString}}
               volumeMounts:
-              - name: dshm
-                mountPath: /dev/shm
               - name: shared-tmp
                 mountPath: /tmp
             volumes:
-            - name: dshm
-              emptyDir:
-                medium: Memory
             - name: shared-tmp
               hostPath:
                 path: /tmp

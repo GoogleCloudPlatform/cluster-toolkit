@@ -82,14 +82,14 @@ spec:
                   value: "INFO"
                 {{- end }}
                 {{- end }}
+{{- if .VolumeMountsYAML }}
                 volumeMounts:
-                - name: temp-storage
-                  mountPath: /mnt/data
 {{.VolumeMountsYAML}}
+{{- end }}
+{{- if .VolumesYAML }}
               volumes:
-              - name: temp-storage
-                emptyDir: {}
 {{.VolumesYAML}}
+{{- end }}
 {{- if .NodeSelector }}
               nodeSelector:
 {{.NodeSelector}}
