@@ -392,6 +392,7 @@ limitations under the License.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_accelerator_topology_mode"></a> [accelerator\_topology\_mode](#output\_accelerator\_topology\_mode) | The accelerator topology mode for the resource policy. |
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
