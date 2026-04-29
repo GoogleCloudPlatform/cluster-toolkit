@@ -18,10 +18,13 @@ package shell
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/rand"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -33,6 +36,77 @@ import (
 type ProposedChanges struct {
 	Summary string
 	Full    string
+}
+
+// CommandResult holds the output and exit code of an executed command.
+type CommandResult struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
+// Command represents a shell command that can be executed.
+type Command struct {
+	cmd    *exec.Cmd
+	stdin  bytes.Buffer
+	stdout bytes.Buffer
+	stderr bytes.Buffer
+}
+
+// NewCommand creates a new Command instance.
+func NewCommand(name string, args ...string) *Command {
+	cmd := exec.Command(name, args...)
+	return &Command{cmd: cmd}
+}
+
+// SetInput sets the standard input for the command.
+func (c *Command) SetInput(input string) {
+	c.stdin.WriteString(input)
+	c.cmd.Stdin = &c.stdin
+}
+
+// Execute runs the command and returns a CommandResult.
+func (c *Command) Execute() CommandResult {
+	c.cmd.Stdout = &c.stdout
+	c.cmd.Stderr = &c.stderr
+
+	err := c.cmd.Run()
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return CommandResult{
+				Stdout:   c.stdout.String(),
+				Stderr:   c.stderr.String(),
+				ExitCode: exitError.ExitCode(),
+			}
+		}
+		// If it's not an ExitError, it's some other error during command execution
+		return CommandResult{
+			Stdout:   c.stdout.String(),
+			Stderr:   c.stderr.String(),
+			ExitCode: 1, // Generic error code
+		}
+	}
+	return CommandResult{
+		Stdout:   c.stdout.String(),
+		Stderr:   c.stderr.String(),
+		ExitCode: 0,
+	}
+}
+
+// ExecuteCommand executes a shell command and returns its output and exit code.
+// It takes the command name as the first argument, followed by its arguments.
+var ExecuteCommand = func(name string, args ...string) CommandResult {
+	cmd := NewCommand(name, args...)
+	return cmd.Execute()
+}
+
+// RandomString generates a random string of a given length.
+func RandomString(length int) (string, error) {
+	b := make([]byte, (length+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random string: %w", err)
+	}
+	return fmt.Sprintf("%x", b)[:length], nil
 }
 
 // ValidateDeploymentDirectory ensures that the deployment directory structure
@@ -123,4 +197,35 @@ Please select an option [d,a,s,c]: `)
 			logging.Fatal("user chose to stop execution of gcluster rather than make proposed changes to infrastructure")
 		}
 	}
+}
+
+// PromptYesNo prompts the user with a yes/no question.
+// It returns true if the user answers 'y' or 'yes' or just presses Enter.
+var PromptYesNo = func(prompt string) bool {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("%s [Y/n]: ", prompt)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			logging.Fatal("%v", err)
+		}
+		response = strings.ToLower(strings.TrimSpace(response))
+		if response == "" || response == "y" || response == "yes" {
+			return true
+		}
+		if response == "n" || response == "no" {
+			return false
+		}
+		fmt.Println("Invalid input. Please enter 'Y' or 'n'.")
+	}
+}
+
+// ExtractRegion extracts the region from a location (region or zone).
+func ExtractRegion(location string) string {
+	parts := strings.Split(location, "-")
+	if len(parts) == 3 {
+		// likely a zone, return region (first two parts)
+		return parts[0] + "-" + parts[1]
+	}
+	return location
 }
