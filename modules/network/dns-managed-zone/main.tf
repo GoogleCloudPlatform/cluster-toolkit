@@ -36,7 +36,7 @@ resource "google_dns_record_set" "record" {
   for_each     = { for i, rs in var.recordsets : tostring(i) => rs }
   project      = google_project_service.dns_api.project
   managed_zone = google_dns_managed_zone.zone.name
-  name         = each.value.name
+  name         = endswith(each.value.name, ".") ? each.value.name : "${each.value.name}.${google_dns_managed_zone.zone.dns_name}"
   type         = each.value.type
   ttl          = each.value.ttl
   rrdatas      = each.value.rrdatas
