@@ -16,11 +16,9 @@
 
 # This module creates a Workload Identity binding between a Google Service Account (GSA)
 # and a Kubernetes Service Account (KSA).
-data "google_project" "project" {
-  project_id = var.project_id
-}
+
 resource "google_service_account_iam_member" "main" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${var.service_account_email}"
+  service_account_id = var.service_account_email
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${var.project_id}.svc.id.goog/subject/ns/${var.namespace}/sa/${var.k8s_service_account_name}"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }

@@ -25,7 +25,7 @@ variable "service_account_email" {
 variable "namespace" {
   type        = string
   description = "The Kubernetes namespace where the KSA is located."
-  default     = "xmc"
+  default     = "default"
 }
 variable "k8s_service_account_name" {
   type        = string

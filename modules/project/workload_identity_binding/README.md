@@ -53,14 +53,13 @@ No modules.
 | Name | Type |
 | ---- | ---- |
 | [google_service_account_iam_member.main](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
-| [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | The name of the Kubernetes Service Account (KSA) to bind. | `string` | n/a | yes |
-| <a name="input_namespace"></a> [namespace](#input\_namespace) | The Kubernetes namespace where the KSA is located. | `string` | `"xmc"` | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | The Kubernetes namespace where the KSA is located. | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the cluster is located. | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The email of the Google Service Account (GSA) to bind. | `string` | n/a | yes |
 
