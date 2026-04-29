@@ -89,12 +89,12 @@ func loadReleaseMetadata() error {
 }
 
 // getStandardModules returns the cached list of official modules from Viper
-func getStandardModules() []string {
+var getStandardModules = func() []string {
 	err := loadReleaseMetadata() // Will move this function call within the root persistent pre-run in future PR to avoid calling multiple times.
-	if err != nil {
-		return []string{}
+	if err == nil && viper.IsSet("standard_modules") {
+		return viper.GetStringSlice("standard_modules")
 	}
-	return viper.GetStringSlice("standard_modules")
+	return []string{}
 }
 
 func getBpModulesList(bp config.Blueprint) []string {

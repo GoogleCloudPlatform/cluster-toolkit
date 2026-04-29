@@ -1031,6 +1031,70 @@ func TestGetBillingAccountId(t *testing.T) {
 	}
 }
 
+func TestGetModules(t *testing.T) {
+	// Save and restore the original function to avoid affecting other tests
+	originalGetStandardModules := getStandardModules
+	defer func() { getStandardModules = originalGetStandardModules }()
+
+	mockStandardList := []string{
+		"modules/network/vpc",
+		"community/modules/compute/mig",
+	}
+
+	tests := []struct {
+		name                string
+		input               []string
+		mockStandardModules []string
+		expected            string
+	}{
+		{
+			name:                "success: all standard modules",
+			input:               []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockStandardModules: mockStandardList,
+			expected:            "modules/network/vpc,community/modules/compute/mig",
+		},
+		{
+			name:                "success: mix of standard and custom modules",
+			input:               []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
+			mockStandardModules: mockStandardList,
+			expected:            "modules/network/vpc,Custom,community/modules/compute/mig",
+		},
+		{
+			name:                "success: only custom modules",
+			input:               []string{"my/custom/module1", "my/custom/module2"},
+			mockStandardModules: mockStandardList,
+			expected:            "Custom,Custom",
+		},
+		{
+			name:                "success: empty input",
+			input:               []string{},
+			mockStandardModules: mockStandardList,
+			expected:            "",
+		},
+		{
+			name:                "error: standardModules fetch failed (UNVERIFIED)",
+			input:               []string{"modules/network/vpc", "my/custom/module"},
+			mockStandardModules: []string{}, // Simulating an empty return indicating fetch failure
+			expected:            "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Mock the getStandardModules function for this specific test case
+			getStandardModules = func() []string {
+				return tc.mockStandardModules
+			}
+
+			result := getModules(tc.input)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
 // TestGetIsGoogler tests the full logic of the getIsGoogler method including fallbacks.
 func TestGetIsGoogler(t *testing.T) {
 	// Save the original environment variables to restore them after the tests
