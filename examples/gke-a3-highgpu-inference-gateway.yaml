@@ -123,6 +123,7 @@ deployment_groups:
     settings:
       name: "default"
       machine_type: "n4-standard-2"
+      disk_type: "hyperdisk-balanced"
       autoscaling_total_min_nodes: 1
       autoscaling_total_max_nodes: 3
       zones: [$(vars.zone)]

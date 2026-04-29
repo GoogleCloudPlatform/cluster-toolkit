@@ -273,7 +273,7 @@ variable "system_node_pool_disk_size_gb" {
 variable "system_node_pool_disk_type" {
   description = "Disk type for each node of the system node pool."
   type        = string
-  default     = null
+  default     = "hyperdisk-balanced"
 }
 
 variable "system_node_pool_taints" {
