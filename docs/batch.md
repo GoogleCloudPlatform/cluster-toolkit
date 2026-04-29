@@ -25,9 +25,9 @@ contained in the `community` folder of the Cluster Toolkit repo and are marked a
 
 ## Example
 
-[serverless-batch.yaml](../examples/serverless-batch.yaml) contains an example
+[batch.yaml](../examples/batch.yaml) contains an example
 of how to use Google Cloud Batch with the Cluster Toolkit
-([example documentation](../examples/README.md#serverless-batchyaml--)).
+([example documentation](../examples/README.md#batchyaml-)).
 
 ---
 
