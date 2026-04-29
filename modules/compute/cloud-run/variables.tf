@@ -44,3 +44,19 @@ variable "allow_unauthenticated" {
   type        = bool
   default     = true
 }
+
+variable "ingress" {
+  description = "Ingress traffic allowed for the service. Possible values: INGRESS_TRAFFIC_ALL, INGRESS_TRAFFIC_INTERNAL_ONLY, INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER."
+  type        = string
+  default     = "INGRESS_TRAFFIC_ALL"
+  validation {
+    condition     = contains(["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_ONLY", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"], var.ingress)
+    error_message = "The ingress variable must be one of INGRESS_TRAFFIC_ALL, INGRESS_TRAFFIC_INTERNAL_ONLY, or INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER."
+  }
+}
+
+variable "labels" {
+  description = "Labels to apply to the Cloud Run service"
+  type        = any
+  default     = {}
+}

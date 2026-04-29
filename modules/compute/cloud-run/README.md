@@ -18,19 +18,7 @@ This module deploys a Google Cloud Run (v2) service.
     allow_unauthenticated: true
 ```
 
-Copyright 2026 Google LLC
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
@@ -79,6 +67,8 @@ No modules.
 | <a name="input_container_port"></a> [container\_port](#input\_container\_port) | Port the container listens on | `number` | `8080` | no |
 | <a name="input_env_vars"></a> [env\_vars](#input\_env\_vars) | Environment variables for the container | `map(string)` | `{}` | no |
 | <a name="input_image"></a> [image](#input\_image) | Container Image URL | `string` | n/a | yes |
+| <a name="input_ingress"></a> [ingress](#input\_ingress) | Ingress traffic allowed for the service. Possible values: INGRESS\_TRAFFIC\_ALL, INGRESS\_TRAFFIC\_INTERNAL\_ONLY, INGRESS\_TRAFFIC\_INTERNAL\_LOAD\_BALANCER. | `string` | `"INGRESS_TRAFFIC_ALL"` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the Cloud Run service | `any` | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP Project ID | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP Region | `string` | n/a | yes |
 | <a name="input_service_name"></a> [service\_name](#input\_service\_name) | Cloud Run Service Name | `string` | n/a | yes |
