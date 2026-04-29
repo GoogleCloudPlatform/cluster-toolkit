@@ -14,11 +14,14 @@
 # limitations under the License.
 
 # This script caches metadata for all the github version releases. Used to backfill the data.
-# Cmds to run the script:
+# Commands to run the script:
 # chmod +x tools/cache_metadata/run_backfill.sh
 # ./tools/cache_metadata/run_backfill.sh
 # If hitting Github API rate limits, can create and use a Personal Authentication token by generating and exporting it.
 # export GITHUB_TOKEN="ghp_YourGeneratedTokenHere..."
+
+# To collect metadata for one specific version, run the following command:
+# go run tools/cache_metadata/main.go -version <VERSION>
 
 set -e
 
