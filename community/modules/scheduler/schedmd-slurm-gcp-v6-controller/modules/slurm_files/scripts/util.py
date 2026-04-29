@@ -1656,7 +1656,7 @@ class Lookup:
         
         valid_nodesets = [
             getattr(ns, "nodeset_name", None) 
-            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+            for ns in (*self.cfg.nodeset.values(), *self.cfg.nodeset_tpu.values(), *self.cfg.nodeset_dyn.values())
         ]
         
         if matched_ns not in valid_nodesets:
