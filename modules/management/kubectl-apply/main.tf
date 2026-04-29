@@ -79,7 +79,7 @@ locals {
     for index, manifest in local.enabled_manifests : index => manifest
     if try(manifest.source, null) != null &&
     !contains(keys(local.url_manifests), index) &&
-    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
+    (try(endswith(manifest.source, "/"), false) || (!try(fileexists(manifest.source), true) && can(fileset(manifest.source, "*"))))
   }
 
   # Pre-calculate normalized names for each manifest
@@ -194,6 +194,10 @@ module "install_kueue" {
                 var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
                 var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
               )
+              limits = merge(
+                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
+                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+              )
             }
           }
         } : {}
@@ -243,6 +247,10 @@ module "install_jobset" {
       controller = {
         resources = {
           requests = merge(
+            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
+            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+          )
+          limits = merge(
             var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
             var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
           )
