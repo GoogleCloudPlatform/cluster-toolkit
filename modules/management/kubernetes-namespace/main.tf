@@ -23,6 +23,12 @@ locals {
   cluster_name     = length(local.cluster_id_parts) > 5 ? local.cluster_id_parts[5] : ""
   cluster_location = length(local.cluster_id_parts) > 3 ? local.cluster_id_parts[3] : ""
   kube_project_id  = length(local.cluster_id_parts) > 1 ? local.cluster_id_parts[1] : ""
+
+
+  # HYBRID LOGIC: Use passed-in variable if available, otherwise fall back to data source
+  host                   = var.cluster_endpoint != null ? "https://${var.cluster_endpoint}" : "https://${data.google_container_cluster.gke_cluster.endpoint}"
+  token                  = var.access_token != null ? var.access_token : data.google_client_config.default.access_token
+  cluster_ca_certificate = var.cluster_ca_certificate != null ? base64decode(var.cluster_ca_certificate) : base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
 }
 data "google_client_config" "default" {}
 data "google_container_cluster" "gke_cluster" {
@@ -31,7 +37,7 @@ data "google_container_cluster" "gke_cluster" {
   project  = local.kube_project_id
 }
 provider "kubernetes" {
-  host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  host                   = local.host
+  token                  = local.token
+  cluster_ca_certificate = local.cluster_ca_certificate
 }

@@ -17,8 +17,27 @@ variable "namespace" {
   description = "Kubernetes namespace"
   type        = string
 }
+
 variable "cluster_id" {
-  description = "An identifier for the cluster"
+  description = "The full GCP resource ID of the GKE cluster in the format projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME"
   type        = string
+}
+
+variable "cluster_endpoint" {
+  description = "The endpoint of the GKE cluster. If provided, ignores data source lookup."
+  type        = string
+  default     = null
+}
+
+variable "cluster_ca_certificate" {
+  description = "The cluster CA certificate of the GKE cluster. If provided, ignores data source lookup."
+  type        = string
+  default     = null
+}
+
+variable "access_token" {
+  description = "The access token for accessing the cluster. If provided, ignores data source lookup."
+  type        = string
+  sensitive   = true
   default     = null
 }
