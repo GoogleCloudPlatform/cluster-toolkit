@@ -25,10 +25,16 @@ set -e
 # Ensure we have the latest tags
 git fetch --tags
 
+# Build the tool once
+go build -o backfill_tool tools/cache_metadata/main.go
+
 # Loop through all tags matching the pattern "v*"
 for version in $(git tag -l "v*" | sort -V); do
 	echo "Running for $version..."
-	go run tools/cache_metadata/main.go -version "$version"
+	./backfill_tool -version "$version"
 done
+
+# Clean up
+rm backfill_tool
 
 echo "Finished processing all tags."
