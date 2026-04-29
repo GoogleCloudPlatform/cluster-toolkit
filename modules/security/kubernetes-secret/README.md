@@ -65,8 +65,8 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_token"></a> [access\_token](#input\_access\_token) | The access token for accessing the cluster. If provided, ignores data source lookup. | `string` | `null` | no |
-| <a name="input_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#input\_cluster\_ca\_certificate) | The cluster CA certificate of the GKE cluster. If provided, ignores data source lookup. | `string` | `null` | no |
-| <a name="input_cluster_endpoint"></a> [cluster\_endpoint](#input\_cluster\_endpoint) | The endpoint of the GKE cluster. If provided, ignores data source lookup. | `string` | `null` | no |
+| <a name="input_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#input\_cluster\_ca\_certificate) | The cluster CA certificate of the GKE cluster. Must be base64-encoded. If provided, ignores data source lookup. | `string` | `null` | no |
+| <a name="input_cluster_endpoint"></a> [cluster\_endpoint](#input\_cluster\_endpoint) | The endpoint of the GKE cluster. Do not include the https:// prefix. If provided, ignores data source lookup. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | The full GCP resource ID of the GKE cluster in the format projects/PROJECT\_ID/locations/LOCATION/clusters/CLUSTER\_NAME | `string` | n/a | yes |
 | <a name="input_data"></a> [data](#input\_data) | Key-value map of secret data | `map(string)` | n/a | yes |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace | `string` | n/a | yes |

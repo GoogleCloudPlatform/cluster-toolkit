@@ -33,13 +33,13 @@ variable "cluster_id" {
 }
 
 variable "cluster_endpoint" {
-  description = "The endpoint of the GKE cluster. If provided, ignores data source lookup."
+  description = "The endpoint of the GKE cluster. Do not include the https:// prefix. If provided, ignores data source lookup."
   type        = string
   default     = null
 }
 
 variable "cluster_ca_certificate" {
-  description = "The cluster CA certificate of the GKE cluster. If provided, ignores data source lookup."
+  description = "The cluster CA certificate of the GKE cluster. Must be base64-encoded. If provided, ignores data source lookup."
   type        = string
   default     = null
 }
