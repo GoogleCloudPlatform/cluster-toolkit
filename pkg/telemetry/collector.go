@@ -35,7 +35,6 @@ import (
 
 var (
 	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
-	standardModules            = config.GetPredefinedModules()
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -203,6 +202,8 @@ func getModules(modulesList []string) string {
 	if len(modulesList) == 0 {
 		return ""
 	}
+
+	standardModules := getStandardModules()
 
 	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
 	if len(standardModules) == 0 {
