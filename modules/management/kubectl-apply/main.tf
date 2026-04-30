@@ -79,7 +79,7 @@ locals {
     for index, manifest in local.enabled_manifests : index => manifest
     if try(manifest.source, null) != null &&
     !contains(keys(local.url_manifests), index) &&
-    (try(endswith(manifest.source, "/"), false) || (!try(fileexists(manifest.source), true) && can(fileset(manifest.source, "*"))))
+    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
   }
 
   # Pre-calculate normalized names for each manifest
