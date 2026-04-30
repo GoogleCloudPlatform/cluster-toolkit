@@ -65,7 +65,7 @@ def _delete_slurm_reservation(node_name: str, lkp: util.Lookup):
     except Exception as e:
         log.error(f"Failed to delete reservation for {node_name}: {e}")
 
-def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup) -> None:
+def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup, placement_group: Optional[str] = None) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
@@ -81,22 +81,31 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
 
   # Create MIG
+  body = dict(
+    name=mig_name,
+    versions=[dict(instanceTemplate=nodeset.instance_template)],
+    targetSize=0,
+    distributionPolicy=dict(
+      zones=[
+         dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
+      ],
+      targetShape="ANY_SINGLE_ZONE" ),
+    updatePolicy = dict(instanceRedistributionType = "NONE" ),
+    instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
+  )
+  if placement_group:
+    body["resourcePolicies"] = {
+        "workloadPolicy": f"regions/{region}/resourcePolicies/{placement_group}"
+    }
+
+
+
   req = lkp.compute.regionInstanceGroupManagers().insert(
     project=lkp.project,
     region=region,
-    body=dict(
-      name=mig_name,
-      versions=[dict(instanceTemplate=nodeset.instance_template)],
-      targetSize=0,
-      distributionPolicy=dict(
-        zones=[
-           dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
-        ],
-        targetShape="ANY_SINGLE_ZONE" ),
-      updatePolicy = dict(instanceRedistributionType = "NONE" ),
-      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
-    )
+    body=body
   )
+
   util.log_api_request(req)
   op = req.execute()
   res = util.wait_for_operation(op)
