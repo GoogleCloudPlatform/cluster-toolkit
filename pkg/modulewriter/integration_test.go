@@ -103,9 +103,9 @@ func TestIntegrationTerraformInit(t *testing.T) {
 
 	// 6. Verify files were copied
 	groupDir := filepath.Join(depDir, "primary")
-	modAInDep := filepath.Join(groupDir, "modules/embedded/modules/modA")
-	modBInDep := filepath.Join(groupDir, "modules/embedded/modules/modB")
-	modCInDep := filepath.Join(groupDir, "modules/embedded/modules/modC")
+	modAInDep := filepath.Join(depDir, config.SharedModulesDirName, "embedded/modules/modA")
+	modBInDep := filepath.Join(depDir, config.SharedModulesDirName, "embedded/modules/modB")
+	modCInDep := filepath.Join(depDir, config.SharedModulesDirName, "embedded/modules/modC")
 
 	if _, err := os.Stat(modAInDep); os.IsNotExist(err) {
 		t.Errorf("modA was not copied to %s", modAInDep)

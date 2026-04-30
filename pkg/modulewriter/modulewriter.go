@@ -99,6 +99,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
 	fmt.Fprintln(instructions, "================================")
 
+	if err := copySharedEmbeddedModules(bp, deploymentDir); err != nil {
+		return err
+	}
+
 	for ig := range bp.Groups {
 		if err := writeGroup(deploymentDir, bp, ig, instructions); err != nil {
 			return err
@@ -114,6 +118,32 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 	for _, writer := range kinds {
 		if err := writer.restoreState(deploymentDir); err != nil {
 			return fmt.Errorf("error trying to restore terraform state: %w", err)
+		}
+	}
+	return nil
+}
+
+func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error {
+	var allSources []string
+	for _, g := range bp.Groups {
+		for _, mod := range g.Modules {
+			allSources = append(allSources, mod.Source)
+		}
+	}
+	resolvedDeps, err := modulereader.ResolveDependencies(allSources)
+	if err != nil {
+		return fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+
+	for _, dep := range resolvedDeps {
+		if sourcereader.IsEmbeddedPath(dep) {
+			dst := filepath.Join(deploymentDir, config.SharedModulesDirName, "embedded", dep)
+			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+				return err
+			}
+			if err := copyModuleSource(dep, dst); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -239,7 +269,7 @@ func DeploymentSource(mod config.Module) (string, error) {
 func tfDeploymentSource(mod config.Module) (string, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(mod.Source):
-		return "./modules/" + filepath.Join("embedded", mod.Source), nil
+		return "../" + config.SharedModulesDirName + "/" + filepath.ToSlash(filepath.Join("embedded", mod.Source)), nil
 	case sourcereader.IsLocalPath(mod.Source):
 		clean := filepath.Clean(mod.Source)
 		base := filepath.Base(clean)
@@ -315,27 +345,6 @@ func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
 }
 
 func copyGroupSources(gPath string, g config.Group) error {
-	// 1. Resolve dependencies for all modules in the group
-	sources := make([]string, 0, len(g.Modules))
-	for _, mod := range g.Modules {
-		sources = append(sources, mod.Source)
-	}
-	resolvedDeps, err := modulereader.ResolveDependencies(sources)
-	if err != nil {
-		return fmt.Errorf("failed to resolve dependencies: %w", err)
-	}
-
-	// 2. Copy resolved embedded modules
-	for _, dep := range resolvedDeps {
-		if sourcereader.IsEmbeddedPath(dep) {
-			dst := filepath.Join(gPath, "modules", "embedded", dep)
-			if err := copyModuleSource(dep, dst); err != nil {
-				return err
-			}
-		}
-	}
-
-	// 3. Copy non-embedded modules
 	return copyNonEmbeddedModules(gPath, g.Modules)
 }
 
