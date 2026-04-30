@@ -483,8 +483,11 @@ def create_placement_request(pg_name: str, region: str, max_distance: Optional[i
             2: "BLOCK",
             3: "CLUSTER",
         }
-        topo_distance = distance_map.get(max_distance, "CLUSTER")
+        topo_distance = "CLUSTER"
+        if max_distance in distance_map:
+            topo_distance = distance_map[max_distance]
         
+
         config = {
             "name": pg_name,
             "region": region,
@@ -493,6 +496,7 @@ def create_placement_request(pg_name: str, region: str, max_distance: Optional[i
                 "maxTopologyDistance": topo_distance,
             },
         }
+
     else:
         config = {
             "name": pg_name,
