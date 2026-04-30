@@ -220,7 +220,6 @@ variable "dependencies" {
 variable "cluster_id" {
   description = "An identifier for the cluster"
   type        = string
-  default     = null
 }
 
 variable "cluster_endpoint" {
