@@ -7,8 +7,8 @@ This module provides a standardized way to deploy Helm charts directly to a GKE 
 ```yaml
 - id: my_helm_release
   source: community/modules/management/direct-helm-install
+  use: [kubernetes_cluster]
   settings:
-    cluster_id: $(kubernetes_cluster.cluster_id)
     release_name: "my-release"
     chart_name: "my-chart"
     chart_repository: "https://charts.example.com"
