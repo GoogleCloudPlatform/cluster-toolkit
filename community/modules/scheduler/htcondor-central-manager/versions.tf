@@ -26,7 +26,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-central-manager/v1.88.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-central-manager/v1.89.0"
   }
 
   required_version = "= 1.12.2"
