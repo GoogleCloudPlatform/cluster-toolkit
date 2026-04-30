@@ -73,6 +73,10 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.Err
 }
 
+func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+	return []orchestrator.JobStatus{}, m.Err
+}
+
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 
 	tests := []struct {
@@ -1025,8 +1029,6 @@ func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
 }
 
 func TestParseJobStatus_CompletionTime(t *testing.T) {
-	orc := &GKEOrchestrator{}
-
 	tests := []struct {
 		name               string
 		obj                map[string]interface{}
@@ -1114,7 +1116,7 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotStatus, gotCompletionTime := orc.parseJobStatus(tt.obj)
+			gotStatus, gotCompletionTime := parseJobStatus(tt.obj)
 			if gotStatus != tt.wantStatus {
 				t.Errorf("parseJobStatus() gotStatus = %v, want %v", gotStatus, tt.wantStatus)
 			}

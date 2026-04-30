@@ -76,6 +76,10 @@ func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.err
 }
 
+func (m *mockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+	return []orchestrator.JobStatus{}, m.err
+}
+
 func TestCancelCmd_MissingArgs(t *testing.T) {
 	resetSubmitCmdFlags()
 
