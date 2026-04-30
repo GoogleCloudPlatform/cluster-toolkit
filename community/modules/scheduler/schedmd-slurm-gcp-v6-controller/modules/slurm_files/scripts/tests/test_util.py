@@ -67,7 +67,12 @@ from addict import Dict as NSDict # type: ignore
     ],
 )
 def test_node_desc(name, expected):
-    assert util.lookup()._node_desc(name) == expected
+    cfg = TstCfg(
+        slurm_cluster_name="az",
+        nodeset={"buka": TstNodeset(nodeset_name="buka")},
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp._node_desc(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -81,11 +86,16 @@ def test_node_desc(name, expected):
     ],
 )
 def test_node_index(name, expected):
+    cfg = TstCfg(
+        slurm_cluster_name="az",
+        nodeset={"buka": TstNodeset(nodeset_name="buka")},
+    )
+    lkp = util.Lookup(cfg)
     if  type(expected) is type and issubclass(expected, Exception):
         with pytest.raises(expected):
-            util.lookup().node_index(name) 
+            lkp.node_index(name) 
     else:
-        assert util.lookup().node_index(name) == expected
+        assert lkp.node_index(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -345,11 +355,11 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
     cfg = TstCfg(
         slurm_cluster_name="c",
         nodeset={
-            "n": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+            "n": TstNodeset(nodeset_name="n", node_count_static=2, node_count_dynamic_max=3)},
         nodeset_tpu={
-            "t": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+            "t": TstNodeset(nodeset_name="t", node_count_static=2, node_count_dynamic_max=3)},
         nodeset_dyn={
-            "d": TstNodeset()},
+            "d": TstNodeset(nodeset_name="d")},
     )
     lkp = util.Lookup(cfg)
     lkp.slurm_nodes = lambda: {node: state} if state else {} # type: ignore[assignment]

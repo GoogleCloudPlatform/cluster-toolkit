@@ -38,9 +38,6 @@ vars:
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
 
-  # The number of nodes to be created in each nodepool
-  static_node_count:
-
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
@@ -156,7 +153,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -176,7 +173,6 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
-      static_node_count: $(vars.static_node_count)
       additional_networks:
         $(concat(
           [{
@@ -210,7 +206,7 @@ deployment_groups:
         enable_pathways_for_tpus: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-v6e-pool.tpu_chips_per_node)
+          tpu_quota: $(vars.num_slices * gke-tpu-v6e-pool.node_count_static * gke-tpu-v6e-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-v6e-pool.tpu_accelerator_type)
       jobset:
         install: true

@@ -67,6 +67,7 @@ def test_get_resume_file_data():
 @unittest.mock.patch("resume.create_placements")
 def test_group_nodes_bulk(mock_create_placements, mock_tpu):
   cfg = TstCfg(
+      slurm_cluster_name="c",
       nodeset={
         "n": TstNodeset(nodeset_name="n"),
       },

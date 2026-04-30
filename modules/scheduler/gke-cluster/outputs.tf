@@ -107,3 +107,8 @@ output "system_node_pool_id" {
   description = "The ID of the system node pool."
   value       = var.system_node_pool_enabled ? one(google_container_node_pool.system_node_pools[*].id) : null
 }
+
+output "enable_slice_controller" {
+  description = "Indicates whether the GKE Slice Controller is enabled."
+  value       = var.enable_slice_controller
+}

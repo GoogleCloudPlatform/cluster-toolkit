@@ -22,6 +22,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-partition/v1.87.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-partition/v1.89.0"
   }
 }

@@ -38,9 +38,6 @@ vars:
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
 
-  # The number of nodes to be created in each nodepool
-  static_node_count:
-
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
@@ -119,7 +116,7 @@ deployment_groups:
         display_name: "kubectl-access-network"
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.34."
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -148,7 +145,6 @@ deployment_groups:
       machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
-      static_node_count: $(vars.static_node_count)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -163,7 +159,7 @@ deployment_groups:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          tpu_quota: $(vars.num_slices * vars.static_node_count * gke-tpu-7x-pool.tpu_chips_per_node)
+          tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
           accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
       jobset:
         install: true

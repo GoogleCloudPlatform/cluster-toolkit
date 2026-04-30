@@ -70,6 +70,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_machine_configs"></a> [machine\_configs](#input\_machine\_configs) | Definition of GCE machine types and counts | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The machine type of the node pool. | `string` | n/a | yes |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | The placement policy for the node pool. | <pre>object({<br/>    type         = string<br/>    name         = optional(string)<br/>    tpu_topology = optional(string)<br/>  })</pre> | n/a | yes |
 

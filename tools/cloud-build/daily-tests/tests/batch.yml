@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: serverless-batch
-deployment_name: cloud-batch-{{ build }}
+test_name: batch
+deployment_name: batch-{{ build }}
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/serverless-batch.yaml"
+blueprint_yaml: "{{ workspace }}/examples/batch.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
 post_deploy_tests:

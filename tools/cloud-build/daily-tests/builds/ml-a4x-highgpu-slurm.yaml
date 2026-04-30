@@ -14,11 +14,18 @@
 
 ---
 tags:
-- m.batch-job-template
-- m.batch-login-node
+- slurm6
 - m.filestore
-- m.pre-existing-vpc
-- batch
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
+- m.vpc
+- m.custom-image
+- m.cloud-storage-bucket
+- m.gpu-rdma-vpc
+- m.pre-existing-network-storage
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
@@ -28,10 +35,9 @@ steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/cloud-batch.yaml"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a4x-highgpu-slurm.yaml"
 
-# Test Cloud Batch Example
-- id: cloud-batch
+- id: ml-a4x-highgpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -52,12 +58,24 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    BLUEPRINT=examples/serverless-batch.yaml
-    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    REGION=us-west8
+    ZONE=us-west8-a
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/cloud-batch.yml"
+    BLUEPRINT="/workspace/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
+
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
+
+    # Adding this as filestore APIs are not available on us-west8-a. Should be removed once reservation is moved or updated to non us-west8-a region
+    sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
+    sed -i '/- homefs/d' $${BLUEPRINT}
+    sed -i '/filestore_ip_range:/d' $${BLUEPRINT}
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
+      --extra-vars="region=$${REGION} zone=$${ZONE} "\
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4x-highgpu-slurm.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
   secretManager:

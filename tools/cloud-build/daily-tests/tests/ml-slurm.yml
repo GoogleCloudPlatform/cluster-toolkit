@@ -22,4 +22,4 @@ blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"
 packer_group_name: packer
 packer_module_id: custom-image
 cli_deployment_vars:
-  network_name: "{{ network }}"
+  test_name: "{{ test_name }}"

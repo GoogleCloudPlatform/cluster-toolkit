@@ -296,3 +296,15 @@ variable "enable_gpu_network_wait_online" {
   type        = bool
   default     = false
 }
+
+variable "compute_endpoint_version" {
+  description = "Custom Google Compute API endpoint version."
+  type        = string
+  default     = null
+}
+
+variable "gcloud_path_override" {
+  description = "Path to the directory containing the gcloud binary to use as an override for local execution."
+  type        = string
+  default     = ""
+}

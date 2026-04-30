@@ -33,6 +33,7 @@ var gitBranch string
 var gitCommitInfo string
 var gitCommitHash string
 var gitInitialHash string
+var gitIsOfficial string
 
 func main() {
 	if err := dependencies.PatchPath(); err != nil {
@@ -45,6 +46,7 @@ func main() {
 	cmd.GitCommitInfo = gitCommitInfo
 	cmd.GitCommitHash = gitCommitHash
 	cmd.GitInitialHash = gitInitialHash
+	cmd.GitIsOfficial = gitIsOfficial
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

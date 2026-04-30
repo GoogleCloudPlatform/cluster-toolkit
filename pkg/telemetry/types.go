@@ -24,11 +24,12 @@ import (
 )
 
 const (
-	ClearcutProdURL   = "https://play.googleapis.com/log"
-	configDirName     = "cluster-toolkit"
-	HttpServerTimeout = 10 * time.Second
-	CLUSTER_TOOLKIT   = "CLUSTER_TOOLKIT"
-	CONCORD           = "CONCORD"
+	clearcutProdURL = "https://play.googleapis.com/log"
+	configDirName   = "cluster-toolkit"
+	timeout10Sec    = 10 * time.Second
+	timeout2Sec     = 2 * time.Second
+	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
+	CONCORD         = "CONCORD"
 )
 
 // Collector encapsulates the telemetry state (avoids global variables).
@@ -71,7 +72,24 @@ type ClientInfo struct {
 	ClientType string `json:"client_type"`
 }
 
+// ServiceAccountKey matches the structure of a GCP service account JSON key.
+type ServiceAccountKey struct {
+	ClientEmail string `json:"client_email"`
+}
+
 const (
-	IS_TEST_DATA = "CLUSTER_TOOLKIT_IS_TEST_DATA"
-	EXIT_CODE    = "CLUSTER_TOOLKIT_EXIT_CODE"
+	COMMAND_FLAGS      = "CLUSTER_TOOLKIT_COMMAND_FLAGS"
+	IS_GKE             = "CLUSTER_TOOLKIT_IS_GKE"
+	IS_SLURM           = "CLUSTER_TOOLKIT_IS_SLURM"
+	IS_VM_INSTANCE     = "CLUSTER_TOOLKIT_IS_VM_INSTANCE"
+	MACHINE_TYPE       = "CLUSTER_TOOLKIT_MACHINE_TYPE"
+	REGION             = "CLUSTER_TOOLKIT_REGION"
+	ZONE               = "CLUSTER_TOOLKIT_ZONE"
+	MODULES            = "CLUSTER_TOOLKIT_MODULES"
+	OS_NAME            = "CLUSTER_TOOLKIT_OS_NAME"
+	OS_VERSION         = "CLUSTER_TOOLKIT_OS_VERSION"
+	TERRAFORM_VERSION  = "CLUSTER_TOOLKIT_TERRAFORM_VERSION"
+	BILLING_ACCOUNT_ID = "CLUSTER_TOOLKIT_BILLING_ACCOUNT_ID"
+	IS_TEST_DATA       = "CLUSTER_TOOLKIT_IS_TEST_DATA"
+	EXIT_CODE          = "CLUSTER_TOOLKIT_EXIT_CODE"
 )

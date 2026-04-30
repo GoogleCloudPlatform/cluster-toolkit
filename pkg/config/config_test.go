@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -922,5 +923,90 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 		err := h(MustParseExpression(`"Slurm-${1}"`).AsValue())
 		c.Check(errors.As(err, &e), Equals, true)
 		c.Check(err, ErrorMatches, ".*lowercase letter.*")
+	}
+}
+
+// TestGetAllModules verifies that the method correctly flattens and extracts
+// all modules defined across multiple deployment groups in a blueprint.
+func TestGetAllModules(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupBp  func() *Blueprint
+		expected []ModuleID
+	}{
+		{
+			name: "No modules or groups",
+			setupBp: func() *Blueprint {
+				return &Blueprint{
+					Groups: []Group{},
+				}
+			},
+			expected: []ModuleID{},
+		},
+		{
+			name: "Single module in a single group",
+			setupBp: func() *Blueprint {
+				return &Blueprint{
+					Groups: []Group{
+						{
+							Name: GroupName("group-1"),
+							Modules: []Module{
+								{ID: ModuleID("module-1"), Source: "source/1"},
+							},
+						},
+					},
+				}
+			},
+			expected: []ModuleID{"module-1"},
+		},
+		{
+			name: "Multiple modules across multiple groups",
+			setupBp: func() *Blueprint {
+				return &Blueprint{
+					Groups: []Group{
+						{
+							Name: GroupName("group-1"),
+							Modules: []Module{
+								{ID: ModuleID("module-1"), Source: "source/1"},
+								{ID: ModuleID("module-2"), Source: "source/2"},
+							},
+						},
+						{
+							Name: GroupName("group-2"),
+							Modules: []Module{
+								{ID: ModuleID("module-3"), Source: "source/3"},
+							},
+						},
+					},
+				}
+			},
+			// The expected order should match the sequential walk across groups
+			expected: []ModuleID{"module-1", "module-2", "module-3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+
+			// Call the method
+			modules := GetAllBpModules(bp)
+
+			// Extract just the ModuleIDs to make the comparison simpler and more robust
+			var actualIDs []ModuleID
+			for _, m := range modules {
+				actualIDs = append(actualIDs, m.ID)
+			}
+
+			// Handle nil vs empty slice comparisons safely
+			if len(tt.expected) == 0 && len(actualIDs) == 0 {
+				return
+			}
+
+			// Verify that the exact sequence of ModuleIDs matches our expectation
+			if !reflect.DeepEqual(actualIDs, tt.expected) {
+				t.Errorf("GetAllModules() returned IDs %v, want %v", actualIDs, tt.expected)
+			}
+		})
 	}
 }

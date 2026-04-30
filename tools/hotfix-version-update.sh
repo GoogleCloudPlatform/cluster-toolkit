@@ -112,7 +112,7 @@ cd "${GITDIR}"
 git switch -c "${V_BRANCH}" "${BRANCH_NAME}"
 echo "Creating new Toolkit version branch"
 echo "converting old v${OLD_MAJOR}.${OLD_MINOR}.${OLD_PATCH} to new ${NEW_TAG}"
-git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" -- **/*.go **/versions.tf
+git ls-files -z '*.go' '*versions.tf' | xargs -0 git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" --
 git add -u
 echo "Creating new branch with version update to ${NEW_VERSION}"
 git commit -m "Increase version to ${NEW_VERSION}"

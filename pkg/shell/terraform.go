@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
@@ -484,7 +485,10 @@ func TfVersion() (string, error) {
 		return "", err
 	}
 
-	out, err := exec.Command(path, "version", "--json").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, path, "version", "--json").Output()
 	if err != nil {
 		return "", err
 	}

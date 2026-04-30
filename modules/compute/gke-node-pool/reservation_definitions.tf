@@ -70,7 +70,7 @@ locals {
   nodepool_vm_properties = {
     "machine_type" : var.machine_type
     "guest_accelerators" : local.has_gpu ? ( # Conditional check for GPUs
-      { for acc in try(local.guest_accelerator, []) : coalesce(acc.type, try(local.generated_guest_accelerator[0].type, "")) => coalesce(acc.count, try(local.generated_guest_accelerator[0].count, 0)) }
+      { for acc in try(local.guest_accelerator, []) : (acc.type != null ? acc.type : (length(local.generated_guest_accelerator) > 0 ? local.generated_guest_accelerator[0].type : "unknown")) => coalesce(acc.count, try(local.generated_guest_accelerator[0].count, 0)) }
     ) : {} # If no GPUs, it's an empty map {}
   }
 
