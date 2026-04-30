@@ -65,7 +65,7 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/serverless-batch-mpi.yaml
+    SG_EXAMPLE=examples/batch-mpi.yaml
     bash tools/add_ttl_label.sh $${SG_EXAMPLE}
 
 
