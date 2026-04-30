@@ -62,11 +62,14 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_access_token"></a> [access\_token](#input\_access\_token) | The access token to authenticate to the GKE cluster. If provided, ignores data source lookup. | `string` | `null` | no |
 | <a name="input_atomic"></a> [atomic](#input\_atomic) | If set, the installation process purges chart on failure ('helm install --atomic'). The --wait flag will be set automatically if atomic is used. | `bool` | `false` | no |
 | <a name="input_chart_name"></a> [chart\_name](#input\_chart\_name) | Name of the Helm chart (can be a chart reference, path to a packaged chart, path to an unpacked chart directory, or a URL). | `string` | n/a | yes |
 | <a name="input_chart_repository"></a> [chart\_repository](#input\_chart\_repository) | URL of the Helm chart repository. Set to null or omit if 'chart\_name' is a path or URL. | `string` | `null` | no |
 | <a name="input_chart_version"></a> [chart\_version](#input\_chart\_version) | Version of the Helm chart to install. If omitted, the latest version will be selected (unless 'devel' is true). | `string` | `null` | no |
 | <a name="input_cleanup_on_fail"></a> [cleanup\_on\_fail](#input\_cleanup\_on\_fail) | Allow deletion of new resources created in this upgrade when the upgrade fails ('helm upgrade --cleanup-on-fail'). | `bool` | `false` | no |
+| <a name="input_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#input\_cluster\_ca\_certificate) | The cluster CA certificate of the GKE cluster. Must be base64-encoded. If provided, ignores data source lookup. | `string` | `null` | no |
+| <a name="input_cluster_endpoint"></a> [cluster\_endpoint](#input\_cluster\_endpoint) | The endpoint of the GKE cluster. Do not include the https:// prefix. If provided, ignores data source lookup. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the cluster | `string` | `null` | no |
 | <a name="input_create_namespace"></a> [create\_namespace](#input\_create\_namespace) | Set to true to create the namespace if it does not exist ('helm install --create-namespace'). | `bool` | `true` | no |
 | <a name="input_dependencies"></a> [dependencies](#input\_dependencies) | A list of resource IDs (e.g., node pool IDs) that this release depends on. Used to force Terraform dependencies. | `list(string)` | `[]` | no |

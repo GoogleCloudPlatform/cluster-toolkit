@@ -20,20 +20,28 @@ locals {
   project       = length(local.cluster_parts) > 1 ? local.cluster_parts[1] : ""
   location      = length(local.cluster_parts) > 3 ? local.cluster_parts[3] : ""
   cluster_name  = length(local.cluster_parts) > 5 ? local.cluster_parts[5] : ""
-  endpoint      = join("", data.google_container_cluster.target[*].endpoint)
-  token         = join("", data.google_client_config.default[*].access_token)
-  all_auth      = flatten(data.google_container_cluster.target[*].master_auth)
-  ca_cert       = length(local.all_auth) > 0 ? local.all_auth[0].cluster_ca_certificate : ""
+
+  # Hybrid Logic: Use provided variables or fallback to data source
+  endpoint = var.cluster_endpoint != null ? var.cluster_endpoint : join("", data.google_container_cluster.target[*].endpoint)
+  token    = var.access_token != null ? var.access_token : join("", data.google_client_config.default[*].access_token)
+
+  all_auth = flatten(data.google_container_cluster.target[*].master_auth)
+  ca_cert  = var.cluster_ca_certificate != null ? var.cluster_ca_certificate : (length(local.all_auth) > 0 ? local.all_auth[0].cluster_ca_certificate : "")
 }
+
 data "google_client_config" "default" {
-  count = local.is_valid ? 1 : 0
+  # Skip if token is provided
+  count = (local.is_valid && var.access_token == null) ? 1 : 0
 }
+
 data "google_container_cluster" "target" {
-  count    = local.is_valid ? 1 : 0
+  # Skip if endpoint is provided
+  count    = (local.is_valid && var.cluster_endpoint == null) ? 1 : 0
   name     = local.cluster_name
   location = local.location
   project  = local.project
 }
+
 provider "helm" {
   kubernetes {
     host                   = local.is_valid ? "https://${local.endpoint}" : null
@@ -41,6 +49,7 @@ provider "helm" {
     cluster_ca_certificate = local.is_valid ? base64decode(local.ca_cert) : null
   }
 }
+
 resource "helm_release" "apply_chart" {
   # Required Identification
   name  = var.release_name
