@@ -163,7 +163,7 @@ func (g *GKEOrchestrator) fetchCapacityForZoneWithRetry(machineType, zone string
 	return cap, nil
 }
 
-func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, error) {
+func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool, error) {
 	// Return false immediately if not using TPUs.
 	if !strings.Contains(strings.ToLower(opts.AcceleratorType), "tpu") {
 		return false, nil
@@ -172,14 +172,14 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 	// Check for topologies.kueue.x-k8s.io CRD
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
-		logging.Warn("Topology CRD not found. Kueue Super-slicing not active.")
+		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
 		return false, nil
 	}
 
 	// Check for AdmissionCheck with controllerName: accelerator.gke.io/slice
 	acResult := g.executor.ExecuteCommand("kubectl", "get", "admissioncheck", "-o", "json")
 	if acResult.ExitCode != 0 {
-		logging.Warn("Failed to query AdmissionChecks. Assuming super-slicing not active.")
+		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
 		return false, nil
 	}
 
@@ -192,7 +192,7 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 	}
 
 	if err := json.Unmarshal([]byte(acResult.Stdout), &acList); err != nil {
-		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming super-slicing not active.", err)
+		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming dynamic-slicing not active.", err)
 		return false, nil
 	}
 
@@ -205,22 +205,22 @@ func (g *GKEOrchestrator) verifySuperSlicingActive(opts ManifestOptions) (bool, 
 	}
 
 	if !hasSliceController {
-		logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Super-slicing not active.")
+		logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
 		return false, nil
 	}
 
-	// Check discovered node pools for super-slicing
+	// Check discovered node pools for dynamic-slicing
 	requestedMachineName := g.resolveMachineName(opts.AcceleratorType)
 	for _, np := range g.clusterDesc.NodePools {
 		if np.Config.MachineType == requestedMachineName {
 			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
-				logging.Info("Super-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
+				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
 				return true, nil
 			}
 		}
 	}
 
-	logging.Info("Node pool does not have PROVISION_ONLY mode. Super-slicing not active.")
+	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
 	return false, nil
 }
 

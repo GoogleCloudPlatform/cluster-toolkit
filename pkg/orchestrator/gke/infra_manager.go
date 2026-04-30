@@ -93,9 +93,9 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	}
 
 	if needReinstall {
-		isSuperSlicing, _ := g.checkSuperSlicingViaGKE(clusterName, clusterLocation)
-		if isSuperSlicing {
-			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Super-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+		isDynamicSlicing, _ := g.checkDynamicSlicingViaGKE(clusterName, clusterLocation)
+		if isDynamicSlicing {
+			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Dynamic-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
 		}
 
 		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
@@ -883,7 +883,7 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkSuperSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
+func (g *GKEOrchestrator) checkDynamicSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
 	poolName := os.Getenv("GKE_NODE_POOL_NAME")
 	if poolName == "" {
 		return false, nil

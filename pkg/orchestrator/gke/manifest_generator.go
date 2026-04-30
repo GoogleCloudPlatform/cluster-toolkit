@@ -118,7 +118,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 
 	mappedLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
 
-	schedOpts, isSuperSlicing, err := g.resolveSchedulingAndTopology(&job, mappedLabel)
+	schedOpts, isDynamicSlicing, err := g.resolveSchedulingAndTopology(&job, mappedLabel)
 	if err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
@@ -137,7 +137,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	pathwaysInstanceType := fmt.Sprintf("%s:%s", instanceType, schedOpts.Topology)
 
 	opts := ManifestOptions{
-		IsSuperSlicing:                isSuperSlicing,
+		IsDynamicSlicing:              isDynamicSlicing,
 		WorkloadName:                  job.WorkloadName,
 		FullImageName:                 fullImageName,
 		CommandToRun:                  job.CommandToRun,
@@ -160,7 +160,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Verbose:                       job.Verbose,
 	}
 
-	if err := g.fillManifestStrings(&opts, schedOpts, job, isSuperSlicing, isCPUMachine); err != nil {
+	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isCPUMachine); err != nil {
 		return ManifestOptions{}, JobProfile{}, err
 	}
 
@@ -281,20 +281,20 @@ func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefi
 
 	g.dynamicallyCalculateVmsPerSlice(job, topology, mappedLabel)
 
-	isSuperSlicing, err := g.verifySuperSlicingActive(ManifestOptions{
+	isDynamicSlicing, err := g.verifyDynamicSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
 		ClusterLocation: job.ClusterLocation,
 		AcceleratorType: job.AcceleratorType,
 	})
 	if err != nil {
-		logging.Warn("Failed to verify if Super-slicing is active: %v. Assuming not active.", err)
+		logging.Warn("Failed to verify if Dynamic-slicing is active: %v. Assuming not active.", err)
 	}
 
-	return schedOpts, isSuperSlicing, nil
+	return schedOpts, isDynamicSlicing, nil
 }
 
-func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isSuperSlicing, isCPUMachine bool) error {
-	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isSuperSlicing, isCPUMachine)
+func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing, isCPUMachine bool) error {
+	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isDynamicSlicing, isCPUMachine)
 	if err != nil {
 		return err
 	}

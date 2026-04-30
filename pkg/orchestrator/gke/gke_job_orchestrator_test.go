@@ -802,7 +802,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 	}
 }
 
-func TestVerifySuperSlicingActive(t *testing.T) {
+func TestVerifyDynamicSlicingActive(t *testing.T) {
 	tests := []struct {
 		name          string
 		opts          ManifestOptions
@@ -811,7 +811,7 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 		wantResult    bool
 	}{
 		{
-			name: "Success - Super-slicing active",
+			name: "Success - Dynamic-slicing active",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -960,7 +960,7 @@ func TestVerifySuperSlicingActive(t *testing.T) {
 			orc := &GKEOrchestrator{executor: mockExecutor}
 			orc.clusterDesc.NodePools = tt.nodePools
 
-			got, err := orc.verifySuperSlicingActive(tt.opts)
+			got, err := orc.verifyDynamicSlicingActive(tt.opts)
 
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
