@@ -20,10 +20,6 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 7.2"
     }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
     helm = {
       source  = "hashicorp/helm"
       version = "~> 2.17"
@@ -32,10 +28,14 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.88.0"
+    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.89.0"
   }
 
   required_version = "= 1.12.2"

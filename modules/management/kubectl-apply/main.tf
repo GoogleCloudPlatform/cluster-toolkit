@@ -33,6 +33,8 @@ locals {
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
 
+  webhook_wait_duration = "60s"
+
   asapd_lite_config_content = (
     var.asapd_lite.config_path != null && var.asapd_lite.config_path != "" ?
     (
@@ -191,6 +193,14 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
+# This sleep ensures that subsequent configuration of Kueue custom resources 
+# do not fail due to the webhook not being available.
+resource "time_sleep" "wait_for_webhook" {
+  count           = local.install_kueue ? 1 : 0
+  create_duration = local.webhook_wait_duration
+  depends_on      = [module.install_kueue]
+}
+
 module "configure_kueue" {
   source           = "./helm_install"
   count            = local.configure_kueue ? 1 : 0
@@ -199,7 +209,7 @@ module "configure_kueue" {
   chart_version    = "0.1.0"
   namespace        = "kueue-system"
   create_namespace = true
-  wait             = false # Configuration resources (Queues) usually don't need wait
+  wait             = true
 
   values_yaml = [
     yamlencode({
@@ -207,7 +217,7 @@ module "configure_kueue" {
     })
   ]
 
-  depends_on = [module.install_kueue]
+  depends_on = [time_sleep.wait_for_webhook]
 
 }
 

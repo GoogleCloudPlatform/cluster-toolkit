@@ -15,9 +15,19 @@
 package telemetry
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"hpc-toolkit/pkg/config"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -47,8 +57,13 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	// Define all expected metric keys from types.go
 	expectedKeys := []string{
 		COMMAND_FLAGS,
+		MACHINE_TYPE,
 		REGION,
 		ZONE,
+		OS_NAME,
+		OS_VERSION,
+		TERRAFORM_VERSION,
+		BILLING_ACCOUNT_ID,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -73,40 +88,66 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				_ = cmd.Flags().Set("project", "test-project")
 			},
 			setupCollector: func(c *Collector) {
-				// Mock the blueprint variables to include region and zone
+				// Mock the blueprint variables and modules
 				c.blueprint = config.Blueprint{
 					Vars: config.NewDict(map[string]cty.Value{
 						"region": cty.StringVal("us-central1"),
 						"zone":   cty.StringVal("us-central1-a"),
 					}),
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID: config.ModuleID("compute_pool"),
+									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
 				}
 			},
 			expectedValues: map[string]string{
-				COMMAND_FLAGS: "force,project",
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "0",
-				REGION:        "us-central1",
-				ZONE:          "us-central1-a",
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "0",
+				COMMAND_FLAGS:      "force,project",
+				REGION:             "us-central1",
+				ZONE:               "us-central1-a",
+				MACHINE_TYPE:       "c2-standard-8",
+				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 		{
-			name:      "Failure exit code with missing region and zone",
-			errorCode: 1, // Simulating a failure
+			name:      "Failure exit code with missing region, zone, and machine type",
+			errorCode: 1,
 			setupCmd: func(cmd *cobra.Command) {
-				// No flags set for this test case
+				// No flags set
 			},
 			setupCollector: func(c *Collector) {
-				// Blueprint with empty vars to simulate missing region and zone
+				// Blueprint with empty vars
 				c.blueprint = config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{}),
+					Vars:   config.NewDict(map[string]cty.Value{}),
+					Groups: []config.Group{},
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:  "true",
-				EXIT_CODE:     "1", // Verify failure code is captured
-				COMMAND_FLAGS: "",  // Verify empty flags
-				REGION:        "",  // Verify missing region
-				ZONE:          "",  // Verify missing zone
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "1",
+				COMMAND_FLAGS:      "",
+				REGION:             "",
+				ZONE:               "",
+				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
+				BILLING_ACCOUNT_ID: "",
 			},
 		},
 	}
@@ -114,6 +155,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "mock"}
+
 			// Execute the setup function to apply flags to the command
 			if tt.setupCmd != nil {
 				tt.setupCmd(cmd)
@@ -419,6 +461,884 @@ func TestGetKeyFromBlueprint(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
+func TestGetMachineType(t *testing.T) {
+	tests := []struct {
+		name     string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Single machine type in module",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("compute_pool"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "c2-standard-8",
+		},
+		{
+			name: "Multiple different machine types",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("login_node"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("n2-standard-2"),
+									}),
+								},
+								{
+									ID:     config.ModuleID("lcontroller_node"),
+									Source: "modules/compute/vm-instance",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("n2-standard-2"),
+									}),
+								},
+								{
+									ID:     config.ModuleID("compute_pool"),
+									Source: "modules/compute/gke-node-pool",
+									Settings: config.NewDict(map[string]cty.Value{
+										"machine_type": cty.StringVal("c2-standard-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "n2-standard-2,c2-standard-8",
+		},
+		{
+			name: "TPU node type module (schedmd-slurm-gcp-v6-nodeset-tpu)",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:     config.ModuleID("tpu_nodeset"),
+									Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu",
+									Settings: config.NewDict(map[string]cty.Value{
+										"node_type": cty.StringVal("v4-8"),
+									}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "v4-8",
+		},
+		{
+			name: "No machine types in modules",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Groups: []config.Group{
+						{
+							Name: config.GroupName("primary"),
+							Modules: []config.Module{
+								{
+									ID:       config.ModuleID("vpc_network"),
+									Source:   "modules/network/vpc",
+									Settings: config.NewDict(map[string]cty.Value{}),
+								},
+							},
+						},
+					},
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+
+			actual := getMachineType(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getMachineType() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetOSName verifies that the operating system name correctly matches the runtime GOOS.
+func TestGetOSName(t *testing.T) {
+	expected := runtime.GOOS
+	actual := getOSName()
+
+	if actual != expected {
+		t.Errorf("getOSName() = %q, want %q", actual, expected)
+	}
+}
+
+// TestOSSpecificVersionMethods verifies graceful failure when running
+// OS-specific version methods on the wrong OS.
+func TestOSSpecificVersionMethods(t *testing.T) {
+	linuxVer := getLinuxVersion()
+	macVer := getMacVersion()
+	winVer := getWindowsVersion()
+
+	if runtime.GOOS != "linux" && linuxVer != "Linux (unknown version)" {
+		// Note: On rare occasions (like WSL or specific Mac setups), /etc/os-release
+		// might exist, so we use Logf instead of Errorf to avoid flaky tests.
+		t.Logf("Unexpected linux version string on %s: %s", runtime.GOOS, linuxVer)
+	}
+
+	if runtime.GOOS != "darwin" && macVer != "Darwin (unknown version)" {
+		t.Errorf("getMacVersion() = %q on %s, want empty string", macVer, runtime.GOOS)
+	}
+
+	if runtime.GOOS != "windows" && winVer != "Windows (unknown version)" {
+		t.Errorf("getWindowsVersion() = %q on %s, want empty string", winVer, runtime.GOOS)
+	}
+}
+
+// TestGetOSVersionDelegation ensures getOSVersion() correctly delegates
+// to the right OS-specific method based on runtime.GOOS.
+func TestGetOSVersionDelegation(t *testing.T) {
+	osVer := getOSVersion()
+
+	switch runtime.GOOS {
+	case "linux":
+		expected := getLinuxVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	case "darwin":
+		expected := getMacVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	case "windows":
+		expected := getWindowsVersion()
+		if osVer != expected {
+			t.Errorf("getOSVersion() = %q, want %q", osVer, expected)
+		}
+	default:
+		if osVer != "" {
+			t.Errorf("getOSVersion() = %q on %s, want empty string", osVer, runtime.GOOS)
+		}
+	}
+}
+
+// TestParseOsReleaseField thoroughly unit tests the string parsing logic
+// used by getLinuxVersion to read /etc/os-release files.
+func TestParseOsReleaseField(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		expected string
+	}{
+		{
+			name:     "With quotes",
+			line:     `PRETTY_NAME="Ubuntu 22.04 LTS"`,
+			expected: `Ubuntu 22.04 LTS`,
+		},
+		{
+			name:     "Without quotes",
+			line:     `VERSION_ID=22.04`,
+			expected: `22.04`,
+		},
+		{
+			name:     "No equals sign",
+			line:     `INVALID_LINE_FORMAT`,
+			expected: ``,
+		},
+		{
+			name:     "Empty value after equals",
+			line:     `PRETTY_NAME=`,
+			expected: ``,
+		},
+		{
+			name:     "Equals sign in value",
+			line:     `PRETTY_NAME="My=Custom=Linux"`,
+			expected: `My=Custom=Linux`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := parseOsReleaseField(tt.line)
+			if actual != tt.expected {
+				t.Errorf("parseOsReleaseField(%q) = %q, want %q", tt.line, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetTerraformVersion(t *testing.T) {
+	// Define the test cases
+	testCases := []struct {
+		name        string
+		mockVersion string
+		mockError   error
+		expected    string
+	}{
+		{
+			name:        "Success - returns terraform version",
+			mockVersion: "1.3.7",
+			mockError:   nil,
+			expected:    "1.3.7",
+		},
+		{
+			name:        "Failure - returns '' on error",
+			mockVersion: "",
+			mockError:   fmt.Errorf("executable file not found in $PATH"),
+			expected:    "",
+		},
+	}
+
+	// Save the original function and ensure it gets restored after tests
+	originalTfVersionFunc := tfVersionFunc
+	defer func() { tfVersionFunc = originalTfVersionFunc }()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Inject the mock function for the current test case
+			tfVersionFunc = func() (string, error) {
+				return tc.mockVersion, tc.mockError
+			}
+
+			// 2. Execute the method under test
+			actual := getTerraformVersion()
+
+			// 3. Assert the result
+			if actual != tc.expected {
+				t.Errorf("getTerraformVersion() = %q; want %q", actual, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetIsGke(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies gke-cluster pattern",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "true",
+		},
+		{
+			name:        "identifies gke-node-pool pattern",
+			modulesList: []string{"module/gke-node-pool/bar"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no GKE modules are present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where GKE is present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/primary", "module/schedmd-slurm-gcp-v6-login"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsGke(tt.modulesList); got != tt.want {
+				t.Errorf("getIsGke() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsSlurm(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies schedmd-slurm-gcp pattern",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no Slurm modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where Slurm is present",
+			modulesList: []string{"module/network/vpc", "module/schedmd-slurm-gcp-v6-login", "module/schedmd-slurm-gcp-v6-compute"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsSlurm(tt.modulesList); got != tt.want {
+				t.Errorf("getIsSlurm() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetIsVmInstance(t *testing.T) {
+	tests := []struct {
+		name        string
+		modulesList []string
+		want        string
+	}{
+		{
+			name:        "empty list returns false",
+			modulesList: []string{},
+			want:        "false",
+		},
+		{
+			name:        "identifies vm-instance pattern",
+			modulesList: []string{"module/network/vpc", "module/vm-instance/compute"},
+			want:        "true",
+		},
+		{
+			name:        "returns false when no VM instance modules are present",
+			modulesList: []string{"module/network/vpc", "module/gke-cluster/foo", "module/schedmd-slurm-gcp-v6-controller"},
+			want:        "false",
+		},
+		{
+			name:        "handles multiple modules where VM instance is present",
+			modulesList: []string{"module/vm-instance/login", "module/network/vpc"},
+			want:        "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsVmInstance(tt.modulesList); got != tt.want {
+				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGetProjectNumber verifies that the project number is correctly fetched
+// or gracefully fails depending on the blueprint configuration and API response.
+func TestGetProjectNumber(t *testing.T) {
+	tests := []struct {
+		name      string
+		blueprint config.Blueprint
+		clientErr error
+		mockErr   error
+		want      string
+	}{
+		{
+			name: "success_1",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-1"),
+				}),
+			},
+			want: "1234567890",
+		},
+		{
+			name: "success_2",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project-2"),
+				}),
+			},
+			want: "9876543210",
+		},
+		{
+			name: "no_project_id",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{}),
+			},
+			want: "",
+		},
+		{
+			name: "client_creation_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("any-project"),
+				}),
+			},
+			clientErr: errors.New("failed to create client"),
+			want:      "",
+		},
+		{
+			name: "api_error",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("error-project"),
+				}),
+			},
+			mockErr: errors.New("project not found"),
+			want:    "",
+		},
+		{
+			name: "api_returns_empty_name",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal(""),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "api_returns_nil_project",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("nil-project"),
+				}),
+			},
+			want: "",
+		},
+		{
+			name: "project_id_not_string_type",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.NumberIntVal(123),
+				}),
+			},
+			want: "",
+		},
+	}
+
+	// To safely mock package-level variables without permanently altering the global state.
+	origFetchProjectName := fetchProjectName
+	defer func() { fetchProjectName = origFetchProjectName }()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the function directly for this test case
+			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+				if tt.clientErr != nil {
+					return "", tt.clientErr
+				}
+				if tt.mockErr != nil {
+					return "", tt.mockErr
+				}
+				// simulate mock responses based on test setup
+				if projectID == "test-project-1" {
+					return "projects/1234567890", nil
+				}
+				if projectID == "test-project-2" {
+					return "projects/9876543210", nil
+				}
+				return "", errors.New("not found")
+			}
+
+			got := getProjectNumber(tt.blueprint)
+			if got != tt.want {
+				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
+func TestGetBillingAccountId(t *testing.T) {
+	// Save the original function and restore it after the test finishes
+	originalGetProjectBillingAccount := getProjectBillingAccount
+	defer func() { getProjectBillingAccount = originalGetProjectBillingAccount }()
+
+	tests := []struct {
+		name               string
+		setupBp            func() config.Blueprint
+		mockBillingAccount string
+		expected           string
+	}{
+		{
+			name: "Missing project_id in blueprint",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present but no billing account returned",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "",
+			expected:           "",
+		},
+		{
+			name: "Project ID present and billing account trimmed",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal("test-project-123"),
+					}),
+				}
+			},
+			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
+			expected:           "012345-6789AB-CDEF01",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock the GCP call for this specific test case
+			getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+				return tt.mockBillingAccount
+			}
+
+			bp := tt.setupBp()
+			actual := getBillingAccountId(bp)
+
+			if actual != tt.expected {
+				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetModules(t *testing.T) {
+	// Save and restore the original transport
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Mock JSON response that config.GetPredefinedModules() will parse
+	mockJSON := `{
+		"tree": [
+			{"path": "modules/network/vpc/main.tf", "type": "blob"},
+			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name     string
+		input    []string
+		mockResp *http.Response
+		expected string
+	}{
+		{
+			name:  "success: all standard modules",
+			input: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to keep original paths
+			expected: "modules/network/vpc,community/modules/compute/mig",
+		},
+		{
+			name:  "success: mix of standard and custom modules",
+			input: []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize the unknown module
+			expected: "modules/network/vpc,Custom,community/modules/compute/mig",
+		},
+		{
+			name:  "success: only custom modules",
+			input: []string{"my/custom/module1", "my/custom/module2"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize all
+			expected: "Custom,Custom",
+		},
+		{
+			name:  "success: empty input",
+			input: []string{},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "",
+		},
+		{
+			name:  "error: standardModules fetch failed (UNVERIFIED)",
+			input: []string{"modules/network/vpc", "my/custom/module"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return tc.mockResp, nil
+				},
+			}
+
+			// Force re-initialization of the global variable for this specific test so it picks up the mocked HTTP response, and restore it afterwards.
+			originalModules := standardModules
+			standardModules = config.GetPredefinedModules()
+			defer func() { standardModules = originalModules }()
+
+			result := getModules(tc.input)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
+// TestGetIsGoogler tests the full logic of the getIsGoogler method including fallbacks.
+func TestGetIsGoogler(t *testing.T) {
+	// Save the original environment variables to restore them after the tests
+	originalCreds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	originalPath := os.Getenv("PATH")
+	defer func() {
+		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", originalCreds)
+		os.Setenv("PATH", originalPath)
+	}()
+
+	tempDir := t.TempDir()
+
+	// Helper to create a mock gcloud executable in the temp directory
+	createFakeGcloud := func(output string, exitCode int) {
+		mockGcloudPath := filepath.Join(tempDir, "gcloud")
+		var script string
+		if exitCode == 0 {
+			script = fmt.Sprintf("#!/bin/sh\necho '%s'\n", output)
+		} else {
+			script = fmt.Sprintf("#!/bin/sh\nexit %d\n", exitCode)
+		}
+
+		err := os.WriteFile(mockGcloudPath, []byte(script), 0755)
+		if err != nil {
+			t.Fatalf("Failed to write fake gcloud script: %v", err)
+		}
+
+		// Prepend the temp directory to the PATH to intercept `exec.Command("gcloud", ...)`
+		os.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
+	}
+
+	// Helper to create a fake Application Default Credentials JSON file
+	createFakeADC := func(content string) string {
+		adcPath := filepath.Join(tempDir, "adc.json")
+		err := os.WriteFile(adcPath, []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write fake ADC file: %v", err)
+		}
+		return adcPath
+	}
+
+	tests := []struct {
+		name           string
+		setupADC       bool
+		adcContent     string
+		gcloudOutput   string
+		gcloudExitCode int
+		expected       bool
+	}{
+		{
+			name:       "Success - Internal ADC is present",
+			setupADC:   true,
+			adcContent: `{"client_email": "test-sa@hpc-toolkit-dev.iam.gserviceaccount.com"}`,
+			expected:   true,
+		},
+		{
+			name:       "Success - Internal ADC project number is present",
+			setupADC:   true,
+			adcContent: `{"client_email": "508417052821@cloudbuild.gserviceaccount.com"}`,
+			expected:   true,
+		},
+		{
+			name:           "Success - Fallback to gcloud when ADC is external",
+			setupADC:       true,
+			adcContent:     `{"client_email": "external@example.com"}`,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Success - Fallback to gcloud when ADC is invalid",
+			setupADC:       true,
+			adcContent:     `{invalid_json}`,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Success - Internal user via gcloud directly (No ADC)",
+			setupADC:       false,
+			gcloudOutput:   "user@google.com",
+			gcloudExitCode: 0,
+			expected:       true,
+		},
+		{
+			name:           "Failure - External user via gcloud directly (No ADC)",
+			setupADC:       false,
+			gcloudOutput:   "user@example.com",
+			gcloudExitCode: 0,
+			expected:       false,
+		},
+		{
+			name:           "Failure - External ADC and gcloud fails execution",
+			setupADC:       true,
+			adcContent:     `{"client_email": "external@example.com"}`,
+			gcloudExitCode: 1, // Represents a failure when running the CLI
+			expected:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock ADC file if required
+			if tt.setupADC {
+				adcPath := createFakeADC(tt.adcContent)
+				os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", adcPath)
+			} else {
+				os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
+			}
+
+			// Mock gcloud command
+			createFakeGcloud(tt.gcloudOutput, tt.gcloudExitCode)
+
+			got := getIsGoogler()
+			if got != tt.expected {
+				t.Errorf("getIsGoogler() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestCheckADCForInternalUser tests the JSON file parsing logic for Application Default Credentials.
+func TestCheckADCForInternalUser(t *testing.T) {
+	tempDir := t.TempDir()
+
+	createADC := func(content string) string {
+		path := filepath.Join(tempDir, "adc.json")
+		_ = os.WriteFile(path, []byte(content), 0644)
+		return path
+	}
+
+	tests := []struct {
+		name        string
+		content     string
+		fileExists  bool
+		expected    bool
+		expectError bool
+	}{
+		{
+			name:        "Valid internal ADC user",
+			content:     `{"client_email": "test-sa@hpc-toolkit-dev.iam.gserviceaccount.com"}`,
+			fileExists:  true,
+			expected:    true,
+			expectError: false,
+		},
+		{
+			name:        "Valid external ADC user",
+			content:     `{"client_email": "external@example.com"}`,
+			fileExists:  true,
+			expected:    false,
+			expectError: false,
+		},
+		{
+			name:        "Malformed JSON payload",
+			content:     `{invalid}`,
+			fileExists:  true,
+			expected:    false,
+			expectError: true,
+		},
+		{
+			name:        "ADC file missing",
+			fileExists:  false,
+			expected:    false,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var path string
+			if tt.fileExists {
+				path = createADC(tt.content)
+			} else {
+				path = filepath.Join(tempDir, "non_existent_adc.json")
+			}
+
+			got, err := checkADCForInternalUser(path)
+			if (err != nil) != tt.expectError {
+				t.Errorf("checkADCForInternalUser() error = %v, expectError %v", err, tt.expectError)
+				return
+			}
+			if got != tt.expected {
+				t.Errorf("checkADCForInternalUser() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsInternalEmail tests the allowlisting and domain verification logic.
+func TestIsInternalEmail(t *testing.T) {
+	tests := []struct {
+		email    string
+		expected bool
+	}{
+		// Positive test cases
+		{"user@google.com", true},
+		{"user@sub.google.com", true},
+		{"test-sa@hpc-toolkit-dev.iam.gserviceaccount.com", true},
+		{"test-sa@hpc-toolkit-demo.iam.gserviceaccount.com", true},
+		{"test-sa@hpc-toolkit-gsc.dev.gserviceaccount.com", true},
+		{"508417052821@cloudbuild.gserviceaccount.com", true},
+		{"858831239249.foo.@cloudbuild.gserviceaccount.com", true},
+		{"266450182917@cloudbuild.gserviceaccount.com", true},
+		// Negative test cases
+		{"user@example.com", false},
+		{"test-sa@other-external-project.iam.gserviceaccount.com", false},
+		{"1234567890@cloudbuild.gserviceaccount.com", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.email, func(t *testing.T) {
+			if got := isInternalEmail(tt.email); got != tt.expected {
+				t.Errorf("isInternalEmail(%q) = %v, want %v", tt.email, got, tt.expected)
 			}
 		})
 	}

@@ -81,8 +81,9 @@ steps:
     fi
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
-    sed -i -e '/- id: h4d-slurm-net-0/,/- id: h4d-rdma-net/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
