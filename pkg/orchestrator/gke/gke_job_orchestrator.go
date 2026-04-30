@@ -1851,7 +1851,7 @@ func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string)
 
 func (d *DefaultKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.TODO(), metav1.ListOptions{
+	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.Background(), metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
