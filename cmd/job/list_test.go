@@ -31,6 +31,7 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		g := gke.NewGKEOrchestrator()
 		g.SetExecutor(&mockCancelExecutor{}) // Use the mock from cancel_test.go if available
+		g.SetKubeClient(&mockKubeClient{namespace: "default"})
 		return g
 	}
 

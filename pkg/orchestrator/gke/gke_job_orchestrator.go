@@ -130,45 +130,29 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 		return nil, err
 	}
 
-	client, err := g.getDynamicClient()
-	if err != nil {
+	if _, err := g.getDynamicClient(); err != nil {
 		return nil, err
 	}
 
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-
-	list, err := client.Resource(gvr).Namespace("").List(context.TODO(), metav1.ListOptions{
-		LabelSelector: "gcluster.google.com/workload",
-	})
+	list, err := g.kubeClient.ListJobSets("gcluster.google.com/workload")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list jobsets across all namespaces: %w", err)
 	}
 
-	var jobs []orchestrator.JobStatus
-	for _, item := range list.Items {
-		name := item.GetName()
-		if opts.NameContains != "" && !strings.Contains(name, opts.NameContains) {
+	var filteredJobs []orchestrator.JobStatus
+	for _, job := range list {
+		if opts.NameContains != "" && !strings.Contains(job.Name, opts.NameContains) {
 			continue
 		}
 
-		creationParams := item.GetCreationTimestamp()
-		creationTime := creationParams.Time.Format(time.RFC3339)
-
-		statusStr, completionTime := g.parseJobStatus(item.Object)
-
-		if opts.Status != "" && !strings.EqualFold(statusStr, opts.Status) {
+		if opts.Status != "" && !strings.EqualFold(job.Status, opts.Status) {
 			continue
 		}
 
-		jobs = append(jobs, orchestrator.JobStatus{
-			Name:           name,
-			Status:         statusStr,
-			CreationTime:   creationTime,
-			CompletionTime: completionTime,
-		})
+		filteredJobs = append(filteredJobs, job)
 	}
 
-	return jobs, nil
+	return filteredJobs, nil
 }
 
 // CancelJob deletes a job from the GKE cluster by name.
@@ -1353,7 +1337,7 @@ func (g *GKEOrchestrator) addVolumeOptions(opts *ManifestOptions, vols []orchest
 	}
 }
 
-func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr, completionTime string) {
+func parseJobStatus(obj map[string]interface{}) (statusStr, completionTime string) {
 	statusStr = "Unknown"
 	completionTime = ""
 
@@ -1378,13 +1362,13 @@ func (g *GKEOrchestrator) parseJobStatus(obj map[string]interface{}) (statusStr,
 	}
 
 	if conditions, ok := statusMap["conditions"].([]interface{}); ok {
-		g.parseConditions(conditions, &statusStr, &completionTime)
+		parseConditions(conditions, &statusStr, &completionTime)
 	}
 
 	return
 }
 
-func (g *GKEOrchestrator) parseConditions(conditions []interface{}, statusStr *string, completionTime *string) {
+func parseConditions(conditions []interface{}, statusStr *string, completionTime *string) {
 	for _, c := range conditions {
 		cond := c.(map[string]interface{})
 		condType, _ := cond["type"].(string)
@@ -1518,7 +1502,7 @@ func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 		return wlStatus, nil
 	}
 
-	status, _ := g.parseJobStatus(obj.Object)
+	status, _ := parseJobStatus(obj.Object)
 
 	if status == "Running" {
 		podStatus, err := g.getPodAggregatedStatus(client, ns, name)
@@ -1863,6 +1847,34 @@ func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string)
 		matchedWorkloads = append(matchedWorkloads, item.GetName())
 	}
 	return matchedWorkloads, nil
+}
+
+func (d *DefaultKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.Background(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var jobs []orchestrator.JobStatus
+	for _, item := range list.Items {
+		name := item.GetName()
+		creationParams := item.GetCreationTimestamp()
+		creationTime := creationParams.Time.Format(time.RFC3339)
+
+		statusStr, completionTime := parseJobStatus(item.Object)
+
+		jobs = append(jobs, orchestrator.JobStatus{
+			Name:           name,
+			Status:         statusStr,
+			CreationTime:   creationTime,
+			CompletionTime: completionTime,
+		})
+	}
+
+	return jobs, nil
 }
 
 func (d *DefaultExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
