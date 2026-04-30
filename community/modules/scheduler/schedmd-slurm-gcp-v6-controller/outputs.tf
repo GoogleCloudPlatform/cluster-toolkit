@@ -39,7 +39,7 @@ output "slurm_bucket_name" {
 
 output "slurm_bucket" {
   description = "GCS Bucket of Slurm cluster file storage."
-  value       = var.create_bucket ? module.bucket : []
+  value       = module.bucket
 }
 
 output "slurm_bucket_dir" {
