@@ -218,7 +218,7 @@ variable "dependencies" {
 }
 
 variable "cluster_id" {
-  description = "An identifier for the cluster"
+  description = "The full resource ID of the GKE cluster (e.g., projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME). Note: PROJECT_ID, LOCATION, and CLUSTER_NAME are placeholders."
   type        = string
 }
 
