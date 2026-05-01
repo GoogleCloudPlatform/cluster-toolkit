@@ -1065,14 +1065,14 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 
 	resp, err := httpClient.Get(url)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
-	}
-	defer resp.Body.Close()
+if err != nil {
+	return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+}
+defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
-	}
+if resp.StatusCode != http.StatusOK {
+	return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+}
 
 	var treeResp TreeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
