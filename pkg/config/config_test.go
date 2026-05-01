@@ -17,11 +17,16 @@ limitations under the License.
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
+	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -926,6 +931,15 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 	}
 }
 
+// mockTransport intercepts HTTP calls and returns predefined responses.
+type mockTransport struct {
+	roundTripFunc func(req *http.Request) (*http.Response, error)
+}
+
+func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.roundTripFunc(req)
+}
+
 // TestGetAllModules verifies that the method correctly flattens and extracts
 // all modules defined across multiple deployment groups in a blueprint.
 func TestGetAllModules(t *testing.T) {
@@ -1006,6 +1020,201 @@ func TestGetAllModules(t *testing.T) {
 			// Verify that the exact sequence of ModuleIDs matches our expectation
 			if !reflect.DeepEqual(actualIDs, tt.expected) {
 				t.Errorf("GetAllModules() returned IDs %v, want %v", actualIDs, tt.expected)
+			}
+		})
+	}
+}
+func TestFetchStandardExampleFiles(t *testing.T) {
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	tests := []struct {
+		name     string
+		mockJSON string
+		expected []string
+	}{
+		{
+			name: "Successfully fetches valid YAML files",
+			mockJSON: `{
+				"tree": [
+					{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+					{"path": "community/examples/ml-cluster.yaml", "type": "blob"},
+					{"path": "examples/README.md", "type": "blob"},
+					{"path": "modules/network/vpc/main.tf", "type": "blob"},
+					{"path": "examples/subfolder/test.yaml", "type": "blob"}
+				]
+			}`,
+			expected: []string{
+				"community/examples/ml-cluster.yaml",
+				"examples/hpc-slurm.yaml",
+				"examples/subfolder/test.yaml",
+			},
+		},
+		{
+			name: "Returns empty list when no examples found",
+			mockJSON: `{
+				"tree": [
+					{"path": "modules/network/vpc/main.tf", "type": "blob"},
+					{"path": "examples/README.md", "type": "blob"}
+				]
+			}`,
+			expected: []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBufferString(tc.mockJSON)),
+					}, nil
+				},
+			}
+
+			result := FetchStandardExampleFiles("v1.89.0")
+
+			sort.Strings(result)
+			sort.Strings(tc.expected)
+
+			// Safely handle empty slice comparisons
+			if len(result) == 0 && len(tc.expected) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("FetchStandardExampleFiles() = %v; want %v", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFetchStandardModules(t *testing.T) {
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	tests := []struct {
+		name     string
+		mockJSON string
+		expected []string
+	}{
+		{
+			name: "Successfully identifies modules",
+			mockJSON: `{
+				"tree": [
+					{"path": "modules/network/vpc/main.tf", "type": "blob"},
+					{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
+					{"path": "modules/network/vpc/README.md", "type": "blob"},
+					{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+				]
+			}`,
+			expected: []string{
+				"community/modules/compute/mig",
+				"modules/network/vpc",
+			},
+		},
+		{
+			name: "Returns empty when no modules matched",
+			mockJSON: `{
+				"tree": [
+					{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+				]
+			}`,
+			expected: []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBufferString(tc.mockJSON)),
+					}, nil
+				},
+			}
+
+			result := FetchStandardModules("v1.89.0")
+
+			sort.Strings(result)
+			sort.Strings(tc.expected)
+
+			if len(result) == 0 && len(tc.expected) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("FetchStandardModules() = %v; want %v", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFetchStandardBlueprintNames(t *testing.T) {
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Define our mock raw YAML responses that the worker pool will fetch
+	mockYamlMap := map[string]string{
+		"examples/hpc-slurm.yaml":            "blueprint_name: hpc-slurm",
+		"community/examples/ml-cluster.yaml": "blueprint_name: ml-cluster-v1",
+		"examples/invalid.yaml":              "some_other_field: test", // No blueprint_name
+	}
+
+	http.DefaultTransport = &mockTransport{
+		roundTripFunc: func(req *http.Request) (*http.Response, error) {
+			// Find which file is being requested from the URL path
+			for path, content := range mockYamlMap {
+				if strings.Contains(req.URL.Path, path) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBufferString(content)),
+					}, nil
+				}
+			}
+
+			// Default 404 for unknown files
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Body:       io.NopCloser(bytes.NewBufferString("404 Not Found")),
+			}, nil
+		},
+	}
+
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "Successfully parses blueprint names with workers",
+			input:    []string{"examples/hpc-slurm.yaml", "community/examples/ml-cluster.yaml"},
+			expected: []string{"hpc-slurm", "ml-cluster-v1"},
+		},
+		{
+			name:     "Handles empty blueprint inputs",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "Skips files missing blueprint_name",
+			input:    []string{"examples/hpc-slurm.yaml", "examples/invalid.yaml"},
+			expected: []string{"hpc-slurm"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FetchStandardBlueprintNames(tc.input, "v1.89.0")
+
+			sort.Strings(result)
+			sort.Strings(tc.expected)
+
+			if len(result) == 0 && len(tc.expected) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("FetchStandardBlueprintNames() = %v; want %v", result, tc.expected)
 			}
 		})
 	}
