@@ -1081,6 +1081,8 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 
 	return &treeResp, nil
 }
+
+// fetchModulesFromGitHub parses the GitHub tree to find standard modules.
 func fetchModulesFromGitHub(version string) []string {
 	moduleSet := make(map[string]bool)
 	predefinedModules := make([]string, 0)
