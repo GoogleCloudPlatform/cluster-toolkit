@@ -142,7 +142,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 
 	standardFiles := config.GetPredefinedExampleFiles()
 
-	// If standardFiles is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no deployment file was used.
+	// If standardFiles is empty due to a fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no deployment file was used.
 	if len(standardFiles) == 0 {
 		return "UNVERIFIED"
 	}
