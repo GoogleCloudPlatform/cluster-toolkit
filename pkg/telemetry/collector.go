@@ -135,7 +135,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 
 	path := flag.Value.String()
 
-	// Force all backslashes to forward slashes first to ensure consistent cross-platform parsing (e.g., when running Windows inputs on Linux)
+	// Force all backslashes to forward slashes first to ensure consistent cross-platform parsing
 	path = strings.ReplaceAll(path, "\\", "/")
 	// Clean the path, enforce forward slashes, and trim leading relative prefixes
 	path = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "./")
