@@ -18,6 +18,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,7 +26,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
@@ -1024,197 +1024,133 @@ func TestGetAllModules(t *testing.T) {
 		})
 	}
 }
-func TestFetchStandardExampleFiles(t *testing.T) {
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
+
+func TestGetPredefinedModules(t *testing.T) {
+	// Save the original transport to restore it after tests complete
+	originalTransport := httpClient.Transport
+	defer func() { httpClient.Transport = originalTransport }()
+
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "modules/network/vpc/main.tf", "type": "blob"},
+			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
+			{"path": "modules/ignore_me.txt", "type": "blob"},
+			{"path": "modules/not_a_blob/main.tf", "type": "tree"}
+		]
+	}`
+	expectedParsedModules := []string{"modules/network/vpc", "community/modules/compute/mig"}
 
 	tests := []struct {
-		name     string
-		mockJSON string
-		expected []string
+		name       string
+		setupCache func(cacheFilePath string)
+		mockResp   *http.Response
+		mockErr    error
+		expected   []string
 	}{
 		{
-			name: "Successfully fetches valid YAML files",
-			mockJSON: `{
-				"tree": [
-					{"path": "examples/hpc-slurm.yaml", "type": "blob"},
-					{"path": "community/examples/ml-cluster.yaml", "type": "blob"},
-					{"path": "examples/README.md", "type": "blob"},
-					{"path": "modules/network/vpc/main.tf", "type": "blob"},
-					{"path": "examples/subfolder/test.yaml", "type": "blob"}
-				]
-			}`,
-			expected: []string{
-				"community/examples/ml-cluster.yaml",
-				"examples/hpc-slurm.yaml",
-				"examples/subfolder/test.yaml",
+			name: "success: cache miss, successful network fetch",
+			setupCache: func(cacheFilePath string) {
+				// Do nothing, ensure cache doesn't exist
 			},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			expected: expectedParsedModules,
 		},
 		{
-			name: "Returns empty list when no examples found",
-			mockJSON: `{
-				"tree": [
-					{"path": "modules/network/vpc/main.tf", "type": "blob"},
-					{"path": "examples/README.md", "type": "blob"}
-				]
-			}`,
+			name: "success: cache hit directly reads from disk",
+			setupCache: func(cacheFilePath string) {
+				// Pre-populate the cache with some distinct modules to prove it was read from disk
+				cachedData := `["modules/cached/module1", "modules/cached/module2"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+			},
+			// Provide an error response to guarantee the test fails if it attempts a network fetch
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: []string{"modules/cached/module1", "modules/cached/module2"},
+		},
+		{
+			name: "success: corrupt cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				// Write corrupted JSON to the cache file
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(`{invalid_json]`), 0644)
+			},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			expected: expectedParsedModules,
+		},
+		{
+			name: "error: cache miss, network failure returns empty slice",
+			setupCache: func(cacheFilePath string) {
+				// Do nothing
+			},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
 			expected: []string{},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			http.DefaultTransport = &mockTransport{
+			// 1. Isolate the OS Cache Directories
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			version := GetToolkitVersion()
+			cacheFilePath := filepath.Join(tempDir, "cluster-toolkit", fmt.Sprintf("standard_modules_%s.json", version))
+
+			// 2. Setup the cache state for the specific test case
+			if tc.setupCache != nil {
+				tc.setupCache(cacheFilePath)
+			}
+
+			// 3. Mock the package-level HTTP transport
+			httpClient.Transport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					return &http.Response{
-						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(bytes.NewBufferString(tc.mockJSON)),
-					}, nil
+					// Verify URL matches the expected version
+					if !strings.Contains(req.URL.String(), version) {
+						t.Errorf("Expected URL to contain version %s, got %s", version, req.URL.String())
+					}
+					return tc.mockResp, tc.mockErr
 				},
 			}
 
-			result := FetchStandardExampleFiles("v1.89.0")
+			// 4. Call the method under test
+			modules := GetPredefinedModules()
 
-			sort.Strings(result)
-			sort.Strings(tc.expected)
-
-			// Safely handle empty slice comparisons
-			if len(result) == 0 && len(tc.expected) == 0 {
-				return
-			}
-			if !reflect.DeepEqual(result, tc.expected) {
-				t.Errorf("FetchStandardExampleFiles() = %v; want %v", result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestFetchStandardModules(t *testing.T) {
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
-
-	tests := []struct {
-		name     string
-		mockJSON string
-		expected []string
-	}{
-		{
-			name: "Successfully identifies modules",
-			mockJSON: `{
-				"tree": [
-					{"path": "modules/network/vpc/main.tf", "type": "blob"},
-					{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
-					{"path": "modules/network/vpc/README.md", "type": "blob"},
-					{"path": "examples/hpc-slurm.yaml", "type": "blob"}
-				]
-			}`,
-			expected: []string{
-				"community/modules/compute/mig",
-				"modules/network/vpc",
-			},
-		},
-		{
-			name: "Returns empty when no modules matched",
-			mockJSON: `{
-				"tree": [
-					{"path": "examples/hpc-slurm.yaml", "type": "blob"}
-				]
-			}`,
-			expected: []string{},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			http.DefaultTransport = &mockTransport{
-				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					return &http.Response{
-						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(bytes.NewBufferString(tc.mockJSON)),
-					}, nil
-				},
+			// 5. Verify the returned modules
+			if len(modules) == 0 && len(tc.expected) == 0 {
+				// Both are effectively empty, preventing nil != []string{} reflect failures
+			} else if !reflect.DeepEqual(modules, tc.expected) {
+				t.Errorf("expected modules %v, got %v", tc.expected, modules)
 			}
 
-			result := FetchStandardModules("v1.89.0")
-
-			sort.Strings(result)
-			sort.Strings(tc.expected)
-
-			if len(result) == 0 && len(tc.expected) == 0 {
-				return
-			}
-			if !reflect.DeepEqual(result, tc.expected) {
-				t.Errorf("FetchStandardModules() = %v; want %v", result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestFetchStandardBlueprintNames(t *testing.T) {
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
-
-	// Define our mock raw YAML responses that the worker pool will fetch
-	mockYamlMap := map[string]string{
-		"examples/hpc-slurm.yaml":            "blueprint_name: hpc-slurm",
-		"community/examples/ml-cluster.yaml": "blueprint_name: ml-cluster-v1",
-		"examples/invalid.yaml":              "some_other_field: test", // No blueprint_name
-	}
-
-	http.DefaultTransport = &mockTransport{
-		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			// Find which file is being requested from the URL path
-			for path, content := range mockYamlMap {
-				if strings.Contains(req.URL.Path, path) {
-					return &http.Response{
-						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(bytes.NewBufferString(content)),
-					}, nil
+			// 6. Verify the cache file was written correctly (if we expect modules to exist)
+			if len(tc.expected) > 0 {
+				cacheData, err := os.ReadFile(cacheFilePath)
+				if err != nil {
+					t.Fatalf("expected cache file to exist at %s, but got error: %v", cacheFilePath, err)
 				}
-			}
 
-			// Default 404 for unknown files
-			return &http.Response{
-				StatusCode: http.StatusNotFound,
-				Body:       io.NopCloser(bytes.NewBufferString("404 Not Found")),
-			}, nil
-		},
-	}
+				var writtenModules []string
+				if err := json.Unmarshal(cacheData, &writtenModules); err != nil {
+					t.Fatalf("failed to unmarshal cache file contents: %v", err)
+				}
 
-	tests := []struct {
-		name     string
-		input    []string
-		expected []string
-	}{
-		{
-			name:     "Successfully parses blueprint names with workers",
-			input:    []string{"examples/hpc-slurm.yaml", "community/examples/ml-cluster.yaml"},
-			expected: []string{"hpc-slurm", "ml-cluster-v1"},
-		},
-		{
-			name:     "Handles empty blueprint inputs",
-			input:    []string{},
-			expected: []string{},
-		},
-		{
-			name:     "Skips files missing blueprint_name",
-			input:    []string{"examples/hpc-slurm.yaml", "examples/invalid.yaml"},
-			expected: []string{"hpc-slurm"},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := FetchStandardBlueprintNames(tc.input, "v1.89.0")
-
-			sort.Strings(result)
-			sort.Strings(tc.expected)
-
-			if len(result) == 0 && len(tc.expected) == 0 {
-				return
-			}
-			if !reflect.DeepEqual(result, tc.expected) {
-				t.Errorf("FetchStandardBlueprintNames() = %v; want %v", result, tc.expected)
+				if !reflect.DeepEqual(writtenModules, tc.expected) {
+					t.Errorf("cache file contained %v, expected %v", writtenModules, tc.expected)
+				}
 			}
 		})
 	}

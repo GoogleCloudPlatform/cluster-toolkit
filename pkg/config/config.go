@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path"
@@ -1001,7 +1000,7 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 
 	resp, err := httpClient.Get(url)
-	if err != nil {
+	if err != nil || resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}
 	defer resp.Body.Close()
@@ -1018,48 +1017,79 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 	return &treeResp, nil
 }
 
-func FetchStandardModules(version string) []string {
+func fetchModulesFromGitHub(version string) []string {
 	moduleSet := make(map[string]bool)
 	predefinedModules := make([]string, 0)
-
 	treeResp, err := fetchGitTree(version)
-	if err != nil {
-		log.Fatalf("Error fetching git tree for version %s: %v", version, err)
-	}
 
-	// Parse the remote tree
-	for _, item := range treeResp.Tree {
-		// Check for Terraform and Packer files in the module directories.
-		if item.Type == "blob" &&
-			(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
-			(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
-			moduleDir := path.Dir(item.Path)
-			if !moduleSet[moduleDir] {
-				moduleSet[moduleDir] = true
-				predefinedModules = append(predefinedModules, moduleDir)
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// Check for Terraform and Packer files in the module directories.
+			if item.Type == "blob" &&
+				(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
+				(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+				moduleDir := path.Dir(item.Path)
+				if !moduleSet[moduleDir] {
+					moduleSet[moduleDir] = true
+					predefinedModules = append(predefinedModules, moduleDir)
+				}
 			}
 		}
 	}
+
 	return predefinedModules
+}
+
+// GetPredefinedModules fetches modules, using a local file cache to prevent repetitive network requests across different CLI executions.
+func GetPredefinedModules() []string {
+	version := GetToolkitVersion()
+
+	// 1. Determine the cache file path (e.g., ~/.cache/cluster-toolkit/modules_v1.89.0.json)
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
+	}
+	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", fmt.Sprintf("standard_modules_%s.json", version))
+
+	// 2. Try to read from the local cache first
+	if data, err := os.ReadFile(cacheFile); err == nil {
+		var cachedModules []string
+		if err := json.Unmarshal(data, &cachedModules); err == nil {
+			return cachedModules // Cache hit!
+		}
+	}
+
+	// 3. Cache miss: Fetch from GitHub API
+	modules := fetchModulesFromGitHub(version)
+
+	// 4. Save the successfully fetched modules to the cache file for future CLI runs
+	if len(modules) > 0 {
+		if data, err := json.Marshal(modules); err == nil {
+			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
+			_ = os.WriteFile(cacheFile, data, 0644)
+		}
+	}
+
+	return modules
 }
 
 func FetchStandardExampleFiles(version string) []string {
 	predefinedExampleFiles := make([]string, 0)
-
 	treeResp, err := fetchGitTree(version)
-	if err != nil {
-		log.Fatalf("Error fetching git tree for version %s: %v", version, err)
-	}
 
-	// Parse the remote tree
-	for _, item := range treeResp.Tree {
-		// Check for YAML files in the example directories.
-		if item.Type == "blob" &&
-			(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
-			strings.HasSuffix(item.Path, ".yaml") {
-			predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// Check for YAML files in the example directories.
+			if item.Type == "blob" &&
+				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+				strings.HasSuffix(item.Path, ".yaml") {
+				predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
+			}
 		}
 	}
+
 	return predefinedExampleFiles
 }
 

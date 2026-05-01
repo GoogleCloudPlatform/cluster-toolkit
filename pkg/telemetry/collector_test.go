@@ -15,10 +15,13 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1032,57 +1035,90 @@ func TestGetBillingAccountId(t *testing.T) {
 }
 
 func TestGetModules(t *testing.T) {
-	// Save and restore the original function to avoid affecting other tests
-	originalStandardModules := standardModules
-	defer func() { standardModules = originalStandardModules }()
+	// Save and restore the original transport to not pollute other tests
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
 
-	mockStandardList := []string{
-		"modules/network/vpc",
-		"community/modules/compute/mig",
-	}
+	// Mock JSON response that config.GetPredefinedModules() will parse
+	mockJSON := `{
+		"tree": [
+			{"path": "modules/network/vpc/main.tf", "type": "blob"},
+			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"}
+		]
+	}`
 
 	tests := []struct {
-		name                string
-		input               []string
-		mockStandardModules []string
-		expected            string
+		name     string
+		input    []string
+		mockResp *http.Response
+		expected string
 	}{
 		{
-			name:                "success: all standard modules",
-			input:               []string{"modules/network/vpc", "community/modules/compute/mig"},
-			mockStandardModules: mockStandardList,
-			expected:            "modules/network/vpc,community/modules/compute/mig",
+			name:  "success: all standard modules",
+			input: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to keep original paths
+			expected: "modules/network/vpc,community/modules/compute/mig",
 		},
 		{
-			name:                "success: mix of standard and custom modules",
-			input:               []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
-			mockStandardModules: mockStandardList,
-			expected:            "modules/network/vpc,Custom,community/modules/compute/mig",
+			name:  "success: mix of standard and custom modules",
+			input: []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize the unknown module
+			expected: "modules/network/vpc,Custom,community/modules/compute/mig",
 		},
 		{
-			name:                "success: only custom modules",
-			input:               []string{"my/custom/module1", "my/custom/module2"},
-			mockStandardModules: mockStandardList,
-			expected:            "Custom,Custom",
+			name:  "success: only custom modules",
+			input: []string{"my/custom/module1", "my/custom/module2"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			// Expected to sanitize all
+			expected: "Custom,Custom",
 		},
 		{
-			name:                "success: empty input",
-			input:               []string{},
-			mockStandardModules: mockStandardList,
-			expected:            "",
+			name:  "success: empty input",
+			input: []string{},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "",
 		},
 		{
-			name:                "error: standardModules fetch failed (UNVERIFIED)",
-			input:               []string{"modules/network/vpc", "my/custom/module"},
-			mockStandardModules: []string{}, // Simulating an empty return indicating fetch failure
-			expected:            "UNVERIFIED",
+			name:  "error: standardModules fetch failed (UNVERIFIED)",
+			input: []string{"modules/network/vpc", "my/custom/module"},
+			mockResp: &http.Response{
+				Status:     "500 Internal Server Error",
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Mock the getStandardModules function for this specific test case
-			standardModules = tc.mockStandardModules
+			// Force the OS cache directories to a clean, temporary folder
+			// so that cache files don't leak between test cases.
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir) // Linux
+			t.Setenv("HOME", tempDir)           // macOS / Linux fallback
+			t.Setenv("LocalAppData", tempDir)   // Windows
+
+			// Inject our HTTP mock response for this test case
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return tc.mockResp, nil
+				},
+			}
 
 			result := getModules(tc.input)
 
