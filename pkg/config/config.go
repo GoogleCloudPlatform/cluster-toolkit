@@ -978,6 +978,71 @@ func GetAllBpModules(bp *Blueprint) []Module {
 	return modules
 }
 
+// GetPredefinedModules fetches modules, utilizing the shared cache helper.
+func GetPredefinedModules() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_modules_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		return fetchModulesFromGitHub(version)
+	})
+}
+
+// GetPredefinedExampleFiles fetches example files, utilizing the shared cache helper.
+func GetPredefinedExampleFiles() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_examples_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		return fetchExampleFilesFromGitHub(version)
+	})
+}
+
+// GetStandardBlueprintNames fetches blueprint names, utilizing the shared cache helper.
+func GetStandardBlueprintNames() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_blueprints_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		// First, ensure we have the list of example files to parse
+		exampleFiles := GetPredefinedExampleFiles()
+		// Then, fetch the blueprint names from those files
+		return fetchBlueprintNamesFromGitHub(exampleFiles, version)
+	})
+}
+
+// getOrFetchCachedList is a generic helper that handles file-based caching for string slices.
+// It attempts to read from the local cache first, and if it fails, executes the provided fetchFn.
+func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []string {
+	// 1. Determine the cache directory
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
+	}
+	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", cacheFileName)
+
+	// 2. Try to read from the local cache first
+	if data, err := os.ReadFile(cacheFile); err == nil {
+		var cachedList []string
+		if err := json.Unmarshal(data, &cachedList); err == nil {
+			return cachedList // Cache hit!
+		}
+	}
+
+	// 3. Cache miss: Execute the provided fetch callback
+	fetchedList := fetchFn()
+
+	// 4. Save the successfully fetched list to the cache file for future CLI runs
+	if len(fetchedList) > 0 {
+		if data, err := json.Marshal(fetchedList); err == nil {
+			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
+			_ = os.WriteFile(cacheFile, data, 0644)
+		}
+	}
+
+	return fetchedList
+}
+
 // TreeResponse represents the expected JSON structure from the GitHub Git Trees API
 type TreeResponse struct {
 	Tree []struct {
@@ -1016,7 +1081,6 @@ func fetchGitTree(version string) (*TreeResponse, error) {
 
 	return &treeResp, nil
 }
-
 func fetchModulesFromGitHub(version string) []string {
 	moduleSet := make(map[string]bool)
 	predefinedModules := make([]string, 0)
@@ -1041,39 +1105,6 @@ func fetchModulesFromGitHub(version string) []string {
 	return predefinedModules
 }
 
-// GetPredefinedModules fetches modules, using a local file cache to prevent repetitive network requests across different CLI executions.
-func GetPredefinedModules() []string {
-	version := GetToolkitVersion()
-
-	// 1. Determine the cache file path (e.g., ~/.cache/cluster-toolkit/modules_v1.89.0.json)
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
-	}
-	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", fmt.Sprintf("standard_modules_%s.json", version))
-
-	// 2. Try to read from the local cache first
-	if data, err := os.ReadFile(cacheFile); err == nil {
-		var cachedModules []string
-		if err := json.Unmarshal(data, &cachedModules); err == nil {
-			return cachedModules // Cache hit!
-		}
-	}
-
-	// 3. Cache miss: Fetch from GitHub API
-	modules := fetchModulesFromGitHub(version)
-
-	// 4. Save the successfully fetched modules to the cache file for future CLI runs
-	if len(modules) > 0 {
-		if data, err := json.Marshal(modules); err == nil {
-			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
-			_ = os.WriteFile(cacheFile, data, 0644)
-		}
-	}
-
-	return modules
-}
-
 // fetchExampleFilesFromGitHub parses the GitHub tree to find standard example YAML files.
 func fetchExampleFilesFromGitHub(version string) []string {
 	predefinedExamples := make([]string, 0)
@@ -1095,40 +1126,8 @@ func fetchExampleFilesFromGitHub(version string) []string {
 	return predefinedExamples
 }
 
-// GetPredefinedExampleFiles fetches example files, using a local file cache to prevent repetitive network requests across different CLI executions.
-func GetPredefinedExampleFiles() []string {
-	version := GetToolkitVersion()
-
-	// 1. Determine the cache file path (e.g., ~/.cache/cluster-toolkit/standard_examples_v1.89.0.json)
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
-	}
-	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", fmt.Sprintf("standard_examples_%s.json", version))
-
-	// 2. Try to read from the local cache first
-	if data, err := os.ReadFile(cacheFile); err == nil {
-		var cachedExamples []string
-		if err := json.Unmarshal(data, &cachedExamples); err == nil {
-			return cachedExamples // Cache hit!
-		}
-	}
-
-	// 3. Cache miss: Fetch from GitHub API
-	examples := fetchExampleFilesFromGitHub(version)
-
-	// 4. Save the successfully fetched examples to the cache file for future CLI runs
-	if len(examples) > 0 {
-		if data, err := json.Marshal(examples); err == nil {
-			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
-			_ = os.WriteFile(cacheFile, data, 0644)
-		}
-	}
-
-	return examples
-}
-
-func FetchStandardBlueprintNames(standardExampleFiles []string, version string) []string {
+// fetchBlueprintNamesFromGitHub fetches and parses the blueprint names from the provided example files concurrently.
+func fetchBlueprintNamesFromGitHub(standardExampleFiles []string, version string) []string {
 	blueprintNamesSet := make(map[string]bool)
 	blueprintNames := make([]string, 0)
 
@@ -1147,7 +1146,7 @@ func FetchStandardBlueprintNames(standardExampleFiles []string, version string) 
 	// 1. Start the worker goroutines
 	for w := 1; w <= numWorkers; w++ {
 		wg.Add(1)
-		go worker(w, version, jobs, results, &wg)
+		go worker(version, jobs, results, &wg)
 	}
 
 	// 2. Feed the jobs channel with the file paths
@@ -1173,7 +1172,7 @@ func FetchStandardBlueprintNames(standardExampleFiles []string, version string) 
 }
 
 // worker fetches YAML files from GitHub and extracts the blueprint_name
-func worker(id int, version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+func worker(version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for examplePath := range jobs {
