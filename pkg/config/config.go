@@ -17,13 +17,21 @@ package config
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/agext/levenshtein"
 	"github.com/hashicorp/hcl/v2"
@@ -969,4 +977,169 @@ func GetAllBpModules(bp *Blueprint) []Module {
 		modules = append(modules, *m)
 	})
 	return modules
+}
+
+// TreeResponse represents the expected JSON structure from the GitHub Git Trees API
+type TreeResponse struct {
+	Tree []struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	} `json:"tree"`
+}
+
+// MinimalBlueprint is a lightweight struct to extract only the blueprint_name
+type MinimalBlueprint struct {
+	BlueprintName string `yaml:"blueprint_name"`
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+// fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
+func fetchGitTree(version string) (*TreeResponse, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
+
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	return &treeResp, nil
+}
+
+func FetchStandardModules(version string) []string {
+	moduleSet := make(map[string]bool)
+	predefinedModules := make([]string, 0)
+
+	treeResp, err := fetchGitTree(version)
+	if err != nil {
+		log.Fatalf("Error fetching git tree for version %s: %v", version, err)
+	}
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// Check for Terraform and Packer files in the module directories.
+		if item.Type == "blob" &&
+			(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
+			(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+			moduleDir := path.Dir(item.Path)
+			if !moduleSet[moduleDir] {
+				moduleSet[moduleDir] = true
+				predefinedModules = append(predefinedModules, moduleDir)
+			}
+		}
+	}
+	return predefinedModules
+}
+
+func FetchStandardExampleFiles(version string) []string {
+	predefinedExampleFiles := make([]string, 0)
+
+	treeResp, err := fetchGitTree(version)
+	if err != nil {
+		log.Fatalf("Error fetching git tree for version %s: %v", version, err)
+	}
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// Check for YAML files in the example directories.
+		if item.Type == "blob" &&
+			(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+			strings.HasSuffix(item.Path, ".yaml") {
+			predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
+		}
+	}
+	return predefinedExampleFiles
+}
+
+func FetchStandardBlueprintNames(standardExampleFiles []string, version string) []string {
+	blueprintNamesSet := make(map[string]bool)
+	blueprintNames := make([]string, 0)
+
+	numJobs := len(standardExampleFiles)
+	if numJobs == 0 {
+		return blueprintNames
+	}
+
+	jobs := make(chan string, numJobs)
+	results := make(chan string, numJobs)
+	var wg sync.WaitGroup
+
+	// Set up a bounded worker pool (e.g., 10 concurrent connections)
+	numWorkers := min(numJobs, 10)
+
+	// 1. Start the worker goroutines
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go worker(w, version, jobs, results, &wg)
+	}
+
+	// 2. Feed the jobs channel with the file paths
+	for _, examplePath := range standardExampleFiles {
+		jobs <- examplePath
+	}
+	close(jobs) // Signal that no more jobs will be sent
+
+	// 3. Wait for all workers to finish in the background, then close the results channel
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// 4. Collect results synchronously (prevents race conditions on the map)
+	for bpName := range results {
+		if !blueprintNamesSet[bpName] {
+			blueprintNamesSet[bpName] = true
+			blueprintNames = append(blueprintNames, bpName)
+		}
+	}
+	return blueprintNames
+}
+
+// worker fetches YAML files from GitHub and extracts the blueprint_name
+func worker(id int, version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for examplePath := range jobs {
+		// Create a context with a strict 10-second timeout for each file fetch
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			cancel()
+			continue
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			cancel()
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				var bp MinimalBlueprint
+				// Unmarshal gracefully ignores all fields except blueprint_name
+				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
+					results <- bp.BlueprintName
+				}
+			}
+		}
+
+		resp.Body.Close()
+		cancel() // Release the context resources
+	}
 }

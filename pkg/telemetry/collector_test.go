@@ -1039,8 +1039,8 @@ func TestGetBillingAccountId(t *testing.T) {
 
 func TestGetModules(t *testing.T) {
 	// Save and restore the original function to avoid affecting other tests
-	originalGetStandardModules := getStandardModules
-	defer func() { getStandardModules = originalGetStandardModules }()
+	originalStandardModules := standardModules
+	defer func() { standardModules = originalStandardModules }()
 
 	mockStandardList := []string{
 		"modules/network/vpc",
@@ -1088,9 +1088,7 @@ func TestGetModules(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Mock the getStandardModules function for this specific test case
-			getStandardModules = func() []string {
-				return tc.mockStandardModules
-			}
+			standardModules = tc.mockStandardModules
 
 			result := getModules(tc.input)
 
