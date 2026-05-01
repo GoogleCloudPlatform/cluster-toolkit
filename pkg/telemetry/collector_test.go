@@ -1129,21 +1129,11 @@ func TestGetModules(t *testing.T) {
 	}
 }
 
-// createMockCmd creates a dummy cobra.Command to simulate CLI flag inputs
-func createMockCmd(flagValue string) *cobra.Command {
-	cmd := &cobra.Command{Use: "deploy"}
-	cmd.Flags().String("deployment-file", "", "Path to the deployment file")
-	if flagValue != "" {
-		_ = cmd.Flags().Set("deployment-file", flagValue)
-	}
-	return cmd
-}
-
 func TestGetDeploymentFile(t *testing.T) {
+	// Save and restore the original transport to not pollute other tests
 	originalTransport := http.DefaultTransport
 	defer func() { http.DefaultTransport = originalTransport }()
 
-	// Mock JSON representing the GitHub Tree API response
 	mockJSON := `{
 		"tree": [
 			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
@@ -1152,14 +1142,26 @@ func TestGetDeploymentFile(t *testing.T) {
 	}`
 
 	tests := []struct {
-		name      string
-		flagValue string
-		mockResp  *http.Response
-		expected  string
+		name       string
+		flagValue  string
+		flagExists bool
+		mockResp   *http.Response
+		expected   string
 	}{
 		{
-			name:      "success: matches standard example file",
-			flagValue: "examples/hpc-slurm.yaml",
+			name:       "success: exact match standard file",
+			flagValue:  "community/examples/ml-cluster.yml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "community/examples/ml-cluster.yml",
+		},
+		{
+			name:       "success: suffix match standard file",
+			flagValue:  "hpc-slurm.yaml",
+			flagExists: true,
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
@@ -1167,17 +1169,9 @@ func TestGetDeploymentFile(t *testing.T) {
 			expected: "examples/hpc-slurm.yaml",
 		},
 		{
-			name:      "success: normalizes paths with ./ prefix",
-			flagValue: "./community/examples/ml-cluster.yml",
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			expected: "community/examples/ml-cluster.yml", // Trimmed and matched!
-		},
-		{
-			name:      "success: custom unrecognized file path",
-			flagValue: "examples/my-custom-deployment.yaml",
+			name:       "success: custom file",
+			flagValue:  "my-custom-cluster.yaml",
+			flagExists: true,
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
@@ -1185,18 +1179,28 @@ func TestGetDeploymentFile(t *testing.T) {
 			expected: "Custom",
 		},
 		{
-			name:      "success: no flag provided returns empty string",
-			flagValue: "",
+			name:       "success: windows path normalization",
+			flagValue:  ".\\examples\\hpc-slurm.yaml",
+			flagExists: true,
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
 			},
-			expected: "",
+			expected: "examples/hpc-slurm.yaml",
 		},
 		{
-			name:      "error: GitHub fetch fails, falls back to UNVERIFIED",
-			flagValue: "examples/hpc-slurm.yaml",
+			name:       "success: flag not set",
+			flagValue:  "",
+			flagExists: false,
+			mockResp:   nil,
+			expected:   "",
+		},
+		{
+			name:       "error: standard files fetch failed",
+			flagValue:  "examples/hpc-slurm.yaml",
+			flagExists: true,
 			mockResp: &http.Response{
+				Status:     "500 Internal Server Error",
 				StatusCode: http.StatusInternalServerError,
 				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
 			},
@@ -1206,23 +1210,30 @@ func TestGetDeploymentFile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// 1. Isolate the OS Cache Directories to a temporary folder
+			// Force the OS cache directories to a clean, temporary folder
+			// so that cache files don't leak between test cases.
 			tempDir := t.TempDir()
 			t.Setenv("XDG_CACHE_HOME", tempDir)
 			t.Setenv("HOME", tempDir)
 			t.Setenv("LocalAppData", tempDir)
 
-			// 2. Setup the Cobra Command with the mocked flag
-			cmd := createMockCmd(tc.flagValue)
-
-			// 3. Mock the HTTP transport
-			http.DefaultTransport = &mockTransport{
-				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					return tc.mockResp, nil
-				},
+			if tc.mockResp != nil {
+				// Inject our HTTP mock response for this test case
+				http.DefaultTransport = &mockTransport{
+					roundTripFunc: func(req *http.Request) (*http.Response, error) {
+						return tc.mockResp, nil
+					},
+				}
 			}
 
-			// 4. Call the function
+			// Set up a mock Cobra command
+			cmd := &cobra.Command{Use: "test"}
+			if tc.flagExists {
+				cmd.Flags().String("deployment-file", tc.flagValue, "")
+				// Parse to simulate the user passing the flag
+				_ = cmd.ParseFlags([]string{"--deployment-file", tc.flagValue})
+			}
+
 			result := getDeploymentFile(cmd)
 
 			if result != tc.expected {

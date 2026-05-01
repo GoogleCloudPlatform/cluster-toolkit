@@ -128,16 +128,17 @@ func getCmdFlags(cmd *cobra.Command) string {
 }
 
 func getDeploymentFile(cmd *cobra.Command) string {
-	var path string
-	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
-		path = flag.Value.String()
-	}
-	if path == "" {
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
 		return ""
 	}
 
-	// Normalize path and trim leading relative prefixes
-	path = strings.TrimPrefix(filepath.Clean(path), "./")
+	path := flag.Value.String()
+
+	// Force all backslashes to forward slashes first to ensure consistent cross-platform parsing (e.g., when running Windows inputs on Linux)
+	path = strings.ReplaceAll(path, "\\", "/")
+	// Clean the path, enforce forward slashes, and trim leading relative prefixes
+	path = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "./")
 
 	standardFiles := config.GetPredefinedExampleFiles()
 
@@ -147,8 +148,10 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	}
 
 	// Check if it matches a known example, otherwise mask as "Custom"
-	if slices.Contains(standardFiles, path) {
-		return path
+	for _, sf := range standardFiles {
+		if path == sf || strings.HasSuffix(sf, "/"+path) {
+			return sf
+		}
 	}
 
 	return "Custom"
