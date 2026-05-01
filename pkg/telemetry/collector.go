@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -59,6 +60,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -123,6 +125,33 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getDeploymentFile(cmd *cobra.Command) string {
+	var path string
+	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
+		path = flag.Value.String()
+	}
+	if path == "" {
+		return ""
+	}
+
+	// Normalize path and trim leading relative prefixes
+	path = strings.TrimPrefix(filepath.Clean(path), "./")
+
+	standardFiles := config.GetPredefinedExampleFiles()
+
+	// If standardFiles is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no deployment file was used.
+	if len(standardFiles) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Check if it matches a known example, otherwise mask as "Custom"
+	if slices.Contains(standardFiles, path) {
+		return path
+	}
+
+	return "Custom"
 }
 
 func getIsGke(modulesList []string) string {

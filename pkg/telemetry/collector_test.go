@@ -1129,6 +1129,109 @@ func TestGetModules(t *testing.T) {
 	}
 }
 
+// createMockCmd creates a dummy cobra.Command to simulate CLI flag inputs
+func createMockCmd(flagValue string) *cobra.Command {
+	cmd := &cobra.Command{Use: "deploy"}
+	cmd.Flags().String("deployment-file", "", "Path to the deployment file")
+	if flagValue != "" {
+		_ = cmd.Flags().Set("deployment-file", flagValue)
+	}
+	return cmd
+}
+
+func TestGetDeploymentFile(t *testing.T) {
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	// Mock JSON representing the GitHub Tree API response
+	mockJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+			{"path": "community/examples/ml-cluster.yml", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name      string
+		flagValue string
+		mockResp  *http.Response
+		expected  string
+	}{
+		{
+			name:      "success: matches standard example file",
+			flagValue: "examples/hpc-slurm.yaml",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "examples/hpc-slurm.yaml",
+		},
+		{
+			name:      "success: normalizes paths with ./ prefix",
+			flagValue: "./community/examples/ml-cluster.yml",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "community/examples/ml-cluster.yml", // Trimmed and matched!
+		},
+		{
+			name:      "success: custom unrecognized file path",
+			flagValue: "examples/my-custom-deployment.yaml",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "Custom",
+		},
+		{
+			name:      "success: no flag provided returns empty string",
+			flagValue: "",
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "",
+		},
+		{
+			name:      "error: GitHub fetch fails, falls back to UNVERIFIED",
+			flagValue: "examples/hpc-slurm.yaml",
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Isolate the OS Cache Directories to a temporary folder
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			// 2. Setup the Cobra Command with the mocked flag
+			cmd := createMockCmd(tc.flagValue)
+
+			// 3. Mock the HTTP transport
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					return tc.mockResp, nil
+				},
+			}
+
+			// 4. Call the function
+			result := getDeploymentFile(cmd)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
 // TestGetIsGoogler tests the full logic of the getIsGoogler method including fallbacks.
 func TestGetIsGoogler(t *testing.T) {
 	// Save the original environment variables to restore them after the tests
