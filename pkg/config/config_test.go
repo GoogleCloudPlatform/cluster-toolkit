@@ -1344,8 +1344,7 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 
 			blueprints := GetStandardBlueprintNames()
 
-			// Because GetStandardBlueprintNames uses a worker pool to fetch files,
-			// the order of the appended slices is non-deterministic.
+			// Because GetStandardBlueprintNames uses a worker pool to fetch files, the order of the appended slices is non-deterministic.
 			// We MUST sort both arrays before checking reflect.DeepEqual!
 			sort.Strings(blueprints)
 			sort.Strings(tc.expected)
