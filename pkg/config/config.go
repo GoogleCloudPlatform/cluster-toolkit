@@ -1004,9 +1004,7 @@ func GetStandardBlueprintNames() []string {
 	cacheName := fmt.Sprintf("standard_blueprints_%s.json", version)
 
 	return getOrFetchCachedList(cacheName, func() []string {
-		// First, ensure we have the list of example files to parse
 		exampleFiles := GetPredefinedExampleFiles()
-		// Then, fetch the blueprint names from those files
 		return fetchBlueprintNamesFromGitHub(exampleFiles, version)
 	})
 }
