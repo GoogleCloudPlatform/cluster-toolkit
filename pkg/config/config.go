@@ -1074,23 +1074,58 @@ func GetPredefinedModules() []string {
 	return modules
 }
 
-func FetchStandardExampleFiles(version string) []string {
-	predefinedExampleFiles := make([]string, 0)
+// fetchExampleFilesFromGitHub parses the GitHub tree to find standard example YAML files.
+func fetchExampleFilesFromGitHub(version string) []string {
+	predefinedExamples := make([]string, 0)
 	treeResp, err := fetchGitTree(version)
 
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// Check for YAML files in the example directories.
+			// Check for YAML files in the examples directories.
 			if item.Type == "blob" &&
 				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
-				strings.HasSuffix(item.Path, ".yaml") {
-				predefinedExampleFiles = append(predefinedExampleFiles, item.Path)
+				(strings.HasSuffix(item.Path, ".yaml") || strings.HasSuffix(item.Path, ".yml")) {
+
+				predefinedExamples = append(predefinedExamples, item.Path)
 			}
 		}
 	}
 
-	return predefinedExampleFiles
+	return predefinedExamples
+}
+
+// GetPredefinedExampleFiles fetches example files, using a local file cache to prevent repetitive network requests across different CLI executions.
+func GetPredefinedExampleFiles() []string {
+	version := GetToolkitVersion()
+
+	// 1. Determine the cache file path (e.g., ~/.cache/cluster-toolkit/standard_examples_v1.89.0.json)
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
+	}
+	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", fmt.Sprintf("standard_examples_%s.json", version))
+
+	// 2. Try to read from the local cache first
+	if data, err := os.ReadFile(cacheFile); err == nil {
+		var cachedExamples []string
+		if err := json.Unmarshal(data, &cachedExamples); err == nil {
+			return cachedExamples // Cache hit!
+		}
+	}
+
+	// 3. Cache miss: Fetch from GitHub API
+	examples := fetchExampleFilesFromGitHub(version)
+
+	// 4. Save the successfully fetched examples to the cache file for future CLI runs
+	if len(examples) > 0 {
+		if data, err := json.Marshal(examples); err == nil {
+			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
+			_ = os.WriteFile(cacheFile, data, 0644)
+		}
+	}
+
+	return examples
 }
 
 func FetchStandardBlueprintNames(standardExampleFiles []string, version string) []string {
