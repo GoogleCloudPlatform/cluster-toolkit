@@ -17,10 +17,12 @@ package gke
 import (
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"strings"
 
+	compute "google.golang.org/api/compute/v1"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -37,6 +39,16 @@ type KubeClient interface {
 	ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error)
 }
 
+type MachineTypeClient interface {
+	GetMachineType(project, zone, machineType string) (*compute.MachineType, error)
+}
+
+type DefaultMachineTypeClient struct{}
+
+func (c DefaultMachineTypeClient) GetMachineType(project, zone, machineType string) (*compute.MachineType, error) {
+	return config.GetMachineType(project, zone, machineType)
+}
+
 // DefaultKubeClient implements KubeClient using the actual dynamic client.
 type DefaultKubeClient struct {
 	dynClient dynamic.Interface
@@ -46,12 +58,14 @@ type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
 	executor                    Executor
+	projectID                   string
 	clusterZones                []string
 	nodePoolSAs                 []string
 	capacity                    ClusterCapacity
 	clusterDesc                 gkeCluster
 	dynClient                   dynamic.Interface
 	kubeClient                  KubeClient
+	machineTypeClient           MachineTypeClient
 	acceleratorToMachineType    map[string]string
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
