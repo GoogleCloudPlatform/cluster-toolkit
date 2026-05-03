@@ -135,9 +135,10 @@ deployment_groups:
       - monitoring.metricWriter
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
-      - storage.objectAdmin
+      - storage.admin
       - artifactregistry.reader
       - container.admin
+      - hypercomputecluster.editor
 
   - id: training_bucket
     source: modules/file-system/cloud-storage-bucket
@@ -299,16 +300,12 @@ deployment_groups:
           namespace: $(vars.user_namespace)
       jobset:
         install: true
-      # cert_manager:
-      #   install: true
+      cert_manager:
+        install: true
 
-  # For instructions on enabling ML Diagnostics, refer to README.md#understanding-ml-diagnostics-integration
-  - id: ml-diagnostics
-    source: modules/management/diagnostics
+  - id: gke-ml-diagnostics
+    source: modules/management/mldiagnostics
     use: [gke-tpu-7x-cluster, workload-manager-install]
-    settings:
-      mldiagnostics:
-        enable: false
     outputs: [instructions]
 
   - id: gcs-training

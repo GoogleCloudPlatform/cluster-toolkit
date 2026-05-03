@@ -31,7 +31,7 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:diagnostics/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:mldiagnostics/v1.84.0"
   }
 
   required_version = "= 1.12.2"

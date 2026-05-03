@@ -24,7 +24,7 @@ Refer to the [ML Diagnostics documentation overview](https://docs.cloud.google.c
 Navigate to the test folder within your cloned `cluster-toolkit` repository:
 
 ```sh
-cd modules/management/diagnostics/sample-workload-test
+cd modules/management/mldiagnostics/sample-workload-test
 ```
 
 Set environment variables for your project and region:

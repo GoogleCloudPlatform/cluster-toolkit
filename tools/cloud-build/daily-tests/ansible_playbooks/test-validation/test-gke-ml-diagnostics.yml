@@ -16,7 +16,7 @@
 
 - name: Set local variables
   ansible.builtin.set_fact:
-    source_job_file: "/workspace/modules/management/diagnostics/sample-workload-test/sample_job.yaml"
+    source_job_file: "/workspace/modules/management/mldiagnostics/sample-workload-test/sample_job.yaml"
     modified_job_file: "/tmp/sample_job.yaml"
     target_namespace: "{{ custom_vars.user_namespace | default('default') }}"
 

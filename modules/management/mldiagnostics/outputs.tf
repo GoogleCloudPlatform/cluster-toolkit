@@ -14,7 +14,7 @@
 
 output "instructions" {
   description = "GKE ML Diagnostics cluster created"
-  value = var.mldiagnostics.enable ? (<<-EOT
+  value       = <<-EOT
     ML Diagnostics has been successfully installed in the cluster: ${local.cluster_name}.
     - Validated that Cert-Manager is installed (namespace 'cert-manager' found).
     - Validated that the workload service account '${var.k8s_service_account_name}' exists and is annotated for Workload Identity.
@@ -25,5 +25,4 @@ output "instructions" {
     - That namespace has been labeled 'managed-mldiagnostics-gke: "true"' to enable webhook injection.
     - Ensure your workload pods use the Kubernetes Service Account configured with Workload Identity - '${var.k8s_service_account_name}'.
   EOT
-  ) : null
 }

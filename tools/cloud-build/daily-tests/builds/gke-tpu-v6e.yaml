@@ -19,7 +19,7 @@ tags:
 - m.gke-cluster
 - m.gke-node-pool
 - m.kubectl-apply
-- m.diagnostics
+- m.mldiagnostics
 - gke
 
 substitutions:
@@ -92,17 +92,6 @@ steps:
     echo '      - python -c '\''import warnings; warnings.filterwarnings("ignore"); import jax; print(jax.device_count(), "TPU cores")'\'''    >> $${EXAMPLE_BP}
     echo '      node_count: 1'                                                             >> $${EXAMPLE_BP}
     echo '    outputs: [instructions]'                                                     >> $${EXAMPLE_BP}
-
-    # ML Diagnostics specific modifications
-    # Add hypercomputecluster.editor role and storage.admin
-    sed -i '/id: workload_service_account/,/project_roles:/s/project_roles:/project_roles:\n      - hypercomputecluster.editor\n      - storage.admin/' $${EXAMPLE_BP}
-
-    # Uncomment cert-manager
-    sed -i 's/# cert_manager:/cert_manager:/' $${EXAMPLE_BP}
-    sed -i 's/#   install: true/  install: true/' $${EXAMPLE_BP}
-
-    # Enable mldiagnostics module
-    sed -i '/id: ml-diagnostics/,/enable: false/s/enable: false/enable: true/' $${EXAMPLE_BP}
 
     ENABLE_SPOT="true"
     GKE_VARS_FILE="tools/cloud-build/daily-tests/tests/gke-tpu-v6e.yml"

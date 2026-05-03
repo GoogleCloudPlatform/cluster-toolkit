@@ -33,12 +33,12 @@ data "google_container_cluster" "gke_cluster" {
 data "google_client_config" "default" {}
 
 data "kubernetes_all_namespaces" "all" {
-  count      = var.mldiagnostics.enable ? 1 : 0
+  count      = var.gke_cluster_exists ? 1 : 0
   depends_on = [var.k8s_prerequisites_ready]
 }
 
 data "kubernetes_service_account_v1" "workload_sa" {
-  count = var.mldiagnostics.enable ? 1 : 0
+  count = var.gke_cluster_exists ? 1 : 0
   metadata {
     name      = var.k8s_service_account_name
     namespace = var.namespace
@@ -47,7 +47,7 @@ data "kubernetes_service_account_v1" "workload_sa" {
 }
 
 resource "kubernetes_labels" "workload_namespace_labels" {
-  count       = var.mldiagnostics.enable ? 1 : 0
+  count       = var.gke_cluster_exists ? 1 : 0
   api_version = "v1"
   kind        = "Namespace"
 
@@ -67,30 +67,30 @@ resource "kubernetes_labels" "workload_namespace_labels" {
 }
 
 module "install_mldiagnostics_webhook" {
+  count            = var.gke_cluster_exists ? 1 : 0
   source           = "../kubectl-apply/helm_install"
-  count            = var.mldiagnostics.enable ? 1 : 0
   wait             = true
   timeout          = 1200
   release_name     = "mld-webhook"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-injection-webhook"
   chart_repository = ""
-  chart_version    = var.mldiagnostics.injection_webhook_version
+  chart_version    = var.injection_webhook_version
   namespace        = local.mldiagnostics_namespace
   create_namespace = true
-  depends_on       = [var.gke_cluster_exists, var.k8s_prerequisites_ready, kubernetes_labels.workload_namespace_labels]
+  depends_on       = [var.k8s_prerequisites_ready, kubernetes_labels.workload_namespace_labels]
 }
 
 module "install_mldiagnostics_connection_operator" {
+  count            = var.gke_cluster_exists ? 1 : 0
   source           = "../kubectl-apply/helm_install"
-  count            = var.mldiagnostics.enable ? 1 : 0
   wait             = true
   timeout          = 1200
   release_name     = "mld-op"
   chart_name       = "oci://us-docker.pkg.dev/ai-on-gke/mldiagnostics-webhook-and-operator-helm/mldiagnostics-connection-operator"
   chart_repository = ""
-  chart_version    = var.mldiagnostics.connection_operator_version
+  chart_version    = var.connection_operator_version
   namespace        = local.mldiagnostics_namespace
   create_namespace = false
   set_values       = [{ name = "fullnameOverride", value = "mld-op" }]
-  depends_on       = [var.gke_cluster_exists, var.k8s_prerequisites_ready, module.install_mldiagnostics_webhook]
+  depends_on       = [var.k8s_prerequisites_ready, module.install_mldiagnostics_webhook]
 }

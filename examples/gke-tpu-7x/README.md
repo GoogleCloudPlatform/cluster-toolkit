@@ -447,9 +447,9 @@ The logs will display content from `shared_output.txt`, showing timestamps and h
 
 ### Understanding ML Diagnostics integration
 
-This blueprint includes optional support for easy installation and configuration of [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++), a managed service for profiling, logging, and monitoring AI/ML workloads on GKE.
+This blueprint includes support for easy installation and configuration of [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++), a managed service for profiling, logging, and monitoring AI/ML workloads on GKE.
 
-Enabling this feature automates the setup of necessary components, including:
+This feature automates the setup of necessary components, including:
 
 - **ML Diagnostics Injection Webhook:** Injects required metadata into workload pods to enable the ML Diagnostics SDK.
 - **ML Diagnostics Connection Operator:** Enables on-demand profiling for ML workloads.
@@ -460,7 +460,7 @@ Enabling this feature automates the setup of necessary components, including:
 
 To enable Google Cloud ML Diagnostics, perform the following steps **before** deploying the blueprint:
 
-1. **Specify user workload namespace:** In the `vars:` section of `gke-tpu-7x-deployment.yaml`, define a dedicated namespace for your workloads by setting `user_namespace`. If not provided, the value will default to ‘default’. The `user_namespace` will be automatically created by the `gke-tpu-7x-cluster` module if it doesn't already exist. This namespace will be used across different modules.
+1. **Specify user workload namespace:** In the `vars:` section of `gke-tpu-7x-deployment.yaml`, define the namespace to be pre-configured for your workloads by setting `user_namespace`. If not provided, the value will default to ‘default’. The `user_namespace` will be automatically created by the `gke-tpu-7x-cluster` module if it doesn't already exist. This namespace will be used across different modules.
 
     ```yaml
     vars:
@@ -468,7 +468,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
       user_namespace: ai-workloads # Example namespace
     ```
 
-2. **Add IAM Permissions:** The workload Kubernetes Service Account bound to the Google Service Account requires specific [roles](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview#iam-permissions) for running ML Diagnostics workloads. In the blueprint, one additional permission is required, add `"hypercomputecluster.editor"` to `workload_service_account`.
+2. **Add IAM Permissions:** The workload Kubernetes Service Account bound to the Google Service Account requires specific [roles](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview#iam-permissions) for running ML Diagnostics workloads. In the blueprint, ensure `"hypercomputecluster.editor"` is added to `project_roles` of the `workload_service_account` module.
 
     ```yaml
       - id: workload_service_account
@@ -480,7 +480,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           - hypercomputecluster.editor
     ```
 
-3. **Configure Workload Identity Namespace:** Ensure the `gke-tpu-7x-cluster` module is configured to create the Workload Identity resources in your user namespace. Add `namespace: $(vars.user_namespace)` to its settings:
+3. **Configure Workload Identity Namespace:** Ensure the `gke-tpu-7x-cluster` module is configured to create the Workload Identity resources in the user namespace.
 
     ```yaml
       - id: gke-tpu-7x-cluster
@@ -502,7 +502,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
               namespace: $(vars.user_namespace)
     ```
 
-5. **Enable Cert-Manager:** In the `workload-manager-install` module, ensure Cert-Manager is set to install, as it's required by the ML Diagnostics webhook:
+5. **Cert-Manager:** In the `workload-manager-install` module, ensure Cert-Manager is set to install, as it's required by the ML Diagnostics webhook:
 
     ```yaml
       - id: workload-manager-install
@@ -515,15 +515,14 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
             # version: "v1.17.2" # Optional: specify version
     ```
 
-6. **Enable ML Diagnostics Module:** Enable `ml-diagnostics` module to install ML Diagnostics charts and configurations to user namespace.
+6. **ML Diagnostics Module:** Ensure `gke-ml-diagnostics` module is present in the blueprint to install ML Diagnostics charts and configurations to user namespace.
 
     ```yaml
-      - id: ml-diagnostics
-        source: modules/management/diagnostics
+      - id: gke-ml-diagnostics
+        source: modules/management/mldiagnostics
         use: [gke-tpu-7x-cluster, workload-manager-install]
-        settings:
-          mldiagnostics:
-            enable: true
+        # Optional: Specify the versions of the injection webhook and connection operator to install.
+        # settings:
             # injection_webhook_version: "0.25.0" # Optional
             # connection_operator_version: "0.21.0" # Optional
           # Optional: Specify the namespace to be configured for running workloads with ML Diagnostics.
@@ -531,7 +530,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           # namespace: $(vars.user_namespace)
     ```
 
-When `enable: true` in `ml-diagnostics`, cert-manager and workload identity will be validated here as they are created in other modules.
+In `gke-ml-diagnostics` module, cert-manager and workload identity will be validated as they are created in other modules.
 
 After making these changes, run the `gcluster deploy` command to create the GKE cluster with the ML diagnostics configuration.
 
@@ -583,4 +582,4 @@ After making these changes, run the `gcluster deploy` command to create the GKE 
 
 These steps confirm that the ML Diagnostics components and their dependencies are correctly set up in the cluster.
 
-To test with sample workload, refer to the [ML Diagnostics Test README](../../modules/management/diagnostics/sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
+To test with sample workload, refer to the [ML Diagnostics Test README](../../modules/management/mldiagnostics/sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
