@@ -91,13 +91,13 @@ steps:
 
     # Inject spot setting after auto_upgrade: true
     sed -i 's/auto_upgrade: true/auto_upgrade: true\n      spot: '"$$ENABLE_SPOT"'/' $${EXAMPLE_BP}
+    sed -i 's/name: run-nvidia-smi/name: my-job/' $${EXAMPLE_BP}
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
-    python3 tools/fix_vpc_name.py $${EXAMPLE_BP} "${_TEST_PREFIX}"
     cat $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
