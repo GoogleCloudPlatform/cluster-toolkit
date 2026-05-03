@@ -127,7 +127,9 @@ func copySharedEmbeddedModules(bp config.Blueprint, deploymentDir string) error 
 	var allSources []string
 	for _, g := range bp.Groups {
 		for _, mod := range g.Modules {
-			allSources = append(allSources, mod.Source)
+			if mod.Kind == config.TerraformKind {
+				allSources = append(allSources, mod.Source)
+			}
 		}
 	}
 	resolvedDeps, err := modulereader.ResolveDependencies(allSources)
