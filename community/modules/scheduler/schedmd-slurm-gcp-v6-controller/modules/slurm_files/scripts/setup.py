@@ -494,6 +494,19 @@ def setup_controller():
     pass
 
 
+def prevent_munge_boot_race():
+    """Install a systemd drop-in so munge.service is skipped (not failed) at
+    boot when munge.key is absent, and clear any failed state from the current
+    boot before setup_network_storage() deploys the key."""
+    munge_override_dir = Path("/etc/systemd/system/munge.service.d")
+    munge_override_dir.mkdir(parents=True, exist_ok=True)
+    (munge_override_dir / "require-key.conf").write_text(
+        f"[Unit]\nConditionPathExists={dirs.munge / 'munge.key'}\n"
+    )
+    run("systemctl daemon-reload", timeout=30)
+    run("systemctl reset-failed munge", timeout=30, check=False)
+
+
 def setup_login():
     """run login node setup"""
     log.info("Setting up login")
@@ -508,6 +521,9 @@ def setup_login():
     sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
     update_system_config("sackd", sysconf)
     install_custom_scripts()
+
+    if not lkp.cfg.enable_slurm_auth:
+        prevent_munge_boot_race()
 
     setup_network_storage()
     setup_sudoers()
@@ -554,6 +570,10 @@ def setup_compute():
     install_custom_scripts()
 
     setup_nss_slurm()
+
+    if not lkp.cfg.enable_slurm_auth:
+        prevent_munge_boot_race()
+
     setup_network_storage()
 
     has_gpu = run("lspci | grep --ignore-case 'NVIDIA' | wc -l", shell=True).returncode
