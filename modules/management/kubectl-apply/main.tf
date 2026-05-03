@@ -210,13 +210,14 @@ module "configure_kueue" {
   chart_version    = "0.1.0"
   namespace        = "kueue-system"
   create_namespace = true
-  wait             = false # Configuration resources (Queues) usually don't need wait
+  wait             = true
 
   values_yaml = [
     yamlencode({
       manifests = local.final_kueue_manifests
     })
   ]
+
   depends_on = [time_sleep.wait_for_webhook]
 
 }
