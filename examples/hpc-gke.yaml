@@ -17,11 +17,11 @@
 blueprint_name: hpc-gke
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
-  deployment_name: cluster-01
+  project_id:  hpc-toolkit-gsc
+  deployment_name: hanu-gke
   region: us-central1
   gcp_public_cidrs_access_enabled: false
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr: 0.0.0.0/0
 
 deployment_groups:
 - group: primary
@@ -77,14 +77,12 @@ deployment_groups:
   - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
-
-  - id: job-template
-    source: modules/compute/gke-job-template
-    use: [compute_pool]
     settings:
-      image: busybox
-      command:
-      - echo
-      - Hello World
-      node_count: 3
-    outputs: [instructions]
+      disk_type: pd-balanced
+      machine_type: n2-standard-4
+      static_node_count: 2
+
+  - id: k8s-provider-test-run
+    source: modules/management/kubernetes
+    use: [gke_cluster]
+    
