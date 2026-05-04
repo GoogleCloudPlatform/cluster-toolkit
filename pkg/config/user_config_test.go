@@ -19,12 +19,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/spf13/viper"
 )
 
 // setupTestEnv creates a clean temporary directory and forces os.UserConfigDir()
-// to use it via environment variables. It also resets the global Viper state.
+// to use it via environment variables. It also resets the global state.
 func setupTestEnv(t *testing.T) string {
 	tempDir := t.TempDir()
 
@@ -34,7 +32,7 @@ func setupTestEnv(t *testing.T) string {
 	t.Setenv("AppData", tempDir)         // Windows
 	t.Setenv("LocalAppData", tempDir)    // Windows fallback
 
-	viper.Reset()
+	globalUserConfig = UserConfig{}
 	return tempDir
 }
 
@@ -46,7 +44,7 @@ func TestInitUserConfig_NewUser(t *testing.T) {
 		t.Fatalf("InitUserConfig failed: %v", err)
 	}
 
-	// Verify Viper state
+	// Verify in-memory state
 	userID := GetPersistentUserId()
 	if userID == "" || len(userID) != 24 {
 		t.Errorf("Expected valid 24-char user ID, got: %s", userID)
@@ -66,9 +64,9 @@ func TestInitUserConfig_ExistingUser(t *testing.T) {
 	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 
-	existingData := map[string]any{
-		USER_ID_KEY:   "existing-test-id",
-		TELEMETRY_KEY: true,
+	existingData := UserConfig{
+		UserID:           "existing-test-id",
+		TelemetryEnabled: true,
 	}
 	data, _ := json.Marshal(existingData)
 	_ = os.WriteFile(configFile, data, 0644)
@@ -78,7 +76,7 @@ func TestInitUserConfig_ExistingUser(t *testing.T) {
 		t.Fatalf("InitUserConfig failed: %v", err)
 	}
 
-	// Verify Viper state loaded the existing data instead of generating new defaults
+	// Verify the in-memory state loaded the existing data instead of generating new defaults
 	if GetPersistentUserId() != "existing-test-id" {
 		t.Errorf("Expected user ID 'existing-test-id', got: %s", GetPersistentUserId())
 	}
@@ -100,7 +98,7 @@ func TestInitUserConfig_CorruptFile(t *testing.T) {
 		t.Fatalf("InitUserConfig failed: %v", err)
 	}
 
-	// Verify Viper safely recovered by generating a new ID
+	// Verify the system safely recovered by generating a new ID
 	userID := GetPersistentUserId()
 	if userID == "" || len(userID) != 24 {
 		t.Errorf("Expected valid 24-char user ID to be generated, got: %s", userID)
@@ -111,7 +109,7 @@ func TestInitUserConfig_CorruptFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read config file: %v", err)
 	}
-	var settings map[string]any
+	var settings UserConfig
 	if err := json.Unmarshal(data, &settings); err != nil {
 		t.Errorf("Expected config file to be overwritten with valid JSON, got unmarshal error: %v", err)
 	}
@@ -132,20 +130,20 @@ func TestSetTelemetry(t *testing.T) {
 		t.Fatalf("SetTelemetry failed: %v", err)
 	}
 
-	// Verify Viper in-memory state
+	// Verify in-memory state
 	if !IsTelemetryEnabled() {
-		t.Errorf("Expected telemetry to be true in viper")
+		t.Errorf("Expected telemetry to be true in memory state")
 	}
 
 	// Verify File on-disk state
 	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
 	data, _ := os.ReadFile(configFile)
 
-	var settings map[string]any
+	var settings UserConfig
 	_ = json.Unmarshal(data, &settings)
 
-	if settings[TELEMETRY_KEY] != true {
-		t.Errorf("Expected telemetry to be true in file, got: %v", settings[TELEMETRY_KEY])
+	if !settings.TelemetryEnabled {
+		t.Errorf("Expected telemetry to be true in file, got: %v", settings.TelemetryEnabled)
 	}
 }
 

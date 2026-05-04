@@ -21,32 +21,31 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-
-	"github.com/spf13/viper"
 )
 
-const (
-	USER_ID_KEY   string = "user_id"
-	TELEMETRY_KEY string = "telemetry_enabled"
-)
+// UserConfig holds the in-memory state of the user's telemetry preferences
+type UserConfig struct {
+	UserID           string `json:"user_id"`
+	TelemetryEnabled bool   `json:"telemetry_enabled"`
+}
+
+// globalUserConfig is the package-level variable holding the state during execution
+var globalUserConfig UserConfig
 
 // InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
 func InitUserConfig() error {
-	userID := generateUniqueID()
-
-	// Set local Viper defaults
-	viper.SetDefault(USER_ID_KEY, userID)
+	// Set the defaults
+	globalUserConfig = UserConfig{
+		UserID:           generateUniqueID(),
+		TelemetryEnabled: true, // Default telemetry state
+	}
 
 	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
 
 	// Try to read from the local config file
 	if data, err := os.ReadFile(configFile); err == nil {
-		var settings map[string]any
-		if err := json.Unmarshal(data, &settings); err == nil {
-			// Merge data into Viper
-			for k, v := range settings {
-				viper.Set(k, v)
-			}
+		// If the file exists and is valid, overwrite the defaults
+		if err := json.Unmarshal(data, &globalUserConfig); err == nil {
 			return nil
 		}
 	}
@@ -55,19 +54,19 @@ func InitUserConfig() error {
 	return SaveToFile()
 }
 
-// GetPersistentUserId returns the stored User ID from Viper config.
+// GetPersistentUserId returns the stored User ID from the in-memory config.
 func GetPersistentUserId() string {
-	return viper.GetString(USER_ID_KEY)
+	return globalUserConfig.UserID
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
 func IsTelemetryEnabled() bool {
-	return viper.GetBool(TELEMETRY_KEY)
+	return globalUserConfig.TelemetryEnabled
 }
 
-// SetTelemetry sets the telemetry preference for the user.
+// SetTelemetry sets the telemetry preference for the user and saves to disk.
 func SetTelemetry(telemetry bool) error {
-	viper.Set(TELEMETRY_KEY, telemetry)
+	globalUserConfig.TelemetryEnabled = telemetry
 	err := SaveToFile()
 	if err != nil {
 		return fmt.Errorf("failed to save state to file: %v", err)
@@ -75,16 +74,11 @@ func SetTelemetry(telemetry bool) error {
 	return nil
 }
 
-// SaveToFile saves Viper state back to a local JSON file
+// SaveToFile saves the in-memory state back to a local JSON file
 func SaveToFile() error {
 	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
 
-	settings := map[string]any{
-		USER_ID_KEY:   viper.GetString(USER_ID_KEY),
-		TELEMETRY_KEY: viper.GetBool(TELEMETRY_KEY),
-	}
-
-	data, err := json.MarshalIndent(settings, "", "  ")
+	data, err := json.MarshalIndent(globalUserConfig, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal user config: %v", err)
 	}
