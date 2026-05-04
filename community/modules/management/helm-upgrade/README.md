@@ -1,4 +1,3 @@
-
 ## Description
 This community script module manages Helm chart deployment lifecycles inside a GKE cluster using the raw `helm` CLI binary via a `local-exec` provisioner block.
 It utilizes the **`helm upgrade --install`** flag sequence, meaning it is fully capable of both **installing new charts** for the first time, as well as **upgrading active charts** during multi-stage deployment configurations.
@@ -6,11 +5,30 @@ It utilizes the **`helm upgrade --install`** flag sequence, meaning it is fully 
 ### Production-Ready Dynamic Authentication
 The module handles its own cluster authentication on-the-fly by executing `gcloud container clusters get-credentials` at the start of the provisioner shell block. It does not rely on pre-cached host machine credentials, making it 100% self-sufficient and safe to use inside clean automated CI/CD pipelines (such as Cloud Build).
 
-## Requirements
+> [!IMPORTANT]
+> **Lifecycle Warning (No Destroy Cleanup)**: Because this module utilizes shell execution hooks outside the standard declarative Terraform state tracking, removing this module block from your blueprint will remove the reference from the state file, but **it will not uninstall the chart release from your cluster**. If you permanently retire this module, you must run `helm uninstall <release_name> --namespace <namespace>` manually via the CLI shell to clear the namespace.
+
+### Software Requirements
 The host machine running Terraform must have the following tools available in its `PATH`:
 
 * `gcloud` (Google Cloud SDK)
 * `helm` (Helm CLI binary)
+
+### Example
+
+```yaml
+  - id: upgrade_my_chart
+    source: community/modules/management/helm-upgrade
+    settings:
+      project_id: $(vars.project_id)
+      cluster_name: my-gke-cluster
+      location: us-central1
+      release_name: my-app
+      chart_name: ./charts/my-app
+      namespace: default
+```
+
+## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
@@ -60,8 +78,8 @@ No modules.
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the release into. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID of the GKE cluster. | `string` | n/a | yes |
 | <a name="input_release_name"></a> [release\_name](#input\_release\_name) | Name of the Helm release. | `string` | n/a | yes |
-| <a name="input_set_values"></a> [set\_values](#input\_set\_values) | List of key-value pairs to set in the helm chart. | <pre>list(object({<br/>    name  = string<br/>    value = string<br/>  }))</pre> | n/a | yes |
-| <a name="input_values_yaml"></a> [values\_yaml](#input\_values\_yaml) | List of paths to values.yaml files to pass to helm upgrade. | `list(string)` | n/a | yes |
+| <a name="input_set_values"></a> [set\_values](#input\_set\_values) | List of key-value pairs to set in the helm chart. | `any` | `[]` | no |
+| <a name="input_values_yaml"></a> [values\_yaml](#input\_values\_yaml) | List of paths to values.yaml files to pass to helm upgrade. | `any` | `[]` | no |
 
 ## Outputs
 

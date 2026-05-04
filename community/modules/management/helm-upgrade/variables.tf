@@ -46,14 +46,13 @@ variable "namespace" {
 }
 
 variable "values_yaml" {
-  type        = list(string)
+  type        = any
   description = "List of paths to values.yaml files to pass to helm upgrade."
+  default     = []
 }
 
 variable "set_values" {
-  type = list(object({
-    name  = string
-    value = string
-  }))
+  type        = any
   description = "List of key-value pairs to set in the helm chart."
+  default     = []
 }
