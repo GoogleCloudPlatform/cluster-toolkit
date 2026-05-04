@@ -15,14 +15,8 @@
  */
 
 
-resource "google_project_service" "spanner_api" {
-  project            = var.project_id
-  service            = "spanner.googleapis.com"
-  disable_on_destroy = false
-}
-
 resource "google_spanner_instance" "main" {
-  project          = google_project_service.spanner_api.project
+  project          = var.project_id
   name             = var.instance_name
   config           = var.config
   display_name     = var.display_name
@@ -33,7 +27,7 @@ resource "google_spanner_instance" "main" {
 
 resource "google_spanner_database" "db" {
   for_each            = var.databases
-  project             = google_project_service.spanner_api.project
+  project             = var.project_id
   instance            = google_spanner_instance.main.name
   name                = each.value.name
   deletion_protection = each.value.deletion_protection
@@ -60,7 +54,7 @@ locals {
 
 resource "google_spanner_database_iam_member" "member" {
   for_each = { for iam in local.db_iam_members : iam.key => iam }
-  project  = google_project_service.spanner_api.project
+  project  = var.project_id
   instance = google_spanner_instance.main.name
   database = google_spanner_database.db[each.value.database].name
   role     = each.value.role
