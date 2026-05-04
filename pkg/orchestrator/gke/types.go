@@ -142,7 +142,7 @@ type ManifestOptions struct {
 	VolumesYAML                   string
 	VolumeMountsYAML              string
 	GCSFuseEnabled                bool
-	IsSuperSlicing                bool
+	IsDynamicSlicing              bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool

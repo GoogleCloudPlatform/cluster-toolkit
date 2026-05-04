@@ -859,7 +859,7 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 		return "", nil // Rejects GPU topologies implicitly
 	}
 
-	top, handled, err := g.resolveSuperSlicingTopology(requested, clusterName, clusterLocation, accelType)
+	top, handled, err := g.resolveDynamicSlicingTopology(requested, clusterName, clusterLocation, accelType)
 	if err != nil {
 		return "", err
 	}
@@ -936,18 +936,18 @@ func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveSuperSlicingTopology(requested string, clusterName string, clusterLocation string, accelType string) (string, bool, error) {
+func (g *GKEOrchestrator) resolveDynamicSlicingTopology(requested string, clusterName string, clusterLocation string, accelType string) (string, bool, error) {
 	// This function should work only for TPU 7x
 	if !strings.Contains(accelType, "tpu7x") {
 		return "", false, nil
 	}
 
-	if active, _ := g.verifySuperSlicingActive(ManifestOptions{
+	if active, _ := g.verifyDynamicSlicingActive(ManifestOptions{
 		ClusterName:     clusterName,
 		ClusterLocation: clusterLocation,
 		AcceleratorType: accelType,
 	}); active {
-		logging.Info("Super-slicing detected. Skipping strict physical state queries for topology.")
+		logging.Info("Dynamic-slicing detected. Skipping strict physical state queries for topology.")
 		if requested != "" {
 			dims := strings.Split(requested, "x")
 			if len(dims) != 3 {
@@ -969,7 +969,7 @@ func (g *GKEOrchestrator) resolveSuperSlicingTopology(requested string, clusterN
 				return "", true, fmt.Errorf("requested cubes for topology %s exceeds the maximum limit of 144", requested)
 			}
 
-			logging.Info("Validated provided Topology (Super-Slicing): %s", requested)
+			logging.Info("Validated provided Topology (Dynamic-Slicing): %s", requested)
 			return requested, true, nil
 		}
 		return "", true, nil
@@ -1144,7 +1144,7 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
-	if !opts.IsSuperSlicing {
+	if !opts.IsDynamicSlicing {
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
@@ -1749,7 +1749,7 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 	return nil
 }
 
-func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isSuperSlicing bool, isCPUMachine bool) (string, error) {
+func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isCPUMachine bool) (string, error) {
 	nodeSelector := GetNodeSelector(schedOpts)
 	accelLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
 
@@ -1773,7 +1773,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 		if nodeSelector == nil {
 			nodeSelector = make(map[string]string)
 		}
-		if !isSuperSlicing {
+		if !isDynamicSlicing {
 			nodeSelector["cloud.google.com/gke-tpu-topology"] = schedOpts.Topology
 		}
 	}
