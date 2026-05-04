@@ -15,59 +15,44 @@
 package config
 
 import (
-	"context"
 	"crypto/sha256"
-
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
-	"sync"
-	"time"
+	"path/filepath"
 
 	"github.com/spf13/viper"
-
-	"cloud.google.com/go/firestore"
 )
 
 const (
-	USER_ID_KEY    string = "user_id"
-	TELEMETRY_KEY  string = "telemetry_enabled"
-	projectID      string = "hpc-toolkit-gsc"
-	collectionName string = "user_configs"
+	USER_ID_KEY   string = "user_id"
+	TELEMETRY_KEY string = "telemetry_enabled"
 )
 
-var (
-	fsClient     *firestore.Client
-	fsClientOnce sync.Once // To guarantee exactly-once initialization
-)
-
+// InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
 func InitUserConfig() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	userID := generateUniqueID()
-
-	client, err := GetFirestoreClient(ctx)
-	if err != nil {
-		return err
-	}
 
 	// Set local Viper defaults
 	viper.SetDefault(USER_ID_KEY, userID)
 
-	// Try to fetch the document
-	doc, err := client.Collection(collectionName).Doc(userID).Get(ctx)
-	if err != nil {
-		return SaveToFirestore()
+	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+
+	// Try to read from the local config file
+	if data, err := os.ReadFile(configFile); err == nil {
+		var settings map[string]any
+		if err := json.Unmarshal(data, &settings); err == nil {
+			// Merge data into Viper
+			for k, v := range settings {
+				viper.Set(k, v)
+			}
+			return nil
+		}
 	}
 
-	// Merge Firestore data into Viper
-	data := doc.Data()
-	for k, v := range data {
-		viper.Set(k, v)
-	}
-
-	return nil
+	// If file doesn't exist or is invalid, save defaults to file
+	return SaveToFile()
 }
 
 // GetPersistentUserId returns the stored User ID from Viper config.
@@ -83,33 +68,33 @@ func IsTelemetryEnabled() bool {
 // SetTelemetry sets the telemetry preference for the user.
 func SetTelemetry(telemetry bool) error {
 	viper.Set(TELEMETRY_KEY, telemetry)
-	err := SaveToFirestore()
+	err := SaveToFile()
 	if err != nil {
-		return fmt.Errorf("Failed to save state to Firestore: %v", err)
+		return fmt.Errorf("failed to save state to file: %v", err)
 	}
 	return nil
 }
 
-// Save Viper state back to Firestore
-func SaveToFirestore() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	userID := viper.GetString(USER_ID_KEY)
-
-	client, err := GetFirestoreClient(ctx)
-	if err != nil {
-		return err
-	}
+// SaveToFile saves Viper state back to a local JSON file
+func SaveToFile() error {
+	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
 
 	settings := map[string]any{
 		USER_ID_KEY:   viper.GetString(USER_ID_KEY),
 		TELEMETRY_KEY: viper.GetBool(TELEMETRY_KEY),
 	}
 
-	_, err = client.Collection(collectionName).Doc(userID).Set(ctx, settings)
+	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to save to firestore: %v", err)
+		return fmt.Errorf("failed to marshal user config: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %v", err)
+	}
+
+	if err := os.WriteFile(configFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to save to file: %v", err)
 	}
 	return nil
 }
@@ -129,30 +114,4 @@ func generateUniqueID() string {
 	// Hash it to create a clean, fixed-length unique ID (to avoid PII)
 	hash := sha256.Sum256([]byte(rawID))
 	return fmt.Sprintf("%x", hash)[:24]
-}
-
-// Helper function to initialize Firestore client
-func GetFirestoreClient(ctx context.Context) (*firestore.Client, error) {
-	var initErr error
-
-	// The block inside Do() will only be executed once globally even if multiple goroutines call it simultaneously.
-	fsClientOnce.Do(func() {
-		// If client already exists
-		if fsClient != nil {
-			return
-		}
-
-		// Else create a new client
-		client, err := firestore.NewClient(ctx, projectID)
-		if err != nil {
-			initErr = err
-			return
-		}
-		fsClient = client
-	})
-
-	if initErr != nil {
-		return nil, initErr
-	}
-	return fsClient, nil
 }

@@ -1014,12 +1014,8 @@ func GetStandardBlueprintNames() []string {
 // getOrFetchCachedList is a generic helper that handles file-based caching for string slices.
 // It attempts to read from the local cache first, and if it fails, executes the provided fetchFn.
 func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []string {
-	// 1. Determine the cache directory
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
-	}
-	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", cacheFileName)
+	// 1. Determine the cache directory using the shared helper
+	cacheFile := filepath.Join(getLocalDirPath(true), cacheFileName)
 
 	// 2. Try to read from the local cache first
 	if data, err := os.ReadFile(cacheFile); err == nil {
@@ -1041,6 +1037,21 @@ func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []strin
 	}
 
 	return fetchedList
+}
+
+// getLocalDirPath determines the directory for storing local files (cache or config).
+func getLocalDirPath(isCache bool) string {
+	var baseDir string
+	var err error
+	if isCache {
+		baseDir, err = os.UserCacheDir()
+	} else {
+		baseDir, err = os.UserConfigDir()
+	}
+	if err != nil {
+		baseDir = os.TempDir() // Fallback if standard dir is unavailable
+	}
+	return filepath.Join(baseDir, "cluster-toolkit")
 }
 
 // TreeResponse represents the expected JSON structure from the GitHub Git Trees API
