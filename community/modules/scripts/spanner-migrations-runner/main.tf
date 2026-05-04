@@ -16,7 +16,7 @@
 
 resource "null_resource" "run_migrations" {
   triggers = {
-    migrations_hash = sha256(join("", [for f in fileset(var.migrations_dir, "${var.sub_directory}/*.up.sql") : filesha256("${var.migrations_dir}/${f}")]))
+    migrations_hash = sha256(join("", [for f in fileset("${var.migrations_dir}/${var.sub_directory}", "*.up.sql") : filesha256("${var.migrations_dir}/${var.sub_directory}/${f}")]))
     proto_hash      = var.proto_descriptors_file != null ? filesha256(var.proto_descriptors_file) : ""
     instance_name   = var.instance_name
     database_name   = var.database_name
@@ -30,8 +30,8 @@ resource "null_resource" "run_migrations" {
         gcloud spanner databases ddl update "${var.database_name}" \
           --instance="${var.instance_name}" \
           --project="${var.project_id}" \
-          ${var.proto_descriptors_file != null ? "--proto-descriptors-file=\"${var.proto_descriptors_file}\" \\" : ""}
-          --ddl-file="$f"
+          --ddl-file="$f" \
+          ${var.proto_descriptors_file != null ? "--proto-descriptors-file=\"${var.proto_descriptors_file}\"" : ""}
       done
     EOF
   }
