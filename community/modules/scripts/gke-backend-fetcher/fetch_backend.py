@@ -17,30 +17,47 @@ import sys
 import json
 import subprocess
 import time
-import os
+import shutil
+
+def check_dependencies():
+    missing = []
+    if not shutil.which("gcloud"):
+        missing.append("gcloud")
+    if not shutil.which("kubectl"):
+        missing.append("kubectl")
+    
+    if missing:
+        sys.stderr.write(f"{{\"error\": \"Missing required host dependencies: {', '.join(missing)}. Please install them and ensure they are in your PATH.\"}}\n")
+        sys.exit(1)
+
 def main():
+    check_dependencies()
+
     try:
         input_data = json.loads(sys.stdin.read())
     except Exception as e:
         sys.stderr.write(f"{{\"error\": \"Failed to read stdin: {e}\"}}\n")
         sys.exit(1)
+
     project_id = input_data.get('project_id')
     cluster_name = input_data.get('cluster_name')
     location = input_data.get('location')
     namespace = input_data.get('namespace')
     service_name = input_data.get('service_name')
     service_port = str(input_data.get('service_port'))
-    timeout_seconds = int(input_data.get('timeout_seconds', '120'))
+    timeout_seconds = int(input_data.get('timeout_seconds', '600'))
+
     # Configure kubectl
     subprocess.run([
         'gcloud', 'container', 'clusters', 'get-credentials', cluster_name,
         '--project', project_id, '--region', location
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     pattern = f"-{namespace}-{service_name}-{service_port}-"
-    start_time = time.time()
+    initial_start_time = time.time()
     backend_filter = ""
     
-    while (time.time() - start_time) < timeout_seconds:
+    while (time.time() - initial_start_time) < timeout_seconds:
         try:
             res = subprocess.run(['kubectl', 'get', 'ingress', '-n', namespace, '-o', 'json'], capture_output=True, text=True)
             if res.returncode == 0:
@@ -54,7 +71,7 @@ def main():
                     except json.JSONDecodeError:
                         continue
                     
-                    matching_backends = [k for k in backends.keys() if pattern in k]
+                    matching_backends = [k for k in backends.keys() if pattern in k or f"k8s-be-{service_port}--" in k]
                     
                     if len(matching_backends) == 1:
                         backend_filter = f"name~^{matching_backends[0]}"
@@ -69,13 +86,15 @@ def main():
             pass
             
         time.sleep(10)
+
     if not backend_filter:
         sys.stderr.write(f"{{\"error\": \"Timeout waiting for backend service annotation for {service_name}:{service_port}\"}}\n")
         sys.exit(1)
-    start_time = time.time()
+
     backend_service_id = ""
     real_backend_name = ""
-    while (time.time() - start_time) < timeout_seconds:
+
+    while (time.time() - initial_start_time) < timeout_seconds:
         try:
             res = subprocess.run([
                 'gcloud', 'compute', 'backend-services', 'list',
@@ -95,12 +114,15 @@ def main():
             pass
             
         time.sleep(10)
+
     if not backend_service_id:
         sys.stderr.write("{\"error\": \"Timeout fetching GCP backend service ID\"}\n")
         sys.exit(1)
+
     sys.stdout.write(json.dumps({
         "backend_service_id": str(backend_service_id),
         "backend_service_name": real_backend_name
     }) + "\n")
+
 if __name__ == "__main__":
     main()

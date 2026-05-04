@@ -1,5 +1,16 @@
 ## Description
 This module fetches the BackendService associated with a GKE Ingress service. It uses a Python script to query the GKE cluster and return the backend service name and ID.
+
+### Software Requirements
+
+* Python 3 (with `json` support)
+* `gcloud` CLI
+* `kubectl` CLI
+
+### Permissions
+
+* Active authentication with permissions to view GKE clusters and Compute backend services.
+
 ### Example
 
 ```yaml
