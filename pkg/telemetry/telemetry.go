@@ -22,8 +22,8 @@ import (
 	"time"
 )
 
-func (c *Collector) Execute(exitCode int) {
-	c.CollectMetrics(exitCode)
+func (c *Collector) Execute(exitCode int, installationMode string) {
+	c.CollectMetrics(exitCode, installationMode)
 	concordEvent := c.BuildConcordEvent()
 	payload := BuildPayload(concordEvent)
 	Flush(payload)

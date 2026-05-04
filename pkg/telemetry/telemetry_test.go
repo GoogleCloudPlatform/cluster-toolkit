@@ -106,5 +106,5 @@ func TestExecute(t *testing.T) {
 
 	// Trigger Execute. Since Execute doesn't return anything, we verify
 	// it functions without panicking or failing.
-	c.Execute(0)
+	c.Execute(0, SOURCE)
 }
