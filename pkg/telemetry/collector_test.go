@@ -31,7 +31,10 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-const SOURCE = "SOURCE"
+const (
+	SOURCE = "SOURCE"
+	BINARY = "BINARY"
+)
 
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
@@ -63,20 +66,23 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_VERSION,
 		TERRAFORM_VERSION,
 		BILLING_ACCOUNT_ID,
+		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
 
 	tests := []struct {
-		name           string
-		errorCode      int
-		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
-		setupCollector func(c *Collector)       // Hook to mock internal collector state
-		expectedValues map[string]string
+		name             string
+		errorCode        int
+		installationMode string
+		setupCmd         func(cmd *cobra.Command) // Hook to configure the command
+		setupCollector   func(c *Collector)       // Hook to mock internal collector state
+		expectedValues   map[string]string
 	}{
 		{
-			name:      "Success exit code",
-			errorCode: 0,
+			name:             "Success exit code",
+			errorCode:        0,
+			installationMode: SOURCE,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
 				cmd.Flags().Bool("force", false, "Force execution")
@@ -121,11 +127,13 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  SOURCE,
 			},
 		},
 		{
-			name:      "Failure exit code with missing region, zone, and machine type",
-			errorCode: 1,
+			name:             "Failure exit code with missing region, zone, and machine type",
+			errorCode:        1,
+			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
 			},
@@ -147,6 +155,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
 				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  BINARY,
 			},
 		},
 	}
@@ -169,7 +178,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode, SOURCE)
+			c.CollectMetrics(tt.errorCode, tt.installationMode)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
