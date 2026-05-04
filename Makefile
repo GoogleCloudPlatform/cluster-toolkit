@@ -16,7 +16,7 @@ TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -na
 PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 BINARY_TARGETS := ghpc gcluster
 INSTALL_DIRS := . ~/bin /usr/local/bin
-INSTALLATION_MODE = "SOURCE"
+INSTALLATION_MODE = SOURCE
 
 ifneq (, $(shell which git))
 ## GIT IS PRESENT
