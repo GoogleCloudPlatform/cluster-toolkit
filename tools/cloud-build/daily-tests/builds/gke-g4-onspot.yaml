@@ -19,7 +19,6 @@ tags:
 - m.gke-node-pool
 - m.service-account
 - m.vpc
-- m.multivpc
 - m.kubectl-apply
 - m.gke-job-template
 
