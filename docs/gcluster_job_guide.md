@@ -110,7 +110,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-B, --base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
-* `--compute-type string`: Type of compute to request (e.g., `'n2-standard-32'`, `'nvidia-l4'`, or shorthand strings for TPUs like `v6e-8`). (Required) The tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically if needed.
+* `--compute-type string`: Type of compute to request (e.g., `'n2-standard-32'`, `'nvidia-l4'`, or shorthand strings for TPUs like `v6e-8`). (Required) The tool will resolve the machine type and calculate `num-nodes` and `topology` automatically if needed.
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
 * `-c, --cluster string`: Name of the GKE cluster to deploy the job to. Optional if set in configuration.
 * `-l, --location string`: Location (Zone or Region) of the GKE cluster. Optional if set in configuration.
@@ -118,9 +118,9 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with --base-image. (Default: `linux/amd64`)
 * `-n, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
 * `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
-* `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
-* `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
-* `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
+* `--num-slices int`: Number of independent groups/slices to use. (Default: `1`).
+* `--num-nodes int`: Number of nodes to use per group/slice. (Default: `1`). Auto-calculated for TPUs based on topology.
+* `--topology string`: TPU slice topology (e.g., `2x2x1`).
 * `--restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
 * `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
@@ -190,6 +190,24 @@ By specifying the `--compute-type` flag, you can use the exact same command to d
     3. Use the compute type installed on the cluster nodes and map the necessary resource requests.
     4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
     5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
+
+* **Example for Multi-Slice GPU Job:**
+    If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 4 nodes each), you can use `--num-slices` and `--num-nodes`:
+
+    ```bash
+    ./gcluster job submit \
+      --project <PROJECT_ID> \
+      --cluster <CLUSTER_NAME> \
+      --location <REGION/ZONE> \
+      --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+      --command "python train.py" \
+      --name my-gpu-job \
+      --compute-type l4-1 \
+      --num-slices 2 \
+      --num-nodes 4
+    ```
+
+    *This creates a JobSet with 2 replicas, each having 4 pods, totaling 8 nodes.*
 
 ### 7.1 Example: Submit Job with Persistent Storage (Mounting Bucket)
 
@@ -559,8 +577,7 @@ $GCLUSTER job submit \
     --image $IMAGE_NAME \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --compute-type v6e-8 \
-    --nodes 1 \
-    --vms-per-slice 2 \
+    --num-slices 1 \
     --topology 2x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
@@ -812,8 +829,7 @@ $GCLUSTER job submit \
     --image $IMAGE_NAME \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --compute-type tpu7x-32 \
-    --nodes 1 \
-    --vms-per-slice 8 \
+    --num-slices 1 \
     --topology 2x4x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa

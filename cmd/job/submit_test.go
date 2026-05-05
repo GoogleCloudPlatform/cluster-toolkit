@@ -178,6 +178,46 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 }
 
+func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "tpu-fail-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "v6e-8", // TPU type
+		"--num-nodes", "2", // Explicitly set!
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing --num-nodes for TPU job, but got nil")
+	}
+
+	expectedErr := "--num-nodes cannot be used with TPU jobs"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
 func resetSubmitCmdFlags() {
 	imageName = ""
 	baseImage = ""
@@ -190,8 +230,8 @@ func resetSubmitCmdFlags() {
 	projectID = ""
 	workloadName = ""
 	kueueQueueName = ""
-	numSlicesOrNodes = 1
-	vmsPerSlice = 1
+	numNodes = 1
+	numSlices = 1
 	restarts = 1
 	ttlAfterFinished = "1h"
 	gracePeriodStr = "30s"

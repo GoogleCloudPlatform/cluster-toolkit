@@ -339,7 +339,7 @@ func (g *GKEOrchestrator) resolveAmbiguousShorthand(job *orchestrator.JobDefinit
 }
 
 func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobDefinition, topology, mappedLabel string) error {
-	if job.VmsPerSlice <= 0 && topology != "" && config.IsTPU(mappedLabel) {
+	if config.IsTPU(mappedLabel) && topology != "" {
 		machineType, err := g.resolveMachineName(job.AcceleratorType)
 		if err != nil {
 			return err

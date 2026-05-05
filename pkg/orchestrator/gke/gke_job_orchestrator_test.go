@@ -1396,52 +1396,6 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	}
 }
 
-func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
-	setupMockMachineConfig(t)
-
-	orc := NewGKEOrchestrator()
-	orc.projectID = "mock-project"
-	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
-		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
-		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
-		},
-	})
-	orc.SetExecutor(mockExec)
-	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
-
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "user-vms-test",
-		CommandToRun:    "echo hello",
-		ClusterLocation: "us-central1-a",
-		AcceleratorType: "v6e-8",
-		Topology:        "16x16",
-		VmsPerSlice:     1, // Explicitly set to 1
-	}
-
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
-	if err != nil {
-		t.Fatalf("prepareManifestOptions failed: %v", err)
-	}
-
-	manifest, err := orc.GenerateGKEManifest(opts, profile)
-	if err != nil {
-		t.Fatalf("GenerateGKEManifest failed: %v", err)
-	}
-
-	expectedParallelism := "parallelism: 1"
-	expectedCompletions := "completions: 1"
-
-	if !strings.Contains(manifest, expectedParallelism) {
-		t.Errorf("manifest missing expected parallelism %q\nManifest: %s", expectedParallelism, manifest)
-	}
-	if !strings.Contains(manifest, expectedCompletions) {
-		t.Errorf("manifest missing expected completions %q\nManifest: %s", expectedCompletions, manifest)
-	}
-}
-
 func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 	pipeRead, pipeWrite, err := os.Pipe()
 	if err != nil {
