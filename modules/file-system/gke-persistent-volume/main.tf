@@ -60,11 +60,12 @@ locals {
 
   # Common variables for all PVC templates
   common_pvc_vars = {
-    pv_name   = local.pv_name
-    pvc_name  = local.pvc_name
-    labels    = local.labels
-    capacity  = "${var.capacity_gib}Gi"
-    namespace = var.namespace
+    pv_name            = local.pv_name
+    pvc_name           = local.pvc_name
+    labels             = local.labels
+    capacity           = "${var.capacity_gib}Gi"
+    namespace          = var.namespace
+    storage_class_name = var.gcsfuse_storage_class_name
   }
 
   # Common variables for all PV templates
@@ -74,13 +75,27 @@ locals {
     labels   = local.labels
   }
 
+  # Check if a GCS Fuse storage profile is active
+  has_gcsfuse_storage_profile = var.gcsfuse_storage_class_name != "" && var.gcsfuse_storage_class_name != null
+
+  # Extract mount options as a list (fallback to empty list if not GCS)
+  gcs_mount_opts_raw = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
+
+  # Apply filters to clean up the options
+  gcs_mount_options = [
+    for opt in local.gcs_mount_opts_raw : opt
+    if !contains(["defaults", "_netdev"], opt) &&                  # Filter out defaults
+    !(opt == "implicit_dirs" && local.has_gcsfuse_storage_profile) # Filter implicit_dirs if profile is active
+  ]
+
   # Variables for PV templates, merging common vars with type-specific ones.
   pv_template_vars = {
     gcs = merge(local.common_pv_vars, {
-      mount_options = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
-      bucket_name   = var.gcs_bucket_name
-      namespace     = var.namespace
-      pvc_name      = local.pvc_name
+      mount_options      = local.gcs_mount_options
+      bucket_name        = var.gcs_bucket_name
+      namespace          = var.namespace
+      pvc_name           = local.pvc_name
+      storage_class_name = var.gcsfuse_storage_class_name
     })
     lustre = merge(local.common_pv_vars, {
       location        = var.lustre_id != null ? split("/", var.lustre_id)[3] : null

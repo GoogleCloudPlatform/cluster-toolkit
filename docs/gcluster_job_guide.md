@@ -110,18 +110,18 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-B, --base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
 * `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
 * `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
-* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
+* `--compute-type string`: Type of compute to request (e.g., `'n2-standard-32'`, `'nvidia-l4'`, or shorthand strings for TPUs like `v6e-8`). (Required) The tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically if needed.
 * `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
 * `-c, --cluster string`: Name of the GKE cluster to deploy the job to. Optional if set in configuration.
 * `-l, --location string`: Location (Zone or Region) of the GKE cluster. Optional if set in configuration.
 * `-p, --project string`: Google Cloud Project ID. Optional if set in configuration.
-* `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
-* `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
+* `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with --base-image. (Default: `linux/amd64`)
+* `-n, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
 * `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
 * `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
 * `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
 * `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
-* `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
+* `--restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
 * `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
 * `--mount stringArray`: Mount a storage volume (format: `<src>:<dest>[:<mode>]`, mode can be `'ro'` or `'rw'`, default `'ro'`). Can be specified multiple times.
@@ -151,7 +151,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 ### Unified Job Submission
 
-By specifying the `--accelerator` flag, you can use the exact same command to deploy to a standard CPU cluster (using machine type like `n2-standard-32`) or an accelerated GPU/TPU cluster (using accelerator type like `nvidia-l4`). The orchestrator will calculate the necessary resource requests and limits based on the specified accelerator or machine type.
+By specifying the `--compute-type` flag, you can use the exact same command to deploy to a standard CPU cluster (using machine type like `n2-standard-32`) or an accelerated GPU/TPU cluster (using accelerator type like `nvidia-l4`). The orchestrator will calculate the necessary resource requests and limits based on the specified compute type.
 
 > [!TIP]
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
@@ -179,7 +179,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
       --build-context job_details \
       --command "python app.py" \
       --name my-python-app-job \
-      --accelerator n2-standard-32
+      --compute-type n2-standard-32
     ```
 
     *Replace `<PROJECT_ID>` with your actual GCP Project ID.*
@@ -187,7 +187,7 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
     This command will:
     1. Verify/install the JobSet CRD on your cluster.
     2. Auto-discover the Kueue LocalQueue name from the cluster.
-    3. Use the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
+    3. Use the compute type installed on the cluster nodes and map the necessary resource requests.
     4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
     5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
 
@@ -202,7 +202,7 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag. By d
   --location <REGION/ZONE> \
   --name my-storage-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --mount "gs://<YOUR_BUCKET_NAME>:/data:rw"
@@ -257,7 +257,7 @@ Use `--node-constraint` to target specific hardware (e.g., C2 nodes). This maps 
   --location <REGION/ZONE> \
   --name my-machine-job \
   --command "python app.py" \
-  --accelerator c2-standard-60 \
+  --compute-type c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --node-constraint "node.kubernetes.io/instance-type=c2-standard-60"
@@ -276,7 +276,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
 **Example 3: Pod Failure Policy**
-Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `max-restarts` budget).
+Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
 
 ```bash
 ./gcluster job submit \
@@ -306,7 +306,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
   --location <REGION/ZONE> \
   --name my-kueue-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --queue "my-local-queue"
@@ -358,7 +358,7 @@ Request a specific TPU slice topology using `--topology`.
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
-  --accelerator tpu-v6e-slice \
+  --compute-type tpu-v6e-slice \
   --topology 4x4
 ```
 
@@ -372,7 +372,7 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
   --location <REGION/ZONE> \
   --name my-scheduler-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --gke-scheduler gke.io/topology-aware-auto
@@ -558,7 +558,7 @@ $GCLUSTER job submit \
     --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
-    --accelerator v6e-8 \
+    --compute-type v6e-8 \
     --nodes 1 \
     --vms-per-slice 2 \
     --topology 2x4 \
@@ -811,7 +811,7 @@ $GCLUSTER job submit \
     --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
-    --accelerator tpu7x-32 \
+    --compute-type tpu7x-32 \
     --nodes 1 \
     --vms-per-slice 8 \
     --topology 2x4x4 \

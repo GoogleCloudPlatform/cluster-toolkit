@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ import (
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	// Passing nil for args prevents getBlueprint from attempting to read a file
-	c := NewCollector(cmd, nil)
+	c := NewCollector(cmd, nil, SOURCE)
 
 	if c == nil {
 		t.Fatal("Expected NewCollector to return a valid Collector, got nil")
@@ -64,20 +65,23 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_VERSION,
 		TERRAFORM_VERSION,
 		BILLING_ACCOUNT_ID,
+		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
 
 	tests := []struct {
-		name           string
-		errorCode      int
-		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
-		setupCollector func(c *Collector)       // Hook to mock internal collector state
-		expectedValues map[string]string
+		name             string
+		errorCode        int
+		installationMode string
+		setupCmd         func(cmd *cobra.Command) // Hook to configure the command
+		setupCollector   func(c *Collector)       // Hook to mock internal collector state
+		expectedValues   map[string]string
 	}{
 		{
-			name:      "Success exit code",
-			errorCode: 0,
+			name:             "Success exit code",
+			errorCode:        0,
+			installationMode: SOURCE,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
 				cmd.Flags().Bool("force", false, "Force execution")
@@ -122,11 +126,13 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  SOURCE,
 			},
 		},
 		{
-			name:      "Failure exit code with missing region, zone, and machine type",
-			errorCode: 1,
+			name:             "Failure exit code with missing region, zone, and machine type",
+			errorCode:        1,
+			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
 			},
@@ -148,6 +154,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
 				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  BINARY,
 			},
 		},
 	}
@@ -162,7 +169,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Initialize the collector
-			c := NewCollector(cmd, []string{})
+			c := NewCollector(cmd, []string{}, tt.installationMode)
 
 			// Execute the setup function to apply the blueprint state to the collector
 			if tt.setupCollector != nil {
@@ -194,7 +201,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	childCmd := &cobra.Command{Use: "deploy"}
 	rootCmd.AddCommand(childCmd)
 
-	c := NewCollector(childCmd, nil)
+	c := NewCollector(childCmd, nil, SOURCE)
 	c.CollectMetrics(0)
 
 	event := c.BuildConcordEvent()
@@ -1120,7 +1127,120 @@ func TestGetModules(t *testing.T) {
 				},
 			}
 
-			result := getModules(tc.input)
+			// Set up a mock Cobra command
+			cmd := &cobra.Command{Use: "test"}
+			if tc.flagExists {
+				cmd.Flags().String("deployment-file", tc.flagValue, "")
+				// Parse to simulate the user passing the flag
+				_ = cmd.ParseFlags([]string{"--deployment-file", tc.flagValue})
+			}
+
+			result := getDeploymentFile(cmd)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestGetBlueprintName(t *testing.T) {
+	// Save and restore the original transport so we don't pollute other tests
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name     string
+		input    config.Blueprint
+		mockResp *http.Response
+		mockYaml string
+		expected string
+	}{
+		{
+			name:  "success: identifies standard blueprint name",
+			input: config.Blueprint{BlueprintName: "hpc-slurm"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			mockYaml: "blueprint_name: hpc-slurm",
+			expected: "hpc-slurm",
+		},
+		{
+			name:  "success: sanitizes unrecognized blueprint to Custom",
+			input: config.Blueprint{BlueprintName: "my-secret-cluster"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			mockYaml: "blueprint_name: hpc-slurm", // The server only knows about "hpc-slurm"
+			expected: "Custom",
+		},
+		{
+			name:  "success: empty blueprint name returns early",
+			input: config.Blueprint{BlueprintName: ""},
+			// Network mock is not needed because the function returns before fetching
+			expected: "",
+		},
+		{
+			name:  "error: fetch failure safely falls back to UNVERIFIED",
+			input: config.Blueprint{BlueprintName: "hpc-slurm"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Force OS Cache Directories to a clean, temporary folder to prevent test leakage
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			// Set up our mock HTTP routing
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					url := req.URL.String()
+
+					// Route 1: GitHub API Tree Request
+					if strings.Contains(url, "/git/trees/") {
+						// If the test case expects an error (like 500), return it immediately
+						if tc.mockResp != nil && tc.mockResp.StatusCode != http.StatusOK {
+							return tc.mockResp, nil
+						}
+						// Otherwise, return the standard successful tree
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+						}, nil
+					}
+
+					// Route 2: Raw GitHub YAML Request
+					if strings.Contains(url, "hpc-slurm.yaml") && tc.mockYaml != "" {
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(bytes.NewBufferString(tc.mockYaml)),
+						}, nil
+					}
+
+					return &http.Response{
+						StatusCode: http.StatusNotFound,
+						Body:       io.NopCloser(bytes.NewBufferString("404 Not Found")),
+					}, nil
+				},
+			}
+
+			result := getBlueprintName(tc.input)
 
 			if result != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, result)
