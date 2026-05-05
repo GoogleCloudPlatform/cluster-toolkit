@@ -83,8 +83,8 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	defer func() {
 		latencySecs := time.Since(startTime).Seconds()
 		profile := map[string]string{
-			"accelerator_type": job.AcceleratorType,
-			"nodes":            fmt.Sprintf("%d", job.NumSlices),
+			"compute_type": job.ComputeType,
+			"nodes":        fmt.Sprintf("%d", job.NumSlices),
 		}
 
 		orchestrator.RecordLocalMetrics(job.WorkloadName, latencySecs, success, profile)
@@ -92,6 +92,15 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 	var err error
 	err = g.initializeJobSubmission(&job)
+	if err != nil {
+		return err
+	}
+
+	if err := g.fetchClusterState(&job); err != nil {
+		return err
+	}
+
+	profile, isDynamicSlicing, err := g.resolveHardwareRequirements(&job)
 	if err != nil {
 		return err
 	}
@@ -105,7 +114,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if err := g.generateAndSubmitManifests(job, fullImageName); err != nil {
+	if err := g.generateAndSubmitManifests(job, fullImageName, profile, isDynamicSlicing); err != nil {
 		return err
 	}
 
@@ -240,16 +249,16 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	return res.Stdout, nil
 }
 
-func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string) error {
+func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool) error {
 	if job.IsPathwaysJob {
-		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName)
+		manifestContent, err := g.GeneratePathwaysManifest(job, fullImageName, profile, isDynamicSlicing)
 		if err != nil {
 			return err
 		}
 		return g.ApplyManifest(manifestContent, job.DryRunManifest, job.WorkloadName)
 	}
 
-	manifestOpts, profile, err := g.PrepareManifestOptions(job, fullImageName)
+	manifestOpts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing)
 	if err != nil {
 		return err
 	}
@@ -292,7 +301,7 @@ func (g *GKEOrchestrator) validateJobConflicts(workloadName string, clusterName 
 	return nil
 }
 
-func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string) (string, error) {
+func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool) (string, error) {
 	// Set default values for Pathways-specific fields if not provided
 	if job.Pathways.ProxyServerImage == "" {
 		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
@@ -310,7 +319,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
 
-	opts, profile, err := g.PrepareManifestOptions(job, fullImageName)
+	opts, err := g.PrepareManifestOptions(job, fullImageName, profile, isDynamicSlicing)
 	if err != nil {
 		return "", err
 	}
@@ -946,7 +955,7 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(requested string, cluste
 	if active, _ := g.verifyDynamicSlicingActive(ManifestOptions{
 		ClusterName:     clusterName,
 		ClusterLocation: clusterLocation,
-		AcceleratorType: accelType,
+		ComputeType:     accelType,
 	}); active {
 		logging.Info("Dynamic-slicing detected. Skipping strict physical state queries for topology.")
 		if requested != "" {
@@ -1168,7 +1177,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		FullImageName:                 opts.FullImageName,
 		Command:                       command,
 		ResourcesYAML:                 resourcesYAML,
-		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.AcceleratorType),
+		AcceleratorTypeLabel:          g.GenerateGKENodeSelectorLabel(opts.ComputeType),
 		NodeSelector:                  opts.NodeSelector,
 		Affinity:                      opts.Affinity,
 		PodFailurePolicy:              opts.PodFailurePolicy,
@@ -1204,28 +1213,28 @@ func (g *GKEOrchestrator) indentYaml(s string, indent int) string {
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) (bool, int, error) {
-	if _, exists := config.AcceleratorShorthandMap[job.AcceleratorType]; exists {
+	if _, exists := config.AcceleratorShorthandMap[job.ComputeType]; exists {
 		return false, 0, nil
 	}
 
 	for _, realMachine := range config.AcceleratorShorthandMap {
-		if job.AcceleratorType == realMachine {
+		if job.ComputeType == realMachine {
 			return false, 0, nil
 		}
 	}
 
-	mapped := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
+	mapped := g.GenerateGKENodeSelectorLabel(job.ComputeType)
 	if strings.Contains(strings.ToLower(mapped), "nvidia") || config.IsTPU(mapped) {
 		return false, 0, nil
 	}
 
-	count, err := g.FetchMachineCapacity(job.AcceleratorType, job.ClusterLocation)
+	count, err := g.FetchMachineCapacity(job.ComputeType, job.ClusterLocation)
 	if err != nil {
-		return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.AcceleratorType, err)
+		return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.ComputeType, err)
 	}
 	if count > 0 {
-		logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.AcceleratorType)
-		return true, g.getEffectiveCPUs(job.AcceleratorType, count), nil
+		logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.ComputeType)
+		return true, g.getEffectiveCPUs(job.ComputeType, count), nil
 	}
 	return false, 0, nil
 }
@@ -1251,14 +1260,14 @@ func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
 
 func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition) (bool, int, error) {
 	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == job.AcceleratorType {
+		if np.Config.MachineType == job.ComputeType {
 			cap, err := g.FetchMachineCapabilities(np.Config.MachineType, job.ClusterLocation)
 			if err == nil {
 				guestCpus := cap.GuestCpus
 				if np.Config.AdvancedMachineFeatures.ThreadsPerCore == "1" && !strings.HasPrefix(np.Config.MachineType, "t2a") {
 					guestCpus = guestCpus / 2
 				}
-				logging.Info("Dynamically determined %s is a CPU-only machine from cluster desc, capacity: %d", job.AcceleratorType, guestCpus)
+				logging.Info("Dynamically determined %s is a CPU-only machine from cluster desc, capacity: %d", job.ComputeType, guestCpus)
 				return true, guestCpus, nil
 			}
 		}
@@ -1731,7 +1740,7 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 
 func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isCPUMachine bool) (string, error) {
 	nodeSelector := GetNodeSelector(schedOpts)
-	accelLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
+	accelLabel := g.GenerateGKENodeSelectorLabel(job.ComputeType)
 
 	isGPU := strings.Contains(strings.ToLower(accelLabel), "nvidia")
 

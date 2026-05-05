@@ -129,7 +129,7 @@ type ManifestOptions struct {
 	WorkloadName                  string
 	FullImageName                 string
 	CommandToRun                  string
-	AcceleratorType               string
+	ComputeType                   string
 	ResourcesString               string
 	ProjectID                     string
 	ClusterName                   string

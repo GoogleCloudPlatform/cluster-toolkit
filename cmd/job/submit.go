@@ -189,7 +189,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		BuildContext:                  buildContext,
 		Platform:                      platform,
 		CommandToRun:                  commandToRun,
-		AcceleratorType:               computeType,
+		ComputeType:                   computeType,
 		DryRunManifest:                dryRunManifest,
 		ProjectID:                     projectID,
 		ClusterName:                   clusterName,

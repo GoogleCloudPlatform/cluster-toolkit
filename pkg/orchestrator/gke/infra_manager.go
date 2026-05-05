@@ -865,7 +865,7 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 			return g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
 		},
 		func() error {
-			return config.ValidateHardwareRequest(job.AcceleratorType, job.Topology, job.PlacementPolicy)
+			return config.ValidateHardwareRequest(job.ComputeType, job.Topology, job.PlacementPolicy)
 		},
 	}
 
