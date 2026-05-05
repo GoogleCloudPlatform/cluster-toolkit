@@ -16,7 +16,8 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
     settings:
       dws_flex:
         max_run_duration: 3600 # 1 hour
-      enable_placement: false
+      enable_placement: true
+      placement_max_distance: 3 # Optional: 1, 2, or 3
       # the rest of the settings, e.g. node_count_static, machine_type, additional_disks, etc.
 ```
 
@@ -25,8 +26,23 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
 * Static nodes will be re-provisioned when `max_run_duration` ends.
 * Dynamic nodes in exclusive partitions will delete instances after the job completes (even if `max_run_duration` has yet to pass).
 
+## Compact Placement Support
+
+DWS Flex Start supports compact placement to ensure low-latency networking for distributed jobs.
+
+To enable it:
+* Set `enable_placement: true` in the nodeset module settings.
+* Specify `placement_max_distance` (1, 2, or 3) depending on the supported distance for your machine type and region.
+
+> [!NOTE]
+> Currently, strict compact placement with DWS Flex Start is supported only for specific machine types, such as **A3 Ultra**, **A4**, and **H4D**. Support for other machine types is not yet available.
+
+**Implementation Detail:**
+Unlike standard on-demand nodes that use Group Placement Policies, DWS Flex nodes in Slurm use **Workload Policies** (type `HIGH_THROUGHPUT`) attached to the dynamic Managed Instance Groups (MIGs) created by the Slurm controller. This satisfies the Compute Engine requirement for combining Flex-Start with physical proximity constraints.
+
 > [!WARNING]
-> DWS Flex Start cannot be used in tandem with a reservation or placement policy.
+> DWS Flex Start cannot be used in tandem with a reservation.
+
 <p>
 
 > [!WARNING]

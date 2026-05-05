@@ -64,10 +64,6 @@ ghpc:
     error_message: "If a DWS Flex is enabled, `zones` should be empty."
   - validator: exclusive
     inputs:
-      vars: [enable_placement, dws_flex.enabled]
-    error_message: "Cannot use DWS Flex with `enable_placement`."
-  - validator: exclusive
-    inputs:
       vars: [reservation_name, dws_flex.enabled]
     error_message: "Cannot use reservations with DWS Flex."
   - validator: exclusive

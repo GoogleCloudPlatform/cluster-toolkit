@@ -335,7 +335,8 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             )
 
     for chunk in flex_chunks:
-        mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp)
+        mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp, chunk.placement_group)
+
 
     # execute all bulkInsert requests  with batch
     bulk_ops = dict(
@@ -473,20 +474,42 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
     
 
 
-def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str]):
-    config = {
-        "name": pg_name,
-        "region": region,
-        "groupPlacementPolicy": {
-            "collocation": "COLLOCATED",
-            "maxDistance": max_distance,
-            "gpuTopology": accelerator_topology,
-        },
-    }
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str], is_flex: bool = False):
+    if is_flex:
+        distance_map = {
+            1: "SUBBLOCK",
+            2: "BLOCK",
+            3: "CLUSTER",
+        }
+        topo_distance = "CLUSTER"
+        if max_distance in distance_map:
+            topo_distance = distance_map[max_distance]
+        
+
+        config = {
+            "name": pg_name,
+            "region": region,
+            "workloadPolicy": {
+                "type": "HIGH_THROUGHPUT",
+                "maxTopologyDistance": topo_distance,
+            },
+        }
+
+    else:
+        config = {
+            "name": pg_name,
+            "region": region,
+            "groupPlacementPolicy": {
+                "collocation": "COLLOCATED",
+                "maxDistance": max_distance,
+                "gpuTopology": accelerator_topology,
+            },
+        }
     
     request = lookup().compute.resourcePolicies().insert(
         project=lookup().project, region=region, body=config
     )
+
     log_api_request(request)
     return request
 
@@ -516,9 +539,8 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     if excl_job_placement and len(nodes) < 2:
         return no_pp # don't create placement_policy for just one node
 
-    if lkp.is_flex_node(model):
-        return no_pp # TODO(FLEX): Add support for workload policies 
     if lkp.node_is_tpu(model):
+
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):
         return no_pp
@@ -610,6 +632,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     region = lkp.node_region(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
     accelerator_topology = lkp.nodeset_accelerator_topology(lkp.node_nodeset_name(nodes[0]))
+    is_flex = lkp.is_flex_node(nodes[0])
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
@@ -618,8 +641,9 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         )
 
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology, is_flex) for p in placements if p.placement
     }
+
     if not requests:
         return placements
     # TODO: aggregate all requests for whole resume and execute them at once (don't limit to nodeset/job)

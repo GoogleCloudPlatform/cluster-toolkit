@@ -53,13 +53,14 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.reservation_name == "" || !var.dws_flex.enabled
-    error_message = "Cannot use reservations with DWS Flex."
+    condition     = !(var.dws_flex.enabled && var.enable_placement && !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type)))
+    error_message = "Compact placement with DWS Flex is only supported for A3 Ultra, A4, and H4D machine types."
   }
 
   precondition {
-    condition     = !var.enable_placement || !var.dws_flex.enabled
-    error_message = "Cannot use DWS Flex with `enable_placement`."
+
+    condition     = var.reservation_name == "" || !var.dws_flex.enabled
+    error_message = "Cannot use reservations with DWS Flex."
   }
 
   precondition {
