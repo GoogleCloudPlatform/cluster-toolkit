@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"hpc-toolkit/pkg/modulereader"
 
@@ -1067,6 +1068,24 @@ func TestGetPredefinedModules(t *testing.T) {
 			expected: []string{"modules/cached/module1"},
 		},
 		{
+			name: "success: expired cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["modules/cached/expired"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+
+				// Simulate an expired cache by setting ModTime to 25 hours ago
+				expiredTime := time.Now().Add(-25 * time.Hour)
+				_ = os.Chtimes(cacheFilePath, expiredTime, expiredTime)
+			},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			expected: expectedModules, // Expecting fresh network data, not the cached data
+		},
+
+		{
 			name: "success: corrupt cache falls back to network fetch",
 			setupCache: func(cacheFilePath string) {
 				// Simulate a corrupted JSON file on the user's disk
@@ -1164,6 +1183,24 @@ func TestGetPredefinedExampleFiles(t *testing.T) {
 			},
 			expected: []string{"examples/cached/test.yaml"},
 		},
+		{
+			name: "success: expired cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["examples/cached/expired.yaml"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+
+				// Simulate an expired cache by setting ModTime to 25 hours ago
+				expiredTime := time.Now().Add(-25 * time.Hour)
+				_ = os.Chtimes(cacheFilePath, expiredTime, expiredTime)
+			},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			expected: expectedExamples, // Expecting fresh network data
+		},
+
 		{
 			name: "success: corrupt cache falls back to network fetch",
 			setupCache: func(cacheFilePath string) {
@@ -1264,6 +1301,20 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 			expected: []string{"cached-blueprint-1"},
 		},
 		{
+			name: "success: expired cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["expired-blueprint"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+
+				// Simulate an expired cache by setting ModTime to 25 hours ago
+				expiredTime := time.Now().Add(-25 * time.Hour)
+				_ = os.Chtimes(cacheFilePath, expiredTime, expiredTime)
+			},
+			// The custom round tripper logic will hit the simulated network and parse "hpc-slurm"
+			expected: []string{"hpc-slurm"},
+		},
+		{
 			name:       "error: tree fetch fails",
 			setupCache: func(cacheFilePath string) {},
 			mockResp: &http.Response{
@@ -1344,6 +1395,8 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 
 			blueprints := GetStandardBlueprintNames()
 
+			// Because GetStandardBlueprintNames uses a worker pool to fetch files, the order of the appended slices is non-deterministic.
+			// We MUST sort both arrays before checking reflect.DeepEqual!
 			sort.Strings(blueprints)
 			sort.Strings(tc.expected)
 

@@ -102,7 +102,7 @@ func TestExecute(t *testing.T) {
 
 	// Setup dummy cobra command and collector
 	cmd := &cobra.Command{Use: "test-execute"}
-	c := NewCollector(cmd, nil)
+	c := NewCollector(cmd, nil, SOURCE)
 
 	// Trigger Execute. Since Execute doesn't return anything, we verify
 	// it functions without panicking or failing.
