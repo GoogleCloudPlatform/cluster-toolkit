@@ -37,7 +37,7 @@ func TestParseTPUCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.machineType, func(t *testing.T) {
-			if got := parseTPUCount(tt.machineType); got != tt.want {
+			if got := ParseTPUCount(tt.machineType); got != tt.want {
 				t.Errorf("parseTPUCount(%q) = %v, want %v", tt.machineType, got, tt.want)
 			}
 		})
