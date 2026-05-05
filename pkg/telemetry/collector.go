@@ -60,6 +60,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -125,6 +126,27 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getBlueprintName(bp config.Blueprint) string {
+	bpName := bp.BlueprintName
+	if bpName == "" {
+		return bpName
+	}
+
+	standardBlueprints := config.GetStandardBlueprintNames()
+
+	// If standardFiles is empty due to a fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no blueprint name was used.
+	if len(standardBlueprints) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Check if it matches a known blueprint name, otherwise mask as "Custom"
+	if slices.Contains(standardBlueprints, bpName) {
+		return bpName
+	}
+
+	return "Custom"
 }
 
 func getIsGke(modulesList []string) string {

@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1127,6 +1128,111 @@ func TestGetModules(t *testing.T) {
 			}
 
 			result := getModules(tc.input)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestGetBlueprintName(t *testing.T) {
+	// Save and restore the original transport so we don't pollute other tests
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name     string
+		input    config.Blueprint
+		mockResp *http.Response
+		mockYaml string
+		expected string
+	}{
+		{
+			name:  "success: identifies standard blueprint name",
+			input: config.Blueprint{BlueprintName: "hpc-slurm"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			mockYaml: "blueprint_name: hpc-slurm",
+			expected: "hpc-slurm",
+		},
+		{
+			name:  "success: sanitizes unrecognized blueprint to Custom",
+			input: config.Blueprint{BlueprintName: "my-secret-cluster"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+			},
+			mockYaml: "blueprint_name: hpc-slurm", // The server only knows about "hpc-slurm"
+			expected: "Custom",
+		},
+		{
+			name:  "success: empty blueprint name returns early",
+			input: config.Blueprint{BlueprintName: ""},
+			// Network mock is not needed because the function returns before fetching
+			expected: "",
+		},
+		{
+			name:  "error: fetch failure safely falls back to UNVERIFIED",
+			input: config.Blueprint{BlueprintName: "hpc-slurm"},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Force OS Cache Directories to a clean, temporary folder to prevent test leakage
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			// Set up our mock HTTP routing
+			http.DefaultTransport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					url := req.URL.String()
+
+					// Route 1: GitHub API Tree Request
+					if strings.Contains(url, "/git/trees/") {
+						// If the test case expects an error (like 500), return it immediately
+						if tc.mockResp != nil && tc.mockResp.StatusCode != http.StatusOK {
+							return tc.mockResp, nil
+						}
+						// Otherwise, return the standard successful tree
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+						}, nil
+					}
+
+					// Route 2: Raw GitHub YAML Request
+					if strings.Contains(url, "hpc-slurm.yaml") && tc.mockYaml != "" {
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(bytes.NewBufferString(tc.mockYaml)),
+						}, nil
+					}
+
+					return &http.Response{
+						StatusCode: http.StatusNotFound,
+						Body:       io.NopCloser(bytes.NewBufferString("404 Not Found")),
+					}, nil
+				},
+			}
+
+			result := getBlueprintName(tc.input)
 
 			if result != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, result)
