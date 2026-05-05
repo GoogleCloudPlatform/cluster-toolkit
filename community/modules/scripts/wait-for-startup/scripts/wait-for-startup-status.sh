@@ -67,6 +67,7 @@ STARTUP_SCRIPT_SERVICE_FINISHED_LINE="Finished google-startup-scripts.service - 
 
 NON_FATAL_ERRORS=(
 	"Internal error"
+	"SERIAL_PORT_OUTPUT_IN_PROGRESS"
 )
 
 until [[ now -gt deadline ]]; do
@@ -90,7 +91,7 @@ until [[ now -gt deadline ]]; do
 		fi
 	}
 	if [[ -n "${ser_log}" ]]; then break; fi
-	sleep 5
+	sleep 15
 	now=$(date +%s)
 done
 
