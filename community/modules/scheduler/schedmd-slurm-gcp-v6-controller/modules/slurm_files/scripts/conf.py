@@ -60,7 +60,7 @@ def topology_type(lkp: util.Lookup, partition: NSDict) -> str:
     """
     Returns configured topology type for a given partition.
     """
-    if lkp.has_block_topology(partition):
+    if lkp.has_block_topology(partition) and topology_plugin(lkp) == TOPOLOGY_BLOCK:
         if util.slurm_version_gte(lkp.slurm_version, "25.05"):
             log.info(f"Partition {partition.partition_name} is using block topology")
             return TOPOLOGY_BLOCK
@@ -69,6 +69,7 @@ def topology_type(lkp: util.Lookup, partition: NSDict) -> str:
     else:
         log.info(f"Partition {partition.partition_name} is using tree topology")
     return TOPOLOGY_TREE
+
 
 def topology_plugin(lkp: util.Lookup) -> str:
     """
@@ -748,7 +749,7 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
 
     topo = gen_topology(lkp).compress()
     yaml_file = lkp.etc_dir / "cloud_topology.yaml"
-    block_is_default = any(lkp.has_block_topology(p) for p in lkp.cfg.partitions.values())
+    block_is_default = topology_plugin(lkp) == TOPOLOGY_BLOCK
 
     with open(yaml_file, "w") as f:
         f.write(FILE_PREAMBLE)
