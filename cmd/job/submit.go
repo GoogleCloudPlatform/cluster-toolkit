@@ -39,7 +39,6 @@ var (
 	workloadName     string
 	kueueQueueName   string
 	numSlicesOrNodes int
-	vmsPerSlice      int
 	restarts         int
 	ttlAfterFinished string
 	gracePeriodStr   string
@@ -112,7 +111,6 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
-	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 0, "Number of VMs (pods) per slice. Defaults to auto-calculated value for TPUs.")
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
@@ -193,7 +191,6 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
 		NumSlices:                     numSlicesOrNodes,
-		VmsPerSlice:                   vmsPerSlice,
 		MaxRestarts:                   restarts,
 		TtlSecondsAfterFinished:       ttlSeconds,
 		TerminationGracePeriodSeconds: gracePeriodSeconds,
