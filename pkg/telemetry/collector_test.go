@@ -31,15 +31,10 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-const (
-	SOURCE = "SOURCE"
-	BINARY = "BINARY"
-)
-
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	// Passing nil for args prevents getBlueprint from attempting to read a file
-	c := NewCollector(cmd, nil)
+	c := NewCollector(cmd, nil, SOURCE)
 
 	if c == nil {
 		t.Fatal("Expected NewCollector to return a valid Collector, got nil")
@@ -170,7 +165,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Initialize the collector
-			c := NewCollector(cmd, []string{})
+			c := NewCollector(cmd, []string{}, tt.installationMode)
 
 			// Execute the setup function to apply the blueprint state to the collector
 			if tt.setupCollector != nil {
@@ -178,7 +173,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode, tt.installationMode)
+			c.CollectMetrics(tt.errorCode)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
@@ -202,8 +197,8 @@ func TestBuildConcordEvent(t *testing.T) {
 	childCmd := &cobra.Command{Use: "deploy"}
 	rootCmd.AddCommand(childCmd)
 
-	c := NewCollector(childCmd, nil)
-	c.CollectMetrics(0, SOURCE)
+	c := NewCollector(childCmd, nil, SOURCE)
+	c.CollectMetrics(0)
 
 	event := c.BuildConcordEvent()
 
