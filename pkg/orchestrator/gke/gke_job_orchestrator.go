@@ -1796,10 +1796,24 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 }
 
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	// First, retrieve the JobSet to get its UID
+	jobsetGVR := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+	jobset, err := d.dynClient.Resource(jobsetGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get jobset %s in namespace %s: %w", workloadName, namespace, err)
+	}
+
+	uid := string(jobset.GetUID())
+	if uid == "" {
+		return nil, fmt.Errorf("jobset %s has no UID", workloadName)
+	}
+
+	// Now list workloads using the UID label selector
 	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
-	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-name=%s", workloadName),
-	})
+	listOpts := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
+	}
+	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), listOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list workloads in namespace %s: %w", namespace, err)
 	}
