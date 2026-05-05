@@ -1012,7 +1012,7 @@ func GetStandardBlueprintNames() []string {
 }
 
 // getOrFetchCachedList is a generic helper that handles file-based caching for string slices.
-// It attempts to read from the local cache first, and if it fails, executes the provided fetchFn.
+// It attempts to read from the local cache first if within a 24 hr TTL, and if it fails, executes the provided fetchFn.
 func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []string {
 	// 1. Determine the cache directory
 	cacheDir, err := os.UserCacheDir()
@@ -1021,18 +1021,20 @@ func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []strin
 	}
 	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", cacheFileName)
 
-	// 2. Try to read from the local cache first
-	if data, err := os.ReadFile(cacheFile); err == nil {
-		var cachedList []string
-		if err := json.Unmarshal(data, &cachedList); err == nil {
-			return cachedList // Cache hit!
+	// 2. Try to read from the local cache first, checking if it is within the 24-hour TTL
+	if stat, err := os.Stat(cacheFile); err == nil && time.Since(stat.ModTime()) < 24*time.Hour {
+		if data, err := os.ReadFile(cacheFile); err == nil {
+			var cachedList []string
+			if err := json.Unmarshal(data, &cachedList); err == nil {
+				return cachedList // Cache hit and within TTL!
+			}
 		}
 	}
 
-	// 3. Cache miss: Execute the provided fetch callback
+	// 3. Cache miss or expired TTL: Execute the provided fetch callback
 	fetchedList := fetchFn()
 
-	// 4. Save the successfully fetched list to the cache file for future CLI runs
+	// 4. Save the successfully fetched list to the cache file (resets the ModTime)
 	if len(fetchedList) > 0 {
 		if data, err := json.Marshal(fetchedList); err == nil {
 			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
