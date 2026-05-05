@@ -1612,3 +1612,73 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 		t.Errorf("Rendered manifest unexpectedly contains schedulerName")
 	}
 }
+
+func TestGetNodeCount(t *testing.T) {
+	tests := []struct {
+		name      string
+		locations []string
+		np        gkeJobNodePool
+		expected  int
+	}{
+		{
+			name:      "Autoscaling disabled, zonal",
+			locations: []string{"zone-1"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled: false,
+				},
+			},
+			expected: 5,
+		},
+		{
+			name:      "Autoscaling disabled, regional",
+			locations: []string{"zone-1", "zone-2", "zone-3"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled: false,
+				},
+			},
+			expected: 15,
+		},
+		{
+			name:      "Autoscaling enabled, uses TotalMaxNodeCount",
+			locations: []string{"zone-1", "zone-2", "zone-3"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled:           true,
+					MaxNodeCount:      10,
+					TotalMaxNodeCount: 20,
+				},
+			},
+			expected: 20,
+		},
+		{
+			name:      "Autoscaling enabled, falls back to MaxNodeCount (regional)",
+			locations: []string{"zone-1", "zone-2"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled:           true,
+					MaxNodeCount:      10,
+					TotalMaxNodeCount: 0,
+				},
+			},
+			expected: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				clusterZones: tt.locations,
+			}
+			result := orc.getNodeCount(tt.np)
+			if result != tt.expected {
+				t.Errorf("getNodeCount() = %d, expected %d", result, tt.expected)
+			}
+		})
+	}
+}

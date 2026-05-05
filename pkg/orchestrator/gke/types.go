@@ -204,9 +204,10 @@ type gkeNodePoolConfig struct {
 }
 
 type gkeAutoscaling struct {
-	Enabled      bool `json:"enabled"`
-	MinNodeCount int  `json:"minNodeCount"`
-	MaxNodeCount int  `json:"maxNodeCount"`
+	Enabled           bool `json:"enabled"`
+	MinNodeCount      int  `json:"minNodeCount"`
+	MaxNodeCount      int  `json:"maxNodeCount"`
+	TotalMaxNodeCount int  `json:"totalMaxNodeCount"`
 }
 
 type gkePlacementPolicy struct {
