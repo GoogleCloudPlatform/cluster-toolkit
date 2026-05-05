@@ -344,7 +344,12 @@ func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobD
 		if err != nil {
 			return err
 		}
-		nodes, err := config.CalculateAcceleratorNodes(machineType, topology)
+		accelsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
+		if err != nil {
+			logging.Warn("Failed to fetch machine capacity for %s: %v. Falling back to static defaults.", machineType, err)
+			accelsPerVM = 0 // Fallback to static logic in CalculateAcceleratorNodes
+		}
+		nodes, err := config.CalculateAcceleratorNodes(machineType, topology, accelsPerVM)
 		if err != nil {
 			return fmt.Errorf("failed to calculate nodes from topology: %w", err)
 		}

@@ -97,7 +97,7 @@ func TestCalculateAcceleratorNodes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			nodes, err := CalculateAcceleratorNodes(tc.machineType, tc.topology)
+			nodes, err := CalculateAcceleratorNodes(tc.machineType, tc.topology, 0)
 			if tc.expectErr {
 				if err == nil {
 					t.Fatalf("expected error but got nil")
@@ -111,6 +111,16 @@ func TestCalculateAcceleratorNodes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCalculateAcceleratorNodes_WithExplicitCount(t *testing.T) {
+	nodes, err := CalculateAcceleratorNodes("ct5p-hightpu-4t", "4x4x4", 8)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if nodes != 8 {
+		t.Errorf("expected 8 nodes, got %d", nodes)
 	}
 }
 
@@ -226,9 +236,9 @@ func TestResolveTopologyForChips(t *testing.T) {
 		wantErr    bool
 	}{
 		{
-			name:       "v4 4 chips",
+			name:       "v4 8 cores (4 chips)",
 			prefix:     "v4",
-			totalChips: 4,
+			totalChips: 8,
 			wantShape:  "2x2x1",
 			wantErr:    false,
 		},

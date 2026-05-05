@@ -36,6 +36,9 @@ var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v5e"
 var valid3DTPUFamilies = []string{"v4", "v5p", "ct4p", "ct5p", "tpu7"}
 
 // AcceleratorShorthandMap maps shorthand names to full machine types.
+// The shorthand notation generally follows the pattern <accelerator>-<suffix>.
+// For TPU v4, the suffix represents the total number of CORES (e.g., "v4-8" has 8 cores = 4 chips).
+// For TPU v5 and v6, the suffix represents the total number of CHIPS (e.g., "v5e-8" has 8 chips).
 var AcceleratorShorthandMap = map[string]string{
 	// GPU mappings
 	"l4-1":             "g2-standard-12",
@@ -193,7 +196,7 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 		return nil
 	}
 
-	nodes, err := CalculateAcceleratorNodes(mtStr, tpuTopologyStr)
+	nodes, err := CalculateAcceleratorNodes(mtStr, tpuTopologyStr, 0)
 	if err != nil {
 		return fmt.Errorf("failed to automatically calculate static_node_count for module %q: %w", mod.ID, err)
 	}
@@ -208,7 +211,8 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 }
 
 // CalculateAcceleratorNodes derives the node count from topology and machine type.
-func CalculateAcceleratorNodes(machineType, topology string) (int, error) {
+// If acceleratorsPerVM is <= 0, it falls back to deriving it from machineType or defaults.
+func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM int) (int, error) {
 	// 1. Calculate Total Accelerators from topology
 	totalAccelerators := 1
 	for _, dim := range strings.Split(topology, "x") {
@@ -219,23 +223,28 @@ func CalculateAcceleratorNodes(machineType, topology string) (int, error) {
 		totalAccelerators *= val
 	}
 
-	// 2. Identify Accelerators per VM from machine_type
-	acceleratorsPerVM := func() int {
-		// Check for explicit accelerators count in machine_type (e.g., "-4t")
-		if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
-			if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil && val > 0 {
-				return val
+	// 2. Identify Accelerators per VM if not provided
+	if acceleratorsPerVM <= 0 {
+		// Resolve shorthand to full machine type if necessary
+		machineType = ResolveMachineType(machineType)
+
+		acceleratorsPerVM = func() int {
+			// Check for explicit accelerators count in machine_type (e.g., "-4t")
+			if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
+				if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil && val > 0 {
+					return val
+				}
 			}
-		}
-		// Fallback to known machine family defaults
-		for family, defaultAccs := range tpuFamilyDefaults {
-			if strings.Contains(machineType, family) {
-				return defaultAccs
+			// Fallback to known machine family defaults
+			for family, defaultAccs := range tpuFamilyDefaults {
+				if strings.Contains(machineType, family) {
+					return defaultAccs
+				}
 			}
-		}
-		// Final fallback to global default
-		return defaultAcceleratorsPerVM
-	}()
+			// Final fallback to global default
+			return defaultAcceleratorsPerVM
+		}()
+	}
 
 	// 3. Calculate Nodes
 	if totalAccelerators%acceleratorsPerVM != 0 {
@@ -314,6 +323,11 @@ func ResolveTopologyForChips(accelaratorType string) (string, error) {
 	}
 	resolved := ResolveMachineType(accelType)
 	resolvedLower := strings.ToLower(resolved)
+
+	// For TPU v4 (v4-8), the shorthand suffix represents cores. We need to divide by 2 to get chips.
+	if accelaratorType == "v4-8" {
+		totalChips = totalChips / 2
+	}
 
 	// 3D topologies for v4, v5p, tpu7, tpu7x
 	if strings.HasPrefix(resolvedLower, "v4") || strings.HasPrefix(resolvedLower, "v5p") || strings.HasPrefix(resolvedLower, "ct4") || strings.HasPrefix(resolvedLower, "ct5p") || strings.HasPrefix(resolvedLower, "tpu7") {
