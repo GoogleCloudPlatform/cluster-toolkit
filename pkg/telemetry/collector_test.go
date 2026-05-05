@@ -15,13 +15,10 @@
 package telemetry
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +34,7 @@ import (
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	// Passing nil for args prevents getBlueprint from attempting to read a file
-	c := NewCollector(cmd, nil)
+	c := NewCollector(cmd, nil, SOURCE)
 
 	if c == nil {
 		t.Fatal("Expected NewCollector to return a valid Collector, got nil")
@@ -64,20 +61,23 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_VERSION,
 		TERRAFORM_VERSION,
 		BILLING_ACCOUNT_ID,
+		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
 
 	tests := []struct {
-		name           string
-		errorCode      int
-		setupCmd       func(cmd *cobra.Command) // Hook to configure the command
-		setupCollector func(c *Collector)       // Hook to mock internal collector state
-		expectedValues map[string]string
+		name             string
+		errorCode        int
+		installationMode string
+		setupCmd         func(cmd *cobra.Command) // Hook to configure the command
+		setupCollector   func(c *Collector)       // Hook to mock internal collector state
+		expectedValues   map[string]string
 	}{
 		{
-			name:      "Success exit code",
-			errorCode: 0,
+			name:             "Success exit code",
+			errorCode:        0,
+			installationMode: SOURCE,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
 				cmd.Flags().Bool("force", false, "Force execution")
@@ -122,11 +122,13 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  SOURCE,
 			},
 		},
 		{
-			name:      "Failure exit code with missing region, zone, and machine type",
-			errorCode: 1,
+			name:             "Failure exit code with missing region, zone, and machine type",
+			errorCode:        1,
+			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
 			},
@@ -148,6 +150,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
 				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
 				BILLING_ACCOUNT_ID: "",
+				INSTALLATION_MODE:  BINARY,
 			},
 		},
 	}
@@ -162,7 +165,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Initialize the collector
-			c := NewCollector(cmd, []string{})
+			c := NewCollector(cmd, []string{}, tt.installationMode)
 
 			// Execute the setup function to apply the blueprint state to the collector
 			if tt.setupCollector != nil {
@@ -194,7 +197,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	childCmd := &cobra.Command{Use: "deploy"}
 	rootCmd.AddCommand(childCmd)
 
-	c := NewCollector(childCmd, nil)
+	c := NewCollector(childCmd, nil, SOURCE)
 	c.CollectMetrics(0)
 
 	event := c.BuildConcordEvent()
@@ -1035,86 +1038,59 @@ func TestGetBillingAccountId(t *testing.T) {
 }
 
 func TestGetModules(t *testing.T) {
-	// Save and restore the original transport
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
+	// Save and restore the original function to avoid affecting other tests
+	originalGetStandardModules := getStandardModules
+	defer func() { getStandardModules = originalGetStandardModules }()
 
-	// Mock JSON response that config.GetPredefinedModules() will parse
-	mockJSON := `{
-		"tree": [
-			{"path": "modules/network/vpc/main.tf", "type": "blob"},
-			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"}
-		]
-	}`
+	mockStandardList := []string{
+		"modules/network/vpc",
+		"community/modules/compute/mig",
+	}
 
 	tests := []struct {
-		name     string
-		input    []string
-		mockResp *http.Response
-		expected string
+		name                string
+		input               []string
+		mockStandardModules []string
+		expected            string
 	}{
 		{
-			name:  "success: all standard modules",
-			input: []string{"modules/network/vpc", "community/modules/compute/mig"},
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			// Expected to keep original paths
-			expected: "modules/network/vpc,community/modules/compute/mig",
+			name:                "success: all standard modules",
+			input:               []string{"modules/network/vpc", "community/modules/compute/mig"},
+			mockStandardModules: mockStandardList,
+			expected:            "modules/network/vpc,community/modules/compute/mig",
 		},
 		{
-			name:  "success: mix of standard and custom modules",
-			input: []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			// Expected to sanitize the unknown module
-			expected: "modules/network/vpc,Custom,community/modules/compute/mig",
+			name:                "success: mix of standard and custom modules",
+			input:               []string{"modules/network/vpc", "modules/my-custom-network", "community/modules/compute/mig"},
+			mockStandardModules: mockStandardList,
+			expected:            "modules/network/vpc,Custom,community/modules/compute/mig",
 		},
 		{
-			name:  "success: only custom modules",
-			input: []string{"my/custom/module1", "my/custom/module2"},
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			// Expected to sanitize all
-			expected: "Custom,Custom",
+			name:                "success: only custom modules",
+			input:               []string{"my/custom/module1", "my/custom/module2"},
+			mockStandardModules: mockStandardList,
+			expected:            "Custom,Custom",
 		},
 		{
-			name:  "success: empty input",
-			input: []string{},
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			expected: "",
+			name:                "success: empty input",
+			input:               []string{},
+			mockStandardModules: mockStandardList,
+			expected:            "",
 		},
 		{
-			name:  "error: standardModules fetch failed (UNVERIFIED)",
-			input: []string{"modules/network/vpc", "my/custom/module"},
-			mockResp: &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
-			},
-			expected: "UNVERIFIED",
+			name:                "error: standardModules fetch failed (UNVERIFIED)",
+			input:               []string{"modules/network/vpc", "my/custom/module"},
+			mockStandardModules: []string{}, // Simulating an empty return indicating fetch failure
+			expected:            "UNVERIFIED",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			http.DefaultTransport = &mockTransport{
-				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					return tc.mockResp, nil
-				},
+			// Mock the getStandardModules function for this specific test case
+			getStandardModules = func() []string {
+				return tc.mockStandardModules
 			}
-
-			// Force re-initialization of the global variable for this specific test so it picks up the mocked HTTP response, and restore it afterwards.
-			originalModules := standardModules
-			standardModules = config.GetPredefinedModules()
-			defer func() { standardModules = originalModules }()
 
 			result := getModules(tc.input)
 

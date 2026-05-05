@@ -54,7 +54,7 @@ var httpClient = &http.Client{
 }
 
 func main() {
-	version := flag.String("version", "", "The toolkit version tag (e.g., v1.89.0)")
+	version := flag.String("version", "", "The toolkit version tag (e.g., v1.90.0)")
 	flag.Parse()
 	if *version == "" {
 		log.Fatal("Error: -version flag is required")

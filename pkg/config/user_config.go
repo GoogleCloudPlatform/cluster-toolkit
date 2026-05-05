@@ -47,7 +47,7 @@ func InitUserConfig() error {
 
 	userID := generateUniqueID()
 
-	client, err := getFirestoreClient(ctx)
+	client, err := GetFirestoreClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func SaveToFirestore() error {
 
 	userID := viper.GetString(USER_ID_KEY)
 
-	client, err := getFirestoreClient(ctx)
+	client, err := GetFirestoreClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func generateUniqueID() string {
 }
 
 // Helper function to initialize Firestore client
-func getFirestoreClient(ctx context.Context) (*firestore.Client, error) {
+func GetFirestoreClient(ctx context.Context) (*firestore.Client, error) {
 	var initErr error
 
 	// The block inside Do() will only be executed once globally even if multiple goroutines call it simultaneously.

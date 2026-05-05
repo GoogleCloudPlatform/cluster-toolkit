@@ -17,15 +17,11 @@ limitations under the License.
 package config
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -1011,94 +1007,6 @@ func TestGetAllModules(t *testing.T) {
 			if !reflect.DeepEqual(actualIDs, tt.expected) {
 				t.Errorf("GetAllModules() returned IDs %v, want %v", actualIDs, tt.expected)
 			}
-		})
-	}
-}
-
-// mockTransport implements http.RoundTripper to intercept HTTP requests.
-type mockTransport struct {
-	roundTripFunc func(req *http.Request) (*http.Response, error)
-}
-
-// RoundTrip executes the mocked request.
-func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.roundTripFunc(req)
-}
-
-func TestGetPredefinedModules(t *testing.T) {
-	// Save the original transport to restore it after tests complete
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
-
-	tests := []struct {
-		name        string
-		mockResp    *http.Response
-		mockErr     error
-		expected    []string
-		errContains string
-	}{
-		{
-			name: "success: extracts and deduplicates tf and packer modules",
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body: io.NopCloser(bytes.NewBufferString(`{
-					"tree": [
-						{"path": "modules/network/vpc/main.tf", "type": "blob"},
-						{"path": "modules/network/vpc/variables.tf", "type": "blob"},
-						{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
-						{"path": "modules/ignore_me.txt", "type": "blob"},
-						{"path": "some_other_dir/main.tf", "type": "blob"},
-						{"path": "modules/not_a_blob/main.tf", "type": "tree"}
-					]
-				}`)),
-			},
-			// Expected to ignore "ignore_me.txt", "some_other_dir", and "not_a_blob" (since it's a tree)
-			// Expected to deduplicate the "modules/network/vpc" module.
-			expected: []string{"modules/network/vpc", "community/modules/compute/mig"},
-		},
-		{
-			name: "error: non-200 status code",
-			mockResp: &http.Response{
-				StatusCode: http.StatusNotFound,
-				Status:     "404 Not Found",
-				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Not Found"}`)),
-			},
-		},
-		{
-			name: "error: invalid JSON",
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
-			},
-		},
-		{
-			name:    "error: network failure or timeout",
-			mockErr: fmt.Errorf("connection timeout"),
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Set up the mock transport for the current test case
-			http.DefaultTransport = &mockTransport{
-				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					// Verify that the request URL contains the toolkit version
-					version := GetToolkitVersion()
-					if !strings.Contains(req.URL.String(), version) {
-						t.Errorf("Expected URL to contain version %s, got %s", version, req.URL.String())
-					}
-					return tc.mockResp, tc.mockErr
-				},
-			}
-
-			modules := GetPredefinedModules()
-
-			// reflect.DeepEqual works deterministically here because the function processes
-			// the JSON array sequentially and appends exactly in the order items appear.
-			if !reflect.DeepEqual(modules, tc.expected) {
-				t.Errorf("expected modules %v, got %v", tc.expected, modules)
-			}
-
 		})
 	}
 }

@@ -28,10 +28,10 @@ steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/cloud-batch.yaml"
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/batch.yaml"
 
 # Test Cloud Batch Example
-- id: cloud-batch
+- id: batch
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -52,13 +52,13 @@ steps:
     fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    BLUEPRINT=examples/serverless-batch.yaml
+    BLUEPRINT=examples/batch.yaml
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/cloud-batch.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/batch.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
   secretManager:

@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/spf13/viper"
 	"github.com/zclconf/go-cty/cty"
 
 	billing "cloud.google.com/go/billing/apiv1"
@@ -50,6 +51,55 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 		})
 	}
 	return eventMetadata
+}
+
+const (
+	releasesCollection        = "release_metadata"
+	standardModulesKey        = "standard_modules"
+	standardExamplesKey       = "standard_examples"
+	standardBlueprintNamesKey = "standard_blueprint_names"
+)
+
+// loadReleaseMetadata fetches the predefined metadata from Firestore and loads it into the global Viper registry.
+// Will move this function call within the root persistent pre-run in future PR to avoid calling multiple times.
+func loadReleaseMetadata() error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	version := config.GetToolkitVersion()
+
+	// GetFirestoreClient is a singleton helper defined in user_config.go
+	client, err := config.GetFirestoreClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get firestore client: %v", err)
+	}
+
+	// Try to fetch the cached metadata document for this version
+	doc, err := client.Collection(releasesCollection).Doc(version).Get(ctx)
+	if err != nil {
+		// Document not found or network error.
+		// Here we would trigger the fallback to fetchGitTree() and the GitHub API.
+		return fmt.Errorf("metadata cache miss for version %s: %v", version, err)
+	}
+
+	// Merge Firestore array data into the local Viper registry
+	data := doc.Data()
+
+	// Viper will store these as []interface{} internally, which can be easily retrieved
+	viper.Set(standardModulesKey, data["modules"])
+	viper.Set(standardExamplesKey, data["examples"])
+	viper.Set(standardBlueprintNamesKey, data["blueprint_names"])
+
+	return nil
+}
+
+// getStandardModules returns the cached list of official modules from Viper
+var getStandardModules = func() []string {
+	err := loadReleaseMetadata() // Will move this function call within the root persistent pre-run in future PR to avoid calling multiple times.
+	if err == nil && viper.IsSet(standardModulesKey) {
+		return viper.GetStringSlice(standardModulesKey)
+	}
+	return []string{}
 }
 
 func getBpModulesList(bp config.Blueprint) []string {

@@ -27,8 +27,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgu-yaml-) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
-  * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
-  * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
+  * [batch.yaml](#batchyaml-) ![core-badge]
+  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [pfs-managed-lustre-slurm.yaml](#pfs-managed-lustre-slurmyaml-) ![core-badge]
   * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
@@ -563,7 +563,7 @@ timestamp for uniqueness.
 
 [console-images]: https://console.cloud.google.com/compute/images
 
-### [serverless-batch.yaml] ![core-badge]
+### [batch.yaml] ![core-badge]
 
 This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
@@ -578,7 +578,7 @@ job.
 To provision the cluster, please run:
 
 ```text
-./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster create examples/batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./gcluster deploy hello-workload
 ```
 
@@ -588,9 +588,9 @@ When you are done, clean up the resources in reverse order of creation:
 ./gcluster destroy hello-workload
 ```
 
-[serverless-batch.yaml]: ../examples/serverless-batch.yaml
+[batch.yaml]: ../examples/batch.yaml
 
-### [serverless-batch-mpi.yaml] ![core-badge]
+### [batch-mpi.yaml] ![core-badge]
 
 This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 
@@ -645,7 +645,7 @@ The blueprint contains the following:
     job has finished this folder will contain the results of the job. You can
     inspect the `rsl.out.0000` file for a summary of the job.
 
-[serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
+[batch-mpi.yaml]: ../examples/batch-mpi.yaml
 
 ### [pfs-managed-lustre-vm.yaml] ![core-badge]
 
