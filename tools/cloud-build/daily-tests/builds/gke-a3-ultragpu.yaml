@@ -63,7 +63,8 @@ steps:
     echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
     echo '    use: [gke-a3-ultra-net-0]'                 >> $${EXAMPLE_BP}
     echo '    settings:'                                 >> $${EXAMPLE_BP}
-    echo '      machine_type: e2-standard-2'             >> $${EXAMPLE_BP}
+    echo '      machine_type: n4-standard-2'             >> $${EXAMPLE_BP}
+    echo '      disk_type: hyperdisk-balanced'           >> $${EXAMPLE_BP}
     echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
     echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
     echo ''

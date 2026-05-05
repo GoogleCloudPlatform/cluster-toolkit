@@ -176,7 +176,8 @@ deployment_groups:
     use: [gke-a4-net-0, workload_service_account]
     settings:
       auto_monitoring_scope: $(vars.auto_monitoring_scope)
-      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_machine_type: "n4-standard-16"
+      system_node_pool_disk_type: "hyperdisk-balanced"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true

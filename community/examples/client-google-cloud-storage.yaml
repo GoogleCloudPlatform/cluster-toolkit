@@ -56,7 +56,8 @@ deployment_groups:
     - existing-bucket
     settings:
       name_prefix: workstation
-      machine_type: e2-standard-2
+      machine_type: n4-standard-2
+      disk_type: hyperdisk-balanced
       allow_automatic_updates: false
 
   - id: wait

@@ -70,7 +70,7 @@ variable "django_su_email" {
 }
 
 variable "server_instance_type" {
-  default     = "e2-standard-2"
+  default     = "n4-standard-2"
   type        = string
   description = "Instance size to use from HPC Frontend webserver"
 }

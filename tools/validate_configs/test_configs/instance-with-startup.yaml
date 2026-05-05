@@ -40,7 +40,8 @@ deployment_groups:
     - network1
     - homefs
     settings:
-      machine_type: e2-standard-8
+      machine_type: n4-standard-8
+      disk_type: hyperdisk-balanced
 
   - id: wait
     source: community/modules/scripts/wait-for-startup

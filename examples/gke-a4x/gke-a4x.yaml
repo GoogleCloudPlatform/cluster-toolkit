@@ -48,7 +48,7 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
   compute_nodepool_machine_type: a4x-highgpu-4g
-  system_nodepool_machine_type: e2-standard-16
+  system_nodepool_machine_type: n4-standard-16
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image

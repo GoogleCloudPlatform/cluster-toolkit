@@ -48,7 +48,7 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
-  system_nodepool_machine_type: e2-standard-16
+  system_nodepool_machine_type: n4-standard-16
 
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   asapd_lite_installer_path: $(ghpc_stage("./asapd-lite-installer.yaml"))
