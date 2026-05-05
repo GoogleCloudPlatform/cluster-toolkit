@@ -601,7 +601,7 @@ variable "cluster_autoscaling" {
   limits:                Explicit upper bounds to apply during scaling.
     autoprovisioning_machine_type: GCE machine type tier (used as input).
     autoprovisioning_resource_type: The underlying specific GKE accelerator resource name (inferred by expansion).
-    autoprovisioning_max_count:    The ceiling for specific accelerator types.
+    autoprovisioning_max_count:    The ceiling for specific accelerator types. Default 1000.
 
   Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve 
   the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.
@@ -611,7 +611,7 @@ variable "cluster_autoscaling" {
     limits = list(object({
       autoprovisioning_machine_type  = optional(string)
       autoprovisioning_resource_type = optional(string)
-      autoprovisioning_max_count     = optional(number)
+      autoprovisioning_max_count     = optional(number, 1000)
     }))
     service_account_email         = optional(string, "")
     oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])

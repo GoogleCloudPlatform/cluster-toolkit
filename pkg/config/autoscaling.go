@@ -17,7 +17,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -98,6 +97,10 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCac
 	}
 	resMap := resVal.AsValueMap()
 
+	if rtVal, ok := resMap["autoprovisioning_resource_type"]; ok && !rtVal.IsNull() && rtVal.IsKnown() {
+		return cty.ObjectVal(resMap), true, nil
+	}
+
 	mtVal, ok := resMap["autoprovisioning_machine_type"]
 	if !ok || mtVal.IsNull() || !mtVal.IsKnown() {
 		return cty.Value{}, false, nil
@@ -124,9 +127,15 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCac
 		return cty.Value{}, false, nil
 	}
 
-	totalAccelerators, err := validateAndExtractTotalAccelerators(maxCount, maxCountPassed, acceleratorsPerVM, machineType)
-	if err != nil {
-		return cty.Value{}, false, err
+	var totalAccelerators int
+	var err error
+	if maxCountPassed {
+		totalAccelerators, err = validateAndExtractTotalAccelerators(maxCount, acceleratorsPerVM, machineType)
+		if err != nil {
+			return cty.Value{}, false, err
+		}
+	} else {
+		totalAccelerators = 1000
 	}
 
 	resMap["autoprovisioning_max_count"] = cty.NumberIntVal(int64(totalAccelerators))
@@ -144,19 +153,14 @@ func extractMaxCount(resMap map[string]cty.Value) (int, bool) {
 	return 1, false
 }
 
-func validateAndExtractTotalAccelerators(maxCount int, maxCountPassed bool, acceleratorsPerVM int, machineType string) (int, error) {
-	if maxCountPassed {
-		if maxCount <= 0 {
-			return 0, fmt.Errorf("autoprovisioning_max_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
-		}
-		if maxCount%acceleratorsPerVM != 0 {
-			return 0, fmt.Errorf("autoprovisioning_max_count (%d) for machine type %s must be a multiple of its native capacity (%d)", maxCount, machineType, acceleratorsPerVM)
-		}
-		return maxCount, nil
+func validateAndExtractTotalAccelerators(maxCount int, acceleratorsPerVM int, machineType string) (int, error) {
+	if maxCount <= 0 {
+		return 0, fmt.Errorf("autoprovisioning_max_count must be greater than 0 for machine type %s, got %d", machineType, maxCount)
 	}
-	// Default to a large number (e.g., 1000) to allow Node Auto-Provisioning
-	// to scale beyond a single VM capacity.
-	return 1000, nil
+	if maxCount%acceleratorsPerVM != 0 {
+		return 0, fmt.Errorf("autoprovisioning_max_count (%d) for machine type %s must be a multiple of its native capacity (%d)", maxCount, machineType, acceleratorsPerVM)
+	}
+	return maxCount, nil
 }
 
 func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (int, string, error) {
@@ -171,6 +175,10 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 	defer func() {
 		if hasMt {
 			mod.Settings = mod.Settings.With("machine_type", origMt)
+		} else {
+			m := mod.Settings.Items()
+			delete(m, "machine_type")
+			mod.Settings = NewDict(m)
 		}
 	}()
 
@@ -185,7 +193,8 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 			Type  string `json:"type"`
 		} `json:"gpus"`
 		TPUs map[string]struct {
-			Count int `json:"count"`
+			Count int    `json:"count"`
+			Type  string `json:"type"`
 		} `json:"tpus"`
 	}
 	if err := json.Unmarshal([]byte(cfgJson), &data); err != nil {
@@ -195,23 +204,7 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 	if acc, ok := data.GPUs[machineType]; ok {
 		return acc.Count, acc.Type, nil
 	} else if acc, ok := data.TPUs[machineType]; ok {
-		// Map TPU machine type to GKE accelerator identifier
-		tpuAccMap := map[string]string{
-			"ct4p":  "tpu-v4-podslice",
-			"ct5lp": "tpu-v5-lite-podslice",
-			"ct5p":  "tpu-v5p-slice",
-			"ct6e":  "tpu-v6e-slice",
-			"tpu7x": "tpu7x",
-		}
-		accType := machineType
-		// Robustly extract prefix (e.g., "ct6e" from "ct6e-standard-4t")
-		parts := strings.Split(machineType, "-")
-		if len(parts) > 0 {
-			if mapped, exists := tpuAccMap[parts[0]]; exists {
-				accType = mapped
-			}
-		}
-		return acc.Count, accType, nil
+		return acc.Count, acc.Type, nil
 	}
 
 	return 0, "", nil

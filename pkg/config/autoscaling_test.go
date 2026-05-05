@@ -135,7 +135,7 @@ func TestExpandClusterAutoscaling_InvalidCount(t *testing.T) {
 }
 
 func TestExpandClusterAutoscaling_TPU(t *testing.T) {
-	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"tpus": {"ct6e-standard-4t": {"count": 4}}}`)
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"tpus": {"ct6e-standard-4t": {"count": 4, "type": "tpu-v6e-slice"}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
 		"enabled": cty.True,
 		"limits": cty.ListVal([]cty.Value{
