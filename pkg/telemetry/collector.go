@@ -41,13 +41,14 @@ var (
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
-func NewCollector(cmd *cobra.Command, args []string) *Collector {
+func NewCollector(cmd *cobra.Command, args []string, installationMode string) *Collector {
 	return &Collector{
-		eventCmd:       cmd,
-		eventArgs:      args,
-		eventStartTime: time.Now(),
-		blueprint:      getBlueprint(args),
-		metadata:       make(map[string]string),
+		eventCmd:         cmd,
+		eventArgs:        args,
+		eventStartTime:   time.Now(),
+		blueprint:        getBlueprint(args),
+		installationMode: installationMode,
+		metadata:         make(map[string]string),
 	}
 }
 
@@ -70,6 +71,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
+	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }

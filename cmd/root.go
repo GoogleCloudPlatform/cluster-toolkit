@@ -46,6 +46,10 @@ var (
 )
 
 var (
+	InstallationMode string // Toolkit installation mode like "SOURCE", "BINARY", etc.
+)
+
+var (
 	annotation = make(map[string]string)
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
