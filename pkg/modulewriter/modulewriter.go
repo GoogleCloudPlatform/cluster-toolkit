@@ -339,6 +339,9 @@ func copyNonEmbeddedModules(gPath string, modules []config.Module) error {
 			dst = filepath.Join(gPath, deplSource)
 		}
 
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return err
+		}
 		if err := copyModuleSource(src, dst); err != nil {
 			return err
 		}
