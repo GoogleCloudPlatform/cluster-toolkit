@@ -54,6 +54,31 @@ func extractTopology(bp Blueprint, mod *Module) (string, bool) {
 			}
 		}
 	}
+	if topo, ok := extractTopologyFromWorkloadPolicy(bp, mod); ok {
+		return topo, true
+	}
+
+	return "", false
+}
+
+func extractTopologyFromWorkloadPolicy(bp Blueprint, mod *Module) (string, bool) {
+	for _, u := range mod.Use {
+		usedMod, err := bp.Module(u)
+		if err != nil {
+			continue
+		}
+		if usedMod.Settings.Has("workload_policy") {
+			wpVal, err := bp.Eval(usedMod.Settings.Get("workload_policy"))
+			if err == nil && wpVal.Type().IsObjectType() && wpVal.IsKnown() {
+				if wpVal.Type().HasAttribute("accelerator_topology") {
+					topoVal := wpVal.GetAttr("accelerator_topology")
+					if topoVal.Type() == cty.String && !topoVal.IsNull() && topoVal.IsKnown() {
+						return topoVal.AsString(), true
+					}
+				}
+			}
+		}
+	}
 	return "", false
 }
 
@@ -91,6 +116,10 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 
 	mtStr, ok := evalString(bp, mod.Settings.Get("machine_type"))
 	if !ok {
+		return nil
+	}
+
+	if !isTPUMachineType(mtStr) {
 		return nil
 	}
 
@@ -151,4 +180,8 @@ func calculateAcceleratorNodes(machineType, topology string) (int, error) {
 	}
 
 	return totalAccelerators / acceleratorsPerVM, nil
+}
+
+func isTPUMachineType(machineType string) bool {
+	return parseTPUCount(machineType) > 0
 }

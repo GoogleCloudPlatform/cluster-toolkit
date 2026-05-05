@@ -213,4 +213,17 @@ func TestExpandHardwareSettings(t *testing.T) {
 	if !mod3.Settings.Has("placement_policy") {
 		t.Errorf("expected placement_policy to be injected for multi-node setups")
 	}
+	// Test that it skips non-TPU machine types
+	mod4 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("n2-standard-2")).
+			With("tpu_topology", cty.StringVal("2x2")),
+	}
+	err = expandHardwareSettings(bp, mod4)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if mod4.Settings.Has("static_node_count") {
+		t.Errorf("expected static_node_count NOT to be set for non-TPU machine type")
+	}
 }
