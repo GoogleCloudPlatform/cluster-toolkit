@@ -30,10 +30,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.89.0"
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.90.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.89.0"
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.90.0"
   }
   required_version = "= 1.12.2"
 }
