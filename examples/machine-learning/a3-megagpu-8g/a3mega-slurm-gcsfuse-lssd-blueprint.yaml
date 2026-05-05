@@ -26,7 +26,7 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
   a3mega_partition_name: a3mega
   a3mega_maintenance_interval: ""
   enable_placement: false
@@ -482,9 +482,9 @@ deployment_groups:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager-4-cuda12
               - datacenter-gpu-manager-4-dev
-              - libnvidia-cfg1-570-server
-              - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
+              - libnvidia-cfg1-580-server
+              - libnvidia-nscq-580
+              - nvidia-compute-utils-580-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
