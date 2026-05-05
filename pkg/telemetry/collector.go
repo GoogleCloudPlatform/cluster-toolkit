@@ -200,12 +200,11 @@ func getZone(bp config.Blueprint) string {
 // It checks each module in the provided list against the officially predefined standardModules as per the user's version.
 // Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
 func getModules(modulesList []string) string {
-	// If the blueprint has no modules, return empty string
 	if len(modulesList) == 0 {
 		return ""
 	}
 
-	standardModules := getStandardModules()
+	standardModules := config.GetPredefinedModules()
 
 	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
 	if len(standardModules) == 0 {
