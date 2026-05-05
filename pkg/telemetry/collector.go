@@ -47,8 +47,8 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 		eventArgs:        args,
 		eventStartTime:   time.Now(),
 		blueprint:        getBlueprint(args),
-		metadata:         make(map[string]string),
 		installationMode: installationMode,
+		metadata:         make(map[string]string),
 	}
 }
 
