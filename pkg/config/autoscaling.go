@@ -150,7 +150,7 @@ func extractMaxCount(resMap map[string]cty.Value) (int, bool) {
 			return int(f), true
 		}
 	}
-	return 1, false
+	return 0, false
 }
 
 func validateAndExtractTotalAccelerators(maxCount int, acceleratorsPerVM int, machineType string) (int, error) {
