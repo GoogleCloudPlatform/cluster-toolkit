@@ -38,14 +38,14 @@ deployment_groups:
     terraform_providers:
       google:
         source: hashicorp/google
-        version: '>= 6.9.0, <= 7.23.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
       google-beta:
         source: hashicorp/google-beta
-        version: '>= 6.9.0, <= 7.23.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
@@ -131,6 +131,7 @@ deployment_groups:
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
           project_id: ((var.project_id))
+          region: ((var.region))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))
           windows_startup_ps1: ((flatten([module.windows_startup.windows_startup_ps1])))

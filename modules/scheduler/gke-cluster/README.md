@@ -108,7 +108,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.20.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.20.0 |
@@ -117,22 +117,24 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
+| [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
@@ -141,11 +143,12 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_authenticator_security_group"></a> [authenticator\_security\_group](#input\_authenticator\_security\_group) | The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com | `string` | `null` | no |
+| <a name="input_auto_monitoring_scope"></a> [auto\_monitoring\_scope](#input\_auto\_monitoring\_scope) | Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.<br/>For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring | `string` | `"NONE"` | no |
 | <a name="input_autoscaling_profile"></a> [autoscaling\_profile](#input\_autoscaling\_profile) | (Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE\_UTILIZATION. | `string` | `"OPTIMIZE_UTILIZATION"` | no |
-| <a name="input_cloud_dns_config"></a> [cloud\_dns\_config](#input\_cloud\_dns\_config) | Configuration for Using Cloud DNS for GKE. <br/><br/>  additive\_vpc\_scope\_dns\_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster\_dns = "CLOUD\_DNS" and cluster\_dns\_scope = "CLUSTER\_SCOPE" must both be set as well.<br/>  cluster\_dns: Which in-cluster DNS provider should be used. KUBE\_DNS (default) or PROVIDER\_UNSPECIFIED or PLATFORM\_DEFAULT or CLOUD\_DNS.<br/>  cluster\_dns\_scope: The scope of access to cluster DNS records. DNS\_SCOPE\_UNSPECIFIED (default) or CLUSTER\_SCOPE or VPC\_SCOPE.<br/>  cluster\_dns\_domain: The suffix used for all cluster service records. | <pre>object({<br/>    additive_vpc_scope_dns_domain = optional(string)<br/>    cluster_dns                   = optional(string, "KUBE_DNS")<br/>    cluster_dns_scope             = optional(string, "DNS_SCOPE_UNSPECIFIED")<br/>    cluster_dns_domain            = optional(string)<br/>  })</pre> | <pre>{<br/>  "additive_vpc_scope_dns_domain": null,<br/>  "cluster_dns": "KUBE_DNS",<br/>  "cluster_dns_domain": null,<br/>  "cluster_dns_scope": "DNS_SCOPE_UNSPECIFIED"<br/>}</pre> | no |
+| <a name="input_cloud_dns_config"></a> [cloud\_dns\_config](#input\_cloud\_dns\_config) | Configuration for Using Cloud DNS for GKE.<br/><br/>  additive\_vpc\_scope\_dns\_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster\_dns = "CLOUD\_DNS" and cluster\_dns\_scope = "CLUSTER\_SCOPE" must both be set as well.<br/>  cluster\_dns: Which in-cluster DNS provider should be used. KUBE\_DNS (default) or PROVIDER\_UNSPECIFIED or PLATFORM\_DEFAULT or CLOUD\_DNS.<br/>  cluster\_dns\_scope: The scope of access to cluster DNS records. DNS\_SCOPE\_UNSPECIFIED (default) or CLUSTER\_SCOPE or VPC\_SCOPE.<br/>  cluster\_dns\_domain: The suffix used for all cluster service records. | <pre>object({<br/>    additive_vpc_scope_dns_domain = optional(string)<br/>    cluster_dns                   = optional(string, "KUBE_DNS")<br/>    cluster_dns_scope             = optional(string, "DNS_SCOPE_UNSPECIFIED")<br/>    cluster_dns_domain            = optional(string)<br/>  })</pre> | <pre>{<br/>  "additive_vpc_scope_dns_domain": null,<br/>  "cluster_dns": "KUBE_DNS",<br/>  "cluster_dns_domain": null,<br/>  "cluster_dns_scope": "DNS_SCOPE_UNSPECIFIED"<br/>}</pre> | no |
 | <a name="input_cluster_availability_type"></a> [cluster\_availability\_type](#input\_cluster\_availability\_type) | Type of cluster availability. Possible values are: {REGIONAL, ZONAL} | `string` | `"REGIONAL"` | no |
 | <a name="input_cluster_reference_type"></a> [cluster\_reference\_type](#input\_cluster\_reference\_type) | How the google\_container\_node\_pool.system\_node\_pools refers to the cluster. Possible values are: {SELF\_LINK, NAME} | `string` | `"SELF_LINK"` | no |
 | <a name="input_configure_workload_identity_sa"></a> [configure\_workload\_identity\_sa](#input\_configure\_workload\_identity\_sa) | When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster. | `bool` | `false` | no |
@@ -165,6 +168,7 @@ limitations under the License.
 | <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en). If null, will determine state based on if additional\_networks are passed in. | `bool` | `null` | no |
 | <a name="input_enable_node_local_dns_cache"></a> [enable\_node\_local\_dns\_cache](#input\_enable\_node\_local\_dns\_cache) | Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency | `bool` | `false` | no |
 | <a name="input_enable_parallelstore_csi"></a> [enable\_parallelstore\_csi](#input\_enable\_parallelstore\_csi) | The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes. | `bool` | `false` | no |
+| <a name="input_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#input\_enable\_pathways\_for\_tpus) | If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances. | `bool` | `false` | no |
 | <a name="input_enable_persistent_disk_csi"></a> [enable\_persistent\_disk\_csi](#input\_enable\_persistent\_disk\_csi) | The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes. | `bool` | `true` | no |
 | <a name="input_enable_private_endpoint"></a> [enable\_private\_endpoint](#input\_enable\_private\_endpoint) | (Beta) Whether the master's internal IP address is used as the cluster endpoint. | `bool` | `true` | no |
 | <a name="input_enable_private_ipv6_google_access"></a> [enable\_private\_ipv6\_google\_access](#input\_enable\_private\_ipv6\_google\_access) | The private IPv6 google access type for the VMs in this subnet. | `bool` | `true` | no |
@@ -188,7 +192,7 @@ limitations under the License.
 | <a name="input_prefix_with_deployment_name"></a> [prefix\_with\_deployment\_name](#input\_prefix\_with\_deployment\_name) | If true, cluster name will be prefixed by `deployment_name` (ex: <deployment\_name>-<name\_suffix>). | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to host the cluster in. | `string` | n/a | yes |
-| <a name="input_release_channel"></a> [release\_channel](#input\_release\_channel) | The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR` and `STABLE`. | `string` | `"UNSPECIFIED"` | no |
+| <a name="input_release_channel"></a> [release\_channel](#input\_release\_channel) | The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels | `string` | `"UNSPECIFIED"` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: use service\_account\_email and scopes. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the system node pool | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the system node pool. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
@@ -199,8 +203,8 @@ limitations under the License.
 | <a name="input_system_node_pool_enable_secure_boot"></a> [system\_node\_pool\_enable\_secure\_boot](#input\_system\_node\_pool\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_system_node_pool_enabled"></a> [system\_node\_pool\_enabled](#input\_system\_node\_pool\_enabled) | Create a system node pool. | `bool` | `true` | no |
 | <a name="input_system_node_pool_image_type"></a> [system\_node\_pool\_image\_type](#input\_system\_node\_pool\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
-| <a name="input_system_node_pool_kubernetes_labels"></a> [system\_node\_pool\_kubernetes\_labels](#input\_system\_node\_pool\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
-| <a name="input_system_node_pool_machine_type"></a> [system\_node\_pool\_machine\_type](#input\_system\_node\_pool\_machine\_type) | Machine type for the system node pool. | `string` | `"n4-standard-4"` | no |
+| <a name="input_system_node_pool_kubernetes_labels"></a> [system\_node\_pool\_kubernetes\_labels](#input\_system\_node\_pool\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs.<br/>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
+| <a name="input_system_node_pool_machine_type"></a> [system\_node\_pool\_machine\_type](#input\_system\_node\_pool\_machine\_type) | Machine type for the system node pool. | `string` | `"e2-standard-4"` | no |
 | <a name="input_system_node_pool_name"></a> [system\_node\_pool\_name](#input\_system\_node\_pool\_name) | Name of the system node pool. | `string` | `"system"` | no |
 | <a name="input_system_node_pool_node_count"></a> [system\_node\_pool\_node\_count](#input\_system\_node\_pool\_node\_count) | The total min and max nodes to be maintained in the system node pool. | <pre>object({<br/>    total_min_nodes = number<br/>    total_max_nodes = number<br/>  })</pre> | <pre>{<br/>  "total_max_nodes": 10,<br/>  "total_min_nodes": 2<br/>}</pre> | no |
 | <a name="input_system_node_pool_taints"></a> [system\_node\_pool\_taints](#input\_system\_node\_pool\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NO_SCHEDULE",<br/>    "key": "components.gke.io/gke-managed-components",<br/>    "value": true<br/>  }<br/>]</pre> | no |
@@ -214,8 +218,9 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |

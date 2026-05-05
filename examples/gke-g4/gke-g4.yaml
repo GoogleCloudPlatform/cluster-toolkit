@@ -143,7 +143,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.35.2-gke.1485000"
+      version_prefix: "1.35.3-gke.1522000"
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite

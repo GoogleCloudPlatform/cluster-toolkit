@@ -24,11 +24,13 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-g4.yaml](#ml-slurm-g4yaml-) ![core-badge]
+  * [ml-slurm-g4-vgpu.yaml](#ml-slurm-g4-vgu-yaml-) ![community-badge] ![experimental-badge]
   * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
-  * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
-  * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
+  * [batch.yaml](#batchyaml-) ![core-badge]
+  * [batch-mpi.yaml](#batch-mpiyaml-) ![core-badge]
   * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
+  * [pfs-managed-lustre-slurm.yaml](#pfs-managed-lustre-slurmyaml-) ![core-badge]
   * [rapid-storage-slurm.yaml](#rapid-storage-slurmyaml-) ![core-badge]
   * [gke-managed-lustre.yaml](#gke-managed-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -59,6 +61,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
@@ -430,6 +433,10 @@ When you are done, clean up the resources:
 
 [ml-slurm-g4.yaml]: ../examples/ml-slurm-g4.yaml
 
+### [ml-slurm-g4-vgpu.yaml](./ml-slurm-g4-vgpu.yaml) ![community-badge] ![experimental-badge]
+
+This blueprint creates a Slurm cluster on Google Cloud optimized for machine learning workloads using **NVIDIA G4 vGPUs** (Fractional GPUs). It automates the installation of the necessary NVIDIA GRID drivers and configures Slurm to recognize the fractional GPU resources, making it suitable for cost-effective ML development and inference tasks.
+
 ### [image-builder.yaml] ![core-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
@@ -556,7 +563,7 @@ timestamp for uniqueness.
 
 [console-images]: https://console.cloud.google.com/compute/images
 
-### [serverless-batch.yaml] ![core-badge]
+### [batch.yaml] ![core-badge]
 
 This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
@@ -571,7 +578,7 @@ job.
 To provision the cluster, please run:
 
 ```text
-./gcluster create examples/serverless-batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster create examples/batch.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./gcluster deploy hello-workload
 ```
 
@@ -581,9 +588,9 @@ When you are done, clean up the resources in reverse order of creation:
 ./gcluster destroy hello-workload
 ```
 
-[serverless-batch.yaml]: ../examples/serverless-batch.yaml
+[batch.yaml]: ../examples/batch.yaml
 
-### [serverless-batch-mpi.yaml] ![core-badge]
+### [batch-mpi.yaml] ![core-badge]
 
 This blueprint demonstrates how to use Spack to run a real MPI job on Batch.
 
@@ -638,7 +645,7 @@ The blueprint contains the following:
     job has finished this folder will contain the results of the job. You can
     inspect the `rsl.out.0000` file for a summary of the job.
 
-[serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
+[batch-mpi.yaml]: ../examples/batch-mpi.yaml
 
 ### [pfs-managed-lustre-vm.yaml] ![core-badge]
 
@@ -678,6 +685,28 @@ For this example, the following is needed in the selected region:
 
 [pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
 
+### [pfs-managed-lustre-slurm.yaml] ![core-badge]
+
+This blueprint, managed-lustre-slurm, is a specialized configuration designed to deploy a high-performance compute cluster on Google Cloud. It integrates the Slurm Workload Manager with Google Cloud Managed Service for Lustre, a fully managed, POSIX-compliant parallel file system optimized for the massive I/O demands of AI/ML training and scientific simulations.
+
+Creates a Managed Lustre file-system that is mounted on the slurm cluster controller instance.
+
+The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
+file system is designed for high IO performance. For further information, refer the official documentation [Performance tiers and maximum storage capacities](https://docs.cloud.google.com/managed-lustre/docs/create-instance#performance-tiers)
+
+To provision the cluster, run the following command. You will be prompted to approve each deployment group.
+
+```text
+./gcluster deploy examples/pfs-managed-lustre-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
+To destroy the cluster,Run below command:
+
+```text
+./gcluster destroy <deployment_name>
+```
+
+[pfs-managed-lustre-slurm.yaml]: ./pfs-managed-lustre-slurm.yaml
 ### [rapid-storage-slurm.yaml] ![core-badge]
 
 This blueprint showcases the integration of several storage solutions:
@@ -1444,14 +1473,14 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
+This blueprint provisions a GKE cluster with A3 High nodes (`a3-highgpu-8g`). Refer to the [A3 High Deployment Guide](./gke-a3-highgpu/README.md) for detailed instructions.
 
-After provisioning the cluster and the nodepool, the below components will be installed
-to enable GPUDirect for the A3 High machines.
+A3 High VMs feature 8 NVIDIA H100 GPUs and are optimized for high-performance ML training. The blueprint automatically configures:
 
-* NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
-* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
-* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
+* **GPU-Direct TCPX**: High-bandwidth, low-latency networking stack.
+* **Multi-networking**: 4 dedicated VPC networks for GPU-to-GPU communication.
+* **Topology Aware Scheduling (TAS)**: Optimized workload placement via Kueue.
+* **Cluster Health Services (CHS)**: Automated GPU health checks.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1459,24 +1488,23 @@ to enable GPUDirect for the A3 High machines.
 > to apply a manifest. **You must use
 > the `authorized_cidr` variable to supply an authorized network which contains
 > the IP address of the machine deploying the blueprint, for example
-> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
-> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+> `--vars authorized_cidr=<your-ip-address>/32`.**
 
 #### Troubleshooting
 
 ##### Externally Managed Environment Error
 
-If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager.
 
 ```shell
-  ## One time step of creating the venv
-  VENV_DIR=~/venvp3
-  python3 -m venv $VENV_DIR
-  ## Enter your venv.
-  source $VENV_DIR/bin/activate
+## One time step of creating the venv
+VENV_DIR=~/venvp3
+python3 -m venv $VENV_DIR
+## Enter your venv.
+source $VENV_DIR/bin/activate
 ```
 
-[gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+[gke-a3-highgpu.yaml]: ./gke-a3-highgpu/gke-a3-highgpu.yaml
 
 ### [gke-a3-highgpu-inference-gateway.yaml] ![core-badge]
 
@@ -1577,6 +1605,12 @@ is deployed as the native resource manager.
 See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
+
+### [hpc-slurm-kms.yaml] ![community-badge] ![experimental-badge]
+
+Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket.
+
+[hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
 
 ### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 

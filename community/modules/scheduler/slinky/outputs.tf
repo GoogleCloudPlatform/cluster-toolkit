@@ -15,9 +15,21 @@
 output "slurm_namespace" {
   description = "namespace for the slurm chart"
   value       = var.slurm_namespace
+  depends_on = [
+    helm_release.cert_manager,
+    helm_release.slurm_operator,
+    helm_release.slurm,
+    helm_release.prometheus
+  ]
 }
 
 output "slurm_operator_namespace" {
   description = "namespace for the slinky operator chart"
   value       = var.slurm_operator_namespace
+  depends_on = [
+    helm_release.cert_manager,
+    helm_release.slurm_operator,
+    helm_release.slurm,
+    helm_release.prometheus
+  ]
 }

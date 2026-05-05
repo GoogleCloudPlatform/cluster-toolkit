@@ -22,23 +22,27 @@ module "gpu" {
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name                  = ad.disk_name
-      device_name                = ad.device_name
-      disk_type                  = ad.disk_type
-      disk_size_gb               = ad.disk_size_gb
-      disk_labels                = merge(ad.disk_labels, local.labels)
-      auto_delete                = ad.auto_delete
-      boot                       = ad.boot
-      disk_resource_manager_tags = ad.disk_resource_manager_tags
+      disk_name                           = ad.disk_name
+      device_name                         = ad.device_name
+      disk_type                           = ad.disk_type
+      disk_size_gb                        = ad.disk_size_gb
+      disk_labels                         = merge(ad.disk_labels, local.labels)
+      auto_delete                         = ad.auto_delete
+      boot                                = ad.boot
+      disk_resource_manager_tags          = ad.disk_resource_manager_tags
+      disk_encryption_key                 = ad.disk_encryption_key
+      disk_encryption_key_service_account = ad.disk_encryption_key_service_account
     }
   ]
 
   state_disk = var.controller_state_disk != null ? [{
-    source      = google_compute_disk.controller_disk[0].name
-    device_name = google_compute_disk.controller_disk[0].name
-    disk_labels = null
-    auto_delete = false
-    boot        = false
+    source                              = google_compute_disk.controller_disk[0].name
+    device_name                         = google_compute_disk.controller_disk[0].name
+    disk_labels                         = null
+    auto_delete                         = false
+    boot                                = false
+    disk_encryption_key                 = var.disk_encryption_key
+    disk_encryption_key_service_account = var.disk_encryption_key_service_account
   }] : []
 
   synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"
@@ -71,6 +75,14 @@ resource "google_compute_disk" "controller_disk" {
   type    = var.controller_state_disk.type
   size    = var.controller_state_disk.size
   zone    = var.zone
+
+  dynamic "disk_encryption_key" {
+    for_each = compact([var.disk_encryption_key])
+    content {
+      kms_key_self_link       = disk_encryption_key.value
+      kms_key_service_account = var.disk_encryption_key_service_account
+    }
+  }
 }
 
 # INSTANCE TEMPLATE
@@ -89,6 +101,9 @@ module "slurm_controller_template" {
   disk_type                  = var.disk_type
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = concat(local.additional_disks, local.state_disk)
+
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path

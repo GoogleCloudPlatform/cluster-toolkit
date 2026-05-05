@@ -30,6 +30,9 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
+
+	"hpc-toolkit/cmd/cluster"
+	"hpc-toolkit/cmd/job"
 )
 
 // Git references when use Makefile
@@ -39,6 +42,11 @@ var (
 	GitCommitInfo  string
 	GitCommitHash  string
 	GitInitialHash string
+	GitIsOfficial  string
+)
+
+var (
+	InstallationMode string // Toolkit installation mode like "SOURCE", "BINARY", etc.
 )
 
 var (
@@ -52,7 +60,7 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.85.0",
+		Version:     config.GetToolkitVersion(),
 		Annotations: annotation,
 	}
 )
@@ -64,6 +72,9 @@ func init() {
 		initColor()
 		initDependencies(cmd)
 	}
+
+	rootCmd.AddCommand(cluster.ClusterCmd)
+	rootCmd.AddCommand(job.JobCmd)
 }
 
 // Execute the root command
@@ -76,7 +87,11 @@ func Execute() error {
 
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from official release"
+			if GitIsOfficial == "true" {
+				GitTagVersion = "(official binary distribution)"
+			} else {
+				GitTagVersion = "- not built from official release"
+			}
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"

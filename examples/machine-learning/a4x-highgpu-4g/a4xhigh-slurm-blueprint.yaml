@@ -30,7 +30,7 @@ vars:
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-accelerator-arm64-64k
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
@@ -115,6 +115,10 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -657,6 +661,20 @@ deployment_groups:
     settings:
       runners:
       - type: shell
+        destination: ensure_mnt_localssd_permissions.sh
+        content: |
+          #!/bin/bash
+          mkdir -p /mnt/localssd
+          chmod 1777 /mnt/localssd
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: shell
         destination: stage_scripts.sh
         content: |
           #!/bin/bash
@@ -710,3 +728,4 @@ deployment_groups:
         switch_type: switch/nvidia_imex
       controller_state_disk: null
       controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true

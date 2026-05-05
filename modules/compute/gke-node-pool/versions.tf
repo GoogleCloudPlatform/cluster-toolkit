@@ -22,7 +22,7 @@ terraform {
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">= 7.2"
+      version = ">= 7.24.0"
     }
     null = {
       source  = "hashicorp/null"
@@ -30,9 +30,9 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.85.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.89.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.85.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.89.0"
   }
 }

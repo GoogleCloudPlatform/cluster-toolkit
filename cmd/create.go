@@ -18,6 +18,8 @@ limitations under the License.
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -25,8 +27,11 @@ import (
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
@@ -70,7 +75,7 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	deplDir := doCreate(args[0])
+	deplDir := doCreate(cmd, args[0])
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
@@ -78,8 +83,8 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	printAdvancedInstructionsMessage(deplDir)
 }
 
-func doCreate(path string) string {
-	bp, ctx := expandOrDie(path)
+func doCreate(cmd *cobra.Command, path string) string {
+	bp, ctx := expandOrDie(cmd, path)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
@@ -94,8 +99,44 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info("%s", modulewriter.InstructionsPath(deplDir))
 }
 
-// TODO: move to expand.go
-func expandOrDie(path string) (config.Blueprint, *config.YamlCtx) {
+func detectUsername(ctx context.Context) string {
+	// Try env var first
+	if account := os.Getenv("CLOUDSDK_CORE_ACCOUNT"); account != "" {
+		return account
+	}
+
+	// Try gcloud next
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err == nil {
+		email := strings.TrimSpace(out.String())
+		if email != "" {
+			return email
+		}
+	}
+
+	// Fallback to shell
+	if user := os.Getenv("USER"); user != "" {
+		return user
+	}
+	if user := os.Getenv("USERNAME"); user != "" {
+		return user
+	}
+
+	// Last resort
+	u, err := user.Current()
+	if err == nil {
+		return u.Username
+	}
+
+	return "unknown"
+}
+
+func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
 	bp, ctx, err := config.NewBlueprint(path)
 	checkErr(err, ctx)
 
@@ -121,6 +162,19 @@ func expandOrDie(path string) (config.Blueprint, *config.YamlCtx) {
 		logging.Info("ghpc_version setting is ignored.")
 	}
 	bp.GhpcVersion = GitCommitInfo
+
+	if cmd.Flags().Changed("add-creator-label") {
+		bp.AddCreatorLabel = expandFlags.addCreatorLabel
+		if bp.AddCreatorLabel {
+			bp.CreatorUsername = detectUsername(cmd.Context())
+		}
+	} else {
+		username := detectUsername(cmd.Context())
+		if strings.HasSuffix(username, "@google.com") {
+			bp.AddCreatorLabel = true
+			bp.CreatorUsername = username
+		}
+	}
 
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)

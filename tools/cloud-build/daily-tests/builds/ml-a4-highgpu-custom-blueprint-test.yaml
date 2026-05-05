@@ -26,7 +26,6 @@ tags:
 - m.vpc
 - slurm6
 
-
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
@@ -76,7 +75,6 @@ steps:
       echo "INFO: Using $${VARS_FILE} as it is for SPOT provisioning."
     fi
 
-    sed -i -e '/- id: a4high-slurm-net-0/,/- id: a4high-slurm-net-1/ s/network_name: .*/network_name: $(vars.base_network_name)/' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

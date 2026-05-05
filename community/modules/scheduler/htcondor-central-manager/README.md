@@ -90,7 +90,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -98,7 +98,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
@@ -113,7 +113,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_address.cm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_storage_bucket_object.cm_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [null_resource.cm_config](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -125,7 +125,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_central_manager_runner"></a> [central\_manager\_runner](#input\_central\_manager\_runner) | A list of Toolkit runners for configuring an HTCondor central manager | `list(map(string))` | `[]` | no |
 | <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account e-mail for central manager (can be supplied by htcondor-setup module) | `string` | n/a | yes |
@@ -152,7 +152,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_central_manager_ips"></a> [central\_manager\_ips](#output\_central\_manager\_ips) | IP addresses of the central managers provisioned by this module |
 | <a name="output_central_manager_name"></a> [central\_manager\_name](#output\_central\_manager\_name) | Name of the central managers provisioned by this module |
 | <a name="output_list_instances_command"></a> [list\_instances\_command](#output\_list\_instances\_command) | Command to list central managers provisioned by this module |

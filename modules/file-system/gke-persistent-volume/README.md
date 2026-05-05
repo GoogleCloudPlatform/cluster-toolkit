@@ -109,6 +109,49 @@ authorized to connect to the Kubernetes API. You can add the
 the IP address of the machine performing the deployment. This will ensure that
 the deploying machine can connect to the cluster.
 
+### GCS Fuse Storage Profiles Prerequisites
+
+When using `gcsfuse_storage_class_name` with GCS Fuse, GKE requires a custom IAM role named `gke.gcsfuse.profileUser` to be present in the project. This role grants the GKE service agent permissions to manage Anywhere Caches and retrieve bucket metadata.
+
+If this role is not already created in your project, you must create it before deploying.
+
+You can create it using the `gcloud` CLI:
+
+```bash
+gcloud iam roles create gke.gcsfuse.profileUser \
+  --project=<YOUR_PROJECT_ID> \
+  --title="GKE GCSFuse Profile User" \
+  --description="Allows scanning GCS buckets for objects, retrieving bucket metadata, and creating Anywhere Caches." \
+  --permissions="storage.objects.list,storage.buckets.get,storage.anywhereCaches.create,storage.anywhereCaches.get,storage.anywhereCaches.list,storage.anywhereCaches.update"
+```
+
+Or using Terraform:
+
+```hcl
+resource "google_project_iam_custom_role" "gcsfuse_profile_user" {
+  role_id     = "gke.gcsfuse.profileUser"
+  project     = var.project_id
+  title       = "GKE GCSFuse Profile User"
+  description = "Allows scanning GCS buckets for objects, retrieving bucket metadata, and creating Anywhere Caches."
+  permissions = [
+    "storage.objects.list",
+    "storage.buckets.get",
+    "storage.anywhereCaches.create",
+    "storage.anywhereCaches.get",
+    "storage.anywhereCaches.list",
+    "storage.anywhereCaches.update",
+  ]
+}
+```
+
+Once created, the role must be bound to the GKE Service Agent (`service-<PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com`).
+
+```bash
+gcloud projects add-iam-policy-binding <YOUR_PROJECT_ID> \
+  --member="serviceAccount:service-<YOUR_PROJECT_NUMBER>@container-engine-robot.iam.gserviceaccount.com" \
+  --role="projects/<YOUR_PROJECT_ID>/roles/gke.gcsfuse.profileUser"
+```
+
 ### Connecting Via Use
 
 The diagram below shows the valid `use` relationships for the GKE Cluster Toolkit
@@ -150,7 +193,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
@@ -158,7 +201,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | >= 1.7.0 |
 
@@ -169,7 +212,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [kubectl_manifest.pv](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc_namespace](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
@@ -179,11 +222,12 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_capacity_gib"></a> [capacity\_gib](#input\_capacity\_gib) | The storage capacity with which to create the persistent volume. | `number` | n/a | yes |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | The gcs bucket to be used with the persistent volume. | `string` | `null` | no |
+| <a name="input_gcsfuse_storage_class_name"></a> [gcsfuse\_storage\_class\_name](#input\_gcsfuse\_storage\_class\_name) | The storage class name for GCS Fuse. Allowed values: gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_lustre_id"></a> [lustre\_id](#input\_lustre\_id) | An identifier for a lustre with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to deploy the storage PVC/PV | `string` | `"default"` | no |
@@ -194,7 +238,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_persistent_volume_claims"></a> [persistent\_volume\_claims](#output\_persistent\_volume\_claims) | An object describing the Kubernetes PersistentVolumeClaim created by this module. |
 | <a name="output_pvc_name"></a> [pvc\_name](#output\_pvc\_name) | The name of the Kubernetes PVC created by this module. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -104,7 +104,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -113,7 +113,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.6 |
@@ -129,7 +129,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_address.ap](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.spool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_region_disk.spool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_disk) | resource |
@@ -144,7 +144,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_point_runner"></a> [access\_point\_runner](#input\_access\_point\_runner) | A list of Toolkit runners for configuring an HTCondor access point | `list(map(string))` | `[]` | no |
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account for access point (e-mail format) | `string` | n/a | yes |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
@@ -181,7 +181,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_access_point_ips"></a> [access\_point\_ips](#output\_access\_point\_ips) | IP addresses of the access points provisioned by this module |
 | <a name="output_access_point_name"></a> [access\_point\_name](#output\_access\_point\_name) | Name of the access point provisioned by this module |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

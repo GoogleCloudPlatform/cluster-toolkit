@@ -2,14 +2,14 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_helm"></a> [helm](#provider\_helm) | ~> 2.17 |
 
 ## Modules
@@ -19,13 +19,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [helm_release.apply_chart](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_atomic"></a> [atomic](#input\_atomic) | If set, the installation process purges chart on failure ('helm install --atomic'). The --wait flag will be set automatically if atomic is used. | `bool` | `false` | no |
 | <a name="input_chart_name"></a> [chart\_name](#input\_chart\_name) | Name of the Helm chart (can be a chart reference, path to a packaged chart, path to an unpacked chart directory, or a URL). | `string` | n/a | yes |
 | <a name="input_chart_repository"></a> [chart\_repository](#input\_chart\_repository) | URL of the Helm chart repository. Set to null or omit if 'chart\_name' is a path or URL. | `string` | `null` | no |

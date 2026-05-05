@@ -28,3 +28,8 @@ output "placement_policy" {
     tpu_topology = (var.workload_policy.type != null) ? var.workload_policy.accelerator_topology : null
   }
 }
+
+output "accelerator_topology_mode" {
+  description = "The accelerator topology mode for the resource policy."
+  value       = var.workload_policy.accelerator_topology_mode
+}

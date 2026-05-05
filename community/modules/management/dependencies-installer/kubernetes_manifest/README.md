@@ -2,14 +2,14 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.23 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | ~> 2.23 |
 
 ## Modules
@@ -19,13 +19,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [kubernetes_manifest.apply_manifests](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/manifest) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_content"></a> [content](#input\_content) | The YAML body to apply to gke cluster. | `string` | `null` | no |
 | <a name="input_field_manager"></a> [field\_manager](#input\_field\_manager) | (Optional) Configure field manager options. The `name` is the name of the field manager. The `force_conflicts` flag allows overriding conflicts. | <pre>object({<br/>    name            = optional(string, null)<br/>    force_conflicts = optional(bool, false)<br/>  })</pre> | `null` | no |
 | <a name="input_resource_timeouts"></a> [resource\_timeouts](#input\_resource\_timeouts) | (Optional) Configure custom timeouts for the create, update, and delete operations of the resource. These timeouts also govern the duration for any 'wait' conditions to be met. | <pre>object({<br/>    create = optional(string, null)<br/>    update = optional(string, null)<br/>    delete = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "create": "15m",<br/>  "delete": "5m",<br/>  "update": "10m"<br/>}</pre> | no |

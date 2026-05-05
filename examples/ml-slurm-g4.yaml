@@ -30,7 +30,7 @@ vars:
   image_build_machine_type: n2-standard-4
   image_disk_size_gb: 50
   built_image_family: slurm-g4-ubuntu2404
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1 # Or a newer stable tag
 
   # Cluster env settings
   net0_range: 192.168.0.0/24

@@ -33,6 +33,10 @@ var gitBranch string
 var gitCommitInfo string
 var gitCommitHash string
 var gitInitialHash string
+var gitIsOfficial string
+
+// Whether the Toolkit is installed from source, binary, etc.
+var installationMode string
 
 func main() {
 	if err := dependencies.PatchPath(); err != nil {
@@ -45,6 +49,8 @@ func main() {
 	cmd.GitCommitInfo = gitCommitInfo
 	cmd.GitCommitHash = gitCommitHash
 	cmd.GitInitialHash = gitInitialHash
+	cmd.GitIsOfficial = gitIsOfficial
+	cmd.InstallationMode = installationMode
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

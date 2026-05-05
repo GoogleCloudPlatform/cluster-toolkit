@@ -2,7 +2,7 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.88 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.13.0 |
@@ -10,29 +10,29 @@
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.88 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.13.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_compute_instance_template.tpl](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_template) | resource |
 | [google_project.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name | <pre>list(object({<br/>    source                     = optional(string)<br/>    disk_name                  = optional(string)<br/>    device_name                = string<br/>    auto_delete                = bool<br/>    boot                       = bool<br/>    disk_size_gb               = optional(number)<br/>    disk_type                  = optional(string)<br/>    disk_labels                = map(string)<br/>    disk_resource_manager_tags = map(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name | <pre>list(object({<br/>    source                              = optional(string)<br/>    disk_name                           = optional(string)<br/>    device_name                         = string<br/>    auto_delete                         = bool<br/>    boot                                = bool<br/>    disk_size_gb                        = optional(number)<br/>    disk_type                           = optional(string)<br/>    disk_labels                         = map(string)<br/>    disk_resource_manager_tags          = map(string)<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = optional(string)<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_advanced_machine_features"></a> [advanced\_machine\_features](#input\_advanced\_machine\_features) | See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features | <pre>object({<br/>    enable_nested_virtualization = optional(bool)<br/>    threads_per_core             = optional(number)<br/>    turbo_mode                   = optional(string)<br/>    visible_core_count           = optional(number)<br/>    performance_monitoring_unit  = optional(string)<br/>    enable_uefi_networking       = optional(bool)<br/>  })</pre> | n/a | yes |
 | <a name="input_alias_ip_range"></a> [alias\_ip\_range](#input\_alias\_ip\_range) | An array of alias IP ranges for this network interface. Can only be specified for network interfaces on subnet-mode networks.<br/>ip\_cidr\_range: The IP CIDR range represented by this alias IP range. This IP CIDR range must belong to the specified subnetwork and cannot contain IP addresses reserved by system or used by other network interfaces. At the time of writing only a netmask (e.g. /24) may be supplied, with a CIDR format resulting in an API error.<br/>subnetwork\_range\_name: The subnetwork secondary range name specifying the secondary range from which to allocate the IP CIDR range for this alias IP range. If left unspecified, the primary range of the subnetwork will be used. | <pre>object({<br/>    ip_cidr_range         = string<br/>    subnetwork_range_name = string<br/>  })</pre> | `null` | no |
@@ -41,6 +41,7 @@
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example | `string` | `"false"` | no |
 | <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3. | `string` | `null` | no |
 | <a name="input_disk_encryption_key"></a> [disk\_encryption\_key](#input\_disk\_encryption\_key) | The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance | `string` | `null` | no |
+| <a name="input_disk_encryption_key_service_account"></a> [disk\_encryption\_key\_service\_account](#input\_disk\_encryption\_key\_service\_account) | The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used. | `string` | `null` | no |
 | <a name="input_disk_labels"></a> [disk\_labels](#input\_disk\_labels) | Labels to be assigned to boot disk, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_disk_resource_manager_tags"></a> [disk\_resource\_manager\_tags](#input\_disk\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `string` | `"100"` | no |
@@ -82,7 +83,7 @@
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_name"></a> [name](#output\_name) | Name of instance template |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | Self-link of instance template |
 | <a name="output_service_account"></a> [service\_account](#output\_service\_account) | value |

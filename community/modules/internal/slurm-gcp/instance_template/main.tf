@@ -40,7 +40,9 @@ locals {
           slurm_instance_role = var.slurm_instance_role
         },
       )
-      disk_resource_manager_tags = disk.disk_resource_manager_tags
+      disk_resource_manager_tags          = disk.disk_resource_manager_tags
+      disk_encryption_key                 = disk.disk_encryption_key
+      disk_encryption_key_service_account = disk.disk_encryption_key_service_account
     }
   ]
 
@@ -52,7 +54,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-11-hpc-rocky-linux-8"
+    : "slurm-gcp-6-12-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
@@ -169,4 +171,7 @@ module "instance_template" {
   max_run_duration     = var.max_run_duration
   provisioning_model   = var.provisioning_model
   reservation_affinity = var.reservation_affinity
+
+  disk_encryption_key                 = var.disk_encryption_key
+  disk_encryption_key_service_account = var.disk_encryption_key_service_account
 }

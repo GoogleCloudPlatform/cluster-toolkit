@@ -33,16 +33,7 @@ vars:
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-h200-141gb
-  version_prefix: "1.33."
-
-  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
-  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
-
-  permissions_file_staged_path: $(ghpc_stage("./chs-permissions.yaml.tftpl"))
-  chs_output_bucket_name: chs-result
-  chs_pvc_claim_name: chs-output-pvc
-  chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
-  chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
+  version_prefix: "1.35."
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -285,29 +276,6 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
-      apply_manifests:
-      - source: $(vars.permissions_file_staged_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-      - source: $(vars.chs_pvc_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          pvc_name: $(vars.chs_pvc_claim_name)
-          access_mode: ReadWriteOnce
-          capacity: 1Gi
-          storage_class_name: standard-rwo
-      - source: $(vars.chs_cronjob_rendered_path)
-        enable: $(vars.enable_periodic_health_checks)
-        template_vars:
-          project_id: $(vars.project_id)
-          deployment_name: $(vars.deployment_name)
-          region: $(vars.region)
-          machine_type: a3-ultragpu-8g
-          gcs_bucket: $(vars.chs_output_bucket_name)
-          gcs_pvc: $(vars.chs_pvc_claim_name)
-          cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
@@ -335,45 +303,24 @@ deployment_groups:
       k8s_service_account_name: workload-identity-k8s-sa
     outputs: [instructions]
 
-  # Create a remote mount of training_bucket using
-  # mount options optimized for reading training data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/training-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  # Create a remote mount of checkpoint_bucket using mount
-  # options optimized for writing and reading checkpoint data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a3-ultragpu-cluster]
+    use: [training_bucket, a3-ultragpu-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a3-ultragpu-cluster]
+    use: [checkpoint_bucket, a3-ultragpu-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.

@@ -1,0 +1,138 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: CHS Test Standard Suite
+  delegate_to: "{{ 'localhost' if scheduler == 'gke' else inventory_hostname }}"
+  vars:
+    ansible_async_dir: "/tmp/.ansible_async_user"
+    ansible_async_dir_root: "/tmp/.ansible_async_root"
+  block:
+  - name: Ensure async directories exist
+    block:
+    - name: Ensure user async directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_async_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Ensure root async directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_async_dir_root }}"
+        state: directory
+        mode: '0700'
+      become: true
+
+  - name: Setup environment for CHS
+    become: true
+    vars:
+      ansible_async_dir: "{{ ansible_async_dir_root }}"
+    block:
+    - name: Set variables for CHS setup
+      ansible.builtin.set_fact:
+        chs_venv_path: "/opt/chs_venv"
+
+    - name: Create Python Virtual Environment
+      ansible.builtin.command:
+        cmd: "python3 -m venv {{ chs_venv_path }}"
+        creates: "{{ chs_venv_path }}/bin/python"
+      async: 120
+      poll: 10
+
+  - name: Install and Setup CHS
+    block:
+    - name: Create temporary directory for CHS clone
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: chs_clone
+      register: chs_temp_dir
+
+    - name: Clone CHS repository
+      ansible.builtin.git:
+        repo: "{{ chs_repo }}"
+        dest: "{{ chs_temp_dir.path }}"
+        version: release
+        accept_hostkey: true
+      async: 120
+      poll: 10
+
+    - name: Install CHS into venv
+      ansible.builtin.pip:
+        name: "{{ chs_temp_dir.path }}"
+        virtualenv: "{{ chs_venv_path }}"
+      async: 300
+      poll: 10
+      become: true
+      vars:
+        ansible_async_dir: "{{ ansible_async_dir_root }}"
+
+  - name: Perform CHS Operations
+    environment:
+      PATH: "{{ chs_venv_path }}/bin:{{ lookup('env', 'PATH') }}"
+    block:
+    - name: Configure bucket for CHS
+      ansible.builtin.shell: |
+        set -e -u
+        chs configure bucket --name chs-results
+      async: 120
+      poll: 10
+      changed_when: false
+
+    - name: "Run CHS standard suite"
+      ansible.builtin.shell: |
+        set -e -u
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite standard
+      register: chs_run
+      async: 3000
+      poll: 10
+      changed_when: false
+
+    - name: CHS run output
+      ansible.builtin.debug:
+        var: chs_run.stdout_lines
+
+  rescue:
+  - name: CHS Test Failure
+    ansible.builtin.debug:
+      msg: "CHS tests failed or timed out. Continuing playbook execution."
+    ignore_errors: true
+
+  always:
+  - name: Cleanup Kubernetes resources
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete jobset --all --ignore-not-found
+      kubectl delete job --all --ignore-not-found
+      kubectl delete pod --all --ignore-not-found
+    async: 300
+    poll: 10
+    ignore_errors: true
+    when: scheduler == 'gke'
+
+  - name: Cleanup Slurm resources
+    ansible.builtin.shell: |
+      scancel -u $(whoami)
+    async: 300
+    poll: 10
+    when: scheduler == 'slurm'
+    ignore_errors: true
+
+  - name: Cleanup temporary directory
+    ansible.builtin.file:
+      path: "{{ chs_temp_dir.path }}"
+      state: absent
+    become: true
+    ignore_errors: true
+    when: chs_temp_dir.path is defined

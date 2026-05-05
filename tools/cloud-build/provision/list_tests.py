@@ -53,10 +53,6 @@ ORDER_SEED = b"What a wonderful phrase"
 TEMPORAL_CONSTAINTS = [
     # (set_of_tests, min_distance)
     ((
-        "ml-a4-highgpu-slurm",
-        "gke-a4"
-    ), 2*60),
-    ((
         "ml-a4-highgpu-onspot-slurm",
         "gke-a4-onspot"
     ), 2*60),

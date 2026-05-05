@@ -67,7 +67,7 @@ steps:
     fi
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
-    EXAMPLE_BP=examples/gke-a3-highgpu.yaml
+    EXAMPLE_BP=examples/gke-a3-highgpu/gke-a3-highgpu.yaml
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
@@ -99,13 +99,10 @@ steps:
       echo "INFO: Using $${GKE_VARS_FILE} as it is for SPOT provisioning."
     fi
 
-    # Setting placement policy as compact for nccl test to run on spot VMs, adding spot variable.
-    sed -i '/id: a3_highgpu_pool/,/outputs: \[instructions\]/ { /zones: \[$(vars.zone)\]/a \
-          spot: '"$$ENABLE_SPOT"' \
-          placement_policy: \
-            type: COMPACT
-    }' $${EXAMPLE_BP}
-
+    # Replace the existing reservation block in the blueprint with a compact placement policy and the dynamic spot variable.
+    sed -i -e '/reservation_affinity:/,+3c\      placement_policy:\n        type: COMPACT\n      spot: '"$$ENABLE_SPOT"'' $${EXAMPLE_BP}
+    # Remove the empty reservation variable to pass ghpc validation, since reservations are not used.
+    sed -i '/^  reservation:/d' $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

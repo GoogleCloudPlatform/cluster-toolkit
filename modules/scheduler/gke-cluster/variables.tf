@@ -80,7 +80,7 @@ variable "enable_private_ipv6_google_access" {
 }
 
 variable "release_channel" {
-  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR` and `STABLE`."
+  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
   type        = string
   default     = "UNSPECIFIED"
 }
@@ -140,8 +140,8 @@ variable "maintenance_exclusions" {
 
 variable "cloud_dns_config" {
   description = <<EOT
-  Configuration for Using Cloud DNS for GKE. 
-  
+  Configuration for Using Cloud DNS for GKE.
+
   additive_vpc_scope_dns_domain: This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster_dns = "CLOUD_DNS" and cluster_dns_scope = "CLUSTER_SCOPE" must both be set as well.
   cluster_dns: Which in-cluster DNS provider should be used. KUBE_DNS (default) or PROVIDER_UNSPECIFIED or PLATFORM_DEFAULT or CLOUD_DNS.
   cluster_dns_scope: The scope of access to cluster DNS records. DNS_SCOPE_UNSPECIFIED (default) or CLUSTER_SCOPE or VPC_SCOPE.
@@ -261,7 +261,7 @@ variable "system_node_pool_node_count" {
 variable "system_node_pool_machine_type" {
   description = "Machine type for the system node pool."
   type        = string
-  default     = "n4-standard-4"
+  default     = "e2-standard-4"
 }
 
 variable "system_node_pool_disk_size_gb" {
@@ -292,7 +292,7 @@ variable "system_node_pool_taints" {
 
 variable "system_node_pool_kubernetes_labels" {
   description = <<-EOT
-  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs.
   (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
   EOT
   type        = map(string)
@@ -507,7 +507,7 @@ variable "upgrade_settings" {
   description = <<-EOT
   Defines gke cluster upgrade settings. It is highly recommended that you define all max_surge and max_unavailable.
   If max_surge is not specified, it would be set to a default value of 0.
-  If max_unavailable is not specified, it would be set to a default value of 1.  
+  If max_unavailable is not specified, it would be set to a default value of 1.
   EOT
   type = object({
     strategy        = string
@@ -558,6 +558,25 @@ variable "enable_external_dns_endpoint" {
 
 variable "enable_inference_gateway" {
   description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
+  type        = bool
+  default     = false
+}
+
+variable "auto_monitoring_scope" {
+  description = <<-EOT
+  Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.
+  For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring
+  EOT
+  type        = string
+  default     = "NONE"
+  validation {
+    condition     = contains(["ALL", "NONE"], var.auto_monitoring_scope)
+    error_message = "auto_monitoring_scope can only be ALL or NONE."
+  }
+}
+
+variable "enable_pathways_for_tpus" {
+  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
   type        = bool
   default     = false
 }

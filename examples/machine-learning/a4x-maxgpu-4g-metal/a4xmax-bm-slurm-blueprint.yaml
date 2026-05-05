@@ -30,7 +30,7 @@ vars:
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-a4x-max-metal # Needs to be built with MOFED
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1
 
   # Cluster env settings
   net0_range: 10.1.1.0/24

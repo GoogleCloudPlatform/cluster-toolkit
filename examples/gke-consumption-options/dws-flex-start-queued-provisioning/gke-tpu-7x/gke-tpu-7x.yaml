@@ -148,6 +148,7 @@ deployment_groups:
       system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
+      enable_pathways_for_tpus: true
       enable_gcsfuse_csi: true # enable GCS Fuse for the cluster
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -170,7 +171,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.34.1"
+      version_prefix: "1.35."
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -235,34 +236,21 @@ deployment_groups:
       jobset:
         install: true
 
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, gke-tpu-7x-cluster]
+    use: [training_bucket, gke-tpu-7x-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, gke-tpu-7x-cluster]
+    use: [checkpoint_bucket, gke-tpu-7x-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing

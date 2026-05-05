@@ -12,9 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 locals {
+  # Load shared JSON
+  accelerators_json = try(jsondecode(var.machine_configs), var.machine_configs)
+
   # Determine if this is a TPU node pool by checking if the machine_type exists in our authoritative map of TPU machine types.
   is_tpu = contains(keys(local.tpu_chip_count_map), var.machine_type)
 
@@ -33,29 +36,9 @@ locals {
     "tpu7x" = "tpu7x"                # TPU v7x
   }
 
-  # Map specific GCE machine types to the number of TPU chips per node (VM).
-  # The machine-type map must be updated to reflect new TPU releases with reference to public documentation: https://docs.cloud.google.com/tpu/docs/intro-to-tpu
+  # Project shared JSON into the expected format for tpu_chip_count_map (machine_type -> count)
   tpu_chip_count_map = {
-    # v4 - ct4p
-    "ct4p-hightpu-4t" = 4
-
-    # v5e - ct5lp
-    "ct5lp-hightpu-1t" = 1
-    "ct5lp-hightpu-4t" = 4
-    "ct5lp-hightpu-8t" = 8
-
-    # v5p - ct5p
-    "ct5p-hightpu-1t" = 1
-    "ct5p-hightpu-2t" = 2
-    "ct5p-hightpu-4t" = 4
-
-    # v6e - ct6e
-    "ct6e-standard-1t" = 1
-    "ct6e-standard-4t" = 4
-    "ct6e-standard-8t" = 8
-
-    # v7x - tpu7x
-    "tpu7x-standard-4t" = 4
+    for k, v in try(local.accelerators_json.tpus, {}) : k => v.count
   }
 
   # Robustly extract the machine family prefix (e.g., "ct6e").

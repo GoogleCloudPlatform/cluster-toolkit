@@ -12,30 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
-
-variable "machine_type" {
-  description = "Machine type to use for the instance creation"
-  type        = string
-}
-
-variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the instance."
-  type = list(object({
-    type  = string
-    count = number
-    gpu_driver_installation_config = optional(object({
-      gpu_driver_version = string
-    }), { gpu_driver_version = "DEFAULT" })
-    gpu_partition_size = optional(string)
-    gpu_sharing_config = optional(object({
-      gpu_sharing_strategy       = string
-      max_shared_clients_per_gpu = number
-    }))
-  }))
-  default  = []
-  nullable = false
-}
+ */
 
 locals {
   # example state; terraform will ignore diffs if last element of URL matches
@@ -45,44 +22,12 @@ locals {
   #     type  = "https://www.googleapis.com/compute/beta/projects/PROJECT/zones/ZONE/acceleratorTypes/nvidia-tesla-a100"
   #   },
   # ]
-  accelerator_machines = {
-    "a2-highgpu-1g"              = { type = "nvidia-tesla-a100", count = 1 },
-    "a2-highgpu-2g"              = { type = "nvidia-tesla-a100", count = 2 },
-    "a2-highgpu-4g"              = { type = "nvidia-tesla-a100", count = 4 },
-    "a2-highgpu-8g"              = { type = "nvidia-tesla-a100", count = 8 },
-    "a2-megagpu-16g"             = { type = "nvidia-tesla-a100", count = 16 },
-    "a2-ultragpu-1g"             = { type = "nvidia-a100-80gb", count = 1 },
-    "a2-ultragpu-2g"             = { type = "nvidia-a100-80gb", count = 2 },
-    "a2-ultragpu-4g"             = { type = "nvidia-a100-80gb", count = 4 },
-    "a2-ultragpu-8g"             = { type = "nvidia-a100-80gb", count = 8 },
-    "a3-highgpu-1g"              = { type = "nvidia-h100-80gb", count = 1 },
-    "a3-highgpu-2g"              = { type = "nvidia-h100-80gb", count = 2 },
-    "a3-highgpu-4g"              = { type = "nvidia-h100-80gb", count = 4 },
-    "a3-highgpu-8g"              = { type = "nvidia-h100-80gb", count = 8 },
-    "a3-megagpu-8g"              = { type = "nvidia-h100-mega-80gb", count = 8 },
-    "a3-ultragpu-8g"             = { type = "nvidia-h200-141gb", count = 8 },
-    "a4-highgpu-8g-lowmem"       = { type = "nvidia-b200", count = 8 },
-    "a4-highgpu-8g"              = { type = "nvidia-b200", count = 8 },
-    "a4x-highgpu-4g"             = { type = "nvidia-gb200", count = 4 },
-    "a4x-highgpu-4g-nolssd"      = { type = "nvidia-gb200", count = 4 },
-    "a4x-maxgpu-4g-metal"        = { type = "nvidia-gb300", count = 4 },
-    "a4x-maxgpu-4g-metal-nolssd" = { type = "nvidia-gb300", count = 4 },
-    "g2-standard-4"              = { type = "nvidia-l4", count = 1 },
-    "g2-standard-8"              = { type = "nvidia-l4", count = 1 },
-    "g2-standard-12"             = { type = "nvidia-l4", count = 1 },
-    "g2-standard-16"             = { type = "nvidia-l4", count = 1 },
-    "g2-standard-24"             = { type = "nvidia-l4", count = 2 },
-    "g2-standard-32"             = { type = "nvidia-l4", count = 1 },
-    "g2-standard-48"             = { type = "nvidia-l4", count = 4 },
-    "g2-standard-96"             = { type = "nvidia-l4", count = 8 },
-    "g4-standard-6"              = { type = "nvidia-rtx-pro-6000", count = 1 },
-    "g4-standard-12"             = { type = "nvidia-rtx-pro-6000", count = 1 },
-    "g4-standard-24"             = { type = "nvidia-rtx-pro-6000", count = 1 },
-    "g4-standard-48"             = { type = "nvidia-rtx-pro-6000", count = 1 },
-    "g4-standard-96"             = { type = "nvidia-rtx-pro-6000", count = 2 },
-    "g4-standard-192"            = { type = "nvidia-rtx-pro-6000", count = 4 },
-    "g4-standard-384"            = { type = "nvidia-rtx-pro-6000", count = 8 },
-  }
+  accelerator_machines = try(
+    jsondecode(var.machine_configs).gpus,
+    var.machine_configs.gpus,
+    {}
+  )
+
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 
   # Select in priority order:

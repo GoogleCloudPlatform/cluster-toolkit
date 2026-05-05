@@ -52,8 +52,9 @@ vars:
 
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   asapd_lite_installer_path: $(ghpc_stage("./asapd-lite-installer.yaml"))
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb300
-  version_prefix: "1.34."
+  version_prefix: "1.35."
 
   # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -175,22 +176,6 @@ deployment_groups:
         start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
-      additional_networks:
-        $(concat(
-          [{
-            network = gke-a4x-max-net-1.network_name,
-            subnetwork = gke-a4x-max-net-1.subnetwork_name,
-            subnetwork_project = vars.project_id,
-            nic_type = "IDPF",
-            queue_count = null,
-            network_ip = null,
-            stack_type = null,
-            access_config = [],
-            ipv6_access_config = [],
-            alias_ip_range = []
-          }],
-          gke-a4x-max-rdma-net.subnetwork_interfaces_gke
-        ))
     outputs: [instructions]
 
   # --- MANAGED LUSTRE ADDITIONS ---
@@ -291,6 +276,13 @@ deployment_groups:
     use: [a4x-max-cluster]
     settings:
       target_architecture: "arm64"
+      kueue:
+        install: true
+        version: "0.17.1"
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(a4x-max-pool.static_gpu_count)
+          accelerator_type: $(vars.accelerator_type)
       asapd_lite:
         install: true
         config_path: $(vars.asapd_lite_installer_path)
@@ -338,45 +330,24 @@ deployment_groups:
       force_destroy: false
       enable_hierarchical_namespace: true
 
-  # Create a remote mount of training_bucket using
-  # mount options optimized for reading training data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  # Create a remote mount of checkpoint_bucket using mount
-  # options optimized for writing and reading checkpoint data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4x-max-cluster]
+    use: [training_bucket, a4x-max-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4x-max-cluster]
+    use: [checkpoint_bucket, a4x-max-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.

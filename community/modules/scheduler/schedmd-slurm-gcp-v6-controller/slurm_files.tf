@@ -40,6 +40,10 @@ module "bucket" {
   labels = merge(local.labels, {
     slurm_cluster_name = local.slurm_cluster_name
   })
+
+  encryption_key_names = var.slurm_bucket_kms_key != null ? {
+    (local.synth_bucket_name) = var.slurm_bucket_kms_key
+  } : {}
 }
 
 # BUCKET IAMs

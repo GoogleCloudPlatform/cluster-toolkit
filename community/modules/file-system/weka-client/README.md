@@ -149,7 +149,7 @@ weka local rm -f --all
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -167,7 +167,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mount options for filesystem shared by all clients. | `string` | `""` | no |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Weka filesystem name. | `string` | n/a | yes |
@@ -176,7 +176,7 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_client_install_runner"></a> [client\_install\_runner](#output\_client\_install\_runner) | Ansible runner that performs client installation needed to use file system. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Ansible runner that mounts the file system. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

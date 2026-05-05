@@ -39,14 +39,14 @@ deployment_groups:
     terraform_providers:
       google:
         source: hashicorp/google
-        version: '>= 6.9.0, <= 7.23.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
       google-beta:
         source: hashicorp/google-beta
-        version: '>= 6.9.0, <= 7.23.0'
+        version: '>= 6.9.0, <= 7.27.0'
         configuration:
           project: ((var.project_id))
           region: ((var.region))
@@ -97,6 +97,7 @@ deployment_groups:
             ((merge(var.labels, {
               green = "sleeves"
             })))
+          machine_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           network_storage: ((flatten([module.first-fs.network_storage])))
           project_id: ((var.project_id))
           region: ((var.region))
@@ -110,6 +111,7 @@ deployment_groups:
         settings:
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
+          machine_configs: '{"gpus": {}, "tpus": {}, "cpus": {}}'
           network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])))
           project_id: ((var.project_id))
           region: ((var.region))

@@ -23,6 +23,9 @@ tags:
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
 
+substitutions:
+  _TEST_PREFIX: "" # Default to no prefix
+
 timeout: 14400s  # 4hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -57,3 +60,8 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-rapid-storage.yaml"
+  secretEnv: ['GCLUSTER_GCS_PATH']
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'

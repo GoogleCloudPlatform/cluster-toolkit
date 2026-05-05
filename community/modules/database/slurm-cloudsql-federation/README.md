@@ -42,7 +42,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -50,7 +50,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -61,7 +61,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_bigquery_connection.connection](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_connection) | resource |
 | [google_compute_address.psc](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_forwarding_rule.psc_consumer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_forwarding_rule) | resource |
@@ -74,7 +74,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_authorized_networks"></a> [authorized\_networks](#input\_authorized\_networks) | IP address ranges as authorized networks of the Cloud SQL for MySQL instances | `list(string)` | `[]` | no |
 | <a name="input_data_cache_enabled"></a> [data\_cache\_enabled](#input\_data\_cache\_enabled) | Whether data cache is enabled for the instance. Can be used with ENTERPRISE\_PLUS edition. | `bool` | `false` | no |
 | <a name="input_database_flags"></a> [database\_flags](#input\_database\_flags) | Database flags to set on instance. | `map(string)` | `{}` | no |
@@ -102,6 +102,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_cloudsql"></a> [cloudsql](#output\_cloudsql) | Describes the cloudsql instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

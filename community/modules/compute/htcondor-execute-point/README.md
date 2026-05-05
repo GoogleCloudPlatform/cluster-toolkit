@@ -196,7 +196,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -204,7 +204,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
@@ -220,7 +220,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_storage_bucket_object.execute_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [null_resource.execute_config](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
@@ -229,7 +229,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
@@ -266,7 +266,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_autoscaler_runner"></a> [autoscaler\_runner](#output\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
 | <a name="output_mig_id"></a> [mig\_id](#output\_mig\_id) | ID of the managed instance group containing the execute points |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

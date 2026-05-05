@@ -40,7 +40,7 @@ variable "job_id" {
 }
 
 variable "job_filename" {
-  description = "The filename of the generated job template file. Will default to `cloud-batch-<job_id>.json` if not specified"
+  description = "The filename of the generated job template file. Will default to `<job_id>.yaml` if not specified"
   type        = string
   default     = null
 }

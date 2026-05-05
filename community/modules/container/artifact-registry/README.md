@@ -102,7 +102,7 @@ Note: only Docker registries have been tested so far. Placeholders do exist for 
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.42 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -110,7 +110,7 @@ Note: only Docker registries have been tested so far. Placeholders do exist for 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.42 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
@@ -122,7 +122,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_artifact_registry_repository.artifact_registry](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/artifact_registry_repository) | resource |
 | [google_secret_manager_secret.repo_password_secret](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_version.repo_password_secret_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
@@ -133,7 +133,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment. | `string` | n/a | yes |
 | <a name="input_format"></a> [format](#input\_format) | Artifact Registry format (e.g., DOCKER). | `string` | `"DOCKER"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the artifact registry. Key-value pairs. | `map(string)` | `{}` | no |
@@ -152,6 +152,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_registry_url"></a> [registry\_url](#output\_registry\_url) | The URL of the created artifact registry. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

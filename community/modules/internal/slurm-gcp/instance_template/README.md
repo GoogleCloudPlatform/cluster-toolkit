@@ -2,41 +2,43 @@
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | ../internal_instance_template | n/a |
 | <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [local_file.startup](https://registry.terraform.io/providers/hashicorp/local/latest/docs/data-sources/file) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br/>    source                     = optional(string)<br/>    disk_name                  = optional(string)<br/>    device_name                = string<br/>    disk_type                  = optional(string)<br/>    disk_size_gb               = optional(number)<br/>    disk_labels                = map(string)<br/>    auto_delete                = bool<br/>    boot                       = bool<br/>    disk_resource_manager_tags = optional(map(string))<br/>  }))</pre> | `[]` | no |
+| <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br/>    source                              = optional(string)<br/>    disk_name                           = optional(string)<br/>    device_name                         = string<br/>    disk_type                           = optional(string)<br/>    disk_size_gb                        = optional(number)<br/>    disk_labels                         = map(string)<br/>    auto_delete                         = bool<br/>    boot                                = bool<br/>    disk_resource_manager_tags          = optional(map(string))<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = optional(string)<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_advanced_machine_features"></a> [advanced\_machine\_features](#input\_advanced\_machine\_features) | See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features | <pre>object({<br/>    enable_nested_virtualization = optional(bool)<br/>    threads_per_core             = optional(number)<br/>    turbo_mode                   = optional(string)<br/>    visible_core_count           = optional(number)<br/>    performance_monitoring_unit  = optional(string)<br/>    enable_uefi_networking       = optional(bool)<br/>  })</pre> | n/a | yes |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Tier 1 bandwidth increases the maximum egress bandwidth for VMs.<br/>Using the `virtio_enabled` setting will only enable VirtioNet and will not enable TIER\_1.<br/>Using the `tier_1_enabled` setting will enable both gVNIC and TIER\_1 higher bandwidth networking.<br/>Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER\_1.<br/>Note that TIER\_1 only works with specific machine families & shapes and must be using an image that supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"platform_default"` | no |
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example. | `bool` | `false` | no |
 | <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3. | `string` | `null` | no |
 | <a name="input_disk_auto_delete"></a> [disk\_auto\_delete](#input\_disk\_auto\_delete) | Whether or not the boot disk should be auto-deleted. | `bool` | `true` | no |
+| <a name="input_disk_encryption_key"></a> [disk\_encryption\_key](#input\_disk\_encryption\_key) | The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance | `string` | `null` | no |
+| <a name="input_disk_encryption_key_service_account"></a> [disk\_encryption\_key\_service\_account](#input\_disk\_encryption\_key\_service\_account) | The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used. | `string` | `null` | no |
 | <a name="input_disk_labels"></a> [disk\_labels](#input\_disk\_labels) | Labels to be assigned to boot disk, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_disk_resource_manager_tags"></a> [disk\_resource\_manager\_tags](#input\_disk\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. | `number` | `100` | no |
@@ -78,7 +80,7 @@
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template details |
 | <a name="output_labels"></a> [labels](#output\_labels) | Labels attached to the instance template |
 | <a name="output_name"></a> [name](#output\_name) | Name of instance template |

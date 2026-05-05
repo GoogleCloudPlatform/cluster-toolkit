@@ -55,7 +55,7 @@ spec:
       hostPID: true
       containers:
       - name: asapd-lite
-        image: us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.3
+        image: us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.7
 
         command: ["/bin/bash", "-c"]
         args:

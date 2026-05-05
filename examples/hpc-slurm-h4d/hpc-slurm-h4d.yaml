@@ -20,7 +20,7 @@ vars:
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
   instance_image:
-    family: slurm-gcp-6-11-hpc-rocky-linux-8
+    family: slurm-gcp-6-12-hpc-rocky-linux-8
     project: schedmd-slurm-public
   h4d_cluster_size: 2
 

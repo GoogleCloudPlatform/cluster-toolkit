@@ -1,0 +1,26 @@
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: pathways-flavor
+spec:
+  nodeLabels:
+    cloud.google.com/gke-nodepool: "${pathways_nodepool_name}"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cluster-queue
+spec:
+  namespaceSelector: {}
+  preemption:
+    reclaimWithinCohort: Never
+    withinClusterQueue: LowerPriority
+  resourceGroups:
+  - coveredResources: ["cpu", "memory"]
+    flavors:
+    - name: pathways-flavor
+      resources:
+      - name: cpu
+        nominalQuota: ${pathways_cpu_quota}
+      - name: memory
+        nominalQuota: "${pathways_memory_quota}"

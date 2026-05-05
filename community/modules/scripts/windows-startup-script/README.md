@@ -75,7 +75,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
@@ -93,7 +93,7 @@ No resources.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set http and https proxy for use by Invoke-WebRequest commands | `string` | `""` | no |
 | <a name="input_http_proxy_set_environment"></a> [http\_proxy\_set\_environment](#input\_http\_proxy\_set\_environment) | Set system default environment variables http\_proxy and https\_proxy for all commands | `bool` | `false` | no |
 | <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Install NVIDIA GPU drivers and the CUDA Toolkit using script specified by var.install\_nvidia\_driver\_script | `bool` | `false` | no |
@@ -104,6 +104,6 @@ No resources.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_windows_startup_ps1"></a> [windows\_startup\_ps1](#output\_windows\_startup\_ps1) | A string list of scripts selected by this module |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

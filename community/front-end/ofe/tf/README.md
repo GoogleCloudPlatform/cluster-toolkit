@@ -16,7 +16,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 4.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 4.0 |
@@ -25,14 +25,14 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_control_bucket"></a> [control\_bucket](#module\_control\_bucket) | terraform-google-modules/cloud-storage/google | ~> 4.0 |
 | <a name="module_network"></a> [network](#module\_network) | ./network | n/a |
 | <a name="module_pubsub"></a> [pubsub](#module\_pubsub) | terraform-google-modules/pubsub/google | ~> 5.0 |
@@ -41,7 +41,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_instance.server_vm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance) | resource |
 | [google_logging_project_sink.build_sink](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/logging_project_sink) | resource |
 | [google_pubsub_subscription.cloud_build_logs_sub](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription) | resource |
@@ -54,7 +54,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_deployment_key"></a> [deployment\_key](#input\_deployment\_key) | Name to identify resources from this deployment | `string` | `""` | no |
 | <a name="input_deployment_mode"></a> [deployment\_mode](#input\_deployment\_mode) | Use a tarball of this directory, or download from git to deploy the server. Must be either 'tarball' or 'git' | `string` | `"tarball"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Base "name" for the deployment. | `string` | n/a | yes |
@@ -75,6 +75,6 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_server_ip"></a> [server\_ip](#output\_server\_ip) | Webserver IP Address |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

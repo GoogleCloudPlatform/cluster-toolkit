@@ -52,17 +52,31 @@ variable "disk_resource_manager_tags" {
 
 variable "additional_disks" {
   type = list(object({
-    disk_name                  = string
-    device_name                = string
-    disk_type                  = string
-    disk_size_gb               = number
-    disk_labels                = map(string)
-    auto_delete                = bool
-    boot                       = bool
-    disk_resource_manager_tags = map(string)
+    disk_name                           = optional(string)
+    device_name                         = optional(string)
+    disk_type                           = optional(string)
+    disk_size_gb                        = optional(number)
+    disk_labels                         = optional(map(string), {})
+    auto_delete                         = optional(bool, true)
+    boot                                = optional(bool, false)
+    disk_resource_manager_tags          = optional(map(string), {})
+    disk_encryption_key                 = optional(string)
+    disk_encryption_key_service_account = optional(string)
   }))
   description = "List of maps of disks."
   default     = []
+}
+
+variable "disk_encryption_key" {
+  type        = string
+  description = "The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance"
+  default     = null
+}
+
+variable "disk_encryption_key_service_account" {
+  type        = string
+  description = "The service account being used for the encryption request for the given KMS key. If absent, the Compute Engine default service account is used."
+  default     = null
 }
 
 variable "advanced_machine_features" {
@@ -301,7 +315,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 

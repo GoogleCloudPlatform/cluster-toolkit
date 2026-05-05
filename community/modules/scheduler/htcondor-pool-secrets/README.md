@@ -117,7 +117,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
@@ -125,7 +125,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 3.0 |
 
@@ -136,7 +136,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_secret_manager_secret.execute_point_idtoken](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret.pool_password](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.access_point](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
@@ -149,7 +149,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | HTCondor access point service account e-mail | `string` | n/a | yes |
 | <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | HTCondor access point service account e-mail | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
@@ -163,7 +163,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_access_point_runner"></a> [access\_point\_runner](#output\_access\_point\_runner) | Toolkit Runner to download pool secrets to an HTCondor access point |
 | <a name="output_central_manager_runner"></a> [central\_manager\_runner](#output\_central\_manager\_runner) | Toolkit Runner to download pool secrets to an HTCondor central manager |
 | <a name="output_execute_point_runner"></a> [execute\_point\_runner](#output\_execute\_point\_runner) | Toolkit Runner to download pool secrets to an HTCondor execute point |

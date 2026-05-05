@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/api/googleapi"
 )
 
 func projectError(p string) error {
@@ -42,9 +43,24 @@ const credentialsHint = "load application default credentials following instruct
 var ErrNoDefaultCredentials = errors.New("could not find application default credentials")
 
 func handleClientError(e error) error {
+	if e == nil {
+		return nil
+	}
 	if strings.Contains(e.Error(), "could not find default credentials") {
 		return config.HintError{Hint: credentialsHint, Err: ErrNoDefaultCredentials}
 	}
+
+	// GoogleAPI Error?
+	var gErr *googleapi.Error
+	if errors.As(e, &gErr) {
+		if gErr.Code == 403 {
+			return fmt.Errorf("GCP API permission denied or API not enabled. Check IAM roles and ensure Compute Engine API is enabled. details: %w", e)
+		}
+		if gErr.Code == 429 {
+			return fmt.Errorf("GCP API rate limit exceeded. Please wait or increase quota. details: %w", e)
+		}
+	}
+
 	return e
 }
 
@@ -59,6 +75,7 @@ const (
 	testMachineTypeInZone             = "test_machine_type_in_zone"
 	testReservationExistsName         = "test_reservation_exists"
 	testDiskTypeInZone                = "test_disk_type_in_zone"
+	testGCSFuseIAMRoleExistsName      = "test_gcsfuse_iam_role_exists"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -70,9 +87,11 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testQuotaAvailabilityName:         testQuotaAvailability,
 		testMachineTypeInZone:             testMachineTypeInZoneAvailability,
 		testReservationExistsName:         testReservationExists,
 		testDiskTypeInZone:                testDiskTypeInZoneAvailability,
+		testGCSFuseIAMRoleExistsName:      testGCSFuseIAMRoleExists,
 	}
 }
 
@@ -200,6 +219,19 @@ func inputsAsStrings(inputs config.Dict) (map[string]string, error) {
 	return ms, nil
 }
 
+func blueprintHasGCSFuse(bp config.Blueprint) bool {
+	hasGCSFuse := false
+	bp.WalkModulesSafe(func(_ config.ModulePath, mod *config.Module) {
+		if strings.Contains(mod.Source, "gke-persistent-volume") && mod.Settings.Has("gcsfuse_storage_class_name") {
+			v := mod.Settings.Get("gcsfuse_storage_class_name")
+			if !v.IsNull() && v.Type() == cty.String && v.AsString() != "" {
+				hasGCSFuse = true
+			}
+		}
+	})
+	return hasGCSFuse
+}
+
 // Creates a list of default validators for the given blueprint,
 // inspect the blueprint for global variables that exist and add an appropriate validators.
 func defaults(bp config.Blueprint) []config.Validator {
@@ -227,8 +259,14 @@ func defaults(bp config.Blueprint) []config.Validator {
 		}, config.Validator{
 			Validator: testApisEnabledName,
 			Inputs:    inputs,
-		},
-		)
+		})
+
+		if blueprintHasGCSFuse(bp) {
+			defaults = append(defaults, config.Validator{
+				Validator: testGCSFuseIAMRoleExistsName,
+				Inputs:    inputs,
+			})
+		}
 	}
 
 	if projectIDExists && regionExists {

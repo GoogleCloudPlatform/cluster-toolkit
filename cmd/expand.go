@@ -37,6 +37,8 @@ func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
 	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "ERROR",
 		"Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	c.Flags().StringSliceVar(&expandFlags.validatorsToSkip, "skip-validators", nil, "Validators to skip")
+	c.Flags().BoolVar(&expandFlags.addCreatorLabel, "add-creator-label", false,
+		"Add label ghpc_creator to the expanded blueprint. Defaults to true for @google.com accounts.")
 	return c
 }
 
@@ -52,6 +54,7 @@ var (
 		cliBEConfigVars  []string
 		validationLevel  string
 		validatorsToSkip []string
+		addCreatorLabel  bool
 	}{}
 
 	expandCmd = addExpandFlags(&cobra.Command{
@@ -65,7 +68,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	bp, ctx := expandOrDie(args[0])
+	bp, ctx := expandOrDie(cmd, args[0])
 	checkErr(bp.Export(expandFlags.outputPath), ctx)
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), expandFlags.outputPath)
 }
