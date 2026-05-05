@@ -1127,15 +1127,7 @@ func TestGetModules(t *testing.T) {
 				},
 			}
 
-			// Set up a mock Cobra command
-			cmd := &cobra.Command{Use: "test"}
-			if tc.flagExists {
-				cmd.Flags().String("deployment-file", tc.flagValue, "")
-				// Parse to simulate the user passing the flag
-				_ = cmd.ParseFlags([]string{"--deployment-file", tc.flagValue})
-			}
-
-			result := getDeploymentFile(cmd)
+			result := getModules(tc.input)
 
 			if result != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, result)

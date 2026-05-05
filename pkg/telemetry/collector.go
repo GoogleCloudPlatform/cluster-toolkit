@@ -62,7 +62,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
-  	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
