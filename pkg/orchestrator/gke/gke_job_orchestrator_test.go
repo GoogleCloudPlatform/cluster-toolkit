@@ -215,7 +215,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			job := orchestrator.JobDefinition{
 				WorkloadName:    "test-workload",
 				CommandToRun:    "echo hello",
-				AcceleratorType: tt.acceleratorType,
+				ComputeType:     tt.acceleratorType,
 				ClusterLocation: "us-central1-a",
 			}
 
@@ -244,10 +244,14 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 			}
 
-			opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+			profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
 			var manifest string
 			if err == nil {
-				manifest, err = orc.GenerateGKEManifest(opts, profile)
+				var opts ManifestOptions
+				opts, err = orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+				if err == nil {
+					manifest, err = orc.GenerateGKEManifest(opts, profile)
+				}
 			}
 
 			if (err != nil) != tt.wantErr {
@@ -296,7 +300,7 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		WorkloadName:    "volume-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "n2-standard-4",
+		ComputeType:     "n2-standard-4",
 		Volumes: []orchestrator.VolumeDefinition{
 			{Name: "vol-0", Source: "gs://my-bucket", MountPath: "/data", Type: "gcsfuse"},
 			{Name: "vol-1", Source: "/host/path", MountPath: "/host", Type: "hostPath"},
@@ -304,12 +308,16 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		},
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
 
-	opts.AcceleratorType = "n2-standard-4"
+	opts.ComputeType = "n2-standard-4"
 	manifest, err := orc.GenerateGKEManifest(opts, profile)
 
 	if err != nil {
@@ -360,7 +368,7 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    `python -c "print('hello')"` + " && echo \"world\"",
-		AcceleratorType: "nvidia-l4",
+		ComputeType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 	}
 
@@ -430,7 +438,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		CommandToRun:    "echo hello",
 		NumSlices:       2,
 		ClusterLocation: "us-central1",
-		AcceleratorType: "n2-standard-2",
+		ComputeType:     "n2-standard-2",
 		Pathways: orchestrator.PathwaysJobDefinition{
 			ProxyServerImage: "proxy:latest",
 			ServerImage:      "server:latest",
@@ -452,7 +460,11 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
 	}
@@ -843,7 +855,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 		{
 			name: "x86 with hyperthreading disabled in map",
 			job: orchestrator.JobDefinition{
-				AcceleratorType: "c2-standard-60",
+				ComputeType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "1",
@@ -859,7 +871,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 		{
 			name: "Fallback to Compute API when not in map",
 			job: orchestrator.JobDefinition{
-				AcceleratorType: "c2-standard-60",
+				ComputeType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "",
@@ -881,7 +893,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 
 			orc.machineTypeToThreadsPerCore = make(map[string]string)
 			if tt.threadsPerCore != "" {
-				orc.machineTypeToThreadsPerCore[tt.job.AcceleratorType] = tt.threadsPerCore
+				orc.machineTypeToThreadsPerCore[tt.job.ComputeType] = tt.threadsPerCore
 			}
 			orc.machineCapCache = make(map[string]MachineTypeCap)
 
@@ -920,7 +932,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -948,7 +960,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "nvidia-l4",
+				ComputeType:     "nvidia-l4",
 			},
 			nodePools:     nil,
 			mockResponses: nil,
@@ -959,7 +971,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -985,7 +997,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -1007,7 +1019,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -1035,7 +1047,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -1095,7 +1107,7 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
-		AcceleratorType: "nvidia-l4",
+		ComputeType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1126,7 +1138,7 @@ func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
-		AcceleratorType: "tpu-v6e-slice",
+		ComputeType:     "tpu-v6e-slice",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1369,12 +1381,17 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 		WorkloadName:    "dynamic-vms-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "v6e-8",
+		ComputeType:     "v6e-8",
 		Topology:        "16x16",
 		VmsPerSlice:     0,
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -1393,73 +1410,6 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	}
 	if !strings.Contains(manifest, expectedCompletions) {
 		t.Errorf("manifest missing expected completions %q\nManifest: %s", expectedCompletions, manifest)
-	}
-}
-
-func TestResolveTopologyForChips(t *testing.T) {
-	orc := &GKEOrchestrator{}
-
-	tests := []struct {
-		name       string
-		prefix     string
-		totalChips int
-		wantShape  string
-		wantErr    bool
-	}{
-		{
-			name:       "v4 4 chips",
-			prefix:     "v4",
-			totalChips: 4,
-			wantShape:  "2x2x1",
-			wantErr:    false,
-		},
-		{
-			name:       "tpu7x 2048 chips",
-			prefix:     "tpu7x",
-			totalChips: 2048,
-			wantShape:  "8x16x16",
-			wantErr:    false,
-		},
-		{
-			name:       "v6e 1 chip",
-			prefix:     "v6e",
-			totalChips: 1,
-			wantShape:  "1x1",
-			wantErr:    false,
-		},
-		{
-			name:       "v6e 256 chips",
-			prefix:     "v6e",
-			totalChips: 256,
-			wantShape:  "16x16",
-			wantErr:    false,
-		},
-		{
-			name:       "tpu7x 1 chip (Fail)",
-			prefix:     "tpu7x",
-			totalChips: 1,
-			wantShape:  "",
-			wantErr:    true,
-		},
-		{
-			name:       "v4 3 chips (Fail)",
-			prefix:     "v4",
-			totalChips: 3,
-			wantShape:  "",
-			wantErr:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := orc.resolveTopologyForChips(tt.prefix, tt.totalChips)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.wantShape {
-				t.Errorf("resolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
-			}
-		})
 	}
 }
 
@@ -1587,7 +1537,7 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "gpu-test-job",
-		AcceleratorType: "nvidia-tesla-a100",
+		ComputeType:     "nvidia-tesla-a100",
 		GKEScheduler:    "gke.io/topology-aware-auto",
 		NumSlices:       1,
 		VmsPerSlice:     1,
@@ -1605,7 +1555,11 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "nvidia-tesla-a100"}},
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
