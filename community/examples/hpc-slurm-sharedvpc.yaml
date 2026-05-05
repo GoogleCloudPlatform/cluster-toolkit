@@ -25,12 +25,12 @@ blueprint_name: hpc-slurm-legacy-sharedvpc
 #
 #    https://cloud.google.com/filestore/docs/shared-vpc
 #
-# 3. Replace project_id, host_project_id, network_name, subnetwork_name with
+# 3. Replace project_id, network_project_id, network_name, subnetwork_name with
 #    valid values in your environment
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  host_project_id: your-host-project
+  network_project_id: ## Set to the project containing the Shared VPC network ##
   deployment_name: hpc-small-shared-vpc
   region: us-central1
   zone: us-central1-c
@@ -44,7 +44,7 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
     settings:
-      project_id: $(vars.host_project_id)
+      project_id: $(vars.network_project_id)
       network_name: your-shared-network
       subnetwork_name: your-shared-subnetwork
 
