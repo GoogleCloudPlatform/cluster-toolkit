@@ -1,0 +1,106 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+variable "project_id" {
+  description = "The project ID that hosts the gke cluster."
+  type        = string
+}
+
+variable "cluster_id" {
+  description = "An identifier for the gke cluster resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  type        = string
+  nullable    = false
+}
+
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to downstream modules that a cluster has been created."
+  type        = bool
+  default     = false
+}
+
+variable "k8s_prerequisites_ready" {
+  description = "A static flag that signals to downstream modules that upstream dependencies are ready."
+  type        = any
+  default     = false
+}
+
+variable "k8s_service_account_name" {
+  description = "Kubernetes service account name used by the gke cluster"
+  type        = string
+  default     = "workload-identity-k8s-sa"
+}
+
+variable "namespace" {
+  description = "The namespace where ML workloads will run and diagnostics should be enabled."
+  type        = string
+  default     = "default"
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "gke_version" {
+  description = "The GKE version for the cluster"
+  type        = string
+  default     = null
+}
+
+variable "injection_webhook_version" {
+  description = "The chart version for mldiagnostics-injection-webhook"
+  type        = string
+  default     = "0.25.0"
+}
+
+variable "connection_operator_version" {
+  description = "The chart version for mldiagnostics-connection-operator"
+  type        = string
+  default     = "0.21.0"
+}
+
+# Validate that the user namespace exists
+resource "terraform_data" "validate_namespace" {
+
+  lifecycle {
+    precondition {
+      condition     = !var.gke_cluster_exists ? true : contains(data.kubernetes_all_namespaces.all[0].namespaces, var.namespace)
+      error_message = "The specified user workload namespace '${var.namespace}' does not exist in the cluster. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
+    }
+  }
+
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
+}
+
+# Validate that the workload service account exists in user namespace and is annotated for Workload Identity
+resource "terraform_data" "validate_sa" {
+
+  lifecycle {
+    precondition {
+      condition     = !var.gke_cluster_exists ? true : try(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations != null ? contains(keys(data.kubernetes_service_account_v1.workload_sa[0].metadata[0].annotations), "iam.gke.io/gcp-service-account") : true, true)
+      error_message = "The Service Account must be annotated for Workload Identity in user workload namespace '${var.namespace}'. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
+    }
+  }
+
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
+}
+
+# Validate that the cert-manager namespace exists
+resource "terraform_data" "validate_cert_manager" {
+
+  lifecycle {
+    precondition {
+      condition     = !var.gke_cluster_exists ? true : contains(data.kubernetes_all_namespaces.all[0].namespaces, "cert-manager")
+      error_message = "Cert-Manager was not found in the cluster (namespace 'cert-manager' missing). Please ensure Cert-Manager is set to install: true in kubectl-apply module as it is required by the ML Diagnostics webhook."
+    }
+  }
+
+  depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
+}

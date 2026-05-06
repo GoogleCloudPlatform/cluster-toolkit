@@ -489,6 +489,18 @@ provider "kubernetes" {
   token                  = data.google_client_config.default.access_token
 }
 
+resource "kubernetes_namespace" "user_namespace" {
+  count = var.namespace != "default" ? 1 : 0
+
+  metadata {
+    name = var.namespace
+  }
+
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
+}
+
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
@@ -496,13 +508,15 @@ module "workload_identity" {
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
+  namespace           = var.namespace
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_project.project,
-    google_container_cluster.gke_cluster
+    google_container_cluster.gke_cluster,
+    kubernetes_namespace.user_namespace
   ]
 }
 

@@ -56,3 +56,6 @@ vars:
 
   # The disk size of v6e node pool for this deployment.
   v6e_node_pool_disk_size_gb:
+
+  # The namespace to be configured for running workloads
+  user_namespace: default

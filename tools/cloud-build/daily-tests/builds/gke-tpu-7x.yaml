@@ -20,6 +20,7 @@ tags:
 - m.gke-node-pool
 - m.kubectl-apply
 - m.resource-policy
+- m.mldiagnostics
 - gke
 
 substitutions:

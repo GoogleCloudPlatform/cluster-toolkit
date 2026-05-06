@@ -148,6 +148,14 @@ variable "jobset" {
   default = {}
 }
 
+variable "cert_manager" {
+  description = "Install [cert-manager](https://cert-manager.io/docs/) which manages TLS certificates for Kubernetes."
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v1.17.2")
+  })
+  default = {}
+}
 
 variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."

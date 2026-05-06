@@ -378,6 +378,12 @@ variable "k8s_service_account_name" {
   default     = "workload-identity-k8s-sa"
 }
 
+variable "namespace" {
+  description = "Kubernetes service account namespace to use with the gke cluster"
+  type        = string
+  default     = "default"
+}
+
 variable "autoscaling_profile" {
   description = "(Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE_UTILIZATION."
   type        = string

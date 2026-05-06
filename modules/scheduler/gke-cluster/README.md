@@ -120,6 +120,7 @@ limitations under the License.
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
+| <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 2.36 |
 
 ## Modules
 
@@ -136,6 +137,7 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
+| [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
@@ -186,6 +188,7 @@ limitations under the License.
 | <a name="input_master_ipv4_cidr_block"></a> [master\_ipv4\_cidr\_block](#input\_master\_ipv4\_cidr\_block) | (Beta) The IP range in CIDR notation to use for the hosted master network. | `string` | `"172.16.0.32/28"` | no |
 | <a name="input_min_master_version"></a> [min\_master\_version](#input\_min\_master\_version) | The minimum version of the master. If unset, the cluster's version will be set by GKE to the version of the most recent official release. | `string` | `null` | no |
 | <a name="input_name_suffix"></a> [name\_suffix](#input\_name\_suffix) | Custom cluster name postpended to the `deployment_name`. See `prefix_with_deployment_name`. | `string` | `""` | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes service account namespace to use with the gke cluster | `string` | `"default"` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to host the cluster given in the format: `projects/<project_id>/global/networks/<network_name>`. | `string` | n/a | yes |
 | <a name="input_networking_mode"></a> [networking\_mode](#input\_networking\_mode) | Determines whether alias IPs or routes will be used for pod IPs in the cluster. Options are VPC\_NATIVE or ROUTES. VPC\_NATIVE enables IP aliasing. The default is VPC\_NATIVE. | `string` | `"VPC_NATIVE"` | no |
 | <a name="input_pods_ip_range_name"></a> [pods\_ip\_range\_name](#input\_pods\_ip\_range\_name) | The name of the secondary subnet ip range to use for pods. | `string` | `"pods"` | no |
@@ -225,5 +228,6 @@ limitations under the License.
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_namespace"></a> [namespace](#output\_namespace) | The namespace where Workload Identity is configured (created if not 'default'). |
 | <a name="output_system_node_pool_id"></a> [system\_node\_pool\_id](#output\_system\_node\_pool\_id) | The ID of the system node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
