@@ -2066,10 +2066,16 @@ class Lookup:
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
         machine_conf.threads_per_core = 1
         _div = 2 if getThreadsPerCore(template) == 1 else 1
-        machine_conf.cpus = (
-            int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
-        )
-        machine_conf.cores_per_socket = int(machine_conf.cpus / machine_conf.sockets)
+        # Check if visibleCoreCount is specified in the instance template
+        visible_cores = template.advancedMachineFeatures.visibleCoreCount
+        if visible_cores:
+            machine_conf.cpus = int(visible_cores) * getThreadsPerCore(template)
+        else:
+            machine_conf.cpus = (
+                int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
+            )
+        # Calculate cores_per_socket once for both cases
+        machine_conf.cores_per_socket = machine_conf.cpus // machine_conf.sockets
         # Because the actual memory on the host will be different than
         # what is configured (e.g. kernel will take it). From
         # experiments, about 16 MB per GB are used (plus about 400 MB
