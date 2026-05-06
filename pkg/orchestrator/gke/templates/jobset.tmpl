@@ -22,8 +22,8 @@ spec:
       replicas: {{.NumSlices}}
       template:
         spec:
-          parallelism: {{.VmsPerSlice}}
-          completions: {{.VmsPerSlice}}
+          parallelism: {{.NodesPerSlice}}
+          completions: {{.NodesPerSlice}}
           backoffLimit: 0
 {{- if .PodFailurePolicy }}
           podFailurePolicy:

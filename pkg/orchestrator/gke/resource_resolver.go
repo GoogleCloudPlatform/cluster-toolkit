@@ -107,22 +107,52 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 
 func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool, error) {
 	// Return false immediately if not using TPUs.
-	if !strings.Contains(strings.ToLower(opts.AcceleratorType), "tpu") {
+	if !config.IsTPU(opts.ComputeType) {
 		return false, nil
+	}
+
+	if val, ok := g.dynamicSlicingCache[opts.ComputeType]; ok {
+		return val, nil
 	}
 
 	// Check for topologies.kueue.x-k8s.io CRD
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
 		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
+		g.dynamicSlicingCache[opts.ComputeType] = false
 		return false, nil
 	}
 
-	// Check for AdmissionCheck with controllerName: accelerator.gke.io/slice
+	if !g.hasSliceAdmissionCheck() {
+		g.dynamicSlicingCache[opts.ComputeType] = false
+		return false, nil
+	}
+
+	// Check discovered node pools for dynamic-slicing
+	requestedMachineName, err := g.resolveMachineName(opts.ComputeType)
+	if err != nil {
+		return false, err
+	}
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Config.MachineType == requestedMachineName {
+			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
+				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
+				g.dynamicSlicingCache[opts.ComputeType] = true
+				return true, nil
+			}
+		}
+	}
+
+	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
+	g.dynamicSlicingCache[opts.ComputeType] = false
+	return false, nil
+}
+
+func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 	acResult := g.executor.ExecuteCommand("kubectl", "get", "admissioncheck", "-o", "json")
 	if acResult.ExitCode != 0 {
 		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
-		return false, nil
+		return false
 	}
 
 	var acList struct {
@@ -135,61 +165,37 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 
 	if err := json.Unmarshal([]byte(acResult.Stdout), &acList); err != nil {
 		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming dynamic-slicing not active.", err)
-		return false, nil
+		return false
 	}
 
-	hasSliceController := false
 	for _, item := range acList.Items {
 		if item.Spec.ControllerName == "accelerator.gke.io/slice" {
-			hasSliceController = true
-			break
+			return true
 		}
 	}
 
-	if !hasSliceController {
-		logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
-		return false, nil
-	}
-
-	// Check discovered node pools for dynamic-slicing
-	requestedMachineName, err := g.resolveMachineName(opts.AcceleratorType)
-	if err != nil {
-		return false, err
-	}
-	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == requestedMachineName {
-			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
-				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
-				return true, nil
-			}
-		}
-	}
-
-	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
-	return false, nil
+	logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
+	return false
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
-		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.AcceleratorType, profile.CapacityCount)
+		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
 		offsetVCPUs := max(1, int(float64(profile.CapacityCount)*0.95))
 		return fmt.Sprintf("%d", offsetVCPUs), "", "", "", nil
 	}
 
-	mapped := g.GenerateGKENodeSelectorLabel(opts.AcceleratorType)
+	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
 
 	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
 	if err != nil {
-		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.AcceleratorType, err)
+		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.ComputeType, err)
 	}
 	return cpuLim, memLim, gpuLim, tpuLim, nil
 }
 
 func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
-	machineName, err := g.resolveMachineName(opts.AcceleratorType)
-	if err != nil {
-		return "", "", "", "", err
-	}
+	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
 	if err != nil {
@@ -243,72 +249,79 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 	return "", fmt.Errorf("machine type %q could not be resolved from static maps or cluster state", acceleratorType)
 }
 
-func (g *GKEOrchestrator) resolveAcceleratorShorthand(job *orchestrator.JobDefinition) error {
-	originalInput := job.AcceleratorType
+func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefinition) (JobProfile, bool, error) {
+	if job.ComputeType == "" {
+		return JobProfile{}, false, nil
+	}
+
+	originalInput := job.ComputeType
 	parts := strings.Split(originalInput, "-")
 
-	machineName, err := g.resolveMachineName(job.AcceleratorType)
-	if err == nil {
-		job.AcceleratorType = machineName
-		// If it is a TPU, we might still need to resolve topology!
-		if config.IsTPU(machineName) && job.Topology == "" && len(parts) == 2 {
-			topology, err := config.ResolveTopologyForChips(originalInput)
-			if err != nil {
-				return err
-			}
-			job.Topology = topology
-			logging.Info("Auto-resolved topology for %s to %s", originalInput, topology)
-		}
-		return nil
-	}
+	var machineName string
+	var err error
 
-	// 2. If resolveMachineName failed, check if it's a multi-node TPU shorthand!
-	if config.IsTPU(originalInput) && job.Topology == "" && len(parts) == 2 {
-		topology, err := config.ResolveTopologyForChips(originalInput)
+	// 1. Try to resolve as full machine type or direct shorthand match
+	machineName, err = g.resolveMachineName(job.ComputeType)
+	if err != nil {
+		// 2. If resolveMachineName failed, check if it's a multi-node TPU shorthand!
+		prefix := parts[0]
+		candidates := config.GetCandidatesForShorthand(prefix)
+		if len(candidates) == 0 {
+			return JobProfile{}, false, fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
+		}
+
+		machineName, err = g.resolveAmbiguousComputeShorthand(prefix, candidates)
 		if err != nil {
-			return fmt.Errorf("failed to resolve topology for %s: %w", originalInput, err)
+			return JobProfile{}, false, err
+		}
+	}
+	job.MachineType = machineName
+
+	isDynamicSlicing := false
+	if config.IsTPU(machineName) {
+		// 3. Resolve Topology
+		topology, err := g.resolveTopology(job)
+		if err != nil {
+			return JobProfile{}, false, err
 		}
 		job.Topology = topology
-		logging.Info("Auto-resolved topology for %s to %s", originalInput, topology)
-		// Set AcceleratorType to prefix to be resolved via cluster state
-		job.AcceleratorType = parts[0]
-		return g.resolveAmbiguousShorthand(job)
-	}
-	return err
-}
 
-func (g *GKEOrchestrator) resolveFullMachineTypeOrValue(acceleratorType string) error {
-	// Check if it is a defined machine type (value in map)
-	for _, v := range config.AcceleratorShorthandMap {
-		if v == acceleratorType {
-			return nil // Valid defined machine type
+		// 4. Calculate VMs per slice
+		err = g.dynamicallyCalculateNodesPerSlice(job)
+		if err != nil {
+			return JobProfile{}, false, err
+		}
+
+		// 6. Verify dynamic slicing (super-slicing)
+		isDynamicSlicing, err = g.verifyDynamicSlicingActive(ManifestOptions{
+			ClusterName:     job.ClusterName,
+			ClusterLocation: job.ClusterLocation,
+			ComputeType:     job.ComputeType,
+		})
+		if err != nil {
+			logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
+			isDynamicSlicing = false
 		}
 	}
 
-	clusterMachineTypes, err := g.queryAllMachineTypes()
+	// 5. Determine if CPU machine
+	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
 	if err != nil {
-		return err
+		return JobProfile{}, false, err
 	}
 
-	for _, cmt := range clusterMachineTypes {
-		if acceleratorType == cmt {
-			return nil // Valid full machine type found in cluster
-		}
-	}
-	return fmt.Errorf("machine type %q not found in cluster and is not a known shorthand or defined machine type", acceleratorType)
+	return JobProfile{
+		IsCPUMachine:  isCPUMachine,
+		CapacityCount: capacity,
+	}, isDynamicSlicing, nil
 }
 
-func (g *GKEOrchestrator) resolveAmbiguousShorthand(job *orchestrator.JobDefinition) error {
-	candidates := config.GetCandidatesForShorthand(job.AcceleratorType)
-	if len(candidates) == 0 {
-		return fmt.Errorf("accelerator type %q is not a known shorthand and could not be resolved", job.AcceleratorType)
-	}
-
-	logging.Info("Detected ambiguous accelerator shorthand %q, finding candidates...", job.AcceleratorType)
+func (g *GKEOrchestrator) resolveAmbiguousComputeShorthand(prefix string, candidates []string) (string, error) {
+	logging.Info("Detected ambiguous compute shorthand %q, finding candidates...", prefix)
 
 	clusterMachineTypes, err := g.queryAllMachineTypes()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	cmtSet := make(map[string]bool, len(clusterMachineTypes))
@@ -324,40 +337,57 @@ func (g *GKEOrchestrator) resolveAmbiguousShorthand(job *orchestrator.JobDefinit
 	}
 
 	if len(matchedCandidates) == 1 {
-		logging.Info("Disambiguated %q to %q based on cluster state.", job.AcceleratorType, matchedCandidates[0])
-
-		// If not found in map, fallback to candidate name
-		job.AcceleratorType = matchedCandidates[0]
-		return nil
+		logging.Info("Disambiguated %q to %q based on cluster state.", prefix, matchedCandidates[0])
+		return matchedCandidates[0], nil
 	}
 
 	if len(matchedCandidates) == 0 {
-		return fmt.Errorf("no matching machine types found in cluster for shorthand %q. Available candidates: %v", job.AcceleratorType, candidates)
+		return "", fmt.Errorf("no matching machine types found in cluster for shorthand %q. Available candidates: %v", prefix, candidates)
 	}
 
-	return fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type directly to disambiguate.", job.AcceleratorType, matchedCandidates)
+	return "", fmt.Errorf("multiple matching machine types found in cluster for shorthand %q: %v. Please pass the required machine type directly to disambiguate.", prefix, matchedCandidates)
 }
 
-func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobDefinition, topology, mappedLabel string) error {
-	if config.IsTPU(mappedLabel) && topology != "" {
-		machineType, err := g.resolveMachineName(job.AcceleratorType)
-		if err != nil {
-			return err
+func (g *GKEOrchestrator) dynamicallyCalculateNodesPerSlice(job *orchestrator.JobDefinition) error {
+	if !config.IsTPU(job.MachineType) {
+		if job.NodesPerSlice <= 0 {
+			job.NodesPerSlice = 1 // default to 1 for non-TPU jobs if not provided
 		}
-		accelsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
-		if err != nil {
-			logging.Warn("Failed to fetch machine capacity for %s: %v. Falling back to static defaults.", machineType, err)
-			accelsPerVM = 0 // Fallback to static logic in CalculateAcceleratorNodes
-		}
-		nodes, err := config.CalculateAcceleratorNodes(machineType, topology, accelsPerVM)
-		if err != nil {
-			return fmt.Errorf("failed to calculate nodes from topology: %w", err)
-		}
-		job.VmsPerSlice = nodes
-		logging.Info("Dynamically determined vms_per_slice for %s: %d", topology, job.VmsPerSlice)
+		return nil
 	}
-	if job.VmsPerSlice <= 0 {
-		job.VmsPerSlice = 1
+	if job.Topology == "" {
+		return fmt.Errorf("could not resolve TPU topology for the provided machine type: %q", job.MachineType)
+	}
+	machineType := job.MachineType
+	accelsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
+	if err != nil {
+		logging.Warn("Failed to fetch machine capacity for %s: %v. Falling back to static defaults.", machineType, err)
+		accelsPerVM = 0 // Fallback to static logic in CalculateAcceleratorNodes
+	}
+	nodes, err := config.CalculateAcceleratorNodes(machineType, job.Topology, accelsPerVM)
+	if err != nil {
+		return fmt.Errorf("failed to calculate nodes from topology: %w", err)
+	}
+	job.NodesPerSlice = nodes
+	if job.NodesPerSlice <= 0 {
+		return fmt.Errorf("invalid nodes_per_slice (%d) for topology %s", job.NodesPerSlice, job.Topology)
+	}
+	logging.Info("Dynamically determined nodes_per_slice for %s: %d", job.Topology, job.NodesPerSlice)
+	return nil
+}
+
+func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) error {
+	logging.Info("Eagerly fetching and caching machine capabilities...")
+	machineTypes, err := g.queryAllMachineTypes()
+	if err != nil {
+		return err
+	}
+
+	for _, mt := range machineTypes {
+		_, err := g.FetchMachineCapabilities(mt, job.ClusterLocation)
+		if err != nil {
+			logging.Warn("Failed to pre-fetch capabilities for machine type %s: %v", mt, err)
+		}
 	}
 	return nil
 }
@@ -374,38 +404,8 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, er
 	return g.indentYaml(string(b), 16), nil
 }
 
-func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefinition, mappedLabel string) (SchedulingOptions, bool, error) {
-	schedOpts := SchedulingOptions{
-		PlacementPolicy:    job.PlacementPolicy,
-		NodeAffinityLabels: job.NodeConstraint,
-		Topology:           job.Topology,
-		Scheduler:          job.GKEScheduler,
-	}
-
-	topology, err := g.resolveTopology(job.Topology, mappedLabel, job.ClusterName, job.ClusterLocation)
-	if err != nil {
-		return SchedulingOptions{}, false, err
-	}
-	schedOpts.Topology = topology
-
-	if err := g.dynamicallyCalculateVmsPerSlice(job, topology, mappedLabel); err != nil {
-		return SchedulingOptions{}, false, err
-	}
-
-	isDynamicSlicing, err := g.verifyDynamicSlicingActive(ManifestOptions{
-		ClusterName:     job.ClusterName,
-		ClusterLocation: job.ClusterLocation,
-		AcceleratorType: job.AcceleratorType,
-	})
-	if err != nil {
-		logging.Warn("Failed to verify if Dynamic-slicing is active: %v. Assuming not active.", err)
-	}
-
-	return schedOpts, isDynamicSlicing, nil
-}
-
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
-	isGPU := !isCPUMachine && !config.IsTPU(job.AcceleratorType)
+	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
 	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
 		opts.SchedulingGates = g.indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
 		opts.SchedulerName = ""
@@ -420,9 +420,9 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	if err != nil {
 		logging.Warn("Warning: failed to calculate resource limits: %v", err)
 	} else {
-		if opts.AcceleratorType != "" && gpuLimit == "" && tpuLimit == "" {
-			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
-			opts.AcceleratorType = ""
+		if opts.ComputeType != "" && gpuLimit == "" && tpuLimit == "" {
+			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.ComputeType)
+			opts.ComputeType = ""
 		}
 		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
 		if err != nil {

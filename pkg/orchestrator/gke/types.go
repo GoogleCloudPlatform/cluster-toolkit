@@ -70,6 +70,8 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
+	dynamicSlicingCache         map[string]bool
+	topologyCache               map[string]string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -129,14 +131,15 @@ type ManifestOptions struct {
 	WorkloadName                  string
 	FullImageName                 string
 	CommandToRun                  string
-	AcceleratorType               string
+	ComputeType                   string
+	MachineType                   string
 	ResourcesString               string
 	ProjectID                     string
 	ClusterName                   string
 	ClusterLocation               string
 	KueueQueueName                string
 	NumSlices                     int
-	VmsPerSlice                   int
+	NodesPerSlice                 int
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
@@ -251,7 +254,7 @@ type jobSetTemplateData struct {
 	TerminationGracePeriodSeconds int
 	MaxRestarts                   int
 	NumSlices                     int
-	VmsPerSlice                   int
+	NodesPerSlice                 int
 	WorkerBackoffLimit            int
 	PathwaysInstanceType          string
 	CommandToRun                  string

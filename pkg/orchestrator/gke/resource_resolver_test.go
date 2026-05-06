@@ -65,7 +65,7 @@ func TestResolveMachineName(t *testing.T) {
 		},
 	}
 
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -104,9 +104,8 @@ func TestResolveMachineName_Dynamic(t *testing.T) {
 }
 
 func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
-	g := &GKEOrchestrator{
-		machineTypeClient: &MockMachineTypeClient{FailAll: true},
-	}
+	g := newTestGKEOrchestrator(nil)
+	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
 	g.clusterZones = []string{"europe-west2-a", "europe-west2-c", "europe-west2-b"}
 
 	_, err := g.FetchMachineCapacity("tpu7x-1", "europe-west2")
@@ -122,13 +121,11 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 }
 
 func TestFetchMachineCapabilities_Caching(t *testing.T) {
-	g := &GKEOrchestrator{
-		machineCapCache: make(map[string]MachineTypeCap),
-		machineTypeClient: &MockMachineTypeClient{
-			MT: &compute.MachineType{
-				GuestCpus: 32,
-				MemoryMb:  131072,
-			},
+	g := newTestGKEOrchestrator(nil)
+	g.machineTypeClient = &MockMachineTypeClient{
+		MT: &compute.MachineType{
+			GuestCpus: 32,
+			MemoryMb:  131072,
 		},
 	}
 
@@ -180,11 +177,11 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 		},
 	}
 
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := ManifestOptions{AcceleratorType: "n2-standard-32"}
+			opts := ManifestOptions{ComputeType: "n2-standard-32", MachineType: "n2-standard-32"}
 			profile := JobProfile{
 				IsCPUMachine:  true,
 				CapacityCount: tt.capacityCount,
@@ -259,8 +256,11 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			name:            "Valid full type in cluster",
 			acceleratorType: "custom-c2-60",
 			nodePools:       []string{"custom-c2-60"},
-			wantType:        "custom-c2-60",
-			wantErr:         false,
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe custom-c2-60": {{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`}},
+			},
+			wantType: "custom-c2-60",
+			wantErr:  false,
 		},
 		{
 			name:            "Invalid full type not in cluster",
@@ -272,7 +272,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			name:            "Ambiguous shorthand resolved",
 			acceleratorType: "v6e",
 			nodePools:       []string{"ct6e-standard-8t"},
-			wantErr:         true,
+			wantType:        "ct6e-standard-8t",
+			wantErr:         false,
 		},
 		{
 			name:            "Unknown shorthand with less than 2 hyphens",
@@ -291,11 +292,20 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{
-				executor:          mockExecutor,
-				machineTypeClient: &MockMachineTypeClient{Executor: mockExecutor},
+			mockResponses := tt.mockResponses
+			if mockResponses == nil {
+				mockResponses = make(map[string][]shell.CommandResult)
 			}
+			// Add default mocks for topology discovery if not provided
+			if _, ok := mockResponses["kubectl get resourceflavors"]; !ok {
+				mockResponses["kubectl get resourceflavors"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+			}
+			if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
+				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "16x16\n"}}
+			}
+
+			mockExecutor := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
 			if len(tt.nodePools) > 0 {
 				for _, mt := range tt.nodePools {
@@ -306,10 +316,10 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			}
 
 			job := &orchestrator.JobDefinition{
-				AcceleratorType: tt.acceleratorType,
+				ComputeType: tt.acceleratorType,
 			}
 
-			err := orc.resolveAcceleratorShorthand(job)
+			_, _, err := orc.resolveHardwareRequirements(job)
 
 			if tt.wantErr {
 				if err == nil {
@@ -319,8 +329,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				if job.AcceleratorType != tt.wantType {
-					t.Errorf("Expected job.AcceleratorType %q, got %q", tt.wantType, job.AcceleratorType)
+				if job.MachineType != tt.wantType {
+					t.Errorf("Expected job.MachineType %q, got %q", tt.wantType, job.MachineType)
 				}
 				if tt.wantTopology != "" && job.Topology != tt.wantTopology {
 					t.Errorf("Expected job.Topology %q, got %q", tt.wantTopology, job.Topology)
