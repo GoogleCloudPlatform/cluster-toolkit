@@ -1241,6 +1241,127 @@ func TestGetBlueprintName(t *testing.T) {
 	}
 }
 
+func TestGetDeploymentFile(t *testing.T) {
+	// Save and restore the original transport to not pollute other tests
+	originalTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = originalTransport }()
+
+	mockJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+			{"path": "community/examples/ml-cluster.yml", "type": "blob"}
+		]
+	}`
+
+	tests := []struct {
+		name       string
+		flagValue  string
+		flagExists bool
+		mockResp   *http.Response
+		expected   string
+	}{
+		{
+			name:       "success: exact match standard file",
+			flagValue:  "community/examples/ml-cluster.yml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "community/examples/ml-cluster.yml",
+		},
+		{
+			name:       "success: custom file",
+			flagValue:  "my-custom-cluster.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "Custom",
+		},
+		{
+			name:       "success: custom parent directory",
+			flagValue:  "my-directory/examples/hpc-slurm.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "examples/hpc-slurm.yaml",
+		},
+		{
+			name:       "success: windows path normalization",
+			flagValue:  ".\\examples\\hpc-slurm.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "examples/hpc-slurm.yaml",
+		},
+		{
+			name:       "success: flag not set",
+			flagValue:  "",
+			flagExists: false,
+			mockResp:   nil,
+			expected:   "",
+		},
+		{
+			name:       "success: flag exists but is empty string",
+			flagValue:  "",
+			flagExists: true,
+			mockResp:   nil,
+			expected:   "",
+		},
+		{
+			name:       "error: standard files fetch failed",
+			flagValue:  "examples/hpc-slurm.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				Status:     "500 Internal Server Error",
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: "UNVERIFIED",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Force the OS cache directories to a clean, temporary folder
+			// so that cache files don't leak between test cases.
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			if tc.mockResp != nil {
+				// Inject our HTTP mock response for this test case
+				http.DefaultTransport = &mockTransport{
+					roundTripFunc: func(req *http.Request) (*http.Response, error) {
+						return tc.mockResp, nil
+					},
+				}
+			}
+
+			// Set up a mock Cobra command
+			cmd := &cobra.Command{Use: "test"}
+			if tc.flagExists {
+				cmd.Flags().String("deployment-file", tc.flagValue, "")
+				// Parse to simulate the user passing the flag
+				_ = cmd.ParseFlags([]string{"--deployment-file", tc.flagValue})
+			}
+
+			result := getDeploymentFile(cmd)
+
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
 // TestGetIsGoogler tests the full logic of the getIsGoogler method including fallbacks.
 func TestGetIsGoogler(t *testing.T) {
 	// Save the original environment variables to restore them after the tests

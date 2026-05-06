@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -61,6 +62,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -144,6 +146,36 @@ func getBlueprintName(bp config.Blueprint) string {
 	// Check if it matches a known blueprint name, otherwise mask as "Custom"
 	if slices.Contains(standardBlueprints, bpName) {
 		return bpName
+	}
+
+	return "Custom"
+}
+
+func getDeploymentFile(cmd *cobra.Command) string {
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
+		return ""
+	}
+
+	path := flag.Value.String()
+
+	// Force all backslashes to forward slashes first to ensure consistent cross-platform parsing
+	path = strings.ReplaceAll(path, "\\", "/")
+	// Clean the path, enforce forward slashes, and trim leading relative prefixes
+	path = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "./")
+
+	standardFiles := config.GetPredefinedExampleFiles()
+
+	// If standardFiles is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no deployment file was used.
+	if len(standardFiles) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Check if it matches a known example, otherwise mask as "Custom"
+	for _, sf := range standardFiles {
+		if path == sf || strings.HasSuffix(path, "/"+sf) {
+			return sf
+		}
 	}
 
 	return "Custom"
