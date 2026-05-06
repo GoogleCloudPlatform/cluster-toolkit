@@ -70,6 +70,8 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
+	dynamicSlicingCache         *bool
+	topologyCache               map[string]string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -130,6 +132,7 @@ type ManifestOptions struct {
 	FullImageName                 string
 	CommandToRun                  string
 	ComputeType                   string
+	MachineType                   string
 	ResourcesString               string
 	ProjectID                     string
 	ClusterName                   string

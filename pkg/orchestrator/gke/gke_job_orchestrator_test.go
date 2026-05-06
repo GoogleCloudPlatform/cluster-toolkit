@@ -79,6 +79,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
+		topologyCache:            make(map[string]string),
 	}
 }
 
@@ -230,10 +231,7 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				"gcloud compute machine-types describe nvidia-unknown-new-gpu --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
 			}
 			mockExec := NewMockExecutor(mockResponses)
-			orc := &GKEOrchestrator{
-				executor:          mockExec,
-				machineTypeClient: &MockMachineTypeClient{Executor: mockExec},
-			}
+			orc := newTestGKEOrchestrator(mockExec)
 			orc.projectID = "mock-project"
 			orc.clusterDesc.NodePools = []gkeJobNodePool{
 				{Config: gkeNodePoolConfig{MachineType: "nvidia-h100-mega-80gb"}},
@@ -356,10 +354,7 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		},
 	}
 	mockExec := NewMockExecutor(mockResponses)
-	orc := &GKEOrchestrator{
-		executor:          mockExec,
-		machineTypeClient: &MockMachineTypeClient{Executor: mockExec},
-	}
+	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Config: gkeNodePoolConfig{MachineType: "nvidia-l4"}},
@@ -369,6 +364,7 @@ func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
 		FullImageName:   "test-image:latest",
 		CommandToRun:    `python -c "print('hello')"` + " && echo \"world\"",
 		ComputeType:     "nvidia-l4",
+		MachineType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 	}
 
@@ -452,10 +448,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	}
 	mockExec := NewMockExecutor(mockResponses)
-	orc := &GKEOrchestrator{
-		executor:          mockExec,
-		machineTypeClient: &MockMachineTypeClient{Executor: mockExec},
-	}
+	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
@@ -556,7 +549,8 @@ func TestAwaitJobCompletion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := &MockExecutor{responses: tt.mockResponses, callCount: make(map[string]int)}
 			mockKube := &MockKubeClient{Namespace: tt.mockNamespace, Workloads: tt.mockWorkloads}
-			orc := &GKEOrchestrator{executor: mockExecutor, kubeClient: mockKube}
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.kubeClient = mockKube
 
 			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
 
@@ -626,10 +620,7 @@ func TestFetchMachineCapacity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{
-				executor:          mockExecutor,
-				machineTypeClient: &MockMachineTypeClient{Executor: mockExecutor},
-			}
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
 
 			count, err := orc.FetchMachineCapacity(tt.machineType, tt.zone)
@@ -722,10 +713,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{
-				executor:          mockExecutor,
-				machineTypeClient: &MockMachineTypeClient{Executor: mockExecutor},
-			}
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
 			orc.machineTypeToThreadsPerCore = make(map[string]string)
 			if tt.np.Config.AdvancedMachineFeatures != nil {
@@ -829,7 +817,7 @@ func TestAutoDetectCPUNodePool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{}
+			orc := newTestGKEOrchestrator(nil)
 			orc.clusterDesc.NodePools = tt.nodePools
 
 			got := orc.autoDetectCPUNodePool()
@@ -1075,7 +1063,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.clusterDesc.NodePools = tt.nodePools
 
 			got, err := orc.verifyDynamicSlicingActive(tt.opts)
@@ -1108,6 +1096,7 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
 		ComputeType:     "nvidia-l4",
+		MachineType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1139,6 +1128,7 @@ func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
 		ComputeType:     "tpu-v6e-slice",
+		MachineType:     "tpu-v6e-slice",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1253,7 +1243,7 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 }
 
 func TestParseKueueWorkloadStatus(t *testing.T) {
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	tests := []struct {
 		name       string
@@ -1450,12 +1440,10 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 	}
 
 	mockExec := NewMockExecutor(responses)
-	orc := &GKEOrchestrator{
-		executor: mockExec,
-		capacity: ClusterCapacity{
-			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {CPUs: 30},
-			},
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.capacity = ClusterCapacity{
+		Flavors: map[string]FlavorCapacity{
+			"flavor-default": {CPUs: 30},
 		},
 	}
 
@@ -1520,7 +1508,7 @@ func TestResolveKueueQueue(t *testing.T) {
 				},
 			}
 			mockExec := NewMockExecutor(responses)
-			orc := &GKEOrchestrator{executor: mockExec}
+			orc := newTestGKEOrchestrator(mockExec)
 
 			got, err := orc.resolveKueueQueue(tt.requestedName)
 			if (err != nil) != tt.wantErr {

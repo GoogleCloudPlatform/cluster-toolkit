@@ -111,43 +111,20 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, nil
 	}
 
+	if g.dynamicSlicingCache != nil {
+		return *g.dynamicSlicingCache, nil
+	}
+
 	// Check for topologies.kueue.x-k8s.io CRD
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
 		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
+		g.dynamicSlicingCache = new(bool)
 		return false, nil
 	}
 
-	// Check for AdmissionCheck with controllerName: accelerator.gke.io/slice
-	acResult := g.executor.ExecuteCommand("kubectl", "get", "admissioncheck", "-o", "json")
-	if acResult.ExitCode != 0 {
-		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
-		return false, nil
-	}
-
-	var acList struct {
-		Items []struct {
-			Spec struct {
-				ControllerName string `json:"controllerName"`
-			} `json:"spec"`
-		} `json:"items"`
-	}
-
-	if err := json.Unmarshal([]byte(acResult.Stdout), &acList); err != nil {
-		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming dynamic-slicing not active.", err)
-		return false, nil
-	}
-
-	hasSliceController := false
-	for _, item := range acList.Items {
-		if item.Spec.ControllerName == "accelerator.gke.io/slice" {
-			hasSliceController = true
-			break
-		}
-	}
-
-	if !hasSliceController {
-		logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
+	if !g.hasSliceAdmissionCheck() {
+		g.dynamicSlicingCache = new(bool)
 		return false, nil
 	}
 
@@ -160,13 +137,46 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		if np.Config.MachineType == requestedMachineName {
 			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
 				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
+				res := true
+				g.dynamicSlicingCache = &res
 				return true, nil
 			}
 		}
 	}
 
 	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
+	g.dynamicSlicingCache = new(bool)
 	return false, nil
+}
+
+func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
+	acResult := g.executor.ExecuteCommand("kubectl", "get", "admissioncheck", "-o", "json")
+	if acResult.ExitCode != 0 {
+		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
+		return false
+	}
+
+	var acList struct {
+		Items []struct {
+			Spec struct {
+				ControllerName string `json:"controllerName"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal([]byte(acResult.Stdout), &acList); err != nil {
+		logging.Warn("Failed to parse AdmissionChecks JSON: %v. Assuming dynamic-slicing not active.", err)
+		return false
+	}
+
+	for _, item := range acList.Items {
+		if item.Spec.ControllerName == "accelerator.gke.io/slice" {
+			return true
+		}
+	}
+
+	logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
+	return false
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
@@ -186,10 +196,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 }
 
 func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
-	machineName, err := g.resolveMachineName(opts.ComputeType)
-	if err != nil {
-		return "", "", "", "", err
-	}
+	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
 	if err != nil {
@@ -346,7 +353,7 @@ func (g *GKEOrchestrator) dynamicallyCalculateVmsPerSlice(job *orchestrator.JobD
 		return nil
 	}
 	if topology == "" {
-		return fmt.Errorf("topology is required for TPU jobs when --vms-per-slice is omitted")
+		return fmt.Errorf("could not resolve TPU topology for the provided machine type: %q", job.MachineType)
 	}
 	machineType := job.MachineType
 	accelsPerVM, err := g.FetchMachineCapacity(machineType, job.ClusterLocation)
@@ -389,36 +396,6 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, er
 		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
 	}
 	return g.indentYaml(string(b), 16), nil
-}
-
-func (g *GKEOrchestrator) resolveSchedulingAndTopology(job *orchestrator.JobDefinition, mappedLabel string) (SchedulingOptions, bool, error) {
-	schedOpts := SchedulingOptions{
-		PlacementPolicy:    job.PlacementPolicy,
-		NodeAffinityLabels: job.NodeConstraint,
-		Topology:           job.Topology,
-		Scheduler:          job.GKEScheduler,
-	}
-
-	topology, err := g.resolveTopology(job.Topology, mappedLabel, job.ClusterName, job.ClusterLocation)
-	if err != nil {
-		return SchedulingOptions{}, false, err
-	}
-	schedOpts.Topology = topology
-
-	if err := g.dynamicallyCalculateVmsPerSlice(job, topology, mappedLabel); err != nil {
-		return SchedulingOptions{}, false, err
-	}
-
-	isDynamicSlicing, err := g.verifyDynamicSlicingActive(ManifestOptions{
-		ClusterName:     job.ClusterName,
-		ClusterLocation: job.ClusterLocation,
-		ComputeType:     job.ComputeType,
-	})
-	if err != nil {
-		logging.Warn("Failed to verify if Dynamic-slicing is active: %v. Assuming not active.", err)
-	}
-
-	return schedOpts, isDynamicSlicing, nil
 }
 
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
