@@ -134,6 +134,26 @@ func TestExpandClusterAutoscaling_InvalidCount(t *testing.T) {
 	}
 }
 
+func TestExpandClusterAutoscaling_ZeroAccelerators(t *testing.T) {
+	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"cpus": {"n1-standard-4": {"count": 4}}}`)
+	ca := cty.ObjectVal(map[string]cty.Value{
+		"enabled": cty.True,
+		"limits": cty.ListVal([]cty.Value{
+			cty.ObjectVal(map[string]cty.Value{
+				"autoprovisioning_machine_type": cty.StringVal("n1-standard-4"),
+				"autoprovisioning_max_count":    cty.NumberIntVal(10),
+			}),
+		}),
+	})
+	mod := tMod("test-mod").set("cluster_autoscaling", ca).build()
+	bp := Blueprint{}
+
+	err := ExpandClusterAutoscaling(bp, &mod)
+	if err == nil {
+		t.Fatal("expected error for zero accelerators, got nil")
+	}
+}
+
 func TestExpandClusterAutoscaling_TPU(t *testing.T) {
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"tpus": {"ct6e-standard-4t": {"count": 4}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
