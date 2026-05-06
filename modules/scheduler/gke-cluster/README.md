@@ -108,7 +108,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.20.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.20.0 |
@@ -117,14 +117,14 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
 
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
@@ -132,7 +132,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
@@ -143,7 +143,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_authenticator_security_group"></a> [authenticator\_security\_group](#input\_authenticator\_security\_group) | The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com | `string` | `null` | no |
 | <a name="input_auto_monitoring_scope"></a> [auto\_monitoring\_scope](#input\_auto\_monitoring\_scope) | Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.<br/>For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring | `string` | `"NONE"` | no |
@@ -181,6 +181,7 @@ limitations under the License.
 | <a name="input_k8s_network_names"></a> [k8s\_network\_names](#input\_k8s\_network\_names) | Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values. | <pre>object({<br/>    gvnic_prefix      = optional(string, "")<br/>    gvnic_start_index = optional(number, 1)<br/>    gvnic_postfix     = optional(string, "")<br/>    rdma_prefix       = optional(string, "")<br/>    rdma_start_index  = optional(number, 0)<br/>    rdma_postfix      = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "gvnic_postfix": "",<br/>  "gvnic_prefix": "gvnic-",<br/>  "gvnic_start_index": 1,<br/>  "rdma_postfix": "",<br/>  "rdma_prefix": "rdma-",<br/>  "rdma_start_index": 0<br/>}</pre> | no |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name to use with the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_machine_mappings_json"></a> [machine\_mappings\_json](#input\_machine\_mappings\_json) | Injected JSON string containing machine mappings | `string` | `"{}"` | no |
 | <a name="input_maintenance_exclusions"></a> [maintenance\_exclusions](#input\_maintenance\_exclusions) | List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`. | <pre>list(object({<br/>    name                        = string<br/>    start_time                  = string<br/>    end_time                    = optional(string)<br/>    exclusion_scope             = string<br/>    exclusion_end_time_behavior = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_maintenance_start_time"></a> [maintenance\_start\_time](#input\_maintenance\_start\_time) | Start time for daily maintenance operations. Specified in GMT with `HH:MM` format. | `string` | `"09:00"` | no |
 | <a name="input_master_authorized_networks"></a> [master\_authorized\_networks](#input\_master\_authorized\_networks) | External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation. | <pre>list(object({<br/>    cidr_block   = string<br/>    display_name = string<br/>  }))</pre> | `[]` | no |
@@ -219,7 +220,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
 | <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |

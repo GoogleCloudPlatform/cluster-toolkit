@@ -80,7 +80,7 @@ locals {
   add_default_cpu = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "cpu")
   add_default_memory = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "memory")
 
-  machine_mappings = jsondecode(file("${path.module}/../../../pkg/config/machine_mappings.json"))
+  machine_mappings = jsondecode(var.machine_mappings_json)
 }
 
 data "google_project" "project" {

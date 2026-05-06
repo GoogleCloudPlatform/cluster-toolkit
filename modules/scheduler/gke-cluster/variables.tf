@@ -635,3 +635,9 @@ variable "cluster_autoscaling" {
     error_message = "autoprovisioning_disk_size_gb must be at least 10 GB."
   }
 }
+
+variable "machine_mappings_json" {
+  description = "Injected JSON string containing machine mappings"
+  type        = string
+  default     = "{}"
+}

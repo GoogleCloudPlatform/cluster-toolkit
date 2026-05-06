@@ -17,6 +17,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -35,6 +36,13 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 	if !ok {
 		return nil
 	}
+	// Read machine mappings from file and inject into module settings
+	mappingsPath := "pkg/config/machine_mappings.json"
+	fileContent, err := os.ReadFile(mappingsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read machine mappings file %s: %w", mappingsPath, err)
+	}
+	mod.Settings = mod.Settings.With("machine_mappings_json", cty.StringVal(string(fileContent)))
 
 	it := limitsVal.ElementIterator()
 	var newLimits []cty.Value
