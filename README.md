@@ -443,7 +443,9 @@ If developing on a mac, a workaround is to install GNU tooling by installing
 
 To help improve Cluster Toolkit, feature usage statistics are collected and sent to Google. You can opt-out at any time by executing the following command:
 
+    ```shell
     ./gcluster telemetry off
+    ```
 
 Cluster Toolkit telemetry overall is handled in accordance with the [Google Privacy Policy](https://policies.google.com/privacy). When you use Cluster Toolkit to interact with or utilize GCP Services, your information is handled in accordance with the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
 
