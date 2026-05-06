@@ -1308,6 +1308,13 @@ func TestGetDeploymentFile(t *testing.T) {
 			expected:   "",
 		},
 		{
+			name:       "success: flag exists but is empty string",
+			flagValue:  "",
+			flagExists: true,
+			mockResp:   nil,
+			expected:   "",
+		},
+		{
 			name:       "error: standard files fetch failed",
 			flagValue:  "examples/hpc-slurm.yaml",
 			flagExists: true,
