@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,7 +47,9 @@ var (
 )
 
 var (
-	InstallationMode string // Toolkit installation mode like "SOURCE", "BINARY", etc.
+	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
+	telemetryCollector *telemetry.Collector
+	userConfigExists   bool = false
 )
 
 var (
@@ -69,6 +72,10 @@ func init() {
 	addDependenciesFlags(rootCmd.PersistentFlags())
 	addColorFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if err := config.InitUserConfig(); err == nil {
+			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
+			userConfigExists = true
+		}
 		initColor()
 		initDependencies(cmd)
 	}
@@ -113,7 +120,25 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+
+	// Capture Error Code
+	exitCode := 0
+	if err != nil {
+		exitCode = 1 // Default generic error code
+
+		// Attempt to unwrap the specific exit code from the error
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	if config.IsTelemetryEnabled() && userConfigExists {
+		telemetryCollector.Execute(exitCode)
+	}
+
+	return err
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git
