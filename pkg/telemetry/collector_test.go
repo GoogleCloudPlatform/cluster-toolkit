@@ -1271,16 +1271,6 @@ func TestGetDeploymentFile(t *testing.T) {
 			expected: "community/examples/ml-cluster.yml",
 		},
 		{
-			name:       "success: suffix match standard file",
-			flagValue:  "hpc-slurm.yaml",
-			flagExists: true,
-			mockResp: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
-			},
-			expected: "examples/hpc-slurm.yaml",
-		},
-		{
 			name:       "success: custom file",
 			flagValue:  "my-custom-cluster.yaml",
 			flagExists: true,
@@ -1298,7 +1288,7 @@ func TestGetDeploymentFile(t *testing.T) {
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
 			},
-			expected: "Custom",
+			expected: "examples/hpc-slurm.yaml",
 		},
 		{
 			name:       "success: windows path normalization",

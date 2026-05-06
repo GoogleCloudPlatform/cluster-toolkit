@@ -173,7 +173,7 @@ func getDeploymentFile(cmd *cobra.Command) string {
 
 	// Check if it matches a known example, otherwise mask as "Custom"
 	for _, sf := range standardFiles {
-		if path == sf || strings.HasSuffix(sf, "/"+path) {
+		if path == sf || strings.HasSuffix(path, "/"+sf) {
 			return sf
 		}
 	}
