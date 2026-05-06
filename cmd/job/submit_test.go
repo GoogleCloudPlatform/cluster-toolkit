@@ -190,7 +190,8 @@ func resetSubmitCmdFlags() {
 	projectID = ""
 	workloadName = ""
 	kueueQueueName = ""
-	numSlicesOrNodes = 1
+	numNodes = 1
+	numSlices = 1
 	restarts = 1
 	ttlAfterFinished = "1h"
 	gracePeriodStr = "30s"

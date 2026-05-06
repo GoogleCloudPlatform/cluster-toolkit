@@ -38,7 +38,8 @@ var (
 
 	workloadName     string
 	kueueQueueName   string
-	numSlicesOrNodes int
+	numNodes         int
+	numSlices        int
 	restarts         int
 	ttlAfterFinished string
 	gracePeriodStr   string
@@ -110,7 +111,8 @@ func init() {
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
-	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
+	SubmitCmd.Flags().IntVar(&numNodes, "num-nodes", 1, "The number of nodes to use per slice (for GPUs).")
+	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of slices to use.")
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
@@ -177,6 +179,10 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		awaitJobCompletion = true
 	}
 
+	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
+		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (vms-per-slice is calculated automatically from topology)")
+	}
+
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
 		BaseImage:                     baseImage,
@@ -190,7 +196,8 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		ClusterLocation:               location,
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
-		NumSlices:                     numSlicesOrNodes,
+		NumSlices:                     numSlices,
+		VmsPerSlice:                   numNodes,
 		MaxRestarts:                   restarts,
 		TtlSecondsAfterFinished:       ttlSeconds,
 		TerminationGracePeriodSeconds: gracePeriodSeconds,

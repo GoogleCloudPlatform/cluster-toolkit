@@ -1397,8 +1397,6 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 }
 
 func TestResolveTopologyForChips(t *testing.T) {
-	orc := &GKEOrchestrator{}
-
 	tests := []struct {
 		name       string
 		prefix     string
@@ -1452,12 +1450,12 @@ func TestResolveTopologyForChips(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := orc.resolveTopologyForChips(tt.prefix, tt.totalChips)
+			got, err := config.ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips))
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("ResolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if got != tt.wantShape {
-				t.Errorf("resolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
+				t.Errorf("ResolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
 			}
 		})
 	}
