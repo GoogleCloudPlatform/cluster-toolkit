@@ -190,11 +190,15 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 
 // isDockerCredsConfigured checks if Docker is configured to use gcloud credentials for the required registries.
 func isDockerCredsConfigured(region string) bool {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return false
+	configDir := os.Getenv("DOCKER_CONFIG")
+	if configDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		configDir = filepath.Join(homeDir, ".docker")
 	}
-	configPath := filepath.Join(homeDir, ".docker", "config.json")
+	configPath := filepath.Join(configDir, "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return false
@@ -205,6 +209,7 @@ func isDockerCredsConfigured(region string) bool {
 		CredsStore  string            `json:"credsStore"`
 	}
 	if err := json.Unmarshal(data, &config); err != nil {
+		logging.Error("Failed to unmarshal Docker config from %s: %v", configPath, err)
 		return false
 	}
 
@@ -261,12 +266,13 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	// Check Docker creds
 	region := shell.ExtractRegion(location)
 	if !isDockerCredsConfigured(region) {
+		cmds := []string{"gcloud auth configure-docker gcr.io --quiet"}
+		if region != "" {
+			cmds = append(cmds, fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region))
+		}
 		missing = append(missing, missingPrereq{
-			name: "Docker Credentials",
-			commands: []string{
-				"gcloud auth configure-docker gcr.io --quiet",
-				fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region),
-			},
+			name:     "Docker Credentials",
+			commands: cmds,
 		})
 	} else {
 		state.DockerCredsConfigured = true
