@@ -187,7 +187,6 @@ type CPUConfig struct {
 	Count    int `json:"count"`
 	MemoryMb int `json:"memoryMb,omitempty"`
 }
-
 type OutputConfig struct {
 	GPUs map[string]GPUConfig `json:"gpus"`
 	TPUs map[string]TPUConfig `json:"tpus"`

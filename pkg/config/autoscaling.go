@@ -20,7 +20,6 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 )
-
 // ExpandClusterAutoscaling intercepts the cluster_autoscaling variable,
 // parses machine_type in Go, and injects internal variables for maximum chips and accelerator type.
 type cachedAccInfo struct {
@@ -187,16 +186,7 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 		return 0, "", err
 	}
 
-	var data struct {
-		GPUs map[string]struct {
-			Count int    `json:"count"`
-			Type  string `json:"type"`
-		} `json:"gpus"`
-		TPUs map[string]struct {
-			Count int    `json:"count"`
-			Type  string `json:"type"`
-		} `json:"tpus"`
-	}
+	var data OutputConfig
 	if err := json.Unmarshal([]byte(cfgJson), &data); err != nil {
 		return 0, "", fmt.Errorf("failed to unmarshal machine configurations: %w", err)
 	}
@@ -204,7 +194,7 @@ func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (
 	if acc, ok := data.GPUs[machineType]; ok {
 		return acc.Count, acc.Type, nil
 	} else if acc, ok := data.TPUs[machineType]; ok {
-		return acc.Count, acc.Type, nil
+		return acc.Count, machineType, nil
 	}
 
 	return 0, "", nil
