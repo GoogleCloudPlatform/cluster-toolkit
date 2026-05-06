@@ -19,7 +19,6 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"io"
@@ -861,12 +860,6 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		func() error { return g.ensurePriorityClassesInstalled() },
 		g.checkAndInstallJobSetCRD,
-		func() error {
-			return g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
-		},
-		func() error {
-			return config.ValidateHardwareRequest(job.ComputeType, job.Topology, job.PlacementPolicy)
-		},
 	}
 
 	for _, validate := range validators {

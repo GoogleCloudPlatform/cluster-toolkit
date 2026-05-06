@@ -80,6 +80,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
 		topologyCache:            make(map[string]string),
+		dynamicSlicingCache:      make(map[string]bool),
 	}
 }
 
@@ -844,6 +845,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			name: "x86 with hyperthreading disabled in map",
 			job: orchestrator.JobDefinition{
 				ComputeType:     "c2-standard-60",
+				MachineType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "1",
@@ -860,6 +862,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			name: "Fallback to Compute API when not in map",
 			job: orchestrator.JobDefinition{
 				ComputeType:     "c2-standard-60",
+				MachineType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "",
@@ -885,7 +888,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			}
 			orc.machineCapCache = make(map[string]MachineTypeCap)
 
-			isCPU, capacity, err := orc.determineIfCPUMachine(tt.job)
+			isCPU, capacity, err := orc.determineIfCPUMachine(&tt.job)
 
 			if tt.wantErr {
 				if err == nil {
