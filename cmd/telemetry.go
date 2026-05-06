@@ -37,16 +37,20 @@ var telemetryCmd = &cobra.Command{
 		switch strings.ToLower(args[0]) {
 		case "on", "true", "yes", "enable":
 			enabled = true
-			logging.Info("Telemetry has been turned on.")
 		case "off", "false", "no", "disable":
 			enabled = false
-			logging.Info("Telemetry has been turned off.")
 		default:
 			return fmt.Errorf("invalid argument %q: use 'on' or 'off'", args[0])
 		}
 
 		if err := config.SetTelemetry(enabled); err != nil {
 			return err
+		}
+
+		if enabled {
+			logging.Info("Telemetry has been turned on.")
+		} else {
+			logging.Info("Telemetry has been turned off.")
 		}
 
 		return nil
