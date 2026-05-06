@@ -224,8 +224,8 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 	if !IsTPU(mtStr) {
 		return nil
 	}
-  
-  nodes, err := CalculateAcceleratorNodes(mtStr, tpuTopologyStr, 0)
+
+	nodes, err := CalculateAcceleratorNodes(mtStr, tpuTopologyStr, 0)
 	if err != nil {
 		return fmt.Errorf("failed to automatically calculate static_node_count for module %q: %w", mod.ID, err)
 	}
