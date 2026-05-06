@@ -74,6 +74,13 @@ locals {
   # and Cluster Autoscaler to allow essentially unlimited CPU and memory scaling for the cluster.
   nap_cpu_max    = var.cluster_autoscaling.autoprovisioning_cpu_max
   nap_memory_max = var.cluster_autoscaling.autoprovisioning_memory_max
+
+  user_provided_resource_types = local.has_autoscaling_limits ? [for limit in var.cluster_autoscaling.limits : limit.autoprovisioning_resource_type] : []
+  
+  add_default_cpu = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "cpu")
+  add_default_memory = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "memory")
+
+  machine_mappings = jsondecode(file("${path.module}/../../../pkg/config/machine_mappings.json"))
 }
 
 data "google_project" "project" {
@@ -153,13 +160,15 @@ resource "google_container_cluster" "gke_cluster" {
 
     dynamic "resource_limits" {
       for_each = concat(
-        var.cluster_autoscaling.enabled ? [
-          { type = "cpu", min = 1, max = local.nap_cpu_max },
-          { type = "memory", min = 1, max = local.nap_memory_max }
-        ] : [],
+        local.add_default_cpu ? [{ type = "cpu", min = 1, max = local.nap_cpu_max }] : [],
+        local.add_default_memory ? [{ type = "memory", min = 1, max = local.nap_memory_max }] : [],
         local.has_autoscaling_limits ? [
           for limit in var.cluster_autoscaling.limits : {
-            type = limit.autoprovisioning_resource_type
+            type = lookup(
+              local.machine_mappings.machine_family_to_label_map,
+              length(split("-", limit.autoprovisioning_resource_type)) > 1 ? join("-", slice(split("-", limit.autoprovisioning_resource_type), 0, length(split("-", limit.autoprovisioning_resource_type)) - 1)) : limit.autoprovisioning_resource_type,
+              limit.autoprovisioning_resource_type
+            )
             min  = 0
             max  = limit.autoprovisioning_max_count
           }

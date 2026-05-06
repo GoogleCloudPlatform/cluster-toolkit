@@ -124,7 +124,7 @@ func TestBuildOutputConfigJSON_CPU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildOutputConfigJSON failed: %v", err)
 	}
-	var out1 outputConfig
+	var out1 OutputConfig
 	if err := json.Unmarshal([]byte(got1), &out1); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestBuildOutputConfigJSON_GPU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildOutputConfigJSON failed: %v", err)
 	}
-	var out2 outputConfig
+	var out2 OutputConfig
 	if err := json.Unmarshal([]byte(got2), &out2); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestBuildOutputConfigJSON_TPU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildOutputConfigJSON failed: %v", err)
 	}
-	var out3 outputConfig
+	var out3 OutputConfig
 	if err := json.Unmarshal([]byte(got3), &out3); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestBuildOutputConfigJSON_TPUFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildOutputConfigJSON failed: %v", err)
 	}
-	var out4 outputConfig
+	var out4 OutputConfig
 	if err := json.Unmarshal([]byte(got4), &out4); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestGetMachineConfigJSON_EmptyParams(t *testing.T) {
 		t.Fatalf("getMachineConfigJSON failed: %v", err)
 	}
 
-	var out outputConfig
+	var out OutputConfig
 	if err := json.Unmarshal([]byte(got), &out); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}
