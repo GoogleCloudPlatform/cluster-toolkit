@@ -65,7 +65,7 @@ func TestResolveMachineName(t *testing.T) {
 		},
 	}
 
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -104,9 +104,8 @@ func TestResolveMachineName_Dynamic(t *testing.T) {
 }
 
 func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
-	g := &GKEOrchestrator{
-		machineTypeClient: &MockMachineTypeClient{FailAll: true},
-	}
+	g := newTestGKEOrchestrator(nil)
+	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
 	g.clusterZones = []string{"europe-west2-a", "europe-west2-c", "europe-west2-b"}
 
 	_, err := g.FetchMachineCapacity("tpu7x-1", "europe-west2")
@@ -122,13 +121,11 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 }
 
 func TestFetchMachineCapabilities_Caching(t *testing.T) {
-	g := &GKEOrchestrator{
-		machineCapCache: make(map[string]MachineTypeCap),
-		machineTypeClient: &MockMachineTypeClient{
-			MT: &compute.MachineType{
-				GuestCpus: 32,
-				MemoryMb:  131072,
-			},
+	g := newTestGKEOrchestrator(nil)
+	g.machineTypeClient = &MockMachineTypeClient{
+		MT: &compute.MachineType{
+			GuestCpus: 32,
+			MemoryMb:  131072,
 		},
 	}
 
@@ -180,11 +177,11 @@ func TestCalculateResourceLimits_CPU(t *testing.T) {
 		},
 	}
 
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := ManifestOptions{ComputeType: "n2-standard-32"}
+			opts := ManifestOptions{ComputeType: "n2-standard-32", MachineType: "n2-standard-32"}
 			profile := JobProfile{
 				IsCPUMachine:  true,
 				CapacityCount: tt.capacityCount,
@@ -308,10 +305,7 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			}
 
 			mockExecutor := NewMockExecutor(mockResponses)
-			orc := &GKEOrchestrator{
-				executor:          mockExecutor,
-				machineTypeClient: &MockMachineTypeClient{Executor: mockExecutor},
-			}
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
 			if len(tt.nodePools) > 0 {
 				for _, mt := range tt.nodePools {

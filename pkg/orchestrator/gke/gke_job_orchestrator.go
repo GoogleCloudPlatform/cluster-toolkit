@@ -58,6 +58,7 @@ func NewGKEOrchestrator() *GKEOrchestrator {
 		machineTypeClient:        &DefaultMachineTypeClient{},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
+		topologyCache:            make(map[string]string),
 	}
 }
 
@@ -865,11 +866,21 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 		return "", nil // Rejects GPU topologies implicitly
 	}
 
+	if g.topologyCache == nil {
+		g.topologyCache = make(map[string]string)
+	}
+
+	cacheKey := requested + ":" + accelType
+	if val, ok := g.topologyCache[cacheKey]; ok {
+		return val, nil
+	}
+
 	top, handled, err := g.resolveDynamicSlicingTopology(requested, clusterName, clusterLocation, accelType)
 	if err != nil {
 		return "", err
 	}
 	if handled {
+		g.topologyCache[cacheKey] = top
 		return top, nil
 	}
 
@@ -888,7 +899,11 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 
 	topologies := g.parseTopologies(output)
 
-	return g.selectTopology(requested, topologies, accelType)
+	res, err := g.selectTopology(requested, topologies, accelType)
+	if err == nil {
+		g.topologyCache[cacheKey] = res
+	}
+	return res, err
 }
 
 func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string]bool, accelType string) (string, error) {
