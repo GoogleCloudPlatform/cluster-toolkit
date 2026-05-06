@@ -315,6 +315,10 @@ resource "google_container_node_pool" "node_pool" {
       node_config[0].local_nvme_ssd_block_config,
     ]
     precondition {
+      condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
+      error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
       error_message = "max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
     }
@@ -347,12 +351,12 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        ((length(local.verified_specific_reservations) == 1 || !var.is_reservation_active) &&
+        (((length(local.verified_specific_reservations) > 0 && length(local.verified_specific_reservations) == length(toset(var.zones != null ? var.zones : []))) || !var.is_reservation_active) &&
         length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT
       Check if your reservation is configured correctly:
-      - A reservation with the name must exist in the specified project and one of the specified zones
+      - A reservation with the name must exist in the specified project and all of the specified zones (var.zones must be explicitly provided when var.is_reservation_active is true)
 
       - Its consumption type must be "specific"
       %{for property in local.specific_reservation_requirement_violations}

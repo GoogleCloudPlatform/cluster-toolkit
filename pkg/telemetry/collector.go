@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -41,13 +42,14 @@ var (
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
-func NewCollector(cmd *cobra.Command, args []string) *Collector {
+func NewCollector(cmd *cobra.Command, args []string, installationMode string) *Collector {
 	return &Collector{
-		eventCmd:       cmd,
-		eventArgs:      args,
-		eventStartTime: time.Now(),
-		blueprint:      getBlueprint(args),
-		metadata:       make(map[string]string),
+		eventCmd:         cmd,
+		eventArgs:        args,
+		eventStartTime:   time.Now(),
+		blueprint:        getBlueprint(args),
+		installationMode: installationMode,
+		metadata:         make(map[string]string),
 	}
 }
 
@@ -59,6 +61,8 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
+	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
+	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
@@ -70,6 +74,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
+	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -123,6 +128,57 @@ func getCmdFlags(cmd *cobra.Command) string {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
+}
+
+func getBlueprintName(bp config.Blueprint) string {
+	bpName := bp.BlueprintName
+	if bpName == "" {
+		return bpName
+	}
+
+	standardBlueprints := config.GetStandardBlueprintNames()
+
+	// If standardFiles is empty due to a fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no blueprint name was used.
+	if len(standardBlueprints) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Check if it matches a known blueprint name, otherwise mask as "Custom"
+	if slices.Contains(standardBlueprints, bpName) {
+		return bpName
+	}
+
+	return "Custom"
+}
+
+func getDeploymentFile(cmd *cobra.Command) string {
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
+		return ""
+	}
+
+	path := flag.Value.String()
+
+	// Force all backslashes to forward slashes first to ensure consistent cross-platform parsing
+	path = strings.ReplaceAll(path, "\\", "/")
+	// Clean the path, enforce forward slashes, and trim leading relative prefixes
+	path = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(path)), "./")
+
+	standardFiles := config.GetPredefinedExampleFiles()
+
+	// If standardFiles is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying no deployment file was used.
+	if len(standardFiles) == 0 {
+		return "UNVERIFIED"
+	}
+
+	// Check if it matches a known example, otherwise mask as "Custom"
+	for _, sf := range standardFiles {
+		if path == sf || strings.HasSuffix(path, "/"+sf) {
+			return sf
+		}
+	}
+
+	return "Custom"
 }
 
 func getIsGke(modulesList []string) string {

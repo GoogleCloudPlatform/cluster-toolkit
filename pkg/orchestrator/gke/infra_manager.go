@@ -19,6 +19,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"io"
@@ -93,9 +94,9 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	}
 
 	if needReinstall {
-		isSuperSlicing, _ := g.checkSuperSlicingViaGKE(clusterName, clusterLocation)
-		if isSuperSlicing {
-			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Super-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+		isDynamicSlicing, _ := g.checkDynamicSlicingViaGKE(clusterName, clusterLocation)
+		if isDynamicSlicing {
+			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Dynamic-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
 		}
 
 		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
@@ -854,13 +855,18 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 }
 
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
-func (g *GKEOrchestrator) ValidateClusterState(workloadName string, clusterName string, clusterLocation string, projectID string) error {
+func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
-		func() error { return g.CheckAndInstallKueue("", clusterName, clusterLocation) },
+		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		func() error { return g.ensurePriorityClassesInstalled() },
 		g.checkAndInstallJobSetCRD,
-		func() error { return g.validateJobConflicts(workloadName, clusterName, clusterLocation, projectID) },
+		func() error {
+			return g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
+		},
+		func() error {
+			return config.ValidateHardwareRequest(job.AcceleratorType, job.Topology, job.PlacementPolicy)
+		},
 	}
 
 	for _, validate := range validators {
@@ -883,7 +889,7 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkSuperSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
+func (g *GKEOrchestrator) checkDynamicSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
 	poolName := os.Getenv("GKE_NODE_POOL_NAME")
 	if poolName == "" {
 		return false, nil

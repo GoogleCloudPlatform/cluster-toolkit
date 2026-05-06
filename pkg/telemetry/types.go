@@ -30,15 +30,18 @@ const (
 	timeout2Sec     = 2 * time.Second
 	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
 	CONCORD         = "CONCORD"
+	SOURCE          = "SOURCE"
+	BINARY          = "BINARY"
 )
 
 // Collector encapsulates the telemetry state (avoids global variables).
 type Collector struct {
-	eventCmd       *cobra.Command
-	eventArgs      []string
-	eventStartTime time.Time
-	blueprint      config.Blueprint
-	metadata       map[string]string
+	eventCmd         *cobra.Command
+	eventArgs        []string
+	eventStartTime   time.Time
+	blueprint        config.Blueprint
+	installationMode string
+	metadata         map[string]string
 
 	mu sync.Mutex // Protects state against concurrent access
 }
@@ -79,6 +82,8 @@ type ServiceAccountKey struct {
 
 const (
 	COMMAND_FLAGS      = "CLUSTER_TOOLKIT_COMMAND_FLAGS"
+	BLUEPRINT          = "CLUSTER_TOOLKIT_BLUEPRINT"
+	DEPLOYMENT_FILE    = "CLUSTER_TOOLKIT_DEPLOYMENT_FILE"
 	IS_GKE             = "CLUSTER_TOOLKIT_IS_GKE"
 	IS_SLURM           = "CLUSTER_TOOLKIT_IS_SLURM"
 	IS_VM_INSTANCE     = "CLUSTER_TOOLKIT_IS_VM_INSTANCE"
@@ -90,6 +95,7 @@ const (
 	OS_VERSION         = "CLUSTER_TOOLKIT_OS_VERSION"
 	TERRAFORM_VERSION  = "CLUSTER_TOOLKIT_TERRAFORM_VERSION"
 	BILLING_ACCOUNT_ID = "CLUSTER_TOOLKIT_BILLING_ACCOUNT_ID"
+	INSTALLATION_MODE  = "CLUSTER_TOOLKIT_INSTALLATION_MODE"
 	IS_TEST_DATA       = "CLUSTER_TOOLKIT_IS_TEST_DATA"
 	EXIT_CODE          = "CLUSTER_TOOLKIT_EXIT_CODE"
 )
