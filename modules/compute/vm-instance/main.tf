@@ -198,6 +198,10 @@ resource "google_compute_instance" "compute_vm" {
     auto_delete = var.auto_delete_boot_disk
   }
 
+  shielded_instance_config {
+      enable_secure_boot = var.enable_secure_boot
+  } 
+
   dynamic "attached_disk" {
     for_each = slice(
       google_compute_disk.additional_disks,
