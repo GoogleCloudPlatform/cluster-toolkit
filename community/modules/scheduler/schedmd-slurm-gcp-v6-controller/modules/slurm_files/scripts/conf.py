@@ -141,6 +141,7 @@ def conflines(lkp: util.Lookup) -> str:
         "TaskProlog": f"{task_prolog_path}/task-prolog" if lkp.cfg.task_prolog_scripts else None,
         "TaskEpilog": f"{task_epilog_path}/task-epilog" if lkp.cfg.task_epilog_scripts else None,
         "PrologFlags": get("prolog_flags", None),
+        "X11Parameters": get("x11_parameters", None),
         "SwitchType": get("switch_type", None),
         "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
