@@ -119,7 +119,6 @@ Here are the flags currently supported by `gcluster job submit`:
 * `-n, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
 * `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
 * `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
-* `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
 * `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
 * `--restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
@@ -560,7 +559,6 @@ $GCLUSTER job submit \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --compute-type v6e-8 \
     --nodes 1 \
-    --vms-per-slice 2 \
     --topology 2x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
@@ -813,7 +811,6 @@ $GCLUSTER job submit \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
     --compute-type tpu7x-32 \
     --nodes 1 \
-    --vms-per-slice 8 \
     --topology 2x4x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
