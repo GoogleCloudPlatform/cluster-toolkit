@@ -586,3 +586,52 @@ variable "enable_slice_controller" {
   type        = bool
   default     = false
 }
+
+variable "cluster_autoscaling" {
+  description = <<EOT
+  GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration.
+
+  enabled:               Enable/disable GKE Cluster autoscaling and auto-provisioning.
+  service_account_email: The service account tied to node-provisioning. Defaults to the deployment service account.
+  oauth_scopes:          Scopes assigned to nodes provisioned by NAP.
+  autoprovisioning_disk_size_gb: The disk size of auto-provisioned nodes (GB). Default 100.
+  autoprovisioning_disk_type:    The disk type of auto-provisioned nodes. Default pd-balanced.
+  autoprovisioning_cpu_max:      The maximum number of CPU cores limit. Default 1,000,000.
+  autoprovisioning_memory_max:   The maximum Memory limit in GB. Default 10,000,000.
+  limits:                Explicit upper bounds to apply during scaling.
+    autoprovisioning_machine_type: GCE machine type tier (used as input).
+    autoprovisioning_resource_type: The underlying specific GKE accelerator resource name (inferred by expansion).
+    autoprovisioning_max_count:    The ceiling for specific accelerator types. Default 1000.
+
+  Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve 
+  the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.
+  EOT
+  type = object({
+    enabled = bool
+    limits = list(object({
+      autoprovisioning_machine_type  = optional(string)
+      autoprovisioning_resource_type = optional(string)
+      autoprovisioning_max_count     = optional(number, 1000)
+    }))
+    service_account_email         = optional(string, "")
+    oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+    autoprovisioning_disk_size_gb = optional(number, 100)
+    autoprovisioning_disk_type    = optional(string, "pd-balanced")
+    autoprovisioning_auto_upgrade = optional(bool, true)
+    autoprovisioning_auto_repair  = optional(bool, true)
+    autoprovisioning_cpu_max      = optional(number, 1000000)
+    autoprovisioning_memory_max   = optional(number, 10000000)
+  })
+  default = {
+    enabled = false
+    limits  = []
+  }
+  validation {
+    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
+    error_message = "autoprovisioning_disk_type must be one of pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
+  }
+  validation {
+    condition     = coalesce(var.cluster_autoscaling.autoprovisioning_disk_size_gb, 100) >= 10
+    error_message = "autoprovisioning_disk_size_gb must be at least 10 GB."
+  }
+}

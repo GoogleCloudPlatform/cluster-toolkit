@@ -176,39 +176,38 @@ func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
 	return buildOutputConfigJSON(machineType, mt)
 }
 
-type gpuConfig struct {
+type GPUConfig struct {
 	Count int    `json:"count"`
 	Type  string `json:"type"`
 }
-type tpuConfig struct {
-	Count int `json:"count"`
+type TPUConfig struct {
+	Count int    `json:"count"`
 }
-type cpuConfig struct {
+type CPUConfig struct {
 	Count    int `json:"count"`
 	MemoryMb int `json:"memoryMb,omitempty"`
 }
-
-type outputConfig struct {
-	GPUs map[string]gpuConfig `json:"gpus"`
-	TPUs map[string]tpuConfig `json:"tpus"`
-	CPUs map[string]cpuConfig `json:"cpus"`
+type OutputConfig struct {
+	GPUs map[string]GPUConfig `json:"gpus"`
+	TPUs map[string]TPUConfig `json:"tpus"`
+	CPUs map[string]CPUConfig `json:"cpus"`
 }
 
 func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string, error) {
-	result := outputConfig{
-		GPUs: make(map[string]gpuConfig),
-		TPUs: make(map[string]tpuConfig),
-		CPUs: make(map[string]cpuConfig),
+	result := OutputConfig{
+		GPUs: make(map[string]GPUConfig),
+		TPUs: make(map[string]TPUConfig),
+		CPUs: make(map[string]CPUConfig),
 	}
 
-	result.CPUs[machineType] = cpuConfig{Count: int(mt.GuestCpus), MemoryMb: int(mt.MemoryMb)}
+	result.CPUs[machineType] = CPUConfig{Count: int(mt.GuestCpus), MemoryMb: int(mt.MemoryMb)}
 
 	count, accelType, isTPU := ResolveAcceleratorInfo(mt, machineType)
 	if count > 0 {
 		if isTPU {
-			result.TPUs[machineType] = tpuConfig{Count: count}
+			result.TPUs[machineType] = TPUConfig{Count: count}
 		} else {
-			result.GPUs[machineType] = gpuConfig{
+			result.GPUs[machineType] = GPUConfig{
 				Count: count,
 				Type:  accelType,
 			}

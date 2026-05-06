@@ -65,6 +65,24 @@ locals {
   ]
 }
 
+# GKE Node Auto-Provisioning (NAP) locals
+locals {
+  has_autoscaling_limits = var.cluster_autoscaling.enabled && length(var.cluster_autoscaling.limits) > 0
+  nap_service_account    = var.cluster_autoscaling.service_account_email != "" ? var.cluster_autoscaling.service_account_email : local.sa_email
+
+  # These maximum values represent massive upper bounds for the GKE Node Auto-Provisioning 
+  # and Cluster Autoscaler to allow essentially unlimited CPU and memory scaling for the cluster.
+  nap_cpu_max    = var.cluster_autoscaling.autoprovisioning_cpu_max
+  nap_memory_max = var.cluster_autoscaling.autoprovisioning_memory_max
+
+  user_provided_resource_types = local.has_autoscaling_limits ? [for limit in var.cluster_autoscaling.limits : limit.autoprovisioning_resource_type] : []
+  
+  add_default_cpu = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "cpu")
+  add_default_memory = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "memory")
+
+  machine_mappings = jsondecode(file("${path.module}/../../../pkg/config/machine_mappings.json"))
+}
+
 data "google_project" "project" {
   project_id = var.project_id
 }
@@ -135,11 +153,49 @@ resource "google_container_cluster" "gke_cluster" {
   enable_shielded_nodes = var.enable_shielded_nodes
 
   cluster_autoscaling {
-    # Controls auto provisioning of node-pools
-    enabled = false
+    enabled = var.cluster_autoscaling.enabled
 
     # Controls autoscaling algorithm of node-pools
     autoscaling_profile = var.autoscaling_profile
+
+    dynamic "resource_limits" {
+      for_each = concat(
+        local.add_default_cpu ? [{ type = "cpu", min = 1, max = local.nap_cpu_max }] : [],
+        local.add_default_memory ? [{ type = "memory", min = 1, max = local.nap_memory_max }] : [],
+        local.has_autoscaling_limits ? [
+          for limit in var.cluster_autoscaling.limits : {
+            type = lookup(
+              local.machine_mappings.machine_family_to_label_map,
+              length(split("-", limit.autoprovisioning_resource_type)) > 1 ? join("-", slice(split("-", limit.autoprovisioning_resource_type), 0, length(split("-", limit.autoprovisioning_resource_type)) - 1)) : limit.autoprovisioning_resource_type,
+              limit.autoprovisioning_resource_type
+            )
+            min  = 0
+            max  = limit.autoprovisioning_max_count
+          }
+        ] : []
+      )
+      content {
+        resource_type = resource_limits.value.type
+        minimum       = resource_limits.value.min
+        maximum       = resource_limits.value.max
+      }
+    }
+
+    dynamic "auto_provisioning_defaults" {
+      for_each = var.cluster_autoscaling.enabled ? [1] : []
+      content {
+        service_account = local.nap_service_account
+        oauth_scopes    = var.cluster_autoscaling.oauth_scopes
+
+        management {
+          auto_upgrade = var.cluster_autoscaling.autoprovisioning_auto_upgrade
+          auto_repair  = var.cluster_autoscaling.autoprovisioning_auto_repair
+        }
+
+        disk_size = var.cluster_autoscaling.autoprovisioning_disk_size_gb
+        disk_type = var.cluster_autoscaling.autoprovisioning_disk_type
+      }
+    }
   }
 
   datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
