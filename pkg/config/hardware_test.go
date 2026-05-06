@@ -15,6 +15,8 @@
 package config
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -95,7 +97,7 @@ func TestCalculateAcceleratorNodes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			nodes, err := calculateAcceleratorNodes(tc.machineType, tc.topology)
+			nodes, err := CalculateAcceleratorNodes(tc.machineType, tc.topology, 0)
 			if tc.expectErr {
 				if err == nil {
 					t.Fatalf("expected error but got nil")
@@ -109,6 +111,16 @@ func TestCalculateAcceleratorNodes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCalculateAcceleratorNodes_WithExplicitCount(t *testing.T) {
+	nodes, err := CalculateAcceleratorNodes("ct5p-hightpu-4t", "4x4x4", 8)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if nodes != 8 {
+		t.Errorf("expected 8 nodes, got %d", nodes)
 	}
 }
 
@@ -225,5 +237,275 @@ func TestExpandHardwareSettings(t *testing.T) {
 	}
 	if mod4.Settings.Has("static_node_count") {
 		t.Errorf("expected static_node_count NOT to be set for non-TPU machine type")
+	}
+}
+
+func TestResolveTopologyForChips(t *testing.T) {
+	tests := []struct {
+		name       string
+		prefix     string
+		totalChips int
+		wantShape  string
+		wantErr    bool
+	}{
+		{
+			name:       "v4 8 cores (4 chips)",
+			prefix:     "v4",
+			totalChips: 8,
+			wantShape:  "2x2x1",
+			wantErr:    false,
+		},
+		{
+			name:       "tpu7x 2048 chips",
+			prefix:     "tpu7x-4",
+			totalChips: 2048,
+			wantShape:  "8x16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 1 chip",
+			prefix:     "v6e",
+			totalChips: 1,
+			wantShape:  "1x1",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 256 chips",
+			prefix:     "v6e",
+			totalChips: 256,
+			wantShape:  "16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "tpu7x 1 chip (Fail)",
+			prefix:     "tpu7x-4",
+			totalChips: 1,
+			wantShape:  "",
+			wantErr:    true,
+		},
+		{
+			name:       "v4 3 chips (Fail)",
+			prefix:     "v4",
+			totalChips: 3,
+			wantShape:  "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ResolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantShape {
+				t.Errorf("ResolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
+			}
+		})
+	}
+}
+
+func TestIsTPU(t *testing.T) {
+	tests := []struct {
+		accelType string
+		want      bool
+	}{
+		{"v4-8", true},
+		{"v5e-8", true},
+		{"v6e-8", true},
+		{"tpu7x-1", true},
+		{"ct4p-hightpu-4t", true},
+		{"ct5lp-hightpu-8t", true},
+		{"v5litepod-16", true},
+		{"l4-1", false},
+		{"nvidia-tesla-a100", false},
+		{"g2-standard-12", false},
+		{"n2-standard-2", false},
+		{"v1-standard-2", false},
+		{"v5x", false},
+	}
+	for _, tt := range tests {
+		if got := IsTPU(tt.accelType); got != tt.want {
+			t.Errorf("IsTPU(%q) = %v, want %v", tt.accelType, got, tt.want)
+		}
+	}
+}
+
+func TestMatchesTPUFamily(t *testing.T) {
+	tests := []struct {
+		name      string
+		accelType string
+		families  []string
+		want      bool
+	}{
+		{"v6e matches 2D", "v6e-8", valid2DTPUFamilies, true},
+		{"v5e matches 2D", "v5e-8", valid2DTPUFamilies, true},
+		{"v5litepod matches 2D", "v5litepod-16", valid2DTPUFamilies, true},
+		{"l4 does not match 2D", "l4-1", valid2DTPUFamilies, false},
+		{"v4 matches 3D", "v4-8", valid3DTPUFamilies, true},
+		{"v5p matches 3D", "v5p-4", valid3DTPUFamilies, true},
+		{"v6e does not match 3D", "v6e-8", valid3DTPUFamilies, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesTPUFamily(tt.accelType, tt.families); got != tt.want {
+				t.Errorf("matchesTPUFamily(%q, %v) = %v, want %v", tt.accelType, tt.families, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveMachineType(t *testing.T) {
+	tests := []struct {
+		accelType string
+		want      string
+	}{
+		{"v4-8", "ct4p-hightpu-4t"},
+		{"v5e-8", "ct5lp-hightpu-8t"},
+		{"l4-1", "g2-standard-12"},
+		{"unknown", "unknown"},
+		{"ct4p-hightpu-4t", "ct4p-hightpu-4t"},
+	}
+	for _, tt := range tests {
+		if got := ResolveMachineType(tt.accelType); got != tt.want {
+			t.Errorf("ResolveMachineType(%q) = %q, want %q", tt.accelType, got, tt.want)
+		}
+	}
+}
+
+func TestGetCandidatesForShorthand(t *testing.T) {
+	tests := []struct {
+		shorthand string
+		want      []string
+	}{
+		{"v5e", []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t", "ct5lp-hightpu-8t"}},
+		{"v4", []string{"ct4p-hightpu-4t"}},
+		{"l4", []string{"g2-standard-12", "g2-standard-24", "g2-standard-48", "g2-standard-96"}},
+		{"unknown", nil},
+	}
+	for _, tt := range tests {
+		got := GetCandidatesForShorthand(tt.shorthand)
+		// Sort for comparison because map iteration order is random
+		slices.Sort(got)
+		slices.Sort(tt.want)
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("GetCandidatesForShorthand(%q) = %v, want %v", tt.shorthand, got, tt.want)
+		}
+	}
+}
+
+func TestValidateHardwareRequest(t *testing.T) {
+	tests := []struct {
+		name            string
+		machineType     string
+		topology        string
+		placementPolicy string
+		wantErr         bool
+	}{
+		{"Valid TPU v4", "v4-8", "2x2x1", "", false},
+		{"Valid TPU v6e", "v6e-8", "2x2", "", false},
+		{"Invalid TPU v6e shape", "v6e-8", "3x3", "", true},
+		{"Valid TPU v5litepod", "v5litepod-16", "4x4", "", false},
+		{"Invalid TPU v5litepod shape", "v5litepod-16", "3x3", "", true},
+		{"Invalid TPU v4 dimensions", "v4-8", "2x2", "", true}, // Needs 3D
+		{"Invalid TPU v4 shape", "v4-8", "3x3x3", "", true},
+		{"Unknown TPU family fails", "tpu-v7-8", "2x2x2", "", true},
+		{"Non-TPU skips validation", "l4-1", "invalid", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHardwareRequest(tt.machineType, tt.topology, tt.placementPolicy)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateHardwareRequest() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestCheckTopologyContainment(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested string
+		container string
+		accelType string
+		wantFit   bool
+		wantErr   bool
+	}{
+		{
+			name:      "Perfect fit",
+			requested: "2x2",
+			container: "2x2",
+			accelType: "v6e",
+			wantFit:   true,
+			wantErr:   false,
+		},
+		{
+			name:      "Fits inside",
+			requested: "2x2",
+			container: "4x4",
+			accelType: "v6e",
+			wantFit:   true,
+			wantErr:   false,
+		},
+		{
+			name:      "Doesn't fit (too large)",
+			requested: "4x4",
+			container: "2x2",
+			accelType: "v6e",
+			wantFit:   false,
+			wantErr:   false,
+		},
+		{
+			name:      "Different dimensions",
+			requested: "2x2x1",
+			container: "4x4",
+			accelType: "v6e",
+			wantFit:   false,
+			wantErr:   false,
+		},
+		{
+			name:      "Invalid requested topology (NaN)",
+			requested: "2xfoo",
+			container: "4x4",
+			accelType: "v6e",
+			wantFit:   false,
+			wantErr:   true,
+		},
+		{
+			name:      "Invalid container topology (NaN)",
+			requested: "2x2",
+			container: "4xbar",
+			accelType: "v6e",
+			wantFit:   false,
+			wantErr:   true,
+		},
+		{
+			name:      "V6e invalid subset shape",
+			requested: "3x3",
+			container: "4x4",
+			accelType: "v6e",
+			wantFit:   false,
+			wantErr:   true,
+		},
+		{
+			name:      "V4 invalid subset shape",
+			requested: "3x3x3",
+			container: "4x4x4",
+			accelType: "v4",
+			wantFit:   false,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := CheckTopologyContainment(tt.requested, tt.container, tt.accelType)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("CheckTopologyContainment() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantFit {
+				t.Errorf("CheckTopologyContainment() got = %v, want %v", got, tt.wantFit)
+			}
+		})
 	}
 }

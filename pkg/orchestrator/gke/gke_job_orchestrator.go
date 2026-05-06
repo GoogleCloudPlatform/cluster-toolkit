@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -54,6 +55,7 @@ const (
 func NewGKEOrchestrator() *GKEOrchestrator {
 	return &GKEOrchestrator{
 		executor:                 &DefaultExecutor{},
+		machineTypeClient:        &DefaultMachineTypeClient{},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
 	}
@@ -364,6 +366,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		return err
 	}
 	job.ProjectID = projectID
+	g.projectID = projectID
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", job.ClusterName)
 	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
@@ -435,7 +438,7 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 
 	// Centralized Cluster Validation (Skip for dry-runs to avoid cluster mutations)
 	if job.DryRunManifest == "" {
-		if err := g.ValidateClusterState(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+		if err := g.ValidateClusterState(job); err != nil {
 			return err
 		}
 	}
@@ -505,11 +508,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 		sa = ""
 	}
 
-	nodeCount := np.InitialNodeCount
-	if np.Autoscaling.Enabled && np.Autoscaling.MaxNodeCount > nodeCount {
-		nodeCount = np.Autoscaling.MaxNodeCount
-	}
-
+	nodeCount := g.getNodeCount(np)
 	nodeLabels = make(map[string]string)
 
 	if nodeCount == 0 {
@@ -555,6 +554,28 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	}
 
 	return cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, nil
+}
+
+func (g *GKEOrchestrator) getNodeCount(np gkeJobNodePool) int {
+	numZones := len(g.clusterZones)
+	if numZones == 0 {
+		numZones = 1
+	}
+
+	nodeCount := np.InitialNodeCount * numZones
+	if np.Autoscaling.Enabled {
+		var maxNodes int
+		if np.Autoscaling.TotalMaxNodeCount > 0 {
+			maxNodes = np.Autoscaling.TotalMaxNodeCount
+		} else {
+			maxNodes = np.Autoscaling.MaxNodeCount * numZones
+		}
+
+		if maxNodes > nodeCount {
+			nodeCount = maxNodes
+		}
+	}
+	return nodeCount
 }
 
 func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nodeCount int, machineType string) (gpus, tpus int, flavor string, nodeLabels map[string]string, err error) {
@@ -816,42 +837,18 @@ func (g *GKEOrchestrator) queryMachineType() (string, error) {
 	return "", nil
 }
 
-func (g *GKEOrchestrator) resolveTopologyForChips(prefix string, totalChips int) (string, error) {
-	// 3D topologies for v4, v5p, tpu7, tpu7x
-	if prefix == "v4" || prefix == "v5p" || prefix == "tpu7" || prefix == "tpu7x" {
-		shapeMap := map[int]string{
-			4:    "2x2x1",
-			8:    "2x2x2",
-			16:   "2x2x4",
-			32:   "2x4x4",
-			64:   "4x4x4",
-			128:  "4x4x8",
-			256:  "4x8x8",
-			512:  "8x8x8",
-			1024: "8x8x16",
-			2048: "8x16x16",
-		}
-		if shape, exists := shapeMap[totalChips]; exists {
-			return shape, nil
-		}
-	} else {
-		// 2D topologies for v5e and v6e (default)
-		shapeMap := map[int]string{
-			1:   "1x1",
-			4:   "2x2",
-			8:   "2x4",
-			16:  "4x4",
-			32:  "4x8",
-			64:  "8x8",
-			128: "8x16",
-			256: "16x16",
-		}
-		if shape, exists := shapeMap[totalChips]; exists {
-			return shape, nil
+func (g *GKEOrchestrator) queryAllMachineTypes() ([]string, error) {
+	var unique []string
+	uniqueMap := make(map[string]bool)
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Config.MachineType != "" {
+			uniqueMap[np.Config.MachineType] = true
 		}
 	}
-
-	return "", fmt.Errorf("could not find a valid topology shape for %d chips with prefix %s", totalChips, prefix)
+	for k := range uniqueMap {
+		unique = append(unique, k)
+	}
+	return unique, nil
 }
 
 func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, clusterName string, clusterLocation string) (string, error) {
@@ -868,7 +865,7 @@ func (g *GKEOrchestrator) resolveTopology(requested string, accelType string, cl
 	}
 
 	if requested != "" {
-		if err := g.validateTopologyMeshFormat(requested, accelType); err != nil {
+		if err := config.ValidateHardwareRequest(accelType, requested, ""); err != nil {
 			return "", err
 		}
 	}
@@ -919,7 +916,11 @@ func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies
 	if !topologies[requested] {
 		contained := false
 		for t := range topologies {
-			if fit, _ := g.checkTopologyContainment(requested, t, accelType); fit {
+			fit, err := config.CheckTopologyContainment(requested, t, accelType)
+			if err != nil {
+				return fmt.Errorf("failed to check topology containment: %w", err)
+			}
+			if fit {
 				contained = true
 				break
 			}
@@ -1002,55 +1003,6 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies() (string, error) {
 	return output, nil
 }
 
-func (g *GKEOrchestrator) validateTopologyMeshFormat(requested string, accelType string) error {
-	dims := strings.Split(requested, "x")
-	isV6e := strings.Contains(accelType, "v6e") || strings.Contains(accelType, "ct6e")
-	isV5e := strings.Contains(accelType, "v5-lite") || strings.Contains(accelType, "ct5lp")
-
-	if isV6e || isV5e {
-		if len(dims) != 2 {
-			return fmt.Errorf("topology format invalid for %s: requested %s, expected AxB (2 dimensions)", accelType, requested)
-		}
-	} else {
-		if len(dims) != 3 {
-			return fmt.Errorf("topology format invalid for %s: requested %s, expected AxBxC (3 dimensions)", accelType, requested)
-		}
-	}
-	for _, d := range dims {
-		if _, err := strconv.Atoi(d); err != nil {
-			return fmt.Errorf("invalid topology dimension footprint val: %s", d)
-		}
-	}
-	return nil
-}
-
-func (g *GKEOrchestrator) checkTopologyContainment(requested, container string, accelType string) (bool, error) {
-	reqDims := strings.Split(requested, "x")
-	conDims := strings.Split(container, "x")
-	if len(reqDims) != len(conDims) {
-		return false, nil
-	}
-	for i := 0; i < len(reqDims); i++ {
-		r, _ := strconv.Atoi(reqDims[i])
-		c, _ := strconv.Atoi(conDims[i])
-		if r > c {
-			return false, nil
-		}
-	}
-
-	if requested != container {
-		if strings.Contains(accelType, "v6e") || strings.Contains(accelType, "ct6e") {
-			allowedShapes := map[string]bool{
-				"1x1": true, "2x2": true, "2x4": true, "4x4": true, "4x8": true, "8x8": true, "8x16": true, "16x16": true,
-			}
-			if !allowedShapes[requested] {
-				return false, fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout", requested)
-			}
-		}
-	}
-	return true, nil
-}
-
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
 	if job.DryRunManifest != "" {
 		if job.BaseImage != "" {
@@ -1116,30 +1068,58 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
+// TODO Use a map
+var machineFamilyToLabelMap = map[string]string{
+	"g2-standard":   "nvidia-l4",
+	"a3-highgpu":    "nvidia-h100-80gb",
+	"a3-megagpu":    "nvidia-h100-mega-80gb",
+	"a3-ultragpu":   "nvidia-h200-141gb",
+	"a4-highgpu":    "nvidia-b200",
+	"a4x-highgpu":   "nvidia-gb200",
+	"a2-highgpu":    "nvidia-tesla-a100",
+	"a2-ultragpu":   "nvidia-tesla-a100",
+	"a2-megagpu":    "nvidia-tesla-a100",
+	"g4-standard":   "nvidia-rtx-pro-6000",
+	"ct6e-standard": "tpu-v6e-slice",
+	"ct5lp-hightpu": "tpu-v5e-slice",
+	"ct5p-hightpu":  "tpu-v5p-slice",
+	"ct4p-hightpu":  "tpu-v4-podslice",
+	"v6e":           "tpu-v6e-slice",
+	"v5e":           "tpu-v5e-slice",
+	"v5p":           "tpu-v5p-slice",
+	"v4":            "tpu-v4-podslice",
+	"l4":            "nvidia-l4",
+	"rtx":           "nvidia-rtx-pro-6000",
+}
+
+// TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
 func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) string {
-	if strings.HasPrefix(acceleratorType, "v6e-") || strings.HasPrefix(acceleratorType, "v6e-slice-") {
-		return "tpu-v6e-slice"
-	}
-	if strings.HasPrefix(acceleratorType, "v5p-") || strings.HasPrefix(acceleratorType, "v5p-slice-") {
-		return "tpu-v5p-slice"
-	}
-	if strings.HasPrefix(acceleratorType, "l4-") {
-		return "nvidia-l4"
-	}
-	if strings.HasPrefix(acceleratorType, "rtx-6000-") || strings.HasPrefix(acceleratorType, "rtx-pro-6000-") {
-		return "nvidia-rtx-pro-6000"
-	}
-	if strings.Contains(acceleratorType, "tpu7x") {
-		return "tpu7x"
-	}
-	switch acceleratorType {
-	case "nvidia-tesla-a100":
-		return "nvidia-tesla-a100"
-	case "tpu-v4-podslice":
-		return "tpu-v4-podslice"
-	default:
+	resolvedLower := strings.ToLower(acceleratorType)
+
+	// Fallback for direct values
+	switch resolvedLower {
+	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5e-slice":
 		return acceleratorType
 	}
+
+	parts := strings.Split(resolvedLower, "-")
+
+	// Try matching first two parts (e.g., "g2-standard")
+	if len(parts) >= 2 {
+		family := parts[0] + "-" + parts[1]
+		if label, ok := machineFamilyToLabelMap[family]; ok {
+			return label
+		}
+	}
+
+	// Try matching first part (e.g., "v6e")
+	if len(parts) >= 1 {
+		if label, ok := machineFamilyToLabelMap[parts[0]]; ok {
+			return label
+		}
+	}
+
+	return acceleratorType
 }
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
@@ -1224,18 +1204,18 @@ func (g *GKEOrchestrator) indentYaml(s string, indent int) string {
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) (bool, int, error) {
-	if _, exists := acceleratorShorthandMap[job.AcceleratorType]; exists {
+	if _, exists := config.AcceleratorShorthandMap[job.AcceleratorType]; exists {
 		return false, 0, nil
 	}
 
-	for _, realMachine := range acceleratorShorthandMap {
+	for _, realMachine := range config.AcceleratorShorthandMap {
 		if job.AcceleratorType == realMachine {
 			return false, 0, nil
 		}
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || IsTPU(mapped) {
+	if strings.Contains(strings.ToLower(mapped), "nvidia") || config.IsTPU(mapped) {
 		return false, 0, nil
 	}
 
@@ -1251,18 +1231,18 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job orchestrator.JobDefinition) 
 }
 
 func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
-	if _, exists := acceleratorShorthandMap[accelType]; exists {
+	if _, exists := config.AcceleratorShorthandMap[accelType]; exists {
 		return true
 	}
 
-	for _, realMachine := range acceleratorShorthandMap {
+	for _, realMachine := range config.AcceleratorShorthandMap {
 		if accelType == realMachine {
 			return true
 		}
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(accelType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || IsTPU(mapped) {
+	if strings.Contains(strings.ToLower(mapped), "nvidia") || config.IsTPU(mapped) {
 		return true
 	}
 
@@ -1834,10 +1814,24 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 }
 
 func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
+	// First, retrieve the JobSet to get its UID
+	jobsetGVR := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
+	jobset, err := d.dynClient.Resource(jobsetGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get jobset %s in namespace %s: %w", workloadName, namespace, err)
+	}
+
+	uid := string(jobset.GetUID())
+	if uid == "" {
+		return nil, fmt.Errorf("jobset %s has no UID", workloadName)
+	}
+
+	// Now list workloads using the UID label selector
 	workloadGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
-	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-name=%s", workloadName),
-	})
+	listOpts := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
+	}
+	workloadList, err := d.dynClient.Resource(workloadGVR).Namespace(namespace).List(context.TODO(), listOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list workloads in namespace %s: %w", namespace, err)
 	}

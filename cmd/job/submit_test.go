@@ -82,7 +82,7 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 		"--pathways-server-image", "server:latest",
 		"--pathways-worker-image", "worker:latest",
 		"--pathways-gcs-location", "gs://my-bucket",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 	)
 
 	if err != nil {
@@ -152,7 +152,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--location", "us-central1-a",
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 	)
 
 	if err != nil {
@@ -183,7 +183,7 @@ func resetSubmitCmdFlags() {
 	baseImage = ""
 	buildContext = ""
 	commandToRun = ""
-	acceleratorType = ""
+	computeType = ""
 	dryRunManifest = ""
 	clusterName = ""
 	location = ""
@@ -192,7 +192,7 @@ func resetSubmitCmdFlags() {
 	kueueQueueName = ""
 	numSlicesOrNodes = 1
 	vmsPerSlice = 1
-	maxRestarts = 1
+	restarts = 1
 	ttlAfterFinished = "1h"
 	gracePeriodStr = "30s"
 	placementPolicy = ""
@@ -379,7 +379,7 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 		"--base-image", "python:3.9-slim",
 		"--build-context", "job_details",
 		"--command", "echo hello",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 		"--cluster", "test-cluster",
 		"--location", "test-location",
 		"--project", "test-project",
@@ -424,7 +424,7 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 		"--base-image", "python:3.9-slim",
 		"--build-context", "job_details",
 		"--command", "echo hello",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 		"--cluster", "test-cluster",
 		"--location", "test-location",
 		"--project", "test-project",

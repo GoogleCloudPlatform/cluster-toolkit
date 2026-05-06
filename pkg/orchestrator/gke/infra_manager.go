@@ -19,6 +19,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"io"
@@ -854,13 +855,18 @@ func (g *GKEOrchestrator) removeDescriptionFields(data map[interface{}]interface
 }
 
 // ValidateClusterState runs all cluster-specific validations to fail early on invalid state.
-func (g *GKEOrchestrator) ValidateClusterState(workloadName string, clusterName string, clusterLocation string, projectID string) error {
+func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) error {
 	validators := []func() error{
 		g.checkClusterConnectivity,
-		func() error { return g.CheckAndInstallKueue("", clusterName, clusterLocation) },
+		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		func() error { return g.ensurePriorityClassesInstalled() },
 		g.checkAndInstallJobSetCRD,
-		func() error { return g.validateJobConflicts(workloadName, clusterName, clusterLocation, projectID) },
+		func() error {
+			return g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
+		},
+		func() error {
+			return config.ValidateHardwareRequest(job.AcceleratorType, job.Topology, job.PlacementPolicy)
+		},
 	}
 
 	for _, validate := range validators {
