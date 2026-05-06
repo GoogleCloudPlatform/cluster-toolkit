@@ -134,12 +134,22 @@ func TestExtractTopology(t *testing.T) {
 		t.Errorf("expected 4x4x4, got %v (ok=%v)", topo, ok)
 	}
 
-	pp := cty.ObjectVal(map[string]cty.Value{"tpu_topology": cty.StringVal("2x2x2")})
+	// Test placement_policy with 3D topology
+	pp3D := cty.ObjectVal(map[string]cty.Value{"tpu_topology": cty.StringVal("2x2x2")})
 	mod2 := &Module{
-		Settings: Dict{}.With("placement_policy", pp),
+		Settings: Dict{}.With("placement_policy", pp3D),
 	}
 	if topo, ok := extractTopology(bp, mod2); !ok || topo != "2x2x2" {
 		t.Errorf("expected 2x2x2, got %v (ok=%v)", topo, ok)
+	}
+
+	// Test placement_policy with 2D topology
+	pp2D := cty.ObjectVal(map[string]cty.Value{"tpu_topology": cty.StringVal("4x4")})
+	mod4 := &Module{
+		Settings: Dict{}.With("placement_policy", pp2D),
+	}
+	if topo, ok := extractTopology(bp, mod4); !ok || topo != "4x4" {
+		t.Errorf("expected 4x4 from placement_policy, got %v (ok=%v)", topo, ok)
 	}
 
 	mod3 := &Module{
@@ -148,6 +158,70 @@ func TestExtractTopology(t *testing.T) {
 	if topo, ok := extractTopology(bp, mod3); ok {
 		t.Errorf("expected false, got %v", topo)
 	}
+}
+
+func TestExtractTopologyFromWorkloadPolicy(t *testing.T) {
+	// Test check used modules for workload_policy (2D topology)
+	wpMod2D := Module{
+		ID:       "wp2d",
+		Settings: Dict{}.With("workload_policy", cty.ObjectVal(map[string]cty.Value{"accelerator_topology": cty.StringVal("4x4")})),
+	}
+	bpTest2D := Blueprint{
+		Groups: []Group{
+			{
+				Modules: []Module{wpMod2D},
+			},
+		},
+	}
+	modUse2D := &Module{
+		Use:      []ModuleID{"wp2d"},
+		Settings: Dict{},
+	}
+	if topo, ok := extractTopologyFromWorkloadPolicy(bpTest2D, modUse2D); !ok || topo != "4x4" {
+		t.Errorf("expected 4x4 from workload_policy, got %v (ok=%v)", topo, ok)
+	}
+
+	// Test check used modules for workload_policy (3D topology)
+	wpMod3D := Module{
+		ID:       "wp3d",
+		Settings: Dict{}.With("workload_policy", cty.ObjectVal(map[string]cty.Value{"accelerator_topology": cty.StringVal("2x2x1")})),
+	}
+	bpTest := Blueprint{
+		Groups: []Group{
+			{
+				Modules: []Module{wpMod3D},
+			},
+		},
+	}
+
+	modUse3D := &Module{
+		Use:      []ModuleID{"wp3d"},
+		Settings: Dict{},
+	}
+	if topo, ok := extractTopologyFromWorkloadPolicy(bpTest, modUse3D); !ok || topo != "2x2x1" {
+		t.Errorf("expected 2x2x1 from workload_policy, got %v (ok=%v)", topo, ok)
+	}
+
+	// Test check used modules for workload_policy without topology
+	wpModNoTopo := Module{
+		ID:       "wp_no_topo",
+		Settings: Dict{}.With("workload_policy", cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("HIGH_THROUGHPUT")})),
+	}
+	bpTestNoTopo := Blueprint{
+		Groups: []Group{
+			{
+				Modules: []Module{wpModNoTopo},
+			},
+		},
+	}
+	modUseNoTopo := &Module{
+		Use:      []ModuleID{"wp_no_topo"},
+		Settings: Dict{},
+	}
+	if topo, ok := extractTopologyFromWorkloadPolicy(bpTestNoTopo, modUseNoTopo); ok {
+		t.Errorf("expected false when workload_policy lacks topology, got %v", topo)
+	}
+
 }
 
 func TestInjectCompactPlacementPolicy(t *testing.T) {
@@ -224,6 +298,19 @@ func TestExpandHardwareSettings(t *testing.T) {
 	}
 	if !mod3.Settings.Has("placement_policy") {
 		t.Errorf("expected placement_policy to be injected for multi-node setups")
+	}
+	// Test that it skips non-TPU machine types
+	mod4 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("n2-standard-2")).
+			With("tpu_topology", cty.StringVal("2x2")),
+	}
+	err = expandHardwareSettings(bp, mod4)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if mod4.Settings.Has("static_node_count") {
+		t.Errorf("expected static_node_count NOT to be set for non-TPU machine type")
 	}
 }
 
