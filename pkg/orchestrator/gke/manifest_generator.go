@@ -33,9 +33,9 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 		return "", fmt.Errorf("failed to calculate resource limits: %w", err)
 	}
 
-	if opts.AcceleratorType != "" && gpuLimit == "" && tpuLimit == "" {
-		logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.AcceleratorType)
-		opts.AcceleratorType = ""
+	if opts.ComputeType != "" && gpuLimit == "" && tpuLimit == "" {
+		logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.ComputeType)
+		opts.ComputeType = ""
 	}
 
 	resourcesString, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
@@ -109,26 +109,14 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 	return g.indentYaml(resourcesStr, indent), nil
 }
 
-func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, JobProfile, error) {
-	originalAccelType := job.AcceleratorType
-	if err := g.resolveAcceleratorShorthand(&job); err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
+func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool) (ManifestOptions, error) {
+	originalAccelType := job.ComputeType
 
-	mappedLabel := g.GenerateGKENodeSelectorLabel(job.AcceleratorType)
-
-	schedOpts, isDynamicSlicing, err := g.resolveSchedulingAndTopology(&job, mappedLabel)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-
-	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
-	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
-	}
-
-	if job.IsPathwaysJob && originalAccelType == "" {
-		return ManifestOptions{}, JobProfile{}, fmt.Errorf("accelerator type is required for Pathways workloads")
+	schedOpts := SchedulingOptions{
+		PlacementPolicy:    job.PlacementPolicy,
+		NodeAffinityLabels: job.NodeConstraint,
+		Topology:           job.Topology,
+		Scheduler:          job.GKEScheduler,
 	}
 
 	parts := strings.Split(originalAccelType, "-")
@@ -140,7 +128,8 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		WorkloadName:                  job.WorkloadName,
 		FullImageName:                 fullImageName,
 		CommandToRun:                  job.CommandToRun,
-		AcceleratorType:               job.AcceleratorType,
+		ComputeType:                   job.ComputeType,
+		MachineType:                   job.MachineType,
 		PathwaysInstanceType:          pathwaysInstanceType,
 		ProjectID:                     job.ProjectID,
 		ClusterName:                   job.ClusterName,
@@ -159,18 +148,18 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Verbose:                       job.Verbose,
 	}
 
-	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isCPUMachine); err != nil {
-		return ManifestOptions{}, JobProfile{}, err
+	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, profile.IsCPUMachine); err != nil {
+		return ManifestOptions{}, err
 	}
 
 	g.addVolumeOptions(&opts, job.Volumes)
 
-	profile, err := g.resolveResourcesAndGates(&opts, isCPUMachine, capacity, job)
+	_, err := g.resolveResourcesAndGates(&opts, profile.IsCPUMachine, profile.CapacityCount, job)
 	if err != nil {
-		return ManifestOptions{}, JobProfile{}, err
+		return ManifestOptions{}, err
 	}
 
-	return opts, profile, nil
+	return opts, nil
 }
 
 func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing, isCPUMachine bool) error {
@@ -199,7 +188,7 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 
 	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology)
 
-	tolerationsStr, err := g.resolveTolerations(job.AcceleratorType)
+	tolerationsStr, err := g.resolveTolerations(job.MachineType)
 	if err != nil {
 		return err
 	}
