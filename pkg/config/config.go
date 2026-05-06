@@ -1014,12 +1014,8 @@ func GetStandardBlueprintNames() []string {
 // getOrFetchCachedList is a generic helper that handles file-based caching for string slices.
 // It attempts to read from the local cache first if within a 24 hr TTL, and if it fails, executes the provided fetchFn.
 func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []string {
-	// 1. Determine the cache directory
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir() // Fallback if user cache dir is unavailable
-	}
-	cacheFile := filepath.Join(cacheDir, "cluster-toolkit", cacheFileName)
+	// 1. Determine the cache directory using the shared helper
+	cacheFile := filepath.Join(getLocalDirPath(true), cacheFileName)
 
 	// 2. Try to read from the local cache first, checking if it is within the 24-hour TTL
 	if stat, err := os.Stat(cacheFile); err == nil && time.Since(stat.ModTime()) < 24*time.Hour {
@@ -1045,6 +1041,21 @@ func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []strin
 	return fetchedList
 }
 
+// getLocalDirPath determines the directory for storing local files (cache or config).
+func getLocalDirPath(isCache bool) string {
+	var baseDir string
+	var err error
+	if isCache {
+		baseDir, err = os.UserCacheDir()
+	} else {
+		baseDir, err = os.UserConfigDir()
+	}
+	if err != nil {
+		baseDir = os.TempDir() // Fallback if standard dir is unavailable
+	}
+	return filepath.Join(baseDir, "cluster-toolkit")
+}
+
 // TreeResponse represents the expected JSON structure from the GitHub Git Trees API
 type TreeResponse struct {
 	Tree []struct {
@@ -1066,7 +1077,16 @@ var httpClient = &http.Client{
 func fetchGitTree(version string) (*TreeResponse, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
 
-	resp, err := httpClient.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("User-Agent", "cluster-toolkit")
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
 	}

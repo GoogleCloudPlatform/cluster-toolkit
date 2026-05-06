@@ -31,7 +31,6 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -313,28 +312,29 @@ func TestGetLatencyMs(t *testing.T) {
 }
 
 func TestGetClientInstallId(t *testing.T) {
-	// Ensure Viper is reset after all tests to prevent config leakage
-	defer viper.Reset()
-
 	tests := []struct {
 		name       string
-		mockConfig func()
+		mockConfig func(configPath string)
 		want       string
 	}{
 		{
 			name: "returns valid client install id when set in config",
-			mockConfig: func() {
+			mockConfig: func(configPath string) {
 				// Mocks the case where the CLI has already bootstrapped the config
-				// and saved a hashed persistent user_id.
-				viper.Set("user_id", "a1b2c3d4e5f6")
+				// and saved a persistent user_id.
+				content := `{"user_id": "a1b2c3d4e5f6"}`
+				_ = os.MkdirAll(filepath.Dir(configPath), 0755)
+				_ = os.WriteFile(configPath, []byte(content), 0644)
 			},
 			want: "a1b2c3d4e5f6",
 		},
 		{
-			name: "returns empty string when client install id is missing",
-			mockConfig: func() {
-				// Mocks the case where the config is missing or uninitialized.
-				viper.Set("user_id", "")
+			name: "returns empty string when client install id is explicitly empty",
+			mockConfig: func(configPath string) {
+				// Mocks the case where the config has been corrupted or emptied
+				content := `{"user_id": ""}`
+				_ = os.MkdirAll(filepath.Dir(configPath), 0755)
+				_ = os.WriteFile(configPath, []byte(content), 0644)
 			},
 			want: "",
 		},
@@ -342,11 +342,23 @@ func TestGetClientInstallId(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset Viper state before each sub-test to ensure isolation
-			viper.Reset()
+			// Set up a clean temporary directory for the config to avoid polluting the host
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", tempDir) // Linux
+			t.Setenv("HOME", tempDir)            // macOS / Linux fallback
+			t.Setenv("AppData", tempDir)         // Windows
+			t.Setenv("LocalAppData", tempDir)    // Windows fallback
 
-			// Apply the mocked configuration for this specific test case
-			tt.mockConfig()
+			configPath := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+
+			// Apply the mocked configuration file for this specific test case
+			tt.mockConfig(configPath)
+
+			// Initialize the config to load the mocked JSON file into the new globalUserConfig state
+			err := config.InitUserConfig()
+			if err != nil {
+				t.Fatalf("Failed to initialize user config in test: %v", err)
+			}
 
 			// Act
 			got := getClientInstallId()
