@@ -70,7 +70,7 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
-	dynamicSlicingCache         *bool
+	dynamicSlicingCache         map[string]bool
 	topologyCache               map[string]string
 }
 
