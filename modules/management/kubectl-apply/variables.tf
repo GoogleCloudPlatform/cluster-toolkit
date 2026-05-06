@@ -222,3 +222,31 @@ variable "module_id" {
   type        = string
   default     = "kubectl-apply" # Fallback if run manually
 }
+
+variable "cluster_endpoint" {
+  description = "The endpoint of the GKE cluster."
+  type        = string
+  default     = null
+}
+
+variable "cluster_ca_certificate" {
+  description = "The CA certificate of the GKE cluster."
+  type        = string
+  default     = null
+}
+
+variable "access_token" {
+  description = "The access token for Kubernetes/Helm providers."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "service_account_annotations" {
+  description = "Optional map of service accounts and workload identity emails to patch natively via HCL."
+  type = map(object({
+    namespace                 = string
+    gcp_service_account_email = string
+  }))
+  default = {}
+}

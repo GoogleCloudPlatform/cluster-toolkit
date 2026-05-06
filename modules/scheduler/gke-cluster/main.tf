@@ -175,6 +175,10 @@ resource "google_container_cluster" "gke_cluster" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  vertical_pod_autoscaling {
+    enabled = var.enable_vertical_pod_autoscaling
+  }
+
   dynamic "gateway_api_config" {
     for_each = var.enable_inference_gateway ? [1] : []
     content {
@@ -498,6 +502,10 @@ module "workload_identity" {
   name                = var.k8s_service_account_name
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
+
+  providers = {
+    kubernetes = kubernetes
+  }
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [

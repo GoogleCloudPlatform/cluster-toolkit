@@ -146,6 +146,7 @@ data "http" "manifest_from_url" {
 }
 
 data "google_container_cluster" "gke_cluster" {
+  count    = var.cluster_endpoint != null ? 0 : 1
   project  = local.project_id
   name     = local.cluster_name
   location = local.cluster_location
@@ -397,4 +398,19 @@ module "install_asapd_lite" {
       manifests = length(trimspace(local.asapd_lite_config_content)) > 0 ? [local.asapd_lite_config_content] : []
     })
   ]
+}
+
+resource "kubernetes_annotations" "sa_patch" {
+  for_each    = var.service_account_annotations
+  api_version = "v1"
+  kind        = "ServiceAccount"
+
+  metadata {
+    name      = each.key
+    namespace = each.value.namespace
+  }
+
+  annotations = {
+    "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
+  }
 }

@@ -581,6 +581,12 @@ variable "enable_pathways_for_tpus" {
   default     = false
 }
 
+variable "enable_vertical_pod_autoscaling" {
+  description = "Enable vertical pod autoscaling for the cluster."
+  type        = bool
+  default     = true
+}
+
 variable "enable_slice_controller" {
   description = "Enables the GKE Slice Controller for Super-slicing topologies."
   type        = bool
