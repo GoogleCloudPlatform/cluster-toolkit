@@ -508,11 +508,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 		sa = ""
 	}
 
-	nodeCount := np.InitialNodeCount
-	if np.Autoscaling.Enabled && np.Autoscaling.MaxNodeCount > nodeCount {
-		nodeCount = np.Autoscaling.MaxNodeCount
-	}
-
+	nodeCount := g.getNodeCount(np)
 	nodeLabels = make(map[string]string)
 
 	if nodeCount == 0 {
@@ -558,6 +554,28 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	}
 
 	return cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, nil
+}
+
+func (g *GKEOrchestrator) getNodeCount(np gkeJobNodePool) int {
+	numZones := len(g.clusterZones)
+	if numZones == 0 {
+		numZones = 1
+	}
+
+	nodeCount := np.InitialNodeCount * numZones
+	if np.Autoscaling.Enabled {
+		var maxNodes int
+		if np.Autoscaling.TotalMaxNodeCount > 0 {
+			maxNodes = np.Autoscaling.TotalMaxNodeCount
+		} else {
+			maxNodes = np.Autoscaling.MaxNodeCount * numZones
+		}
+
+		if maxNodes > nodeCount {
+			nodeCount = maxNodes
+		}
+	}
+	return nodeCount
 }
 
 func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nodeCount int, machineType string) (gpus, tpus int, flavor string, nodeLabels map[string]string, err error) {
