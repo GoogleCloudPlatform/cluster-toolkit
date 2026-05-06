@@ -200,6 +200,8 @@ func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string,
 		CPUs: make(map[string]CPUConfig),
 	}
 
+	result.CPUs[machineType] = CPUConfig{Count: int(mt.GuestCpus), MemoryMb: int(mt.MemoryMb)}
+
 	count, accelType, isTPU := ResolveAcceleratorInfo(mt, machineType)
 	if count > 0 {
 		if isTPU {

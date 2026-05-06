@@ -123,7 +123,7 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCac
 	}
 
 	if acceleratorsPerVM == 0 {
-		return cty.Value{}, false, nil
+		return cty.Value{}, false, fmt.Errorf("machine type %s does not support accelerators and cannot be used in autoscaling limits", machineType)
 	}
 
 	var totalAccelerators int
