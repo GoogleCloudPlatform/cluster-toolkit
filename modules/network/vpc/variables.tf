@@ -102,6 +102,7 @@ variable "subnetworks" {
   by outputs as a "primary" subnetwork.
 
   subnet_name           (string, required, name of subnet)
+  enabled               (bool, optional, Whether to create the subnetwork. Default true if unspecified)
   subnet_region         (string, required, region of subnet)
   subnet_ip             (string, mutually exclusive with new_bits, CIDR-formatted IP range for subnetwork)
   new_bits              (number, mutually exclusive with subnet_ip, CIDR bits used to calculate subnetwork range)
