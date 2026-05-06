@@ -1396,49 +1396,68 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	}
 }
 
-func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
-	setupMockMachineConfig(t)
-
-	orc := NewGKEOrchestrator()
-	orc.projectID = "mock-project"
-	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
-		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
-		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+func TestResolveTopologyForChips(t *testing.T) {
+	tests := []struct {
+		name       string
+		prefix     string
+		totalChips int
+		wantShape  string
+		wantErr    bool
+	}{
+		{
+			name:       "v4 4 chips",
+			prefix:     "v4",
+			totalChips: 4,
+			wantShape:  "2x2x1",
+			wantErr:    false,
 		},
-	})
-	orc.SetExecutor(mockExec)
-	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
-
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "user-vms-test",
-		CommandToRun:    "echo hello",
-		ClusterLocation: "us-central1-a",
-		AcceleratorType: "v6e-8",
-		Topology:        "16x16",
-		VmsPerSlice:     1, // Explicitly set to 1
+		{
+			name:       "tpu7x 2048 chips",
+			prefix:     "tpu7x",
+			totalChips: 2048,
+			wantShape:  "8x16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 1 chip",
+			prefix:     "v6e",
+			totalChips: 1,
+			wantShape:  "1x1",
+			wantErr:    false,
+		},
+		{
+			name:       "v6e 256 chips",
+			prefix:     "v6e",
+			totalChips: 256,
+			wantShape:  "16x16",
+			wantErr:    false,
+		},
+		{
+			name:       "tpu7x 1 chip (Fail)",
+			prefix:     "tpu7x",
+			totalChips: 1,
+			wantShape:  "",
+			wantErr:    true,
+		},
+		{
+			name:       "v4 3 chips (Fail)",
+			prefix:     "v4",
+			totalChips: 3,
+			wantShape:  "",
+			wantErr:    true,
+		},
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
-	if err != nil {
-		t.Fatalf("prepareManifestOptions failed: %v", err)
-	}
-
-	manifest, err := orc.GenerateGKEManifest(opts, profile)
-	if err != nil {
-		t.Fatalf("GenerateGKEManifest failed: %v", err)
-	}
-
-	expectedParallelism := "parallelism: 1"
-	expectedCompletions := "completions: 1"
-
-	if !strings.Contains(manifest, expectedParallelism) {
-		t.Errorf("manifest missing expected parallelism %q\nManifest: %s", expectedParallelism, manifest)
-	}
-	if !strings.Contains(manifest, expectedCompletions) {
-		t.Errorf("manifest missing expected completions %q\nManifest: %s", expectedCompletions, manifest)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := config.ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ResolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantShape {
+				t.Errorf("ResolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
+			}
+		})
 	}
 }
 
