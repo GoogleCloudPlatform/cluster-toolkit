@@ -49,7 +49,7 @@ var (
 var (
 	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
 	telemetryCollector *telemetry.Collector
-	userConfigPresent  bool = false
+	userConfigExists   bool = false
 )
 
 var (
@@ -74,7 +74,7 @@ func init() {
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if err := config.InitUserConfig(); err == nil {
 			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
-			userConfigPresent = true
+			userConfigExists = true
 		}
 		initColor()
 		initDependencies(cmd)
@@ -134,7 +134,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 
-	if config.IsTelemetryEnabled() && userConfigPresent {
+	if config.IsTelemetryEnabled() && userConfigExists {
 		telemetryCollector.Execute(exitCode)
 	}
 
