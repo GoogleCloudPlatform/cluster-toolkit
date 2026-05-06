@@ -188,6 +188,37 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	}
 }
 
+// isDockerCredsConfigured checks if Docker is configured to use gcloud credentials for the required registries.
+func isDockerCredsConfigured(region string) bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	configPath := filepath.Join(homeDir, ".docker", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return false
+	}
+
+	var config struct {
+		CredHelpers map[string]string `json:"credHelpers"`
+		CredsStore  string            `json:"credsStore"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return false
+	}
+
+	if config.CredsStore == "gcloud" {
+		return true
+	}
+
+	if config.CredHelpers["gcr.io"] != "gcloud" {
+		return false
+	}
+	pkgDevReg := fmt.Sprintf("%s-docker.pkg.dev", region)
+	return config.CredHelpers[pkgDevReg] == "gcloud"
+}
+
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
 func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string) error {
 	if dryRunManifest != "" {
@@ -228,8 +259,8 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	checkK8sDependencies(&state, &missing)
 
 	// Check Docker creds
-	if !state.DockerCredsConfigured {
-		region := shell.ExtractRegion(location)
+	region := shell.ExtractRegion(location)
+	if !isDockerCredsConfigured(region) {
 		missing = append(missing, missingPrereq{
 			name: "Docker Credentials",
 			commands: []string{
@@ -237,6 +268,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 				fmt.Sprintf("gcloud auth configure-docker %s-docker.pkg.dev --quiet", region),
 			},
 		})
+	} else {
 		state.DockerCredsConfigured = true
 	}
 
