@@ -1291,7 +1291,7 @@ func TestGetDeploymentFile(t *testing.T) {
 			expected: "Custom",
 		},
 		{
-			name:       "success: parent directory reference",
+			name:       "success: custom parent directory",
 			flagValue:  "my-directory/examples/hpc-slurm.yaml",
 			flagExists: true,
 			mockResp: &http.Response{
