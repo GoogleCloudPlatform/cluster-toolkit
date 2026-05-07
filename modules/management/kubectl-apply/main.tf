@@ -33,6 +33,13 @@ locals {
   ]))
   configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
 
+  kueue_controller_cpu      = try(var.kueue.controller_cpu, null)
+  kueue_controller_memory   = try(var.kueue.controller_memory, null)
+  kueue_controller_replicas = try(var.kueue.controller_replicas, null)
+
+  jobset_controller_cpu    = try(var.jobset.controller_cpu, null)
+  jobset_controller_memory = try(var.jobset.controller_memory, null)
+
   webhook_wait_duration = "60s"
 
   asapd_lite_config_content = (
@@ -185,7 +192,20 @@ module "install_kueue" {
   namespace        = "kueue-system"
   create_namespace = true
   values_yaml = [
-    file("${path.module}/kueue/kueue-helm-values.yaml")
+    file("${path.module}/kueue/kueue-helm-values.yaml"),
+    yamlencode({
+      controllerManager = merge(
+        local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
+        local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
+          resources = {
+            requests = merge(
+              local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+              local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
+            )
+          }
+        } : {}
+      )
+    })
   ]
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
@@ -233,7 +253,19 @@ module "install_jobset" {
   namespace        = "jobset-system"
   create_namespace = true
   values_yaml = [
-    file("${path.module}/jobset/jobset-helm-values.yaml")
+    file("${path.module}/jobset/jobset-helm-values.yaml"),
+    yamlencode({
+      controller = merge(
+        local.jobset_controller_cpu != null || local.jobset_controller_memory != null ? {
+          resources = {
+            requests = merge(
+              local.jobset_controller_cpu != null ? { cpu = local.jobset_controller_cpu } : {},
+              local.jobset_controller_memory != null ? { memory = local.jobset_controller_memory } : {}
+            )
+          }
+        } : {}
+      )
+    })
   ]
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
