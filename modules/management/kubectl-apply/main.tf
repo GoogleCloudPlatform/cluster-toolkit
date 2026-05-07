@@ -402,6 +402,7 @@ module "install_asapd_lite" {
 
 resource "kubernetes_annotations" "sa_patch" {
   for_each    = var.service_account_annotations
+  depends_on  = [var.gke_cluster_exists]
   api_version = "v1"
   kind        = "ServiceAccount"
 

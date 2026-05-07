@@ -584,7 +584,7 @@ variable "enable_pathways_for_tpus" {
 variable "enable_vertical_pod_autoscaling" {
   description = "Enable vertical pod autoscaling for the cluster."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_slice_controller" {

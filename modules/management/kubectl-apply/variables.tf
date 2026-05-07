@@ -230,7 +230,7 @@ variable "cluster_endpoint" {
 }
 
 variable "cluster_ca_certificate" {
-  description = "The CA certificate of the GKE cluster."
+  description = "The base64 encoded CA certificate of the GKE cluster."
   type        = string
   default     = null
 }

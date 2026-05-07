@@ -18,7 +18,7 @@ locals {
   # HYBRID LOGIC: Use passed-in variable if available, otherwise fall back to container cluster data source
   host                   = var.cluster_endpoint != null ? "https://${var.cluster_endpoint}" : (length(data.google_container_cluster.gke_cluster) > 0 ? "https://${data.google_container_cluster.gke_cluster[0].endpoint}" : "")
   token                  = var.access_token != null ? var.access_token : data.google_client_config.default.access_token
-  cluster_ca_certificate = var.cluster_ca_certificate != null ? base64decode(var.cluster_ca_certificate) : (length(data.google_container_cluster.gke_cluster) > 0 ? base64decode(data.google_container_cluster.gke_cluster[0].master_auth[0].cluster_ca_certificate) : "")
+  cluster_ca_certificate = var.cluster_ca_certificate != null ? base64decode(var.cluster_ca_certificate) : (length(data.google_container_cluster.gke_cluster) > 0 ? base64decode(data.google_container_cluster.gke_cluster[0].master_auth[0].cluster_ca_certificate) : null)
 }
 
 provider "helm" {
