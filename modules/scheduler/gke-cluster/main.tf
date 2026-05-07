@@ -76,8 +76,8 @@ locals {
   nap_memory_max = var.cluster_autoscaling.autoprovisioning_memory_max
 
   user_provided_resource_types = local.has_autoscaling_limits ? [for limit in var.cluster_autoscaling.limits : limit.autoprovisioning_resource_type] : []
-  
-  add_default_cpu = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "cpu")
+
+  add_default_cpu    = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "cpu")
   add_default_memory = var.cluster_autoscaling.enabled && !contains(local.user_provided_resource_types, "memory")
 
   machine_mappings = jsondecode(var.machine_mappings_json)
@@ -169,8 +169,8 @@ resource "google_container_cluster" "gke_cluster" {
               length(split("-", limit.autoprovisioning_resource_type)) > 1 ? join("-", slice(split("-", limit.autoprovisioning_resource_type), 0, length(split("-", limit.autoprovisioning_resource_type)) - 1)) : limit.autoprovisioning_resource_type,
               limit.autoprovisioning_resource_type
             )
-            min  = 0
-            max  = limit.autoprovisioning_max_count
+            min = 0
+            max = limit.autoprovisioning_max_count
           }
         ] : []
       )

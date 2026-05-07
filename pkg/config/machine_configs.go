@@ -181,7 +181,7 @@ type GPUConfig struct {
 	Type  string `json:"type"`
 }
 type TPUConfig struct {
-	Count int    `json:"count"`
+	Count int `json:"count"`
 }
 type CPUConfig struct {
 	Count    int `json:"count"`
