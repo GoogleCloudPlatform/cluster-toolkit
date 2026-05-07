@@ -18,9 +18,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/zclconf/go-cty/cty"
 )
+// Note: This function relies on machine_mappings.json in the same directory to map
+// machine families to GKE accelerator labels and shorthands to machine types.
+// Update that file when adding support for new machine families.
+
 // ExpandClusterAutoscaling intercepts the cluster_autoscaling variable,
 // parses machine_type in Go, and injects internal variables for maximum chips and accelerator type.
 type cachedAccInfo struct {
@@ -36,11 +42,15 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 	if !ok {
 		return nil
 	}
+	
 	// Read machine mappings from file and inject into module settings
-	mappingsPath := "pkg/config/machine_mappings.json"
+	_, filename, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(filename)
+	mappingsPath := filepath.Join(dir, "machine_mappings.json")
+
 	fileContent, err := os.ReadFile(mappingsPath)
 	if err != nil {
-		return fmt.Errorf("failed to read machine mappings file %s: %w", mappingsPath, err)
+		return fmt.Errorf("failed to read machine mappings file at %s: %w", mappingsPath, err)
 	}
 	mod.Settings = mod.Settings.With("machine_mappings_json", cty.StringVal(string(fileContent)))
 
@@ -171,25 +181,10 @@ func validateAndExtractTotalAccelerators(maxCount int, acceleratorsPerVM int, ma
 }
 
 func getAcceleratorCountAndType(machineType string, bp Blueprint, mod *Module) (int, string, error) {
-	var origMt cty.Value
-	hasMt := mod.Settings.Has("machine_type")
-	if hasMt {
-		origMt = mod.Settings.Get("machine_type")
-	}
-	mod.Settings = mod.Settings.With("machine_type", cty.StringVal(machineType))
+	modCopy := *mod
+	modCopy.Settings = mod.Settings.With("machine_type", cty.StringVal(machineType))
 
-	// Defensively restore the original machine_type setting in all circumstances
-	defer func() {
-		if hasMt {
-			mod.Settings = mod.Settings.With("machine_type", origMt)
-		} else {
-			m := mod.Settings.Items()
-			delete(m, "machine_type")
-			mod.Settings = NewDict(m)
-		}
-	}()
-
-	cfgJson, err := getMachineConfigJSON(mod, bp)
+	cfgJson, err := getMachineConfigJSON(&modCopy, bp)
 	if err != nil {
 		return 0, "", err
 	}
