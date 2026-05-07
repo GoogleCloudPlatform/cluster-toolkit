@@ -72,12 +72,12 @@ func init() {
 	addDependenciesFlags(rootCmd.PersistentFlags())
 	addColorFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		initColor()
+		initDependencies(cmd)
 		if err := config.InitUserConfig(); err == nil {
 			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
 			userConfigExists = true
 		}
-		initColor()
-		initDependencies(cmd)
 	}
 
 	rootCmd.AddCommand(cluster.ClusterCmd)
