@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"strconv"
 	"strings"
 
 	k8syaml "sigs.k8s.io/yaml"
@@ -190,6 +191,13 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.ComputeType, err)
+	}
+	if opts.ParallelContainers > 1 && tpuLim != "" {
+		tpuInt, err := strconv.Atoi(tpuLim)
+		if err != nil {
+			return "", "", "", "", fmt.Errorf("failed to parse tpu limit %q: %w", tpuLim, err)
+		}
+		tpuLim = strconv.Itoa(tpuInt / opts.ParallelContainers)
 	}
 	return cpuLim, memLim, gpuLim, tpuLim, nil
 }
@@ -414,6 +422,11 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	profile := JobProfile{
 		IsCPUMachine:  isCPUMachine,
 		CapacityCount: capacity,
+	}
+
+	opts.ParallelContainers = 1
+	if job.UseParallelContainers && config.IsTPU(job.MachineType) && strings.Contains(job.MachineType, "tpu7") {
+		opts.ParallelContainers = 2
 	}
 
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(*opts, profile)

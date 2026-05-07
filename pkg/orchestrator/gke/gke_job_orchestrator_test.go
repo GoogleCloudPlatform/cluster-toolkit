@@ -1456,6 +1456,61 @@ func TestGenerateGKEManifest_RespectUserNumNodes(t *testing.T) {
 	}
 }
 
+func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	orc := NewGKEOrchestrator()
+	orc.projectID = "mock-project"
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
+		},
+	})
+	orc.SetExecutor(mockExec)
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:          "parallel-container-test",
+		CommandToRun:          "echo hello",
+		ClusterLocation:       "us-central1-a",
+		ComputeType:           "tpu7x-4", // Resolves to tpu7x-standard-4t
+		Topology:              "2x2x1",   // 4 chips
+		UseParallelContainers: true,      // Enable parallel containers
+	}
+
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Verify that we have two containers!
+	if !strings.Contains(manifest, "name: workload-container-1") {
+		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-1", manifest)
+	}
+	if !strings.Contains(manifest, "name: workload-container-2") {
+		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-2", manifest)
+	}
+
+	// Verify that resources are split!
+	// Total chips = 4. Parallel containers = 2. So each should get 2 chips!
+	expectedResources := "google.com/tpu: \"2\""
+	if strings.Count(manifest, expectedResources) != 2 {
+		t.Errorf("expected %d occurrences of %q, got %d\nManifest: %s", 2, expectedResources, strings.Count(manifest, expectedResources), manifest)
+	}
+}
+
 func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 	pipeRead, pipeWrite, err := os.Pipe()
 	if err != nil {

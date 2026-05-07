@@ -74,13 +74,14 @@ type JobDefinition struct {
 	PodFailurePolicy   map[string]interface{}
 	RestartOnExitCodes []int
 
-	ImagePullSecrets   string
-	ServiceAccountName string
-	Topology           string
-	GKEScheduler       string
-	AwaitJobCompletion bool
-	Timeout            string
-	PriorityClassName  string
+	ImagePullSecrets      string
+	ServiceAccountName    string
+	Topology              string
+	GKEScheduler          string
+	AwaitJobCompletion    bool
+	UseParallelContainers bool
+	Timeout               string
+	PriorityClassName     string
 
 	// Pathways-specific fields
 	IsPathwaysJob bool

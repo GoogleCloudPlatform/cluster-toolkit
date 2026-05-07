@@ -44,6 +44,8 @@ var (
 	ttlAfterFinished string
 	gracePeriodStr   string
 
+	gkeDisableParallelContainers bool
+
 	placementPolicy string
 	nodeConstraint  map[string]string
 
@@ -116,6 +118,7 @@ func init() {
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
+	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU v7/v7x on GKE.")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
@@ -210,6 +213,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Topology:                      topology,
 		GKEScheduler:                  gkeScheduler,
 		AwaitJobCompletion:            awaitJobCompletion,
+		UseParallelContainers:         !gkeDisableParallelContainers,
 		Timeout:                       timeoutStr,
 		PriorityClassName:             priorityClassName,
 		IsPathwaysJob:                 isPathwaysJob,

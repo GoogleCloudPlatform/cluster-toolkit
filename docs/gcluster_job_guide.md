@@ -124,6 +124,7 @@ Here are the flags currently supported by `gcluster job submit`:
 * `--restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
 * `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
 * `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
+* `--gke-disable-parallel-containers`: Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`)
 * `--mount stringArray`: Mount a storage volume (format: `<src>:<dest>[:<mode>]`, mode can be `'ro'` or `'rw'`, default `'ro'`). Can be specified multiple times.
 * `--pathways`: If present, gcluster will generate a manifest for a Pathways job.
 * `--pathways-gcs-location string`: Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.
@@ -833,6 +834,23 @@ $GCLUSTER job submit \
     --topology 2x4x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
+```
+
+To disable parallel containers and use a single container per VM, add the `--gke-disable-parallel-containers` flag:
+
+```bash
+$GCLUSTER job submit \
+    --name maxtext-llama3-1-final-tpu7x-32 \
+    --cluster $CLUSTER_NAME \
+    --location $LOCATION \
+    --image $IMAGE_NAME \
+    --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
+    --compute-type tpu7x-32 \
+    --nodes 1 \
+    --topology 2x4x4 \
+    --priority medium \
+    --service-account workload-identity-k8s-sa \
+    --gke-disable-parallel-containers
 ```
 
 ### 10.2 Build and Submit

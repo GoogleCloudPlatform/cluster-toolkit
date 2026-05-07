@@ -1173,9 +1173,25 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		workerArgsList = strings.Fields(opts.Pathways.WorkerArgs)
 	}
 
+	var containers []ContainerData
+	if opts.ParallelContainers > 1 {
+		for i := 0; i < opts.ParallelContainers; i++ {
+			containers = append(containers, ContainerData{
+				Name:          fmt.Sprintf("workload-container-%d", i+1),
+				ResourcesYAML: resourcesYAML,
+			})
+		}
+	} else {
+		containers = append(containers, ContainerData{
+			Name:          "workload-container",
+			ResourcesYAML: resourcesYAML,
+		})
+	}
+
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
 		ClusterName:                   opts.ClusterName,
+		Containers:                    containers,
 		ProjectID:                     opts.ProjectID,
 		KueueQueueName:                opts.KueueQueueName,
 		TtlSecondsAfterFinished:       opts.TtlSecondsAfterFinished,

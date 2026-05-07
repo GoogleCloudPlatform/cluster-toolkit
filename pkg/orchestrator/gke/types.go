@@ -140,6 +140,7 @@ type ManifestOptions struct {
 	KueueQueueName                string
 	NumSlices                     int
 	NodesPerSlice                 int
+	ParallelContainers            int
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
@@ -245,9 +246,15 @@ type JobSetStatus struct {
 	} `json:"status"`
 }
 
+type ContainerData struct {
+	Name          string
+	ResourcesYAML string
+}
+
 type jobSetTemplateData struct {
 	WorkloadName                  string
 	ClusterName                   string
+	Containers                    []ContainerData
 	ProjectID                     string
 	KueueQueueName                string
 	TtlSecondsAfterFinished       int

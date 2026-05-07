@@ -59,16 +59,17 @@ spec:
 {{- end }}
               restartPolicy: Never
               containers:
-              - name: workload-container
-                image: {{.FullImageName}}
+              {{- range .Containers }}
+              - name: {{ .Name }}
+                image: {{ $.FullImageName }}
                 command:
-                {{- range .Command }}
+                {{- range $.Command }}
                 - {{ printf "%q" . }}
                 {{- end }}
-{{.ResourcesYAML}}
+{{ .ResourcesYAML }}
                 env:
-                {{- if .Verbose }}
-                {{- if .IsTPU }}
+                {{- if $.Verbose }}
+                {{- if $.IsTPU }}
                 - name: TPU_STDERR_LOG_LEVEL
                   value: "0"
                 - name: TPU_MIN_LOG_LEVEL
@@ -77,15 +78,16 @@ spec:
                   value: "0"
                 - name: TPU_VMODULE
                   value: "real_program_continuator=1"
-                {{- else if .IsGPU }}
+                {{- else if $.IsGPU }}
                 - name: NCCL_DEBUG
                   value: "INFO"
                 {{- end }}
                 {{- end }}
-{{- if .VolumeMountsYAML }}
+{{- if $.VolumeMountsYAML }}
                 volumeMounts:
-{{.VolumeMountsYAML}}
+{{ $.VolumeMountsYAML }}
 {{- end }}
+              {{- end }}
 {{- if .VolumesYAML }}
               volumes:
 {{.VolumesYAML}}
