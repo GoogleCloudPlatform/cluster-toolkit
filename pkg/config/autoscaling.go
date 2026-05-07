@@ -23,6 +23,7 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 )
+
 // Note: This function relies on machine_mappings.json in the same directory to map
 // machine families to GKE accelerator labels and shorthands to machine types.
 // Update that file when adding support for new machine families.
@@ -42,7 +43,7 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 	if !ok {
 		return nil
 	}
-	
+
 	// Read machine mappings from file and inject into module settings
 	_, filename, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(filename)
