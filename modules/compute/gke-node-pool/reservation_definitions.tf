@@ -96,7 +96,7 @@ locals {
   # Build the list of reservation names when var.is_reservation_active is true
   active_reservation_values = [
     for r in local.verified_specific_reservations :
-    "projects/${r.project}/zones/${r.zone}/reservations/${r.name}${try(local.input_reservation_suffixes[0], "")}"
+    "projects/${r.project}/zones/${basename(r.zone)}/reservations/${r.name}${try(local.input_reservation_suffixes[0], "")}"
   ]
 
   default_reservation_values = local.input_specific_reservations_count == 0 ? [] : (
