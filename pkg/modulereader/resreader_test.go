@@ -200,7 +200,7 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 		c.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
-	c.Assert(err, ErrorMatches, "source is not a terraform module: .*")
+	c.Assert(err, ErrorMatches, "source is not a terraform or packer module: .*")
 }
 
 func (s *MySuite) TestGetInfo_TFReder(c *C) {

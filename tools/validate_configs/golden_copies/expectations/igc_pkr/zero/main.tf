@@ -15,7 +15,7 @@
   */
 
 module "network0" {
-  source                   = "../_modules/embedded/modules/network/vpc"
+  source                   = "./modules/embedded/modules/network/vpc"
   deployment_name          = var.deployment_name
   enable_iap_rdp_ingress   = true
   enable_iap_winrm_ingress = true
@@ -25,7 +25,7 @@ module "network0" {
 }
 
 module "homefs" {
-  source          = "../_modules/embedded/modules/file-system/filestore"
+  source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
   labels          = var.labels
   local_mount     = "/home"
@@ -36,7 +36,7 @@ module "homefs" {
 }
 
 module "projectsfs" {
-  source          = "../_modules/embedded/modules/file-system/filestore"
+  source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
   labels          = var.labels
   local_mount     = "/projects"
@@ -47,7 +47,7 @@ module "projectsfs" {
 }
 
 module "script" {
-  source          = "../_modules/embedded/modules/scripts/startup-script"
+  source          = "./modules/embedded/modules/scripts/startup-script"
   deployment_name = var.deployment_name
   labels          = var.labels
   project_id      = var.project_id
@@ -60,6 +60,6 @@ module "script" {
 }
 
 module "windows_startup" {
-  source                = "../_modules/embedded/community/modules/scripts/windows-startup-script"
+  source                = "./modules/embedded/community/modules/scripts/windows-startup-script"
   install_nvidia_driver = true
 }
