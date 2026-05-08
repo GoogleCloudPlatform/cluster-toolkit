@@ -22,7 +22,7 @@ terraform {
 }
 
 module "network0" {
-  source          = "../_modules/embedded/modules/network/vpc"
+  source          = "./modules/embedded/modules/network/vpc"
   deployment_name = var.deployment_name
   labels          = var.labels
   project_id      = var.project_id

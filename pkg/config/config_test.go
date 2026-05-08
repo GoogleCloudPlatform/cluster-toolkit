@@ -770,8 +770,6 @@ func (s *zeroSuite) TestGroupNameValidate(c *C) {
 	c.Check(GroupName("g-").Validate(), NotNil)
 	c.Check(GroupName("g+").Validate(), NotNil)
 	c.Check(GroupName("a b").Validate(), NotNil)
-	c.Check(GroupName(".ghpc").Validate(), NotNil)
-	c.Check(GroupName(SharedModulesDirName).Validate(), NotNil)
 
 	// Valid
 	c.Check(GroupName("g").Validate(), IsNil)
