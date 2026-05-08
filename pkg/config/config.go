@@ -45,6 +45,8 @@ import (
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
 	latestToolkitVersion     = "v1.90.0"
+	// SharedModulesDirName is the name of the shared directory for embedded modules
+	SharedModulesDirName = "_modules"
 )
 
 // map[moved module path]replacing module path
@@ -65,6 +67,10 @@ type GroupName string
 func (n GroupName) Validate() error {
 	if n == "" {
 		return EmptyGroupName
+	}
+
+	if n == ".ghpc" || string(n) == SharedModulesDirName {
+		return fmt.Errorf("group name %q is reserved", n)
 	}
 
 	if !regexp.MustCompile(`^\w(-*\w)*$`).MatchString(string(n)) {
