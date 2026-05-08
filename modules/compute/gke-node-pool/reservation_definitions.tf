@@ -94,17 +94,12 @@ locals {
   is_valid_reservation = (length(local.verified_specific_reservations) > 0 && length(local.verified_specific_reservations) == length(toset(var.zones != null ? var.zones : []))) || !var.is_reservation_active
 
   # Build the list of reservation names when var.is_reservation_active is true
-  active_reservation_values = [
+  active_reservation_values = distinct([
     for r in local.verified_specific_reservations :
-    "projects/${r.project}/zones/${basename(r.zone)}/reservations/${r.name}${try(local.input_reservation_suffixes[0], "")}"
-  ]
+    "projects/${r.project}/reservations/${r.name}${try(local.input_reservation_suffixes[0], "")}"
+  ])
 
-  default_reservation_values = local.input_specific_reservations_count == 0 ? [] : (
-    length(var.zones != null ? var.zones : []) > 0 ? [
-      for z in toset(var.zones != null ? var.zones : []) :
-      "projects/${local.input_reservation_projects[0]}/zones/${z}/reservations/${local.input_reservation_names[0]}${try(local.input_reservation_suffixes[0], "")}"
-      ] : [
-      "projects/${local.input_reservation_projects[0]}/reservations/${local.input_reservation_names[0]}${try(local.input_reservation_suffixes[0], "")}"
-    ]
-  )
+  default_reservation_values = local.input_specific_reservations_count == 0 ? [] : [
+    "projects/${local.input_reservation_projects[0]}/reservations/${local.input_reservation_names[0]}${try(local.input_reservation_suffixes[0], "")}"
+  ]
 }
