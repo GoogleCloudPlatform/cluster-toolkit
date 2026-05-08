@@ -19,20 +19,34 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = join("\n---\n", compact([
-    (var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
-      pathways_nodepool_name = "cpu-np"
-      pathways_cpu_quota     = 480
-      pathways_memory_quota  = "2000G"
-    }) : "",
-    var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
-      templatefile(var.kueue.config_path, var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}) :
-      file(var.kueue.config_path)
-    ) : ""
-  ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false))
+  enable_pathways  = var.enable_pathways_for_tpus || var.kueue.enable_pathways_for_tpus
 
+  kueue_default_config_template = local.enable_pathways ? "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl" : ""
+
+  kueue_config_template_vars = merge(
+    {
+      pathways_cpu_quota    = 480
+      pathways_memory_quota = "2000G"
+      tpu_quota             = "999999" # Default high value if not set
+    },
+    var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
+  )
+
+  kueue_default_config_content = local.kueue_default_config_template != "" ? (
+    endswith(local.kueue_default_config_template, ".tftpl") ?
+    templatefile(local.kueue_default_config_template, local.kueue_config_template_vars) :
+    file(local.kueue_default_config_template)
+  ) : ""
+
+  kueue_user_config_content = var.kueue.config_path != "" && var.kueue.config_path != null ? (
+    endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
+    templatefile(var.kueue.config_path, local.kueue_config_template_vars) :
+    file(var.kueue.config_path)
+  ) : ""
+
+  kueue_config_content = local.kueue_user_config_content != "" ? local.kueue_user_config_content : local.kueue_default_config_content
+
+  configure_kueue       = local.install_kueue && local.kueue_config_content != ""
   webhook_wait_duration = "60s"
 
   asapd_lite_config_content = (
