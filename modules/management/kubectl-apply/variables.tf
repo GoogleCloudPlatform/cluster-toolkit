@@ -230,7 +230,7 @@ variable "cluster_endpoint" {
 }
 
 variable "cluster_ca_certificate" {
-  description = "The base64 encoded CA certificate of the GKE cluster."
+  description = "The base64 encoded CA certificate of the GKE cluster. Must be base64 encoded; the module internally decodes this value using base64decode(...) before passing it to the providers."
   type        = string
   default     = null
 }
