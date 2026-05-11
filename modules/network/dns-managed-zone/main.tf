@@ -21,10 +21,12 @@ resource "google_project_service" "dns_api" {
   service            = "dns.googleapis.com"
   disable_on_destroy = false
 }
+
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "dns-managed-zone", ghpc_role = "network" })
 }
+
 resource "google_dns_managed_zone" "zone" {
   project     = google_project_service.dns_api.project
   name        = var.zone_name
@@ -32,11 +34,12 @@ resource "google_dns_managed_zone" "zone" {
   description = var.description
   labels      = local.labels
 }
+
 resource "google_dns_record_set" "record" {
-  for_each     = { for i, rs in var.recordsets : tostring(i) => rs }
+  for_each     = { for rs in var.recordsets : "${rs.name}-${rs.type}" => rs }
   project      = google_project_service.dns_api.project
   managed_zone = google_dns_managed_zone.zone.name
-  name         = endswith(each.value.name, ".") ? each.value.name : "${each.value.name}.${google_dns_managed_zone.zone.dns_name}"
+  name         = (each.value.name == "" || each.value.name == "@") ? google_dns_managed_zone.zone.dns_name : (endswith(each.value.name, ".") ? each.value.name : "${each.value.name}.${google_dns_managed_zone.zone.dns_name}")
   type         = each.value.type
   ttl          = each.value.ttl
   rrdatas      = each.value.rrdatas

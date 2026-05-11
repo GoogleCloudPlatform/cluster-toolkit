@@ -19,24 +19,29 @@ variable "project_id" {
   type        = string
   description = "Project ID"
 }
+
 variable "zone_name" {
   type        = string
   description = "The name of the DNS zone"
 }
+
 variable "dns_name" {
   type        = string
   description = "The DNS name of this managed zone, e.g. 'example.com.'"
 }
+
 variable "description" {
   type        = string
   description = "A textual description of this managed zone"
   default     = "Managed by Cluster Toolkit"
 }
+
 variable "labels" {
   type        = map(string)
   description = "A set of key/value label pairs to assign to this ManagedZone"
   default     = {}
 }
+
 variable "recordsets" {
   type = list(object({
     name    = string
