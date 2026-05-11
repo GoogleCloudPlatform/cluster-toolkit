@@ -66,13 +66,6 @@ func TestCalculateAcceleratorNodes(t *testing.T) {
 			expectErr:     false,
 		},
 		{
-			name:          "v7x 1 chip per VM test",
-			machineType:   "tpu7x-standard-1t",
-			topology:      "1x1x1",
-			expectedNodes: 1, // 1 / 1
-			expectErr:     false,
-		},
-		{
 			name:          "v7x 4 chip per VM test",
 			machineType:   "tpu7x-standard-4t",
 			topology:      "4x4x4",
@@ -331,7 +324,7 @@ func TestResolveTopologyForChips(t *testing.T) {
 		},
 		{
 			name:       "tpu7x 2048 chips",
-			prefix:     "tpu7x-4",
+			prefix:     "tpu7x",
 			totalChips: 2048,
 			wantShape:  "8x16x16",
 			wantErr:    false,
@@ -352,7 +345,7 @@ func TestResolveTopologyForChips(t *testing.T) {
 		},
 		{
 			name:       "tpu7x 1 chip (Fail)",
-			prefix:     "tpu7x-4",
+			prefix:     "tpu7x",
 			totalChips: 1,
 			wantShape:  "",
 			wantErr:    true,
@@ -385,9 +378,9 @@ func TestIsTPU(t *testing.T) {
 		want      bool
 	}{
 		{"v4-8", true},
-		{"v5e-8", true},
+		{"v5litepod-8", true},
 		{"v6e-8", true},
-		{"tpu7x-1", true},
+		{"tpu7x", true},
 		{"ct4p-hightpu-4t", true},
 		{"ct5lp-hightpu-8t", true},
 		{"v5litepod-16", true},
@@ -413,7 +406,7 @@ func TestMatchesTPUFamily(t *testing.T) {
 		want      bool
 	}{
 		{"v6e matches 2D", "v6e-8", valid2DTPUFamilies, true},
-		{"v5e matches 2D", "v5e-8", valid2DTPUFamilies, true},
+		{"v5litepod matches 2D", "v5litepod-8", valid2DTPUFamilies, true},
 		{"v5litepod matches 2D", "v5litepod-16", valid2DTPUFamilies, true},
 		{"l4 does not match 2D", "l4-1", valid2DTPUFamilies, false},
 		{"v4 matches 3D", "v4-8", valid3DTPUFamilies, true},
@@ -435,7 +428,7 @@ func TestResolveMachineType(t *testing.T) {
 		want      string
 	}{
 		{"v4-8", "ct4p-hightpu-4t"},
-		{"v5e-8", "ct5lp-hightpu-8t"},
+		{"v5litepod-8", "ct5lp-hightpu-8t"},
 		{"l4-1", "g2-standard-12"},
 		{"unknown", "unknown"},
 		{"ct4p-hightpu-4t", "ct4p-hightpu-4t"},
@@ -452,7 +445,7 @@ func TestGetCandidatesForShorthand(t *testing.T) {
 		shorthand string
 		want      []string
 	}{
-		{"v5e", []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t", "ct5lp-hightpu-8t"}},
+		{"v5litepod", []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t", "ct5lp-hightpu-8t"}},
 		{"v4", []string{"ct4p-hightpu-4t"}},
 		{"l4", []string{"g2-standard-12", "g2-standard-24", "g2-standard-48", "g2-standard-96"}},
 		{"unknown", nil},

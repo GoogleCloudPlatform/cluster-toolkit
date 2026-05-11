@@ -1106,13 +1106,14 @@ var machineFamilyToLabelMap = map[string]string{
 	"a2-megagpu":    "nvidia-tesla-a100",
 	"g4-standard":   "nvidia-rtx-pro-6000",
 	"ct6e-standard": "tpu-v6e-slice",
-	"ct5lp-hightpu": "tpu-v5e-slice",
+	"ct5lp-hightpu": "tpu-v5-lite-podslice",
 	"ct5p-hightpu":  "tpu-v5p-slice",
 	"ct4p-hightpu":  "tpu-v4-podslice",
 	"v6e":           "tpu-v6e-slice",
-	"v5e":           "tpu-v5e-slice",
+	"v5litepod":     "tpu-v5-lite-podslice",
 	"v5p":           "tpu-v5p-slice",
 	"v4":            "tpu-v4-podslice",
+	"tpu7x":         "tpu7x",
 	"l4":            "nvidia-l4",
 	"rtx":           "nvidia-rtx-pro-6000",
 }
@@ -1123,7 +1124,7 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 
 	// Fallback for direct values
 	switch resolvedLower {
-	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5e-slice":
+	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5-lite-podslice":
 		return acceleratorType
 	}
 

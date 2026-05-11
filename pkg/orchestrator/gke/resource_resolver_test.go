@@ -54,13 +54,8 @@ func TestResolveMachineName(t *testing.T) {
 			wantErr:         true,
 		},
 		{
-			name:            "TPU7x-1 shorthand mapping",
-			acceleratorType: "tpu7x-1",
-			wantMachineName: "tpu7x-standard-1t",
-		},
-		{
-			name:            "TPU7x-4 shorthand mapping",
-			acceleratorType: "tpu7x-4",
+			name:            "TPU7x shorthand mapping",
+			acceleratorType: "tpu7x",
 			wantMachineName: "tpu7x-standard-4t",
 		},
 	}

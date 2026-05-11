@@ -1475,9 +1475,9 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 		WorkloadName:          "parallel-container-test",
 		CommandToRun:          "echo hello",
 		ClusterLocation:       "us-central1-a",
-		ComputeType:           "tpu7x-4", // Resolves to tpu7x-standard-4t
-		Topology:              "2x2x1",   // 4 chips
-		UseParallelContainers: true,      // Enable parallel containers
+		ComputeType:           "tpu7x", // Resolves to tpu7x-standard-4t
+		Topology:              "2x2x1", // 4 chips
+		UseParallelContainers: true,    // Enable parallel containers
 	}
 
 	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)

@@ -26,19 +26,19 @@ import (
 const defaultAcceleratorsPerVM = 4
 
 var tpuFamilyDefaults = map[string]int{
-	"ct5lp":     8, // Default for TPU v5e when suffix is missing
+	"ct5lp":     8, // Default for TPU v5litepod when suffix is missing
 	"v5litepod": 8, // Legacy string literal default
 }
 
 var tpuRegex = regexp.MustCompile(`^v[4-6][ep]?(-\d+)?$`)
 
-var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v5e", "v6e"}
+var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v6e"}
 var valid3DTPUFamilies = []string{"v4", "v5p", "ct4p", "ct5p", "tpu7"}
 
 // AcceleratorShorthandMap maps shorthand names to full machine types.
 // The shorthand notation generally follows the pattern <accelerator>-<suffix>.
 // For TPU v4, the suffix represents the total number of CORES (e.g., "v4-8" has 8 cores = 4 chips).
-// For TPU v5 and v6, the suffix represents the total number of CHIPS (e.g., "v5e-8" has 8 chips).
+// For TPU v5 and v6, the suffix represents the total number of CHIPS (e.g., "v5litepod-8" has 8 chips).
 var AcceleratorShorthandMap = map[string]string{
 	// GPU mappings
 	"l4-1":             "g2-standard-12",
@@ -68,18 +68,17 @@ var AcceleratorShorthandMap = map[string]string{
 	"gb200-4":          "a4x-highgpu-4g",
 
 	// TPU mappings
-	"v4-8":    "ct4p-hightpu-4t",
-	"v5p-1":   "ct5p-hightpu-1t",
-	"v5p-2":   "ct5p-hightpu-2t",
-	"v5p-4":   "ct5p-hightpu-4t",
-	"v5e-1":   "ct5lp-hightpu-1t",
-	"v5e-4":   "ct5lp-hightpu-4t",
-	"v5e-8":   "ct5lp-hightpu-8t",
-	"v6e-1":   "ct6e-standard-1t",
-	"v6e-4":   "ct6e-standard-4t",
-	"v6e-8":   "ct6e-standard-8t",
-	"tpu7x-1": "tpu7x-standard-1t",
-	"tpu7x-4": "tpu7x-standard-4t",
+	"v4-8":        "ct4p-hightpu-4t",
+	"v5p-1":       "ct5p-hightpu-1t",
+	"v5p-2":       "ct5p-hightpu-2t",
+	"v5p-4":       "ct5p-hightpu-4t",
+	"v5litepod-1": "ct5lp-hightpu-1t",
+	"v5litepod-4": "ct5lp-hightpu-4t",
+	"v5litepod-8": "ct5lp-hightpu-8t",
+	"v6e-1":       "ct6e-standard-1t",
+	"v6e-4":       "ct6e-standard-4t",
+	"v6e-8":       "ct6e-standard-8t",
+	"tpu7x":       "tpu7x-standard-4t",
 }
 
 // ValidGPUAccelerators lists valid GPU accelerator types.
@@ -107,7 +106,7 @@ var allowed3DTopologies = map[int]string{
 	2048: "8x16x16",
 }
 
-// 2D topologies for v5e and v6e
+// 2D topologies for v5litepod and v6e
 var allowed2DTopologies = map[int]string{
 	1:   "1x1",
 	4:   "2x2",
@@ -321,7 +320,7 @@ func IsTPU(acceleratorType string) bool {
 	if strings.HasPrefix(resolvedLower, "ct") || strings.Contains(resolvedLower, "tpu") {
 		return true
 	}
-	// Fallback for shorthands not in map that match known TPU versions (v4, v5e, v5p, v6e).
+	// Fallback for shorthands not in map that match known TPU versions (v4, v5litepod, v5p, v6e).
 	// We use a strict regex to avoid matching arbitrary machine types starting with 'v'.
 	return tpuRegex.MatchString(resolvedLower)
 }
@@ -358,13 +357,13 @@ func ResolveTopologyForChips(accelaratorType string) (string, error) {
 		totalChips = totalChips / 2
 	}
 
-	// 3D topologies for v4, v5p, tpu7, tpu7x
+	// 3D topologies for v4, v5p, tpu7x
 	if strings.HasPrefix(resolvedLower, "v4") || strings.HasPrefix(resolvedLower, "v5p") || strings.HasPrefix(resolvedLower, "ct4") || strings.HasPrefix(resolvedLower, "ct5p") || strings.HasPrefix(resolvedLower, "tpu7") {
 		if shape, exists := allowed3DTopologies[totalChips]; exists {
 			return shape, nil
 		}
 	} else {
-		// 2D topologies for v5e and v6e (default)
+		// 2D topologies for v5litepod and v6e (default)
 		if shape, exists := allowed2DTopologies[totalChips]; exists {
 			return shape, nil
 		}
