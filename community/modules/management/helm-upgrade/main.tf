@@ -21,11 +21,15 @@ resource "null_resource" "helm_upgrade" {
     namespace    = var.namespace
     values_yaml  = join(",", var.values_yaml)
     set_values   = yamlencode(var.set_values)
+    project_id   = var.project_id
+    cluster_name = var.cluster_name
+    location     = var.location
   }
 
   provisioner "local-exec" {
     command = <<EOT
-      gcloud container clusters get-credentials "${var.cluster_name}" --project "${var.project_id}" --region "${var.location}"
+      set -e
+      gcloud container clusters get-credentials "${var.cluster_name}" --project "${var.project_id}" --location "${var.location}"
       helm upgrade --install "${var.release_name}" "${var.chart_name}" \
         --namespace "${var.namespace}" --create-namespace \
         ${join(" ", [for f in var.values_yaml : "--values \"${f}\""])} \

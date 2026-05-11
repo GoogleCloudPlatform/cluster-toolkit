@@ -17,4 +17,5 @@
 output "completed" {
   description = "Indicator that the Helm upgrade completed."
   value       = true
+  depends_on  = [null_resource.helm_upgrade]
 }

@@ -78,8 +78,8 @@ No modules.
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to install the release into. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID of the GKE cluster. | `string` | n/a | yes |
 | <a name="input_release_name"></a> [release\_name](#input\_release\_name) | Name of the Helm release. | `string` | n/a | yes |
-| <a name="input_set_values"></a> [set\_values](#input\_set\_values) | List of key-value pairs to set in the helm chart. | `any` | `[]` | no |
-| <a name="input_values_yaml"></a> [values\_yaml](#input\_values\_yaml) | List of paths to values.yaml files to pass to helm upgrade. | `any` | `[]` | no |
+| <a name="input_set_values"></a> [set\_values](#input\_set\_values) | List of key-value pairs to set in the helm chart. | `list(object({ name = string, value = any }))` | `[]` | no |
+| <a name="input_values_yaml"></a> [values\_yaml](#input\_values\_yaml) | List of paths to values.yaml files to pass to helm upgrade. | `list(string)` | `[]` | no |
 
 ## Outputs
 
