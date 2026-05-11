@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "global-static-ip", ghpc_role = "network" })
+}
+
 resource "google_compute_global_address" "ips" {
-  for_each = toset(var.ip_names)
-  name     = each.value
-  project  = var.project_id
+  for_each    = var.ip_names
+  name        = each.value
+  project     = var.project_id
+  description = var.description
+  labels      = local.labels
 }

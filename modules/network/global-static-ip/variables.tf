@@ -16,7 +16,20 @@ variable "project_id" {
   description = "GCP Project ID"
   type        = string
 }
+
 variable "ip_names" {
-  description = "List of global static IP names to create"
-  type        = list(string)
+  description = "Set of global static IP names to create"
+  type        = set(string)
+}
+
+variable "labels" {
+  description = "Labels to apply to the global static IP addresses"
+  type        = map(string)
+  default     = {}
+}
+
+variable "description" {
+  description = "Description to provide context for the global static IP addresses"
+  type        = string
+  default     = null
 }

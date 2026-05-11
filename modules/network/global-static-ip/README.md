@@ -59,7 +59,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_ip_names"></a> [ip\_names](#input\_ip\_names) | List of global static IP names to create | `list(string)` | n/a | yes |
+| <a name="input_description"></a> [description](#input\_description) | Description to provide context for the global static IP addresses | `string` | `null` | no |
+| <a name="input_ip_names"></a> [ip\_names](#input\_ip\_names) | Set of global static IP names to create | `set(string)` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the global static IP addresses | `map(string)` | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP Project ID | `string` | n/a | yes |
 
 ## Outputs
