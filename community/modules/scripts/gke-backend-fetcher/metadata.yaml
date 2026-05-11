@@ -14,6 +14,8 @@
 
 spec:
   requirements:
-    services: []
+    services:
+    - compute.googleapis.com
+    - container.googleapis.com
 ghpc:
   validators: []

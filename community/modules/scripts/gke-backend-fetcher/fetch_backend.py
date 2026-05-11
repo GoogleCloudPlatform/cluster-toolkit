@@ -50,7 +50,7 @@ def main():
     # Configure kubectl
     subprocess.run([
         'gcloud', 'container', 'clusters', 'get-credentials', cluster_name,
-        '--project', project_id, '--region', location
+        '--project', project_id, '--location', location
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     pattern = f"-{namespace}-{service_name}-{service_port}-"
