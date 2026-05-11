@@ -21,6 +21,11 @@ variable "namespace" {
 variable "cluster_id" {
   description = "The full GCP resource ID of the GKE cluster in the format projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME"
   type        = string
+
+  validation {
+    condition     = can(regex("^projects/[^/]+/locations/[^/]+/clusters/[^/]+$", var.cluster_id))
+    error_message = "The cluster_id must be in the format projects/PROJECT_ID/locations/LOCATION/clusters/NAME."
+  }
 }
 
 variable "cluster_endpoint" {

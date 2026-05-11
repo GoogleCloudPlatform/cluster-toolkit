@@ -1,6 +1,6 @@
 ## Description
 
-This module creates a Kubernetes namespace.
+This module creates a Kubernetes namespace. It configures the Kubernetes provider using either explicitly provided credentials (`cluster_endpoint`, `cluster_ca_certificate`, `access_token`) or dynamically looks them up using the `cluster_id`.
 
 ## Example usage
 
