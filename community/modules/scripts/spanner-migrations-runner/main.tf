@@ -14,24 +14,31 @@
 * limitations under the License.
  */
 
+locals {
+  target_dir = var.sub_directory != "" ? "${var.migrations_dir}/${var.sub_directory}" : var.migrations_dir
+}
+
 resource "null_resource" "run_migrations" {
   triggers = {
-    migrations_hash = sha256(join("", [for f in fileset("${var.migrations_dir}/${var.sub_directory}", "*.up.sql") : filesha256("${var.migrations_dir}/${var.sub_directory}/${f}")]))
-    proto_hash      = var.proto_descriptors_file != null ? filesha256(var.proto_descriptors_file) : ""
-    instance_name   = var.instance_name
-    database_name   = var.database_name
+    migrations_hash = sha256(join("", [for f in fileset(local.target_dir, "*.up.sql") : filesha256("${local.target_dir}/${f}")]))
+
+    proto_hash    = var.proto_descriptors_file != null ? filesha256(var.proto_descriptors_file) : ""
+    instance_name = var.instance_name
+    database_name = var.database_name
+    project_id    = var.project_id
   }
 
   provisioner "local-exec" {
     command = <<EOF
-      for f in "${var.migrations_dir}/${var.sub_directory}"/*.up.sql; do
+      set -e
+      for f in "${local.target_dir}"/*.up.sql; do
         [ -e "$f" ] || continue
         echo "Applying $f..."
         gcloud spanner databases ddl update "${var.database_name}" \
           --instance="${var.instance_name}" \
           --project="${var.project_id}" \
           --ddl-file="$f" \
-          ${var.proto_descriptors_file != null ? "--proto-descriptors-file=\"${var.proto_descriptors_file}\"" : ""}
+          ${var.proto_descriptors_file != null ? "--proto-descriptors-file=\"${var.proto_descriptors_file}\"" : ""} || exit 1
       done
     EOF
   }

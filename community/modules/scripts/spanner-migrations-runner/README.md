@@ -1,7 +1,7 @@
 ## Description
 
 This module runs Spanner DDL migrations from a specified directory using `gcloud`.
-It looks for `.up.sql` files in `${var.migrations_dir}/${var.sub_directory}/` and applies them in alphabetical order.
+It looks for `.up.sql` files in the specified `migrations_dir` (or an optional `sub_directory` within it) and applies them in alphabetical order.
 
 ### Software Requirements
 
