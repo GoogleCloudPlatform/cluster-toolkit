@@ -21,7 +21,7 @@ variable "backend_service_id" {
   description = "The ID of the IAP-secured Google Cloud Backend Service (usually obtained from the gke-backend-fetcher module)."
 }
 variable "iap_members" {
-  type        = list(string)
-  description = "List of IAM members to grant the 'roles/iap.httpsResourceAccessor' role (e.g. ['user:example@google.com', 'group:admins@google.com', 'serviceAccount:sa@project.iam.gserviceaccount.com'])."
+  type        = set(string)
+  description = "Set of IAM members to grant the 'roles/iap.httpsResourceAccessor' role (e.g. ['user:example@google.com', 'group:admins@google.com', 'serviceAccount:sa@project.iam.gserviceaccount.com'])."
   default     = []
 }

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "google_iap_web_backend_service_iam_member" "iap_accessor" {
-  for_each            = toset(var.iap_members)
+  for_each            = var.iap_members
   project             = var.project_id
   web_backend_service = var.backend_service_id
   role                = "roles/iap.httpsResourceAccessor"

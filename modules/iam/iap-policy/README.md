@@ -57,7 +57,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_backend_service_id"></a> [backend\_service\_id](#input\_backend\_service\_id) | The ID of the IAP-secured Google Cloud Backend Service (usually obtained from the gke-backend-fetcher module). | `string` | n/a | yes |
-| <a name="input_iap_members"></a> [iap\_members](#input\_iap\_members) | List of IAM members to grant the 'roles/iap.httpsResourceAccessor' role (e.g. ['user:example@google.com', 'group:admins@google.com', 'serviceAccount:sa@project.iam.gserviceaccount.com']). | `list(string)` | `[]` | no |
+| <a name="input_iap_members"></a> [iap\_members](#input\_iap\_members) | Set of IAM members to grant the 'roles/iap.httpsResourceAccessor' role (e.g. ['user:example@google.com', 'group:admins@google.com', 'serviceAccount:sa@project.iam.gserviceaccount.com']). | `set(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the backend service resides. | `string` | n/a | yes |
 
 ## Outputs
