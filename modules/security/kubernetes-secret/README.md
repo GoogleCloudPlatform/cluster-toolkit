@@ -1,6 +1,6 @@
 ## Description
 
-This module creates a Kubernetes secret in a specified namespace on a given GKE cluster. It automatically configures the Kubernetes provider using the GKE cluster credentials.
+This module creates a Kubernetes secret in a specified namespace on a given GKE cluster. It configures the Kubernetes provider using either explicitly provided credentials (`cluster_endpoint`, `cluster_ca_certificate`, `access_token`) or dynamically looks them up using the `cluster_id`.
 
 ## Example usage
 
