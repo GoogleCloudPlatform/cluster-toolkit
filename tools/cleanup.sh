@@ -669,47 +669,133 @@ process_addresses() {
 }
 
 process_iam_deleted_members() {
-	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts ---"
-	local policy_data
-	if ! policy_data=$(gcloud projects get-iam-policy "$PROJECT_ID" --format="value(bindings[].role,bindings[].members)"); then
-		log "ERROR" "Failed to get IAM policy."
+	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts (Bulk) ---"
+	
+	# Run the python bulk script inline
+	python3 - <<EOF
+import json, subprocess, sys
+
+project_id = "$PROJECT_ID"
+dry_run = "$DRY_RUN".lower() == "true"
+
+try:
+    # 1. Fetch the current IAM policy
+    res = subprocess.run(["gcloud", "projects", "get-iam-policy", project_id, "--format=json"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print("ERROR: Failed to get IAM policy:", res.stderr)
+        sys.exit(1)
+
+    policy = json.loads(res.stdout)
+
+    # 2. Clean up bindings
+    original_member_count = 0
+    cleaned_member_count = 0
+    removed_members = []
+
+    new_bindings = []
+    for binding in policy.get("bindings", []):
+        role = binding.get("role")
+        members = binding.get("members", [])
+        original_member_count += len(members)
+        
+        cleaned_members = []
+        for m in members:
+            if m.startswith("deleted:serviceAccount:"):
+                removed_members.append((role, m))
+            else:
+                cleaned_members.append(m)
+                
+        if cleaned_members:
+            binding["members"] = cleaned_members
+            new_bindings.append(binding)
+            cleaned_member_count += len(cleaned_members)
+
+    policy["bindings"] = new_bindings
+    removed_count = len(removed_members)
+    print(f"Original member bindings: {original_member_count}")
+    print(f"Cleaned member bindings: {cleaned_member_count}")
+    print(f"Deleted service account bindings to remove: {removed_count}")
+
+    if removed_count == 0:
+        print("No deleted service accounts found in IAM policy. Nothing to do.")
+        sys.exit(0)
+
+    # 3. Apply or show changes
+    if dry_run:
+        print(f"[DRY-RUN] Would remove {removed_count} deleted service account bindings.")
+        print("Sample bindings to remove:")
+        for r, m in removed_members[:10]:
+            print(f"  - Role: {r}, Member: {m}")
+    else:
+        print(f"Applying bulk IAM policy update to remove {removed_count} bindings...")
+        with open("cleaned_policy.json", "w") as f:
+            json.dump(policy, f)
+            
+        res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, "cleaned_policy.json", "--format=json"], capture_output=True, text=True)
+        subprocess.run(["rm", "-f", "cleaned_policy.json"])
+        
+        if res2.returncode != 0:
+            print("ERROR: Failed to set IAM policy:", res2.stderr)
+            sys.exit(1)
+        print("SUCCESS: Successfully removed all deleted service accounts from IAM policy in bulk!")
+except Exception as e:
+    print(f"ERROR: An unexpected error occurred: {e}")
+    sys.exit(1)
+EOF
+
+	if [[ $? -ne 0 ]]; then
+		log "ERROR" "Bulk IAM cleanup failed."
+		((ERROR_COUNT++)) || true
+	else
+		log "INFO" "Finished bulk processing of IAM deleted members."
+	fi
+}
+
+process_service_accounts() {
+	log "INFO" "--- Processing: Service Accounts ---"
+	local sas_data
+	if ! sas_data=$(gcloud iam service-accounts list --project="$PROJECT_ID" --format="value(email,displayName)"); then
+		log "ERROR" "Failed to list Service Accounts."
 		((ERROR_COUNT++)) || true
 		return 0
 	fi
-	if [[ -z "$policy_data" ]]; then
-		log "INFO" "No IAM bindings found."
+	if [[ -z "$sas_data" ]]; then
+		log "INFO" "No service accounts found."
 		return 0
 	fi
 
 	local count=0
-	while IFS=$'\t' read -r role members_str; do
-		if [[ -z "$role" || -z "$members_str" ]]; then continue; fi
+	while IFS=$'\t' read -r email display_name; do
+		[[ -z "$email" ]] && continue
 
-		IFS=';' read -ra members <<<"$members_str"
-		for member in "${members[@]}"; do
-			if [[ "$member" == deleted:serviceAccount:* ]]; then
-				local -a cmd=(
-					"gcloud" "projects" "remove-iam-policy-binding" "$PROJECT_ID"
-					"--member=$member"
-					"--role=$role"
-					"--condition=None"
-					"--quiet"
-				)
+		# Check if the service account is protected/excluded
+		local protected=false
 
-				if [[ "$DRY_RUN" == "true" ]]; then
-					log "DRY-RUN" "Would remove IAM binding: $member from role $role"
-				else
-					log "EXECUTE" "Removing IAM binding: $member from role $role"
-					if ! "${cmd[@]}" >/dev/null; then
-						log "ERROR" "Failed to remove IAM binding for $member in role $role"
-						((ERROR_COUNT++)) || true
-					fi
+		# 1. Check if the full email or the username part is directly in EXCLUSION_MAP
+		local username="${email%%@*}"
+		if [[ -n "${EXCLUSION_MAP[${email}]:-}" || -n "${EXCLUSION_MAP[${username}]:-}" ]]; then
+			protected=true
+		fi
+
+		# 2. Check if any protected resource name (keys of EXCLUSION_MAP) is a substring of the email
+		if [[ "$protected" == "false" ]]; then
+			for protected_name in "${!EXCLUSION_MAP[@]}"; do
+				if [[ "$email" == *"$protected_name"* ]]; then
+					protected=true
+					log "DEBUG" "Service Account $email is protected because it contains protected resource name: $protected_name"
+					break
 				fi
-				((count++)) || true
-			fi
-		done
-	done <<<"$policy_data"
-	log "INFO" "Finished processing IAM deleted members. $count bindings actioned."
+			done
+		fi
+
+		# 3. If not protected, delete it
+		if [[ "$protected" == "false" ]]; then
+			execute_delete "Service Account" "$email" "" \
+				gcloud iam service-accounts delete "$email" --project="$PROJECT_ID" --quiet
+			((count++)) || true
+		fi
+	done <<<"$sas_data"
+	log "INFO" "Finished processing Service Accounts. $count service accounts actioned."
 }
 
 process_vm_images() {
@@ -1113,6 +1199,7 @@ main() {
 
 	# --- Phase 5: IAM Cleanup ---
 	log "INFO" "--- PHASE 5: Cleaning up IAM Policy Bindings ---"
+	process_service_accounts
 	process_iam_deleted_members
 
 	log "INFO" "CLEANUP RUN FINISHED for project: $PROJECT_ID"
