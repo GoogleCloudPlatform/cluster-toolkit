@@ -43,7 +43,7 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 	if !ok {
 		return nil
 	}
-	
+
 	// Inject the embedded JSON string directly
 	mod.Settings = mod.Settings.With("machine_mappings_json", cty.StringVal(string(machineMappingsJSON)))
 
