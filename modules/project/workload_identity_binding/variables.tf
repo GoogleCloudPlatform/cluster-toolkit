@@ -18,15 +18,18 @@ variable "project_id" {
   type        = string
   description = "The GCP project ID where the cluster is located."
 }
+
 variable "service_account_email" {
   type        = string
-  description = "The email of the Google Service Account (GSA) to bind."
+  description = "The email address of the Google Service Account (GSA) to bind (e.g., user@project.iam.gserviceaccount.com)."
 }
+
 variable "namespace" {
   type        = string
   description = "The Kubernetes namespace where the KSA is located."
   default     = "default"
 }
+
 variable "k8s_service_account_name" {
   type        = string
   description = "The name of the Kubernetes Service Account (KSA) to bind."

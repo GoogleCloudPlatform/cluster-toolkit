@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-output "iam_email" {
+output "workload_identity_principal" {
   description = "The Workload Identity principal."
   value       = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }

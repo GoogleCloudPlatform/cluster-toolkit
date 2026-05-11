@@ -61,11 +61,11 @@ No modules.
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | The name of the Kubernetes Service Account (KSA) to bind. | `string` | n/a | yes |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | The Kubernetes namespace where the KSA is located. | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the cluster is located. | `string` | n/a | yes |
-| <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The email of the Google Service Account (GSA) to bind. | `string` | n/a | yes |
+| <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The email address of the Google Service Account (GSA) to bind (e.g., user@project.iam.gserviceaccount.com). | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_iam_email"></a> [iam\_email](#output\_iam\_email) | The Workload Identity principal. |
+| <a name="output_workload_identity_principal"></a> [workload\_identity\_principal](#output\_workload\_identity\_principal) | The Workload Identity principal. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
