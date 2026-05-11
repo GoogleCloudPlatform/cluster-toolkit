@@ -13,6 +13,7 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "cloud-run", ghpc_role = "compute" })
@@ -22,9 +23,10 @@ resource "google_cloud_run_v2_service" "default" {
   name                = var.service_name
   location            = var.region
   project             = var.project_id
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
   ingress             = var.ingress
   labels              = local.labels
+
   template {
     labels = local.labels
     containers {
@@ -42,6 +44,7 @@ resource "google_cloud_run_v2_service" "default" {
     }
   }
 }
+
 resource "google_cloud_run_v2_service_iam_member" "public_access" {
   count    = var.allow_unauthenticated ? 1 : 0
   project  = google_cloud_run_v2_service.default.project

@@ -13,36 +13,43 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
 }
+
 variable "region" {
   description = "GCP Region"
   type        = string
 }
+
 variable "service_name" {
   description = "Cloud Run Service Name"
   type        = string
 }
+
 variable "image" {
   description = "Container Image URL"
   type        = string
 }
+
 variable "container_port" {
   description = "Port the container listens on"
   type        = number
   default     = 8080
 }
+
 variable "env_vars" {
   description = "Environment variables for the container"
   type        = map(string)
   default     = {}
 }
+
 variable "allow_unauthenticated" {
   description = "Whether to allow unauthenticated access"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "ingress" {
@@ -59,4 +66,10 @@ variable "labels" {
   description = "Labels to apply to the Cloud Run service"
   type        = any
   default     = {}
+}
+
+variable "deletion_protection" {
+  description = "Whether to enable deletion protection for the Cloud Run service"
+  type        = bool
+  default     = true
 }

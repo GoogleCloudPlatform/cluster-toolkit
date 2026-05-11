@@ -63,8 +63,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_allow_unauthenticated"></a> [allow\_unauthenticated](#input\_allow\_unauthenticated) | Whether to allow unauthenticated access | `bool` | `true` | no |
+| <a name="input_allow_unauthenticated"></a> [allow\_unauthenticated](#input\_allow\_unauthenticated) | Whether to allow unauthenticated access | `bool` | `false` | no |
 | <a name="input_container_port"></a> [container\_port](#input\_container\_port) | Port the container listens on | `number` | `8080` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether to enable deletion protection for the Cloud Run service | `bool` | `true` | no |
 | <a name="input_env_vars"></a> [env\_vars](#input\_env\_vars) | Environment variables for the container | `map(string)` | `{}` | no |
 | <a name="input_image"></a> [image](#input\_image) | Container Image URL | `string` | n/a | yes |
 | <a name="input_ingress"></a> [ingress](#input\_ingress) | Ingress traffic allowed for the service. Possible values: INGRESS\_TRAFFIC\_ALL, INGRESS\_TRAFFIC\_INTERNAL\_ONLY, INGRESS\_TRAFFIC\_INTERNAL\_LOAD\_BALANCER. | `string` | `"INGRESS_TRAFFIC_ALL"` | no |
