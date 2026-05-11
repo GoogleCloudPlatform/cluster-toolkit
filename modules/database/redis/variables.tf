@@ -18,32 +18,43 @@ variable "project_id" {
   description = "The project ID to deploy to."
   type        = string
 }
+
 variable "environment" {
   description = "The environment name."
   type        = string
 }
+
 variable "deployment_name" {
   description = "The name of the current deployment."
   type        = string
 }
+
 variable "region" {
   description = "The region to deploy Redis to."
   type        = string
 }
+
 variable "deploy_redis" {
   description = "Whether to deploy Redis."
   type        = bool
   default     = true
 }
+
 variable "network_self_link" {
   description = "The VPC network to which the instance is connected."
   type        = string
 }
+
 variable "connect_mode" {
   description = "The connection mode of the Redis instance."
   type        = string
   default     = "DIRECT_PEERING"
+  validation {
+    condition     = contains(["DIRECT_PEERING", "PRIVATE_SERVICE_ACCESS"], var.connect_mode)
+    error_message = "The connect_mode must be one of DIRECT_PEERING or PRIVATE_SERVICE_ACCESS."
+  }
 }
+
 variable "reserved_ip_range" {
   description = "The name of the allocated IP range for the Private Service Access."
   type        = string
@@ -61,7 +72,7 @@ variable "tier" {
 }
 
 variable "memory_size_gb" {
-  description = "Redis memory size in GiB."
+  description = "Redis memory size in GiB. Defaults to 2 GiB as a safe minimal baseline for general caching workloads."
   type        = number
   default     = 2
 }

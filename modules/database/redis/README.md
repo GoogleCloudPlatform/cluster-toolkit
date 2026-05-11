@@ -65,7 +65,7 @@ No modules.
 | <a name="input_deploy_redis"></a> [deploy\_redis](#input\_deploy\_redis) | Whether to deploy Redis. | `bool` | `true` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment. | `string` | n/a | yes |
 | <a name="input_environment"></a> [environment](#input\_environment) | The environment name. | `string` | n/a | yes |
-| <a name="input_memory_size_gb"></a> [memory\_size\_gb](#input\_memory\_size\_gb) | Redis memory size in GiB. | `number` | `2` | no |
+| <a name="input_memory_size_gb"></a> [memory\_size\_gb](#input\_memory\_size\_gb) | Redis memory size in GiB. Defaults to 2 GiB as a safe minimal baseline for general caching workloads. | `number` | `2` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The VPC network to which the instance is connected. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to deploy to. | `string` | n/a | yes |
 | <a name="input_redis_version"></a> [redis\_version](#input\_redis\_version) | The version of Redis software. | `string` | `"REDIS_6_X"` | no |

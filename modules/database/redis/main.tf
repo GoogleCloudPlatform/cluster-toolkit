@@ -20,10 +20,16 @@ resource "google_project_service" "redis_api" {
   service            = "redis.googleapis.com"
   disable_on_destroy = false
 }
+
+locals {
+  # Redis instance names are limited to 40 characters.
+  redis_name = substr("${var.deployment_name}-redis-${var.environment}", 0, 40)
+}
+
 resource "google_redis_instance" "default" {
   count              = var.deploy_redis ? 1 : 0
   project            = var.project_id
-  name               = "${var.deployment_name}-redis-${var.environment}"
+  name               = local.redis_name
   tier               = var.tier
   memory_size_gb     = var.memory_size_gb
   region             = var.region
@@ -32,5 +38,7 @@ resource "google_redis_instance" "default" {
   connect_mode       = var.connect_mode
   reserved_ip_range  = var.reserved_ip_range
   authorized_network = var.network_self_link
-  depends_on         = [google_project_service.redis_api]
+  labels             = { ghpc_module = "redis", ghpc_role = "database" }
+
+  depends_on = [google_project_service.redis_api]
 }
