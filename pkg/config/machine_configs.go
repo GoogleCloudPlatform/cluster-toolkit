@@ -157,23 +157,51 @@ func GetMachineType(project, zone, machineType string) (*compute.MachineType, er
 	return res, nil
 }
 
-func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
+// GetOutputConfig returns the machine configuration as a struct.
+func GetOutputConfig(m *Module, bp Blueprint) (*OutputConfig, error) {
 	if mockData := os.Getenv("GHPC_MOCK_MACHINE_CONFIG"); mockData != "" {
-		return mockData, nil
+		var data OutputConfig
+		if err := json.Unmarshal([]byte(mockData), &data); err != nil {
+			return nil, err
+		}
+		return &data, nil
 	}
 
 	machineType, zone, project := extractMachineParams(m, bp)
 
 	if machineType == "" || zone == "" || project == "" {
-		return `{"gpus": {}, "tpus": {}, "cpus": {}}`, nil
+		return &OutputConfig{
+			GPUs: make(map[string]GPUConfig),
+			TPUs: make(map[string]TPUConfig),
+			CPUs: make(map[string]CPUConfig),
+		}, nil
 	}
 
 	mt, err := GetMachineType(project, zone, machineType)
 	if err != nil {
+		return nil, err
+	}
+
+	result := buildOutputConfigStruct(machineType, mt)
+	return &result, nil
+}
+
+func getMachineConfigJSON(m *Module, bp Blueprint) (string, error) {
+	if mockData := os.Getenv("GHPC_MOCK_MACHINE_CONFIG"); mockData != "" {
+		return mockData, nil
+	}
+
+	cfg, err := GetOutputConfig(m, bp)
+	if err != nil {
 		return "", err
 	}
 
-	return buildOutputConfigJSON(machineType, mt)
+	resBytes, err := json.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal machine config object to JSON: %w", err)
+	}
+
+	return string(resBytes), nil
 }
 
 type GPUConfig struct {
@@ -193,7 +221,7 @@ type OutputConfig struct {
 	CPUs map[string]CPUConfig `json:"cpus"`
 }
 
-func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string, error) {
+func buildOutputConfigStruct(machineType string, mt *compute.MachineType) OutputConfig {
 	result := OutputConfig{
 		GPUs: make(map[string]GPUConfig),
 		TPUs: make(map[string]TPUConfig),
@@ -214,11 +242,15 @@ func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string,
 		}
 	}
 
+	return result
+}
+
+func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string, error) {
+	result := buildOutputConfigStruct(machineType, mt)
 	resBytes, err := json.Marshal(result)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal machine config object to JSON: %w", err)
 	}
-
 	return string(resBytes), nil
 }
 

@@ -605,6 +605,8 @@ variable "cluster_autoscaling" {
 
   Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve 
   the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.
+
+  WARNING: Enabling autoscaling defaults to effectively unlimited scaling (1,000,000 CPU cores and 10,000,000 GB of memory) unless specific limits are passed in. This may result in large unexpected billing charges if a workload misconfiguration occurs.
   EOT
   type = object({
     enabled = bool
