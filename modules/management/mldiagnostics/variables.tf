@@ -47,6 +47,7 @@ variable "namespace" {
   default     = "default"
 }
 
+# Reserved for future work where behavior will be classified based on GKE version.
 # tflint-ignore: terraform_unused_declarations
 variable "gke_version" {
   description = "The GKE version for the cluster"
