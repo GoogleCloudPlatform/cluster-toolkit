@@ -55,7 +55,7 @@ locals {
       kind       = cqs[0].kind
       metadata   = cqs[0].metadata
       spec = merge(
-        try(cqs[0].spec, {}),
+        merge([for cq in cqs : try(cq.spec, {})]...),
         {
           resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
         }
