@@ -32,6 +32,17 @@ var tpuFamilyDefaults = map[string]int{
 
 var tpuRegex = regexp.MustCompile(`^v[4-6][ep]?(-\d+)?$`)
 
+type tpu3DConstraints struct {
+	maxCubes             int
+	enforceNonDecreasing bool
+}
+
+var tpu3DConstraintsMap = map[string]tpu3DConstraints{
+	"ct4":   {maxCubes: 64, enforceNonDecreasing: false},
+	"ct5p":  {maxCubes: 140, enforceNonDecreasing: true},
+	"tpu7x": {maxCubes: 144, enforceNonDecreasing: true},
+}
+
 var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v6e"}
 var valid3DTPUFamilies = []string{"v4", "v5p", "ct4p", "ct5p", "tpu7"}
 
@@ -92,8 +103,8 @@ var ValidGPUAccelerators = map[string]bool{
 	"nvidia-h100-mega-80gb": true,
 }
 
-// 3D topologies for v4, v5p, tpu7x
-var allowed3DTopologies = map[int]string{
+// 3D topologies for v4, v5p
+var common3DTopologies = map[int]string{
 	4:    "2x2x1",
 	8:    "2x2x2",
 	16:   "2x2x4",
@@ -118,13 +129,9 @@ var allowed2DTopologies = map[int]string{
 	256: "16x16",
 }
 
-var valid3DShapes = make(map[string]bool)
 var valid2DShapes = make(map[string]bool)
 
 func init() {
-	for _, v := range allowed3DTopologies {
-		valid3DShapes[v] = true
-	}
 	for _, v := range allowed2DTopologies {
 		valid2DShapes[v] = true
 	}
@@ -253,9 +260,6 @@ func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM i
 
 	// 2. Identify Accelerators per VM if not provided
 	if acceleratorsPerVM <= 0 {
-		// Resolve shorthand to full machine type if necessary
-		machineType = ResolveMachineType(machineType)
-
 		acceleratorsPerVM = func() int {
 			// Check for explicit accelerators count in machine_type (e.g., "-4t")
 			if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
@@ -294,11 +298,9 @@ func ResolveMachineType(acceleratorType string) string {
 }
 
 // matchesTPUFamily returns true if the accelerator type matches any of the given families.
-func matchesTPUFamily(acceleratorType string, families []string) bool {
-	resolved := ResolveMachineType(acceleratorType)
-	resolvedLower := strings.ToLower(resolved)
+func matchesTPUFamily(machineType string, families []string) bool {
 	for _, f := range families {
-		if strings.Contains(resolvedLower, f) {
+		if strings.Contains(machineType, f) {
 			return true
 		}
 	}
@@ -337,65 +339,81 @@ func GetCandidatesForShorthand(shorthand string) []string {
 	return candidates
 }
 
-// ResolveTopologyForChips returns the default topology for a given accelerator and total chips.
-func ResolveTopologyForChips(accelaratorType string) (string, error) {
-	idx := strings.LastIndex(accelaratorType, "-")
-	if idx == -1 {
-		return "", fmt.Errorf("invalid accelerator type format for topology resolution: %s (expected prefix-suffix)", accelaratorType)
+func parseShorthand(accelaratorType string) (size int, err error) {
+	if strings.Count(accelaratorType, "-") != 1 {
+		return 0, fmt.Errorf("invalid accelerator type format for topology resolution: %s (expected prefix-suffix)", accelaratorType)
 	}
-	accelType := accelaratorType[:idx]
-	suffix := accelaratorType[idx+1:]
-	totalChips, err := strconv.Atoi(suffix)
+	if strings.HasPrefix(accelaratorType, "tpu7x") {
+		return 0, fmt.Errorf("for TPU7x, topology should be passed explicitly via --topology flag. It cannot be passed as chip count via compute-type as a suffix (%q). Please use --topology=AxBxC", accelaratorType)
+	}
+
+	parts := strings.Split(accelaratorType, "-")
+	suffix := parts[1]
+	size, err = strconv.Atoi(suffix)
 	if err != nil {
-		return "", fmt.Errorf("invalid chips value for accelerator type %s: %w", accelaratorType, err)
+		if strings.Contains(suffix, "x") {
+			return 0, fmt.Errorf("only total chip count can be passed via compute-type as a suffix (%q). Use --topology flag with full topology string instead", accelaratorType)
+		}
+		return 0, fmt.Errorf("invalid chips value for accelerator type %s: %w", accelaratorType, err)
 	}
-	resolved := ResolveMachineType(accelType)
-	resolvedLower := strings.ToLower(resolved)
 
 	// For TPU v4 (v4-8), the shorthand suffix represents cores. We need to divide by 2 to get chips.
 	if accelaratorType == "v4-8" {
-		totalChips = totalChips / 2
+		size = size / 2
 	}
 
-	// 3D topologies for v4, v5p, tpu7x
-	if strings.HasPrefix(resolvedLower, "v4") || strings.HasPrefix(resolvedLower, "v5p") || strings.HasPrefix(resolvedLower, "ct4") || strings.HasPrefix(resolvedLower, "ct5p") || strings.HasPrefix(resolvedLower, "tpu7") {
-		if shape, exists := allowed3DTopologies[totalChips]; exists {
-			return shape, nil
+	return size, nil
+}
+
+// ResolveTopologyForChips returns the default topology for a given accelerator and total chips.
+func ResolveTopologyForChips(computeType string, machineType string) (string, error) {
+	totalChips, err := parseShorthand(computeType)
+	if err != nil {
+		return "", err
+	}
+
+	// Validate size based on family
+	isPowerOf2 := totalChips >= 1 && (totalChips&(totalChips-1)) == 0 && totalChips != 2
+	if matchesTPUFamily(machineType, valid2DTPUFamilies) {
+		if !(isPowerOf2) {
+			return "", fmt.Errorf("invalid size %d in compute-type %q. Valid sizes are powers of 2, except 2", totalChips, computeType)
 		}
-	} else {
-		// 2D topologies for v5litepod and v6e (default)
 		if shape, exists := allowed2DTopologies[totalChips]; exists {
 			return shape, nil
 		}
+	} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
+		isMultipleOf64 := totalChips >= 64 && totalChips%64 == 0
+		if !(isPowerOf2 || isMultipleOf64) {
+			return "", fmt.Errorf("invalid size %d in compute-type %q. Valid sizes are powers of 2, or multiples of 64", totalChips, computeType)
+		}
+		if shape, exists := common3DTopologies[totalChips]; exists {
+			return shape, nil
+		}
 	}
 
-	return "", fmt.Errorf("could not find a valid topology shape for %d chips with accelerator %s", totalChips, accelType)
+	return "", fmt.Errorf("could not find a valid topology shape for %d chips with accelerator %s", totalChips, computeType)
 }
 
 // ValidateHardwareRequest validates hardware requests for TPUs.
-func ValidateHardwareRequest(machineType, topology, placementPolicy string) error {
+func ValidateHardwareRequest(machineType, topology string) error {
 	if !IsTPU(machineType) {
 		return nil // Skip for non-TPUs
 	}
 
-	if topology != "" {
-		if err := validateTopologyMeshFormat(topology, machineType); err != nil {
-			return err
-		}
-
-		if matchesTPUFamily(machineType, valid2DTPUFamilies) {
-			if !valid2DShapes[topology] {
-				return fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout for %s", topology, machineType)
-			}
-		} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
-			if !valid3DShapes[topology] {
-				return fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout for %s", topology, machineType)
-			}
-		} else {
-			return fmt.Errorf("TPU type %q is recognized but its topology family is unknown; please report a bug to the toolkit maintainers.", machineType)
-		}
+	if err := validateTopologyMeshFormat(topology, machineType); err != nil {
+		return err
 	}
-	return nil
+
+	if matchesTPUFamily(machineType, valid2DTPUFamilies) {
+		if !valid2DShapes[topology] {
+			return fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout for %s", topology, machineType)
+		}
+		return nil
+	} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
+		return validate3DTopology(topology, machineType)
+	} else {
+		return fmt.Errorf("TPU type %q is recognized but its topology family is unknown; please report a bug to the toolkit maintainers.", machineType)
+	}
 }
 
 func validateTopologyMeshFormat(requested string, accelType string) error {
@@ -414,6 +432,55 @@ func validateTopologyMeshFormat(requested string, accelType string) error {
 			return fmt.Errorf("invalid topology dimension footprint val: %s", d)
 		}
 	}
+	return nil
+}
+
+func isValid3DDimension(x int) bool {
+	return x >= 4 && x%4 == 0
+}
+
+func validate3DTopology(topology string, machineType string) error {
+	for _, v := range common3DTopologies {
+		if topology == v {
+			return nil
+		}
+	}
+
+	dims := strings.Split(topology, "x")
+	a, _ := strconv.Atoi(dims[0])
+	b, _ := strconv.Atoi(dims[1])
+	c, _ := strconv.Atoi(dims[2])
+
+	if !isValid3DDimension(a) || !isValid3DDimension(b) || !isValid3DDimension(c) {
+		return fmt.Errorf("topology %s dimensions must be >= 4 and multiples of 4 (unless it is a common base topology)", topology)
+	}
+
+	maxCubes := 0
+	enforceNonDecreasing := true
+	found := false
+
+	for prefix, constraints := range tpu3DConstraintsMap {
+		if strings.HasPrefix(machineType, prefix) {
+			maxCubes = constraints.maxCubes
+			enforceNonDecreasing = constraints.enforceNonDecreasing
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("unknown 3D TPU family for machine type %s", machineType)
+	}
+
+	cubes := (a / 4) * (b / 4) * (c / 4)
+	if cubes > maxCubes {
+		return fmt.Errorf("topology %s exceeds max cubes limit of %d (current: %d)", topology, maxCubes, cubes)
+	}
+
+	if enforceNonDecreasing && !(a <= b && b <= c) {
+		return fmt.Errorf("topology %s dimensions must be in non-decreasing order (A <= B <= C)", topology)
+	}
+
 	return nil
 }
 
@@ -438,16 +505,5 @@ func CheckTopologyContainment(requested, container string, accelType string) (bo
 		}
 	}
 
-	if requested != container {
-		if matchesTPUFamily(accelType, valid2DTPUFamilies) {
-			if !valid2DShapes[requested] {
-				return false, fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout", requested)
-			}
-		} else if matchesTPUFamily(accelType, valid3DTPUFamilies) {
-			if !valid3DShapes[requested] {
-				return false, fmt.Errorf("requested carve footprint layout %s is not an authorized topology subset layout", requested)
-			}
-		}
-	}
 	return true, nil
 }
