@@ -53,9 +53,9 @@ locals {
     for name, cqs in local.merged_cluster_queues : {
       apiVersion = cqs[0].apiVersion
       kind       = cqs[0].kind
-      metadata   = merge([for cq in cqs : try(cq.metadata, {})]...)
+      metadata   = merge([for cq in cqs : cq.metadata if try(cq.metadata, null) != null]...)
       spec = merge(
-        merge([for cq in cqs : try(cq.spec, {})]...),
+        merge([for cq in cqs : cq.spec if try(cq.spec, null) != null]...),
         {
           resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
         }
