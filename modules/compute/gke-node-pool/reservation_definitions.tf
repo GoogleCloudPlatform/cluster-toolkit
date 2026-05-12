@@ -77,7 +77,10 @@ locals {
   # Compare two maps by counting the keys that mismatch.
   # Know that in map comparison the order of keys does not matter. That is {NVME: x, SCSI: y} and {SCSI: y, NVME: x} are equal
   # As of this writing, there is only one reservation supported by the Node Pool API. So, directly accessing it from the list
-  specific_reservation_requirement_violations = length(local.reservation_vm_properties) == 0 ? [] : [for k, v in local.nodepool_vm_properties : k if v != local.reservation_vm_properties[0][k]]
+  specific_reservation_requirement_violations = length(local.reservation_vm_properties) == 0 ? [] : [
+    for k, v in local.nodepool_vm_properties : k
+    if v != local.reservation_vm_properties[0][k] && try(local.reservation_vm_properties[0][k] != "", true)
+  ]
 
   specific_reservation_requirement_violation_messages = {
     "machine_type" : <<-EOT
