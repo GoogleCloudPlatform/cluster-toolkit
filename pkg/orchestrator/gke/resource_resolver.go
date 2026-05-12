@@ -188,7 +188,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 
 	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
 
-	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
+	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, mapped)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.ComputeType, err)
 	}
@@ -202,7 +202,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 	return cpuLim, memLim, gpuLim, tpuLim, nil
 }
 
-func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
+func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, mapped string) (cpu, mem, gpu, tpu string, err error) {
 	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
@@ -271,7 +271,6 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	// 1. Try to resolve as full machine type or direct shorthand match
 	machineName, err = g.resolveMachineName(job.ComputeType)
 	if err != nil {
-		// 2. If resolveMachineName failed, check if it's a multi-node TPU shorthand!
 		prefix := parts[0]
 		candidates := config.GetCandidatesForShorthand(prefix)
 		if len(candidates) == 0 {
@@ -284,38 +283,33 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		}
 	}
 	job.MachineType = machineName
-
 	isDynamicSlicing := false
 	if config.IsTPU(machineName) {
+		// Validate topology shape before resolving/discovering
+		if job.Topology != "" {
+			if err := config.ValidateHardwareRequest(job.MachineType, job.Topology); err != nil {
+				return JobProfile{}, isDynamicSlicing, err
+			}
+		}
+
 		// 3. Resolve Topology
-		topology, err := g.resolveTopology(job)
+		topology, isDynamicSlicing, err := g.resolveTopology(job)
 		if err != nil {
-			return JobProfile{}, false, err
+			return JobProfile{}, isDynamicSlicing, err
 		}
 		job.Topology = topology
 
 		// 4. Calculate VMs per slice
 		err = g.dynamicallyCalculateNodesPerSlice(job)
 		if err != nil {
-			return JobProfile{}, false, err
-		}
-
-		// 6. Verify dynamic slicing (super-slicing)
-		isDynamicSlicing, err = g.verifyDynamicSlicingActive(ManifestOptions{
-			ClusterName:     job.ClusterName,
-			ClusterLocation: job.ClusterLocation,
-			ComputeType:     job.ComputeType,
-		})
-		if err != nil {
-			logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
-			isDynamicSlicing = false
+			return JobProfile{}, isDynamicSlicing, err
 		}
 	}
 
 	// 5. Determine if CPU machine
 	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
 	if err != nil {
-		return JobProfile{}, false, err
+		return JobProfile{}, isDynamicSlicing, err
 	}
 
 	return JobProfile{
