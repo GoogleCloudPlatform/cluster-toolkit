@@ -20,7 +20,7 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   kueue_config_content = join("\n---\n", compact([
-    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+    (var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
       pathways_cpu_quota     = 480
       pathways_memory_quota  = "2000G"
@@ -31,7 +31,7 @@ locals {
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false))
 
   webhook_wait_duration = "60s"
 

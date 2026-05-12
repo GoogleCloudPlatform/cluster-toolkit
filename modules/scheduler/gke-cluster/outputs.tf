@@ -112,3 +112,8 @@ output "enable_slice_controller" {
   description = "Indicates whether the GKE Slice Controller is enabled."
   value       = var.enable_slice_controller
 }
+
+output "enable_pathways_for_tpus" {
+  description = "Indicates whether Pathways for TPUs is enabled."
+  value       = var.enable_pathways_for_tpus
+}

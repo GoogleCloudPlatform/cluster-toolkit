@@ -136,6 +136,12 @@ variable "kueue" {
   default = {}
 }
 
+variable "enable_pathways_for_tpus" {
+  description = "Enable Pathways for TPUs. This is automatically wired from gke-cluster module if used."
+  type        = bool
+  default     = false
+}
+
 variable "gke_cluster_exists" {
   description = "A static flag that signals to downstream modules that a cluster has been created."
   type        = bool

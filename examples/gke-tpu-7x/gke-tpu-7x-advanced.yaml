@@ -291,7 +291,6 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
