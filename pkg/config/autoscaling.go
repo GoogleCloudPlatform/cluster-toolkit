@@ -88,11 +88,6 @@ func validateAndGetLimits(bp Blueprint, mod *Module) (map[string]cty.Value, cty.
 
 	caMap := caVal.AsValueMap()
 
-	enabledVal, ok := caMap["enabled"]
-	if !ok || enabledVal.IsNull() || !enabledVal.IsKnown() || !enabledVal.True() {
-		return nil, cty.Value{}, false, nil
-	}
-
 	limitsVal, ok := caMap["limits"]
 	if !ok || limitsVal.IsNull() || !limitsVal.IsKnown() {
 		return nil, cty.Value{}, false, nil

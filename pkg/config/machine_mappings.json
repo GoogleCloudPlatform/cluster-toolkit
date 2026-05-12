@@ -19,14 +19,16 @@
     "v5litepod": "tpu-v5e-slice",
     "v5p": "tpu-v5p-slice",
     "v4": "tpu-v4-podslice",
-    "l4": "nvidia-l4",
-    "rtx": "nvidia-rtx-pro-6000"
+    "l4": "nvidia-l4"
   },
   "accelerator_shorthand_map": {
     "l4-1": "g2-standard-12",
     "l4-2": "g2-standard-24",
     "l4-4": "g2-standard-48",
     "l4-8": "g2-standard-96",
+    "rtx-6000-1/8": "g4-standard-6",
+    "rtx-6000-1/4": "g4-standard-12",
+    "rtx-6000-1/2": "g4-standard-24",
     "rtx-6000-1": "g4-standard-48",
     "rtx-6000-2": "g4-standard-96",
     "rtx-6000-4": "g4-standard-192",

@@ -609,7 +609,6 @@ variable "cluster_autoscaling" {
   WARNING: Enabling autoscaling defaults to effectively unlimited scaling (1,000,000 CPU cores and 10,000,000 GB of memory) unless specific limits are passed in. This may result in large unexpected billing charges if a workload misconfiguration occurs.
   EOT
   type = object({
-    enabled = bool
     limits = list(object({
       autoprovisioning_machine_type  = optional(string)
       autoprovisioning_resource_type = optional(string)
@@ -624,10 +623,7 @@ variable "cluster_autoscaling" {
     autoprovisioning_cpu_max      = optional(number, 1000000)
     autoprovisioning_memory_max   = optional(number, 10000000)
   })
-  default = {
-    enabled = false
-    limits  = []
-  }
+  default = null
   validation {
     condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
     error_message = "autoprovisioning_disk_type must be one of pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
