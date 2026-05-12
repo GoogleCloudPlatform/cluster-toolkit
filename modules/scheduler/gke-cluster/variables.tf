@@ -625,11 +625,11 @@ variable "cluster_autoscaling" {
   })
   default = null
   validation {
-    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
+    condition     = var.cluster_autoscaling == null ? true : contains(["pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-balanced"], coalesce(var.cluster_autoscaling.autoprovisioning_disk_type, "pd-balanced"))
     error_message = "autoprovisioning_disk_type must be one of pd-standard, pd-balanced, pd-ssd, hyperdisk-balanced."
   }
   validation {
-    condition     = coalesce(var.cluster_autoscaling.autoprovisioning_disk_size_gb, 100) >= 10
+    condition     = var.cluster_autoscaling == null ? true : coalesce(var.cluster_autoscaling.autoprovisioning_disk_size_gb, 100) >= 10
     error_message = "autoprovisioning_disk_size_gb must be at least 10 GB."
   }
 }

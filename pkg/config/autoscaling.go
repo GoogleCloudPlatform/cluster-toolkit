@@ -30,9 +30,9 @@ var machineMappingsJSON []byte
 
 // ExpandClusterAutoscaling intercepts the cluster_autoscaling variable,
 // parses machine_type in Go, and injects internal variables for maximum chips and accelerator type.
-type cachedAccInfo struct {
-	count int
-	t     string
+type cachedAcceleratorInfo struct {
+	acceleratorCount int
+	acceleratorType  string
 }
 
 func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
@@ -49,7 +49,7 @@ func ExpandClusterAutoscaling(bp Blueprint, mod *Module) error {
 
 	it := limitsVal.ElementIterator()
 	var newLimits []cty.Value
-	accCache := make(map[string]cachedAccInfo)
+	accCache := make(map[string]cachedAcceleratorInfo)
 
 	for it.Next() {
 		_, resVal := it.Element()
@@ -96,7 +96,7 @@ func validateAndGetLimits(bp Blueprint, mod *Module) (map[string]cty.Value, cty.
 	return caMap, limitsVal, true, nil
 }
 
-func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCache map[string]cachedAccInfo) (cty.Value, bool, error) {
+func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCache map[string]cachedAcceleratorInfo) (cty.Value, bool, error) {
 	if !resVal.Type().IsObjectType() {
 		return cty.Value{}, false, nil
 	}
@@ -117,15 +117,15 @@ func processAutoscalingLimit(resVal cty.Value, bp Blueprint, mod *Module, accCac
 	var accType string
 
 	if cached, exists := accCache[machineType]; exists {
-		acceleratorsPerVM = cached.count
-		accType = cached.t
+		acceleratorsPerVM = cached.acceleratorCount
+		accType = cached.acceleratorType
 	} else {
 		var err error
 		acceleratorsPerVM, accType, err = getAcceleratorCountAndType(machineType, bp, mod)
 		if err != nil {
 			return cty.Value{}, false, err
 		}
-		accCache[machineType] = cachedAccInfo{count: acceleratorsPerVM, t: accType}
+		accCache[machineType] = cachedAcceleratorInfo{acceleratorCount: acceleratorsPerVM, acceleratorType: accType}
 	}
 
 	if acceleratorsPerVM == 0 {
