@@ -53,7 +53,7 @@ locals {
     for name, cqs in local.merged_cluster_queues : {
       apiVersion = cqs[0].apiVersion
       kind       = cqs[0].kind
-      metadata   = cqs[0].metadata
+      metadata   = merge([for cq in cqs : try(cq.metadata, {})]...)
       spec = merge(
         merge([for cq in cqs : try(cq.spec, {})]...),
         {
