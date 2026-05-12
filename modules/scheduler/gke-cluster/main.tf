@@ -335,7 +335,7 @@ resource "google_container_node_pool" "system_node_pools" {
 
   project        = var.project_id
   name           = var.system_node_pool_name
-  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.id
   location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   node_locations = var.system_node_pool_zones
   version        = local.master_version
@@ -434,7 +434,7 @@ resource "google_container_node_pool" "cpu_np" {
 
   project        = var.project_id
   name           = "cpu-np"
-  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.id
   location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   node_locations = var.system_node_pool_zones
   version        = local.master_version

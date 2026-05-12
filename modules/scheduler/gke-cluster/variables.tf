@@ -460,13 +460,13 @@ variable "additional_networks" {
 }
 
 variable "cluster_reference_type" {
-  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
-  default     = "SELF_LINK"
+  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {ID, NAME}"
+  default     = "ID"
   type        = string
   nullable    = false
   validation {
-    condition     = contains(["SELF_LINK", "NAME"], var.cluster_reference_type)
-    error_message = "`cluster_reference_type` must be one of {SELF_LINK, NAME}"
+    condition     = contains(["ID", "NAME"], var.cluster_reference_type)
+    error_message = "`cluster_reference_type` must be one of {ID, NAME}"
   }
 }
 
