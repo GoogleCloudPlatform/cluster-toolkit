@@ -117,3 +117,8 @@ output "namespace" {
   description = "The namespace where Workload Identity is configured (created if not 'default')."
   value       = var.namespace
 }
+
+output "enable_pathways_for_tpus" {
+  description = "Indicates whether Pathways for TPUs is enabled."
+  value       = var.enable_pathways_for_tpus
+}

@@ -15,7 +15,7 @@
 package gke
 
 import (
-	"strings"
+	"hpc-toolkit/pkg/config"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -77,7 +77,7 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 	if acceleratorType == "" {
 		return nil
 	}
-	if IsTPU(acceleratorType) {
+	if config.IsTPU(acceleratorType) {
 		return []corev1.Toleration{
 			{
 				Key:      "google.com/tpu",
@@ -87,16 +87,4 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 		}
 	}
 	return nil
-}
-
-func IsTPU(acceleratorType string) bool {
-	if strings.Contains(acceleratorType, "tpu") {
-		return true
-	}
-	if len(acceleratorType) >= 2 && acceleratorType[0] == 'v' {
-		if acceleratorType[1] >= '0' && acceleratorType[1] <= '9' {
-			return true
-		}
-	}
-	return false
 }

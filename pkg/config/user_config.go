@@ -15,101 +15,80 @@
 package config
 
 import (
-	"context"
 	"crypto/sha256"
-
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
-	"sync"
-	"time"
-
-	"github.com/spf13/viper"
-
-	"cloud.google.com/go/firestore"
+	"path/filepath"
 )
 
-const (
-	USER_ID_KEY    string = "user_id"
-	TELEMETRY_KEY  string = "telemetry_enabled"
-	projectID      string = "hpc-toolkit-gsc"
-	collectionName string = "user_configs"
-)
-
-var (
-	fsClient     *firestore.Client
-	fsClientOnce sync.Once // To guarantee exactly-once initialization
-)
-
-func InitUserConfig() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	userID := generateUniqueID()
-
-	client, err := GetFirestoreClient(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Set local Viper defaults
-	viper.SetDefault(USER_ID_KEY, userID)
-
-	// Try to fetch the document
-	doc, err := client.Collection(collectionName).Doc(userID).Get(ctx)
-	if err != nil {
-		return SaveToFirestore()
-	}
-
-	// Merge Firestore data into Viper
-	data := doc.Data()
-	for k, v := range data {
-		viper.Set(k, v)
-	}
-
-	return nil
+// UserConfig holds the in-memory state of the user's telemetry preferences
+type UserConfig struct {
+	UserID           string `json:"user_id"`
+	TelemetryEnabled bool   `json:"telemetry_enabled"`
 }
 
-// GetPersistentUserId returns the stored User ID from Viper config.
+// globalUserConfig is the package-level variable holding the state during execution
+var globalUserConfig UserConfig
+
+// InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
+func InitUserConfig() error {
+	// Set the defaults
+	globalUserConfig = UserConfig{
+		UserID:           generateUniqueID(),
+		TelemetryEnabled: true, // Default telemetry state
+	}
+
+	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+
+	// Try to read from the local config file
+	if data, err := os.ReadFile(configFile); err == nil {
+		// If the file exists and is valid, overwrite the defaults
+		if err := json.Unmarshal(data, &globalUserConfig); err == nil {
+			return nil
+		}
+	}
+
+	// If file doesn't exist or is invalid, save defaults to file
+	return SaveToFile()
+}
+
+// GetPersistentUserId returns the stored User ID from the in-memory config.
 func GetPersistentUserId() string {
-	return viper.GetString(USER_ID_KEY)
+	return globalUserConfig.UserID
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
 func IsTelemetryEnabled() bool {
-	return viper.GetBool(TELEMETRY_KEY)
+	return globalUserConfig.TelemetryEnabled
 }
 
-// SetTelemetry sets the telemetry preference for the user.
+// SetTelemetry sets the telemetry preference for the user and saves to disk.
 func SetTelemetry(telemetry bool) error {
-	viper.Set(TELEMETRY_KEY, telemetry)
-	err := SaveToFirestore()
+	globalUserConfig.TelemetryEnabled = telemetry
+	err := SaveToFile()
 	if err != nil {
-		return fmt.Errorf("Failed to save state to Firestore: %v", err)
+		return fmt.Errorf("failed to save state to file: %v", err)
 	}
 	return nil
 }
 
-// Save Viper state back to Firestore
-func SaveToFirestore() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+// SaveToFile saves the in-memory state back to a local JSON file
+func SaveToFile() error {
+	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
 
-	userID := viper.GetString(USER_ID_KEY)
-
-	client, err := GetFirestoreClient(ctx)
+	data, err := json.MarshalIndent(globalUserConfig, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal user config: %v", err)
 	}
 
-	settings := map[string]any{
-		USER_ID_KEY:   viper.GetString(USER_ID_KEY),
-		TELEMETRY_KEY: viper.GetBool(TELEMETRY_KEY),
+	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %v", err)
 	}
 
-	_, err = client.Collection(collectionName).Doc(userID).Set(ctx, settings)
-	if err != nil {
-		return fmt.Errorf("failed to save to firestore: %v", err)
+	if err := os.WriteFile(configFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to save to file: %v", err)
 	}
 	return nil
 }
@@ -129,30 +108,4 @@ func generateUniqueID() string {
 	// Hash it to create a clean, fixed-length unique ID (to avoid PII)
 	hash := sha256.Sum256([]byte(rawID))
 	return fmt.Sprintf("%x", hash)[:24]
-}
-
-// Helper function to initialize Firestore client
-func GetFirestoreClient(ctx context.Context) (*firestore.Client, error) {
-	var initErr error
-
-	// The block inside Do() will only be executed once globally even if multiple goroutines call it simultaneously.
-	fsClientOnce.Do(func() {
-		// If client already exists
-		if fsClient != nil {
-			return
-		}
-
-		// Else create a new client
-		client, err := firestore.NewClient(ctx, projectID)
-		if err != nil {
-			initErr = err
-			return
-		}
-		fsClient = client
-	})
-
-	if initErr != nil {
-		return nil, initErr
-	}
-	return fsClient, nil
 }

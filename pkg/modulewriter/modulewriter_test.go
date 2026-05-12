@@ -522,13 +522,13 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 		m := config.Module{Kind: config.TerraformKind, Source: "modules/x/y"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "./modules/embedded/modules/x/y")
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/modules/x/y")
 	}
 	{ // embedded community
 		m := config.Module{Kind: config.TerraformKind, Source: "community/modules/x/y"}
 		s, err := DeploymentSource(m)
 		c.Check(err, IsNil)
-		c.Check(s, Equals, "./modules/embedded/community/modules/x/y")
+		c.Check(s, Equals, "../"+config.SharedModulesDirName+"/embedded/community/modules/x/y")
 	}
 	{ // local rel in repo
 		m := config.Module{Kind: config.TerraformKind, Source: "./modules/x/y"}

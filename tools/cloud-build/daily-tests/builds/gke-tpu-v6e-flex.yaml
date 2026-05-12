@@ -22,7 +22,6 @@ tags:
 - m.cloud-storage-bucket
 - m.gke-job-template
 - m.gke-persistent-volume
-- m.pre-existing-network-storage
 - gke
 
 substitutions:

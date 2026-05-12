@@ -156,8 +156,8 @@ spec:
     template:
       spec:
         completionMode: Indexed
-        parallelism: {{.VmsPerSlice}}
-        completions: {{.VmsPerSlice}}
+        parallelism: {{.NodesPerSlice}}
+        completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
 {{- if .PodFailurePolicy }}
         podFailurePolicy:

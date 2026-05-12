@@ -8,7 +8,7 @@ metadata:
     ${key}: ${val}
   %{~ endfor ~}
 spec:
-  storageClassName: ""
+  storageClassName: "${storage_class_name != null ? storage_class_name : ""}"
   capacity:
     storage: ${capacity}
   accessModes:

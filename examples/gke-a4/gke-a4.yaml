@@ -322,45 +322,24 @@ deployment_groups:
       k8s_service_account_name: workload-identity-k8s-sa
     outputs: [instructions]
 
-  # Create a remote mount of training_bucket using
-  # mount options optimized for reading training data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/training-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  # Create a remote mount of checkpoint_bucket using mount
-  # options optimized for writing and reading checkpoint data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4-cluster]
+    use: [training_bucket, a4-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4-cluster]
+    use: [checkpoint_bucket, a4-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.

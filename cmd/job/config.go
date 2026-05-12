@@ -27,6 +27,10 @@ var ConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage gcluster job configuration.",
 	Long:  `Manage persistent configuration for gcluster job commands, such as default project, cluster, and location.`,
+	// The config command should not check for the global flags to be already set.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return nil
+	},
 }
 
 var configSetCmd = &cobra.Command{

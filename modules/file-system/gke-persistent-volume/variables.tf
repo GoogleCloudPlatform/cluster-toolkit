@@ -91,3 +91,13 @@ variable "pvc_name" {
   type        = string
   default     = null
 }
+
+variable "gcsfuse_storage_class_name" {
+  description = "The storage class name for GCS Fuse. Allowed values: gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.gcsfuse_storage_class_name == null || contains(["gcsfusecsi-training", "gcsfusecsi-serving", "gcsfusecsi-checkpointing"], var.gcsfuse_storage_class_name)
+    error_message = "gcsfuse_storage_class_name must be one of gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing."
+  }
+}
