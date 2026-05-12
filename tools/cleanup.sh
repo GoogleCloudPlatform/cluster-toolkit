@@ -670,13 +670,13 @@ process_addresses() {
 
 process_iam_deleted_members() {
 	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts (Bulk) ---"
-	
-	# Run the python bulk script inline
-	python3 - <<EOF
-import json, subprocess, sys
 
-project_id = "$PROJECT_ID"
-dry_run = "$DRY_RUN".lower() == "true"
+	# Run the python bulk script inline
+	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'; then
+import json, os, subprocess, sys, tempfile
+
+project_id = sys.argv[1]
+dry_run = sys.argv[2].lower() == "true"
 
 try:
     # 1. Fetch the current IAM policy
@@ -728,11 +728,13 @@ try:
             print(f"  - Role: {r}, Member: {m}")
     else:
         print(f"Applying bulk IAM policy update to remove {removed_count} bindings...")
-        with open("cleaned_policy.json", "w") as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            temp_name = f.name
             json.dump(policy, f)
             
-        res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, "cleaned_policy.json", "--format=json"], capture_output=True, text=True)
-        subprocess.run(["rm", "-f", "cleaned_policy.json"])
+        res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, temp_name, "--format=json"], capture_output=True, text=True)
+        if os.path.exists(temp_name):
+            os.remove(temp_name)
         
         if res2.returncode != 0:
             print("ERROR: Failed to set IAM policy:", res2.stderr)
@@ -742,8 +744,6 @@ except Exception as e:
     print(f"ERROR: An unexpected error occurred: {e}")
     sys.exit(1)
 EOF
-
-	if [[ $? -ne 0 ]]; then
 		log "ERROR" "Bulk IAM cleanup failed."
 		((ERROR_COUNT++)) || true
 	else
@@ -765,14 +765,21 @@ process_service_accounts() {
 	fi
 
 	local count=0
-	while IFS=$'\t' read -r email display_name; do
+	while IFS=$'\t' read -r email _; do
 		[[ -z "$email" ]] && continue
+
+		local username="${email%%@*}"
+
+		# Safety filter: only process service accounts matching integration test patterns
+		if [[ "$username" != *-compute && "$username" != *-controller && "$username" != *-login && "$username" != *-sa && "$username" != dummy-* && "$username" != test-* ]]; then
+			log "SKIP" "Service Account $email does not match known test patterns. Skipping to prevent accidental deletion."
+			continue
+		fi
 
 		# Check if the service account is protected/excluded
 		local protected=false
 
 		# 1. Check if the full email or the username part is directly in EXCLUSION_MAP
-		local username="${email%%@*}"
 		if [[ -n "${EXCLUSION_MAP[${email}]:-}" || -n "${EXCLUSION_MAP[${username}]:-}" ]]; then
 			protected=true
 		fi
