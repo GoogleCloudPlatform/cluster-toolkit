@@ -69,15 +69,15 @@ locals {
 locals {
   autoscaling_enabled = var.cluster_autoscaling != null
   autoscaling_config = local.autoscaling_enabled ? var.cluster_autoscaling : {
-    limits = []
-    service_account_email = ""
-    oauth_scopes = []
+    limits                        = []
+    service_account_email         = ""
+    oauth_scopes                  = []
     autoprovisioning_disk_size_gb = null
-    autoprovisioning_disk_type = null
+    autoprovisioning_disk_type    = null
     autoprovisioning_auto_upgrade = null
-    autoprovisioning_auto_repair = null
-    autoprovisioning_cpu_max = null
-    autoprovisioning_memory_max = null
+    autoprovisioning_auto_repair  = null
+    autoprovisioning_cpu_max      = null
+    autoprovisioning_memory_max   = null
   }
 
   has_autoscaling_limits = local.autoscaling_enabled && length(local.autoscaling_config.limits) > 0

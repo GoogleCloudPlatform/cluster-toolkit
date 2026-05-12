@@ -245,15 +245,6 @@ func buildOutputConfigStruct(machineType string, mt *compute.MachineType) Output
 	return result
 }
 
-func buildOutputConfigJSON(machineType string, mt *compute.MachineType) (string, error) {
-	result := buildOutputConfigStruct(machineType, mt)
-	resBytes, err := json.Marshal(result)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal machine config object to JSON: %w", err)
-	}
-	return string(resBytes), nil
-}
-
 // ClearMachineTypeCache clears the machine type cache. Used for testing.
 func ClearMachineTypeCache() {
 	machineTypeCache.Range(func(key, value interface{}) bool {

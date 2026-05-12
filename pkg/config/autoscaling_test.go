@@ -29,8 +29,6 @@ func TestExpandClusterAutoscaling_NoAutoscaling(t *testing.T) {
 	}
 }
 
-
-
 func TestExpandClusterAutoscaling_GPU(t *testing.T) {
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", `{"gpus": {"a3-highgpu-8g": {"count": 8, "type": "nvidia-h100-80gb"}}}`)
 	ca := cty.ObjectVal(map[string]cty.Value{
