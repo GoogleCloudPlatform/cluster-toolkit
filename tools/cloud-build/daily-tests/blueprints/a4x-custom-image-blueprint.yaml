@@ -214,12 +214,6 @@ deployment_groups:
               enable_ops_agent: true
               enable_nvidia_dcgm: true
             tasks:
-            # - name: Ensure datacenter-gpu-manager is installed
-            #   ansible.builtin.apt:
-            #     name: datacenter-gpu-manager
-            #     state: present
-            #     update_cache: yes
-            #   when: enable_nvidia_dcgm
             - name: Update Ops Agent configuration
               ansible.builtin.blockinfile:
                 path: /etc/google-cloud-ops-agent/config.yaml
@@ -355,7 +349,6 @@ deployment_groups:
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           # enable a GPU health check that runs at the completion of all jobs on A4X nodes
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
-          # ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
           # enable the use of password-free sudo within Slurm jobs on all compute nodes
           # feature is restricted to users with OS Admin Login IAM role
           # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
@@ -365,7 +358,7 @@ deployment_groups:
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
-          # ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
           curl -s -o "${SLURM_ROOT}/scripts/imex_prolog" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_prolog
           chmod 0755 "${SLURM_ROOT}/scripts/imex_prolog"
