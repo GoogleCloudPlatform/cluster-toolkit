@@ -147,7 +147,6 @@ data "http" "manifest_from_url" {
 }
 
 data "google_container_cluster" "gke_cluster" {
-  count    = var.cluster_endpoint != null ? 0 : 1
   project  = local.project_id
   name     = local.cluster_name
   location = local.cluster_location
