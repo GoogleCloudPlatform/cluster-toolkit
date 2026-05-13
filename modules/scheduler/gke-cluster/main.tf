@@ -485,14 +485,6 @@ resource "google_container_node_pool" "cpu_np" {
   }
 }
 
-data "google_client_config" "default" {}
-
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-}
-
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
