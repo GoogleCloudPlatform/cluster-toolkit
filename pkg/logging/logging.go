@@ -27,6 +27,7 @@ var (
 	infolog      *log.Logger
 	errorlog     *log.Logger
 	fatallog     *log.Logger
+	FatalHook    func() // FatalHook allows registering a callback to run before the program exits on a fatal error.
 	Exit         = os.Exit
 	TsColor      = color.New(color.FgMagenta)
 	WarningColor = color.New(color.FgYellow)
@@ -66,5 +67,11 @@ func Error(f string, a ...any) {
 func Fatal(f string, a ...any) {
 	msg := fmt.Sprintf(f, a...)
 	fatallog.Printf("%s: %s", formatTs(), msg)
+
+	// Execute the hook if it is registered
+	if FatalHook != nil {
+		FatalHook()
+	}
+
 	Exit(1)
 }

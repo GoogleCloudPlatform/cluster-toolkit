@@ -77,6 +77,13 @@ func init() {
 		if err := config.InitUserConfig(); err == nil {
 			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
 			userConfigExists = true
+
+			// Register the fatal hook to flush telemetry on hard failures
+			logging.FatalHook = func() {
+				if config.IsTelemetryEnabled() {
+					telemetryCollector.Execute(1) // Hard-code the exit code to 1 since logging.Fatal always exits with 1
+				}
+			}
 		}
 	}
 
