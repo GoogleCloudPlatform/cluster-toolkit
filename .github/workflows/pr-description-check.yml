@@ -19,6 +19,10 @@ on:
     - opened
     - edited
     - synchronize
+
+permissions:
+  contents: read
+
 jobs:
   check-description:
     runs-on: ubuntu-latest
