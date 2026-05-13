@@ -79,9 +79,9 @@ func init() {
 			userConfigExists = true
 
 			// Register the fatal hook to flush telemetry on hard failures
-			logging.FatalHook = func() {
-				if config.IsTelemetryEnabled() {
-					telemetryCollector.Execute(1) // Hard-code the exit code to 1 since logging.Fatal always exits with 1
+			logging.FatalHook = func(exitCode int) {
+				if config.IsTelemetryEnabled() && telemetryCollector != nil {
+					telemetryCollector.Execute(exitCode)
 				}
 			}
 		}
