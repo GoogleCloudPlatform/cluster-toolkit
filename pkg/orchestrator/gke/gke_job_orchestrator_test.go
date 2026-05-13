@@ -15,12 +15,51 @@
 package gke
 
 import (
+	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"strings"
 	"testing"
 )
+
+func setupMockMachineConfig(t *testing.T) {
+	mockJSON := `{
+	  "cpus": {
+	    "custom-c2-60": {"count": 60, "memoryMb": 240000},
+	    "t2a-custom-16": {"count": 16, "memoryMb": 64000},
+	    "c2-standard-60": {"count": 60, "memoryMb": 240000},
+	    "nvidia-tesla-a100": {"count": 12, "memoryMb": 48000},
+	    "nvidia-h100-mega-80gb": {"count": 80, "memoryMb": 320000},
+	    "nvidia-gb200": {"count": 96, "memoryMb": 384000},
+	    "nvidia-l4": {"count": 12, "memoryMb": 48000},
+	    "tpu-v6e-slice": {"count": 8, "memoryMb": 32768},
+	    "nvidia-unknown-new-gpu": {"count": 8, "memoryMb": 32000},
+	    "n2-standard-2": {"count": 2, "memoryMb": 8000},
+	    "n2-standard-4": {"count": 4, "memoryMb": 16000},
+	    "g2-standard-48": {"count": 48, "memoryMb": 192000},
+	    "ct6e-standard-8t": {"count": 8, "memoryMb": 32768}
+	  },
+	  "gpus": {
+	    "nvidia-tesla-a100": {"count": 1, "type": "nvidia-tesla-a100"},
+	    "nvidia-h100-mega-80gb": {"count": 1, "type": "nvidia-h100-mega-80gb"},
+	    "nvidia-gb200": {"count": 1, "type": "nvidia-gb200"},
+	    "nvidia-l4": {"count": 1, "type": "nvidia-l4"},
+	    "nvidia-unknown-new-gpu": {"count": 1, "type": "nvidia-unknown-new-gpu"},
+	    "g2-standard-48": {"count": 4, "type": "nvidia-l4"}
+	  },
+	  "tpus": {
+	    "tpu-v6e-slice": {"count": 4},
+	    "ct6e-standard-8t": {"count": 8}
+	  }
+	}`
+	config.ClearMachineTypeCache()
+	os.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
+	t.Cleanup(func() {
+		os.Unsetenv("GHPC_MOCK_MACHINE_CONFIG")
+	})
+}
 
 type MockExecutor struct {
 	responses map[string][]shell.CommandResult
@@ -31,6 +70,17 @@ func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
 	return &MockExecutor{
 		responses: responses,
 		callCount: make(map[string]int),
+	}
+}
+
+func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
+	return &GKEOrchestrator{
+		executor:                 executor,
+		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
+		acceleratorToMachineType: make(map[string]string),
+		machineCapCache:          make(map[string]MachineTypeCap),
+		topologyCache:            make(map[string]string),
+		dynamicSlicingCache:      make(map[string]bool),
 	}
 }
 
@@ -47,7 +97,10 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 		}
 	}
 
-	return shell.CommandResult{ExitCode: 1, Stderr: "mock error: unexpected command"}
+	return shell.CommandResult{
+		ExitCode: 1,
+		Stderr:   fmt.Sprintf("mock error: unexpected command: %s", cmdKey),
+	}
 }
 
 func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
@@ -78,6 +131,7 @@ func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobSt
 }
 
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
+	setupMockMachineConfig(t)
 
 	tests := []struct {
 		name            string
@@ -163,26 +217,40 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 			job := orchestrator.JobDefinition{
 				WorkloadName:    "test-workload",
 				CommandToRun:    "echo hello",
-				AcceleratorType: tt.acceleratorType,
+				ComputeType:     tt.acceleratorType,
 				ClusterLocation: "us-central1-a",
 			}
 
 			mockResponses := map[string][]shell.CommandResult{
 				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
-				"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
-				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json":          {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
-				"gcloud compute machine-types describe nvidia-h100-mega-80gb --zone=us-central1-a --format=json":  {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
-				"gcloud compute machine-types describe nvidia-gb200 --zone=us-central1-a --format=json":           {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
-				"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json":              {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
-				"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":          {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4}]}`}},
-				"gcloud compute machine-types describe nvidia-unknown-new-gpu --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
+				"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+				"gcloud compute machine-types describe nvidia-h100-mega-80gb --zone=us-central1-a --format=json":                        {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe nvidia-gb200 --zone=us-central1-a --format=json":                                 {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json":                                    {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
+				"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4}]}`}},
+				"gcloud compute machine-types describe nvidia-unknown-new-gpu --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`}},
 			}
-			orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Config: gkeNodePoolConfig{MachineType: "nvidia-h100-mega-80gb"}},
+				{Config: gkeNodePoolConfig{MachineType: "nvidia-gb200"}},
+				{Config: gkeNodePoolConfig{MachineType: "nvidia-l4"}},
+				{Config: gkeNodePoolConfig{MachineType: "tpu-v6e-slice"}},
+				{Config: gkeNodePoolConfig{MachineType: "nvidia-unknown-new-gpu"}},
+				{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+			}
 
-			opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+			profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
 			var manifest string
 			if err == nil {
-				manifest, err = orc.GenerateGKEManifest(opts, profile)
+				var opts ManifestOptions
+				opts, err = orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+				if err == nil {
+					manifest, err = orc.GenerateGKEManifest(opts, profile)
+				}
 			}
 
 			if (err != nil) != tt.wantErr {
@@ -214,18 +282,24 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Volumes(t *testing.T) {
+	setupMockMachineConfig(t)
 	orc := NewGKEOrchestrator()
+	orc.projectID = "mock-project"
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {
 			{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`},
 		},
 	})
 	orc.SetExecutor(mockExec)
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "n2-standard-4"}},
+	}
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "volume-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "n2-standard-4",
+		ComputeType:     "n2-standard-4",
 		Volumes: []orchestrator.VolumeDefinition{
 			{Name: "vol-0", Source: "gs://my-bucket", MountPath: "/data", Type: "gcsfuse"},
 			{Name: "vol-1", Source: "/host/path", MountPath: "/host", Type: "hostPath"},
@@ -233,12 +307,16 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		},
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
 
-	opts.AcceleratorType = "n2-standard-4"
+	opts.ComputeType = "n2-standard-4"
 	manifest, err := orc.GenerateGKEManifest(opts, profile)
 
 	if err != nil {
@@ -270,17 +348,24 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_CommandEscaping(t *testing.T) {
+	setupMockMachineConfig(t)
 	mockResponses := map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
 		},
 	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "nvidia-l4"}},
+	}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    `python -c "print('hello')"` + " && echo \"world\"",
-		AcceleratorType: "nvidia-l4",
+		ComputeType:     "nvidia-l4",
+		MachineType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 	}
 
@@ -344,12 +429,13 @@ spec:
 }
 
 func TestGeneratePathwaysManifest(t *testing.T) {
+	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "pathways-test",
 		CommandToRun:    "echo hello",
 		NumSlices:       2,
 		ClusterLocation: "us-central1",
-		AcceleratorType: "n2-standard-2",
+		ComputeType:     "n2-standard-2",
 		Pathways: orchestrator.PathwaysJobDefinition{
 			ProxyServerImage: "proxy:latest",
 			ServerImage:      "server:latest",
@@ -362,9 +448,17 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	mockResponses := map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool"}}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest")
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
 	}
@@ -456,7 +550,8 @@ func TestAwaitJobCompletion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := &MockExecutor{responses: tt.mockResponses, callCount: make(map[string]int)}
 			mockKube := &MockKubeClient{Namespace: tt.mockNamespace, Workloads: tt.mockWorkloads}
-			orc := &GKEOrchestrator{executor: mockExecutor, kubeClient: mockKube}
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.kubeClient = mockKube
 
 			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
 
@@ -474,6 +569,7 @@ func TestAwaitJobCompletion(t *testing.T) {
 }
 
 func TestFetchMachineCapacity(t *testing.T) {
+	setupMockMachineConfig(t)
 	tests := []struct {
 		name          string
 		machineType   string
@@ -500,7 +596,6 @@ func TestFetchMachineCapacity(t *testing.T) {
 			zone:        "us-central1-a",
 			mockResponses: map[string][]shell.CommandResult{
 				"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
-					{ExitCode: 1, Stderr: "slow network"},
 					{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
 				},
 			},
@@ -526,7 +621,8 @@ func TestFetchMachineCapacity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.projectID = "mock-project"
 
 			count, err := orc.FetchMachineCapacity(tt.machineType, tt.zone)
 
@@ -547,6 +643,8 @@ func TestFetchMachineCapacity(t *testing.T) {
 }
 
 func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	tests := []struct {
 		name          string
 		np            gkeJobNodePool
@@ -558,7 +656,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 			name: "x86 with hyperthreading disabled",
 			np: gkeJobNodePool{
 				Config: gkeNodePoolConfig{
-					MachineType: "c2-standard-60",
+					MachineType: "custom-c2-60",
 					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
 						ThreadsPerCore: "1",
 					},
@@ -566,7 +664,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 				InitialNodeCount: 1,
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+				"gcloud compute machine-types describe custom-c2-60 --zone=us-central1-a --format=json": {
 					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
 				},
 			},
@@ -577,7 +675,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 			name: "x86 with hyperthreading enabled",
 			np: gkeJobNodePool{
 				Config: gkeNodePoolConfig{
-					MachineType: "c2-standard-60",
+					MachineType: "custom-c2-60",
 					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
 						ThreadsPerCore: "2",
 					},
@@ -585,7 +683,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 				InitialNodeCount: 1,
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute machine-types describe c2-standard-60 --zone=us-central1-a --format=json": {
+				"gcloud compute machine-types describe custom-c2-60 --zone=us-central1-a --format=json": {
 					{ExitCode: 0, Stdout: `{"guestCpus": 60, "memoryMb": 240000}`},
 				},
 			},
@@ -596,7 +694,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 			name: "ARM64 with threadsPerCore=1",
 			np: gkeJobNodePool{
 				Config: gkeNodePoolConfig{
-					MachineType: "t2a-standard-16",
+					MachineType: "t2a-custom-16",
 					AdvancedMachineFeatures: &gkeAdvancedMachineFeatures{
 						ThreadsPerCore: "1",
 					},
@@ -604,7 +702,7 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 				InitialNodeCount: 1,
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"gcloud compute machine-types describe t2a-standard-16 --zone=us-central1-a --format=json": {
+				"gcloud compute machine-types describe t2a-custom-16 --zone=us-central1-a --format=json": {
 					{ExitCode: 0, Stdout: `{"guestCpus": 16, "memoryMb": 64000}`},
 				},
 			},
@@ -616,13 +714,15 @@ func TestProcessNodePoolCapacity_Hyperthreading(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.projectID = "mock-project"
 			orc.machineTypeToThreadsPerCore = make(map[string]string)
 			if tt.np.Config.AdvancedMachineFeatures != nil {
 				orc.machineTypeToThreadsPerCore[tt.np.Config.MachineType] = tt.np.Config.AdvancedMachineFeatures.ThreadsPerCore
 			}
 
 			cpus, _, _, _, _, _, _, err := orc.processNodePoolCapacity(tt.np, "us-central1-a")
+			t.Logf("Test case %s: cpus=%d, err=%v", tt.name, cpus, err)
 
 			if tt.wantErr {
 				if err == nil {
@@ -718,7 +818,7 @@ func TestAutoDetectCPUNodePool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			orc := &GKEOrchestrator{}
+			orc := newTestGKEOrchestrator(nil)
 			orc.clusterDesc.NodePools = tt.nodePools
 
 			got := orc.autoDetectCPUNodePool()
@@ -730,6 +830,8 @@ func TestAutoDetectCPUNodePool(t *testing.T) {
 }
 
 func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	tests := []struct {
 		name           string
 		job            orchestrator.JobDefinition
@@ -742,7 +844,8 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 		{
 			name: "x86 with hyperthreading disabled in map",
 			job: orchestrator.JobDefinition{
-				AcceleratorType: "c2-standard-60",
+				ComputeType:     "c2-standard-60",
+				MachineType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "1",
@@ -758,7 +861,8 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 		{
 			name: "Fallback to Compute API when not in map",
 			job: orchestrator.JobDefinition{
-				AcceleratorType: "c2-standard-60",
+				ComputeType:     "c2-standard-60",
+				MachineType:     "c2-standard-60",
 				ClusterLocation: "us-central1-a",
 			},
 			threadsPerCore: "",
@@ -776,16 +880,15 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{
-				executor: mockExecutor,
-			}
+			orc := newTestGKEOrchestrator(mockExecutor)
+
 			orc.machineTypeToThreadsPerCore = make(map[string]string)
 			if tt.threadsPerCore != "" {
-				orc.machineTypeToThreadsPerCore[tt.job.AcceleratorType] = tt.threadsPerCore
+				orc.machineTypeToThreadsPerCore[tt.job.ComputeType] = tt.threadsPerCore
 			}
 			orc.machineCapCache = make(map[string]MachineTypeCap)
 
-			isCPU, capacity, err := orc.determineIfCPUMachine(tt.job)
+			isCPU, capacity, err := orc.determineIfCPUMachine(&tt.job)
 
 			if tt.wantErr {
 				if err == nil {
@@ -813,13 +916,14 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 		nodePools     []gkeJobNodePool
 		mockResponses map[string][]shell.CommandResult
 		wantResult    bool
+		wantErr       bool
 	}{
 		{
 			name: "Success - Dynamic-slicing active",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -847,7 +951,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "nvidia-l4",
+				ComputeType:     "nvidia-l4",
 			},
 			nodePools:     nil,
 			mockResponses: nil,
@@ -858,7 +962,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -877,13 +981,14 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 				},
 			},
 			wantResult: false,
+			wantErr:    true,
 		},
 		{
 			name: "Failure - CRD not found",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -905,7 +1010,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -933,7 +1038,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				AcceleratorType: "tpu-v6e-slice",
+				ComputeType:     "tpu-v6e-slice",
 			},
 			nodePools: []gkeJobNodePool{
 				{
@@ -961,15 +1066,16 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExecutor := NewMockExecutor(tt.mockResponses)
-			orc := &GKEOrchestrator{executor: mockExecutor}
+			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.clusterDesc.NodePools = tt.nodePools
 
 			got, err := orc.verifyDynamicSlicingActive(tt.opts)
 
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("verifySuperSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if got != tt.wantResult {
+			if !tt.wantErr && got != tt.wantResult {
 				t.Errorf("Expected %t, got %t", tt.wantResult, got)
 			}
 		})
@@ -977,17 +1083,23 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	mockResponses := map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe nvidia-l4 --zone=us-central1-a --format=json": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
 		},
 	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "nvidia-l4"}},
+	}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
-		AcceleratorType: "nvidia-l4",
+		ComputeType:     "nvidia-l4",
+		MachineType:     "nvidia-l4",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1003,17 +1115,23 @@ func TestGenerateGKEManifest_Verbose_GPU(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_Verbose_TPU(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	mockResponses := map[string][]shell.CommandResult{
 		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4}]}`},
 		},
 	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "tpu-v6e-slice"}},
+	}
 	opts := ManifestOptions{
 		WorkloadName:    "test-workload",
 		FullImageName:   "test-image:latest",
 		CommandToRun:    "python app.py",
-		AcceleratorType: "tpu-v6e-slice",
+		ComputeType:     "tpu-v6e-slice",
+		MachineType:     "tpu-v6e-slice",
 		ClusterLocation: "us-central1-a",
 		Verbose:         true,
 	}
@@ -1128,7 +1246,7 @@ func TestParseJobStatus_CompletionTime(t *testing.T) {
 }
 
 func TestParseKueueWorkloadStatus(t *testing.T) {
-	g := &GKEOrchestrator{}
+	g := newTestGKEOrchestrator(nil)
 
 	tests := []struct {
 		name       string
@@ -1237,9 +1355,12 @@ func TestParseKueueWorkloadStatus(t *testing.T) {
 }
 
 func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	orc := NewGKEOrchestrator()
+	orc.projectID = "mock-project"
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe ct6e-standard-8t": {
+		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
 		},
@@ -1247,17 +1368,23 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
 	})
 	orc.SetExecutor(mockExec)
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
 
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "dynamic-vms-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "v6e-8",
+		ComputeType:     "v6e-8",
 		Topology:        "16x16",
-		VmsPerSlice:     0,
+		NodesPerSlice:   0,
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -1279,30 +1406,38 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 	}
 }
 
-func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
+func TestGenerateGKEManifest_RespectUserNumNodes(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	orc := NewGKEOrchestrator()
+	orc.projectID = "mock-project"
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
 		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
-		"gcloud compute machine-types describe ct6e-standard-8t": {
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
-			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+		"gcloud compute machine-types describe g2-standard-12 --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-l4"}]}`},
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-l4"}]}`},
 		},
 	})
 	orc.SetExecutor(mockExec)
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
 
 	job := orchestrator.JobDefinition{
-		WorkloadName:    "user-vms-test",
+		WorkloadName:    "user-nodes-test",
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
-		AcceleratorType: "v6e-8",
-		Topology:        "16x16",
-		VmsPerSlice:     1, // Explicitly set to 1
+		ComputeType:     "l4-1", // Non-TPU job (resolves to g2-standard-12)
+		NodesPerSlice:   32,     // Explicitly set to 32 (representing --num-nodes)
 	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
-		t.Fatalf("prepareManifestOptions failed: %v", err)
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
 
 	manifest, err := orc.GenerateGKEManifest(opts, profile)
@@ -1310,8 +1445,8 @@ func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
 		t.Fatalf("GenerateGKEManifest failed: %v", err)
 	}
 
-	expectedParallelism := "parallelism: 1"
-	expectedCompletions := "completions: 1"
+	expectedParallelism := "parallelism: 32"
+	expectedCompletions := "completions: 32"
 
 	if !strings.Contains(manifest, expectedParallelism) {
 		t.Errorf("manifest missing expected parallelism %q\nManifest: %s", expectedParallelism, manifest)
@@ -1321,70 +1456,58 @@ func TestGenerateGKEManifest_RespectUserVmsPerSlice(t *testing.T) {
 	}
 }
 
-func TestResolveTopologyForChips(t *testing.T) {
-	orc := &GKEOrchestrator{}
+func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
+	setupMockMachineConfig(t)
 
-	tests := []struct {
-		name       string
-		prefix     string
-		totalChips int
-		wantShape  string
-		wantErr    bool
-	}{
-		{
-			name:       "v4 4 chips",
-			prefix:     "v4",
-			totalChips: 4,
-			wantShape:  "2x2x1",
-			wantErr:    false,
+	orc := NewGKEOrchestrator()
+	orc.projectID = "mock-project"
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes":           {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v7x-slice"}]}`},
 		},
-		{
-			name:       "tpu7x 2048 chips",
-			prefix:     "tpu7x",
-			totalChips: 2048,
-			wantShape:  "8x16x16",
-			wantErr:    false,
-		},
-		{
-			name:       "v6e 1 chip",
-			prefix:     "v6e",
-			totalChips: 1,
-			wantShape:  "1x1",
-			wantErr:    false,
-		},
-		{
-			name:       "v6e 256 chips",
-			prefix:     "v6e",
-			totalChips: 256,
-			wantShape:  "16x16",
-			wantErr:    false,
-		},
-		{
-			name:       "tpu7x 1 chip (Fail)",
-			prefix:     "tpu7x",
-			totalChips: 1,
-			wantShape:  "",
-			wantErr:    true,
-		},
-		{
-			name:       "v4 3 chips (Fail)",
-			prefix:     "v4",
-			totalChips: 3,
-			wantShape:  "",
-			wantErr:    true,
-		},
+	})
+	orc.SetExecutor(mockExec)
+	orc.machineTypeClient = &MockMachineTypeClient{Executor: mockExec}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:          "parallel-container-test",
+		CommandToRun:          "echo hello",
+		ClusterLocation:       "us-central1-a",
+		ComputeType:           "tpu7x", // Resolves to tpu7x-standard-4t
+		Topology:              "2x2x1", // 4 chips
+		UseParallelContainers: true,    // Enable parallel containers
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := orc.resolveTopologyForChips(tt.prefix, tt.totalChips)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if got != tt.wantShape {
-				t.Errorf("resolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
-			}
-		})
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Verify that we have two containers!
+	if !strings.Contains(manifest, "name: workload-container-1") {
+		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-1", manifest)
+	}
+	if !strings.Contains(manifest, "name: workload-container-2") {
+		t.Errorf("manifest missing expected container name %q\nManifest: %s", "workload-container-2", manifest)
+	}
+
+	// Verify that resources are split!
+	// Total chips = 4. Parallel containers = 2. So each should get 2 chips!
+	expectedResources := "google.com/tpu: \"2\""
+	if strings.Count(manifest, expectedResources) != 2 {
+		t.Errorf("expected %d occurrences of %q, got %d\nManifest: %s", 2, expectedResources, strings.Count(manifest, expectedResources), manifest)
 	}
 }
 
@@ -1425,12 +1548,10 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 	}
 
 	mockExec := NewMockExecutor(responses)
-	orc := &GKEOrchestrator{
-		executor: mockExec,
-		capacity: ClusterCapacity{
-			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {CPUs: 30},
-			},
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.capacity = ClusterCapacity{
+		Flavors: map[string]FlavorCapacity{
+			"flavor-default": {CPUs: 30},
 		},
 	}
 
@@ -1495,7 +1616,7 @@ func TestResolveKueueQueue(t *testing.T) {
 				},
 			}
 			mockExec := NewMockExecutor(responses)
-			orc := &GKEOrchestrator{executor: mockExec}
+			orc := newTestGKEOrchestrator(mockExec)
 
 			got, err := orc.resolveKueueQueue(tt.requestedName)
 			if (err != nil) != tt.wantErr {
@@ -1507,14 +1628,15 @@ func TestResolveKueueQueue(t *testing.T) {
 		})
 	}
 }
-
 func TestGPUTopologyAwareScheduling(t *testing.T) {
+	setupMockMachineConfig(t)
+
 	job := orchestrator.JobDefinition{
 		WorkloadName:    "gpu-test-job",
-		AcceleratorType: "nvidia-tesla-a100",
+		ComputeType:     "nvidia-tesla-a100",
 		GKEScheduler:    "gke.io/topology-aware-auto",
 		NumSlices:       1,
-		VmsPerSlice:     1,
+		NodesPerSlice:   1,
 		ClusterLocation: "us-central1-a",
 	}
 
@@ -1523,10 +1645,17 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 			{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 1}]}`},
 		},
 	}
-	orc := &GKEOrchestrator{executor: NewMockExecutor(mockResponses)}
-	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "default-pool"}}
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "nvidia-tesla-a100"}},
+	}
 
-	opts, profile, err := orc.PrepareManifestOptions(job, "test-image:latest")
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
@@ -1552,5 +1681,75 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 	}
 	if strings.Contains(manifest, "schedulerName: gke.io/topology-aware-auto") {
 		t.Errorf("Rendered manifest unexpectedly contains schedulerName")
+	}
+}
+
+func TestGetNodeCount(t *testing.T) {
+	tests := []struct {
+		name      string
+		locations []string
+		np        gkeJobNodePool
+		expected  int
+	}{
+		{
+			name:      "Autoscaling disabled, zonal",
+			locations: []string{"zone-1"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled: false,
+				},
+			},
+			expected: 5,
+		},
+		{
+			name:      "Autoscaling disabled, regional",
+			locations: []string{"zone-1", "zone-2", "zone-3"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled: false,
+				},
+			},
+			expected: 15,
+		},
+		{
+			name:      "Autoscaling enabled, uses TotalMaxNodeCount",
+			locations: []string{"zone-1", "zone-2", "zone-3"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled:           true,
+					MaxNodeCount:      10,
+					TotalMaxNodeCount: 20,
+				},
+			},
+			expected: 20,
+		},
+		{
+			name:      "Autoscaling enabled, falls back to MaxNodeCount (regional)",
+			locations: []string{"zone-1", "zone-2"},
+			np: gkeJobNodePool{
+				InitialNodeCount: 5,
+				Autoscaling: gkeAutoscaling{
+					Enabled:           true,
+					MaxNodeCount:      10,
+					TotalMaxNodeCount: 0,
+				},
+			},
+			expected: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				clusterZones: tt.locations,
+			}
+			result := orc.getNodeCount(tt.np)
+			if result != tt.expected {
+				t.Errorf("getNodeCount() = %d, expected %d", result, tt.expected)
+			}
+		})
 	}
 }

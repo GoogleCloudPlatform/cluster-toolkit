@@ -320,11 +320,105 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 	}
 }
 
+func TestIsDockerCredsConfigured(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	dockerDir := filepath.Join(tempDir, ".docker")
+	configPath := filepath.Join(dockerDir, "config.json")
+
+	tests := []struct {
+		name          string
+		configContent string
+		shouldExist   bool
+		region        string
+		expected      bool
+	}{
+		{
+			name:        "No config file",
+			shouldExist: false,
+			region:      "us-central1",
+			expected:    false,
+		},
+		{
+			name:          "Corrupted config file",
+			configContent: "invalid",
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      false,
+		},
+		{
+			name:          "CredsStore set to gcloud",
+			configContent: `{"credsStore": "gcloud"}`,
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      true,
+		},
+		{
+			name:          "CredHelpers configured correctly",
+			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "gcloud"}}`,
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      true,
+		},
+		{
+			name:          "CredHelpers missing gcr.io",
+			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcloud"}}`,
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      false,
+		},
+		{
+			name:          "CredHelpers missing regional registry",
+			configContent: `{"credHelpers": {"gcr.io": "gcloud"}}`,
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      false,
+		},
+		{
+			name:          "CredHelpers wrong helper",
+			configContent: `{"credHelpers": {"gcr.io": "desktop", "us-central1-docker.pkg.dev": "gcloud"}}`,
+			shouldExist:   true,
+			region:        "us-central1",
+			expected:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.shouldExist {
+				os.Remove(configPath)
+			} else {
+				if err := os.MkdirAll(dockerDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got := isDockerCredsConfigured(tt.region)
+			if got != tt.expected {
+				t.Errorf("isDockerCredsConfigured() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
 	origExecuteCommand := shell.ExecuteCommand
 	defer func() { shell.ExecuteCommand = origExecuteCommand }()
 
 	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		}
+		if name == "gcloud" && len(args) > 1 && args[0] == "services" && args[1] == "list" {
+			return shell.CommandResult{ExitCode: 0, Stdout: "artifactregistry.googleapis.com"}
+		}
 		return shell.CommandResult{ExitCode: 0}
 	}
 

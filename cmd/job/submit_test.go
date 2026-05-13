@@ -82,7 +82,7 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 		"--pathways-server-image", "server:latest",
 		"--pathways-worker-image", "worker:latest",
 		"--pathways-gcs-location", "gs://my-bucket",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 	)
 
 	if err != nil {
@@ -152,7 +152,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 		"--location", "us-central1-a",
 		"--project", "test-project",
 		"--dry-run-out", tmpfile.Name(),
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 	)
 
 	if err != nil {
@@ -178,21 +178,61 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 }
 
+func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "tpu-fail-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "v6e-8", // TPU type
+		"--num-nodes", "2", // Explicitly set!
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing --num-nodes for TPU job, but got nil")
+	}
+
+	expectedErr := "--num-nodes cannot be used with TPU jobs"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
 func resetSubmitCmdFlags() {
 	imageName = ""
 	baseImage = ""
 	buildContext = ""
 	commandToRun = ""
-	acceleratorType = ""
+	computeType = ""
 	dryRunManifest = ""
 	clusterName = ""
 	location = ""
 	projectID = ""
 	workloadName = ""
 	kueueQueueName = ""
-	numSlicesOrNodes = 1
-	vmsPerSlice = 1
-	maxRestarts = 1
+	numNodes = 1
+	numSlices = 1
+	restarts = 1
 	ttlAfterFinished = "1h"
 	gracePeriodStr = "30s"
 	placementPolicy = ""
@@ -379,7 +419,7 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 		"--base-image", "python:3.9-slim",
 		"--build-context", "job_details",
 		"--command", "echo hello",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 		"--cluster", "test-cluster",
 		"--location", "test-location",
 		"--project", "test-project",
@@ -424,7 +464,7 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 		"--base-image", "python:3.9-slim",
 		"--build-context", "job_details",
 		"--command", "echo hello",
-		"--accelerator", "n2-standard-4",
+		"--compute-type", "n2-standard-4",
 		"--cluster", "test-cluster",
 		"--location", "test-location",
 		"--project", "test-project",

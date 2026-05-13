@@ -35,6 +35,9 @@ var gitCommitHash string
 var gitInitialHash string
 var gitIsOfficial string
 
+// Whether the Toolkit is installed from source, binary, etc.
+var installationMode string
+
 func main() {
 	if err := dependencies.PatchPath(); err != nil {
 		logging.Fatal("Failed to patch PATH with custom binaries directories: %v", err)
@@ -47,6 +50,7 @@ func main() {
 	cmd.GitCommitHash = gitCommitHash
 	cmd.GitInitialHash = gitInitialHash
 	cmd.GitIsOfficial = gitIsOfficial
+	cmd.InstallationMode = installationMode
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

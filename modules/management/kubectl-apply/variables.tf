@@ -129,8 +129,17 @@ variable "kueue" {
     config_path              = optional(string, null)
     config_template_vars     = optional(map(any), null)
     enable_pathways_for_tpus = optional(bool, false)
+    controller_cpu           = optional(string, null)
+    controller_memory        = optional(string, null)
+    controller_replicas      = optional(number, null)
   })
   default = {}
+}
+
+variable "enable_pathways_for_tpus" {
+  description = "Enable Pathways for TPUs. This is automatically wired from gke-cluster module if used."
+  type        = bool
+  default     = false
 }
 
 variable "gke_cluster_exists" {
@@ -142,12 +151,22 @@ variable "gke_cluster_exists" {
 variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "0.10.1")
+    install           = optional(bool, false)
+    version           = optional(string, "0.10.1")
+    controller_cpu    = optional(string, null)
+    controller_memory = optional(string, null)
   })
   default = {}
 }
 
+variable "cert_manager" {
+  description = "Install [cert-manager](https://cert-manager.io/docs/) which manages TLS certificates for Kubernetes."
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v1.17.2")
+  })
+  default = {}
+}
 
 variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."

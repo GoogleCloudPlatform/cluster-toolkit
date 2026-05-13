@@ -74,6 +74,7 @@ run_test() {
 	for folder in ./*; do
 		rm -rf "${folder}/modules"
 	done
+	rm -rf _modules
 	find . -name "README.md" -exec rm {} \;
 	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
 	sed -i '/- validator: test_quota_availability/,+1d' .ghpc/artifacts/expanded_blueprint.yaml

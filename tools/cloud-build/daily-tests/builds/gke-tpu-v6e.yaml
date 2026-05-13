@@ -19,6 +19,7 @@ tags:
 - m.gke-cluster
 - m.gke-node-pool
 - m.kubectl-apply
+- m.mldiagnostics
 - gke
 
 substitutions:
