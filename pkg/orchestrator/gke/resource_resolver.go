@@ -425,7 +425,7 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	}
 
 	opts.ParallelContainers = 1
-	if job.UseParallelContainers && config.IsTPU(job.MachineType) && strings.Contains(job.MachineType, "tpu7") {
+	if job.UseParallelContainers && !job.IsPathwaysJob && strings.Contains(job.MachineType, "tpu7x") {
 		opts.ParallelContainers = 2
 	}
 
