@@ -1619,14 +1619,6 @@ class Lookup:
 
     @cached_property
     def hostname(self):
-        # Fallback to metadata server if socket.gethostname() returns 'localhost'
-        # (which happens on some nodes like Blackwell during early boot).
-        try:
-            name = instance_metadata("name")
-            if name and name != "localhost":
-                return name
-        except Exception:
-            pass
         return socket.gethostname()
 
     @cached_property
