@@ -20,8 +20,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -37,7 +39,20 @@ func getBlueprint(args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
 	}
-	bp, _, _ := config.NewBlueprint(args[0])
+
+	targetPath := args[0]
+
+	// If the argument is a directory, it indicates a deployment folder (e.g., used in 'deploy' or 'destroy').
+	// We read the expanded blueprint from the artifacts directory instead.
+	if info, err := os.Stat(targetPath); err == nil && info.IsDir() {
+		targetPath = filepath.Join(modulewriter.ArtifactsDir(targetPath), modulewriter.ExpandedBlueprintName)
+	}
+
+	bp, _, err := config.NewBlueprint(targetPath)
+	if err != nil {
+		return config.Blueprint{} // Return empty if it fails to parse
+	}
+
 	return bp
 }
 

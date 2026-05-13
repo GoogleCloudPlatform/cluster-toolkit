@@ -20,15 +20,15 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
-
-	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
@@ -189,6 +189,121 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			for key, expectedVal := range tt.expectedValues {
 				if actualVal, exists := c.metadata[key]; !exists || actualVal != expectedVal {
 					t.Errorf("For key %q, expected value %q, got %q", key, expectedVal, actualVal)
+				}
+			}
+		})
+	}
+}
+
+func TestGetBlueprint(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// 1. Setup a valid blueprint file
+	validBlueprintPath := filepath.Join(tmpDir, "valid_blueprint.yaml")
+	validBlueprintContent := `
+blueprint_name: test-blueprint
+deployment_groups:
+  - group: primary
+    modules:
+      - id: network
+        source: modules/network/vpc
+`
+	if err := os.WriteFile(validBlueprintPath, []byte(validBlueprintContent), 0644); err != nil {
+		t.Fatalf("Failed to create valid blueprint file: %v", err)
+	}
+
+	// 2. Setup an invalid blueprint file (malformed YAML)
+	invalidBlueprintPath := filepath.Join(tmpDir, "invalid_blueprint.yaml")
+	if err := os.WriteFile(invalidBlueprintPath, []byte("invalid: yaml: content: ["), 0644); err != nil {
+		t.Fatalf("Failed to create invalid blueprint file: %v", err)
+	}
+
+	// 3. Setup a valid deployment directory with an expanded blueprint
+	validDepDir := filepath.Join(tmpDir, "valid_deployment")
+	artifactsDir := modulewriter.ArtifactsDir(validDepDir)
+	if err := os.MkdirAll(artifactsDir, 0755); err != nil {
+		t.Fatalf("Failed to create artifacts directory: %v", err)
+	}
+
+	expandedBlueprintPath := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
+	validExpandedContent := `
+blueprint_name: expanded-test-blueprint
+deployment_groups:
+  - group: primary
+    modules:
+      - id: network
+        source: modules/network/vpc
+`
+	if err := os.WriteFile(expandedBlueprintPath, []byte(validExpandedContent), 0644); err != nil {
+		t.Fatalf("Failed to create expanded blueprint file: %v", err)
+	}
+
+	// 4. Setup an invalid deployment directory (missing the expanded blueprint)
+	invalidDepDir := filepath.Join(tmpDir, "invalid_deployment")
+	if err := os.MkdirAll(invalidDepDir, 0755); err != nil {
+		t.Fatalf("Failed to create invalid deployment directory: %v", err)
+	}
+
+	// Define test cases
+	tests := []struct {
+		name          string
+		args          []string
+		expectedName  string
+		expectIsEmpty bool
+	}{
+		{
+			name:          "Empty arguments",
+			args:          []string{},
+			expectedName:  "",
+			expectIsEmpty: true,
+		},
+		{
+			name:          "Non-existent path",
+			args:          []string{filepath.Join(tmpDir, "does_not_exist")},
+			expectedName:  "",
+			expectIsEmpty: true,
+		},
+		{
+			name:          "Valid blueprint file",
+			args:          []string{validBlueprintPath},
+			expectedName:  "test-blueprint",
+			expectIsEmpty: false,
+		},
+		{
+			name:          "Invalid blueprint file",
+			args:          []string{invalidBlueprintPath},
+			expectedName:  "",
+			expectIsEmpty: true,
+		},
+		{
+			name:          "Valid deployment directory",
+			args:          []string{validDepDir},
+			expectedName:  "expanded-test-blueprint",
+			expectIsEmpty: false,
+		},
+		{
+			name:          "Deployment directory missing expanded blueprint",
+			args:          []string{invalidDepDir},
+			expectedName:  "",
+			expectIsEmpty: true,
+		},
+	}
+
+	// Execute tests
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := getBlueprint(tc.args)
+
+			if tc.expectIsEmpty {
+				// Assert that the returned Blueprint is effectively empty
+				if bp.BlueprintName != "" || len(bp.Groups) > 0 {
+					t.Errorf("Expected an empty blueprint, but got: %+v", bp)
+				}
+			} else {
+				// Assert that the returned Blueprint parsed the correct file
+				if bp.BlueprintName != tc.expectedName {
+					t.Errorf("Expected BlueprintName %q, got %q", tc.expectedName, bp.BlueprintName)
 				}
 			}
 		})
