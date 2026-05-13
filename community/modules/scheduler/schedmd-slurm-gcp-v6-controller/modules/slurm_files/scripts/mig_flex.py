@@ -165,13 +165,9 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   target_mig=lkp.get_mig(lkp.project, region, instanceGroupManager)
   assert target_mig
 
-  # TODO(FLEX): This will not work if MIG didn't obtain capacity yet.
-  # The request will fail and MIG will continue provisioning.
-  # Instead whole MIG should be deleted.
-  # + All other instances in MIG are not provisioned also, safe to delete
-  # - Need to come up will clear test to differentiate non-provisioned MIG and single VM being down;
-  #   Particularly CRITICAL due to ActionOnFailure=DO_NOTHING 
-  # - Need to `down_nodes_notify_jobs` for all nodes in MIG, make sure that it doesn't interfere with Slurm suspend-flow. 
+  # NOTE: If the MIG hasn't obtained capacity yet, instances are not provisioned,
+  # and the suspend flow routes to `_suspend_provisioning_inst` where unprovisioned/queued
+  # MIGs are fully deleted. This path handles partially or fully provisioned MIGs.
   
   if target_mig["targetSize"] == len(nodes): #We can just delete the whole MIG in this case
     req = lkp.compute.regionInstanceGroupManagers().delete(
@@ -226,7 +222,11 @@ def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Loo
 
   for mig in mig_list["items"]:
     if mig["instanceTemplate"] == node_template:
-      if mig["currentActions"]["creating"] > 0 and mig["targetSize"] == mig["currentActions"]["creating"]:
+      actions = mig.get("currentActions", {})
+      # If targetSize > 0 but no instances are running normally (none == 0),
+      # the MIG is either actively creating instances or queued waiting for compact capacity.
+      # Fully deleting it upon ResumeTimeout prevents orphaned MIGs.
+      if mig.get("targetSize", 0) > 0 and actions.get("none", 0) == 0:
         req = lkp.compute.regionInstanceGroupManagers().delete(
           project=lkp.project,
           region=region,

@@ -541,8 +541,11 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     if excl_job_placement and len(nodes) < 2:
         return no_pp # don't create placement_policy for just one node
 
+    # NOTE: Flex nodes intentionally follow standard placement policy allocation here
+    # rather than returning early. This ensures massive DWS Flex requests (e.g. 500 nodes)
+    # are chunked into multiple hardware-compliant MIGs via `calculate_chunk_size`
+    # instead of exceeding single physical placement block limits.
     if lkp.node_is_tpu(model):
-
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):
         return no_pp

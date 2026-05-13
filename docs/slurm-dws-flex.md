@@ -35,7 +35,7 @@ To enable it:
 * Specify `placement_max_distance` (1, 2, or 3) depending on the supported distance for your machine type and region.
 
 > [!NOTE]
-> Currently, strict compact placement with DWS Flex Start is supported only for specific machine types, such as **A3 Ultra**, **A4**, and **H4D**. Support for other machine types is not yet available.
+> Currently, strict compact placement with DWS Flex Start is supported only for specific machine types, such as **A3 Ultra**, **A4**, and **H4D**. Support for other machine types is not yet available. Administrators configuring large dynamic partition sizes should ensure requests align with physical hardware block maximums (e.g., capping single job requests to 256 nodes for A3 families) to avoid physical placement limits being exceeded.
 
 **Implementation Detail:**
 Unlike standard on-demand nodes that use Group Placement Policies, DWS Flex nodes in Slurm use **Workload Policies** (type `HIGH_THROUGHPUT`) attached to the dynamic Managed Instance Groups (MIGs) created by the Slurm controller. This satisfies the Compute Engine requirement for combining Flex-Start with physical proximity constraints.
