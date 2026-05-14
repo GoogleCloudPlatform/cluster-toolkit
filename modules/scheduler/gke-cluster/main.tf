@@ -244,6 +244,10 @@ resource "google_container_cluster" "gke_cluster" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  vertical_pod_autoscaling {
+    enabled = var.enable_vertical_pod_autoscaling
+  }
+
   dynamic "gateway_api_config" {
     for_each = var.enable_inference_gateway ? [1] : []
     content {
@@ -550,14 +554,6 @@ resource "google_container_node_pool" "cpu_np" {
   }
 }
 
-data "google_client_config" "default" {}
-
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-}
-
 resource "kubernetes_namespace" "user_namespace" {
   count = var.namespace != "default" ? 1 : 0
 
@@ -580,6 +576,10 @@ module "workload_identity" {
   namespace           = var.namespace
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
+
+  providers = {
+    kubernetes = kubernetes
+  }
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [

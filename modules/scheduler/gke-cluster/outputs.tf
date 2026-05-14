@@ -122,3 +122,13 @@ output "enable_pathways_for_tpus" {
   description = "Indicates whether Pathways for TPUs is enabled."
   value       = var.enable_pathways_for_tpus
 }
+
+output "cluster_endpoint" {
+  description = "The IP address or endpoint of the GKE cluster control plane."
+  value       = google_container_cluster.gke_cluster.endpoint
+}
+
+output "cluster_ca_certificate" {
+  description = "The base64 encoded public certificate authority data for the GKE cluster."
+  value       = google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate
+}

@@ -447,3 +447,19 @@ module "install_asapd_lite" {
     })
   ]
 }
+
+resource "kubernetes_annotations" "sa_patch" {
+  for_each    = var.service_account_annotations
+  depends_on  = [var.gke_cluster_exists]
+  api_version = "v1"
+  kind        = "ServiceAccount"
+
+  metadata {
+    name      = each.key
+    namespace = each.value.namespace
+  }
+
+  annotations = {
+    "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
+  }
+}
