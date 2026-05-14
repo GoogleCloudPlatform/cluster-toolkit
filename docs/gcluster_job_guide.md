@@ -228,7 +228,29 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
   --node-constraint "cloud.google.com/gke-nodepool=my-custom-nodepool"
 ```
 
-**Example 2: Use Placement Policy**
+**Example 2: Target Multiple Topologies (Dynamic Routing)**
+Use a pipe separator (`|`) in `--node-constraint` to specify multiple allowed values for a constraint. This generates a `nodeAffinity` block instead of a strict `nodeSelector`, allowing the workload to fall back to other pools if the preferred one is full.
+
+```bash
+./gcluster job submit \
+  --name my-fallback-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --node-constraint "cloud.google.com/gke-tpu-topology=2x2|4x4"
+```
+
+> [!CAUTION]
+> **Dynamic Slicing Interaction:**
+>
+> When using GKE Dynamic Slicing, be careful setting topology constraints in `--node-constraint`.
+>
+> GKE labels nodes with their *physical* pool topology (e.g., `4x4`). If you request a smaller slice (e.g., `2x2`) via `--topology`, GKE handles the placement via annotations automatically.
+>
+> However, if you also pass `--node-constraint "cloud.google.com/gke-tpu-topology=2x2"`, you are forcing strict Node Affinity. The scheduler will only look for nodes physically labeled `2x2` and will **refuse to schedule** on the `4x4` pool, defeating Dynamic Slicing.
+>
+> To avoid this, either omit the topology from `--node-constraint` when using Dynamic Slicing, or explicitly include the larger pool topologies in the pipe-separated list (e.g., `"2x2|4x4"`).
+
+**Example 3: Use Placement Policy**
 Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
 
 ```bash
@@ -240,7 +262,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
-**Example 3: Pod Failure Policy**
+**Example 4: Pod Failure Policy**
 Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
 
 ```bash
@@ -250,7 +272,7 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
   --restart-on-exit-codes 1,137
 ```
 
-**Example 4: Private Registry & Service Account**
+**Example 5: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
 
 ```bash
@@ -261,7 +283,7 @@ Use `--image-pull-secret` and `--service-account` for secure jobs.
   --service-account "my-workload-sa"
 ```
 
-**Example 5: Explicit Kueue Queue Selection**
+**Example 6: Explicit Kueue Queue Selection**
 Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
@@ -912,7 +934,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--priority` | `string` | Priority class or level assigned to the job queue (e.g., `low`, `medium`, `high`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
-| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. |
+| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
 | `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |

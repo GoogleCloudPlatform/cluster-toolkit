@@ -1816,7 +1816,10 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 			return fmt.Errorf("topology is not allowed for GPU and CPU jobs")
 		}
 		if !isDynamicSlicing {
-			nodeSelector["cloud.google.com/gke-tpu-topology"] = schedOpts.Topology
+			_, hasFallback := schedOpts.NodeAffinityLabels[tpuTopologyLabel]
+			if !hasFallback {
+				nodeSelector[tpuTopologyLabel] = schedOpts.Topology
+			}
 		}
 	}
 	return nil

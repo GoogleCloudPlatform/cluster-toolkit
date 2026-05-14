@@ -117,6 +117,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		NodeAffinityLabels: job.NodeConstraint,
 		Topology:           job.Topology,
 		Scheduler:          job.GKEScheduler,
+		IsDynamicSlicing:   isDynamicSlicing,
 	}
 
 	parts := strings.Split(originalAccelType, "-")

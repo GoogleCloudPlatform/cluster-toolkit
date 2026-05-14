@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"slices"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -101,5 +102,131 @@ func TestGetTolerations(t *testing.T) {
 				t.Errorf("expected nil toleration for %s, got %v", tt.acceleratorType, got)
 			}
 		}
+	}
+}
+
+func TestGetNodeSelector_DynamicTopology(t *testing.T) {
+	opts := SchedulingOptions{
+		NodeAffinityLabels: map[string]string{
+			"normal-key":                        "value",
+			"pipe-key":                          "val1|val2",
+			"cloud.google.com/gke-tpu-topology": "2x2",
+		},
+		Topology: "2x2",
+	}
+	selector := GetNodeSelector(opts)
+
+	if selector["normal-key"] != "value" {
+		t.Errorf("Expected normal-key to be 'value', got %v", selector["normal-key"])
+	}
+	if _, exists := selector["pipe-key"]; exists {
+		t.Errorf("Expected pipe-key to be excluded from nodeSelector")
+	}
+	if _, exists := selector["cloud.google.com/gke-tpu-topology"]; exists {
+		t.Errorf("Expected cloud.google.com/gke-tpu-topology to be excluded from nodeSelector due to smart merging")
+	}
+}
+
+func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       SchedulingOptions
+		wantKey    string
+		wantValues []string
+	}{
+		{
+			name: "pipe separated values (non-topology)",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"pipe-key": "val1|val2",
+				},
+			},
+			wantKey:    "pipe-key",
+			wantValues: []string{"val1", "val2"},
+		},
+		{
+			name: "smart merging (legacy case)",
+			opts: SchedulingOptions{
+				Topology: "2x2",
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "4x4",
+				},
+			},
+			wantKey:    "cloud.google.com/gke-tpu-topology",
+			wantValues: []string{"2x2", "4x4"},
+		},
+		{
+			name: "prioritize baseline and deduplicate",
+			opts: SchedulingOptions{
+				Topology: "2x2x1",
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "2x2x2|2x2x1",
+				},
+			},
+			wantKey:    "cloud.google.com/gke-tpu-topology",
+			wantValues: []string{"2x2x1", "2x2x2"},
+		},
+		{
+			name: "null safety with whitespace",
+			opts: SchedulingOptions{
+				Topology: "2x2x1",
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": " | ",
+				},
+			},
+			wantKey:    "cloud.google.com/gke-tpu-topology",
+			wantValues: []string{"2x2x1"},
+		},
+		{
+			name: "null safety with empty string",
+			opts: SchedulingOptions{
+				Topology: "2x2x1",
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "",
+				},
+			},
+			wantKey:    "cloud.google.com/gke-tpu-topology",
+			wantValues: []string{"2x2x1"},
+		},
+		{
+			name: "skip baseline for dynamic slicing",
+			opts: SchedulingOptions{
+				Topology: "2x2x1",
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "2x2x2",
+				},
+				IsDynamicSlicing: true,
+			},
+			wantKey:    "cloud.google.com/gke-tpu-topology",
+			wantValues: []string{"2x2x2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			affinity := GetAffinity(tt.opts)
+			if affinity == nil {
+				t.Fatal("Expected affinity, got nil")
+			}
+			terms := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+			if len(terms) == 0 {
+				t.Fatal("Expected NodeSelectorTerms")
+			}
+			var found bool
+			for _, req := range terms[0].MatchExpressions {
+				if req.Key == tt.wantKey {
+					found = true
+					if !slices.Equal(req.Values, tt.wantValues) {
+						t.Errorf("Expected values %v, got %v", tt.wantValues, req.Values)
+					}
+					if req.Operator != corev1.NodeSelectorOpIn {
+						t.Errorf("Expected operator In, got %v", req.Operator)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("Expected to find requirement for key %s", tt.wantKey)
+			}
+		})
 	}
 }
