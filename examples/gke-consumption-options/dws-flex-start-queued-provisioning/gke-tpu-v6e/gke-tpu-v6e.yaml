@@ -53,6 +53,9 @@ vars:
   autoscaling_min_node_count:
   autoscaling_max_node_count:
 
+  # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
+  enable_pathways_for_tpus: true
+
  # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("../tpu-dws-queues.yaml.tftpl"))
 
@@ -153,7 +156,7 @@ deployment_groups:
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
-      enable_pathways_for_tpus: true
+      enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
       configure_workload_identity_sa: true
       enable_gcsfuse_csi: true
       master_authorized_networks:

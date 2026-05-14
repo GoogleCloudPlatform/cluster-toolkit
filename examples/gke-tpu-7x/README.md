@@ -21,8 +21,6 @@ This guide also includes a `gke-tpu-7x-job.yaml` that creates a Kubernetes Pod a
   - **What it is**: This defines the shape and total size of your TPU "supercomputer". For the 3D-interconnected TPU 7x, you must specify this in XxYxZ format (e.g., `2x2x1`).
   - **Why it matters**: The product of the dimensions (X*Y*Z) gives you the total number of chips in your slice. This number is essential for calculating the `static_node_count`.
   - **Example**: A tpu_topology of `2x2x1` creates a 4-chip slice. If you then use a `tpu7x-standard-4t` machine type (which has `4` chips per node),then the derived `static_node_count` is `1` (4 total chips / 4 chips per node).
-  - **It is an exact requirement, not a maximum**. If your topology requires 4 nodes, you must set this value to `4`. Providing a different number will cause the deployment to **fail**.
-  - **It does not support autoscaling**. Because the hardware is physically interconnected, the size of the slice is fixed at creation time. There are no "*dynamic*" options.
 
 ## Before you begin
 

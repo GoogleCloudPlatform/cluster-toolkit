@@ -1,62 +1,37 @@
 # Gcluster Job Submission Guide
 
-This guide provides a step-by-step process to deploy a GKE cluster, submit a sample Python script as a job using `gcluster job submit` with on-the-fly image building via Crane, and then destroy the cluster.
+This guide provides a step-by-step process to deploy a GKE cluster, submit a sample Python script as a job using `gcluster job submit` with on-the-fly image building, and then destroy the cluster.
 
-## 1. Prerequisites (Automated by `gcluster job submit`)
+## 1. Prerequisites
 
-`gcluster job submit` automates the check for required prerequisites. The tool will identify missing dependencies and print the necessary installation or remediation commands directly to your console for review and execution.
+Before you begin, ensure you have installed `gcluster` and set up your environment by following the instructions in the [cluster-toolkit README.md](../README.md#using-the-pre-built-bundle-recommended).
 
-However, a few foundational components are still assumed or require your initial attention:
+### Conditional Prerequisites (For On-the-Fly Builds)
 
-* **Go (1.20 or later):** Required for building the `gcluster` binary. The `make` command used in step 3 will handle Go module dependencies.
-* **Google Cloud SDK (`gcloud`):** `gcluster` requires `gcloud` to be installed and available in your system's PATH to run prerequisite checks. If missing, checks will abort. Download and install it from [https://cloud.google.com/sdk/docs/install](https://cloud.google.com/sdk/docs/install).
-* **A GCP Project:** You will need a Google Cloud Project with billing enabled and necessary APIs enabled. `gcluster` will check if a project is resolved from flags or persistent configuration.
-* **Environment Variables (for On-the-Fly Builds):** If you use `--build-context` to build images on-the-fly, you must set:
-  * `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
-  * `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
+If you use `--build-context` to build images on-the-fly, you must set:
 
-### Automated Prerequisite Checks Overview
+* `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
+* `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
 
-When you run `gcluster job submit` (or other job commands), the tool will check for:
+> [!NOTE]
+> ### Automated Prerequisite Checks Overview
+>
+> When you run `gcluster job submit` (or other job commands), the tool will check for:
+>
+> * **Google Cloud SDK**: Verifies `gcloud` is installed.
+> * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
+> * **`kubectl` Installation**: Checks if `kubectl` is installed.
+> * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
+> * **Container Credential Helper**: Checks if Docker is configured for GCR and Artifact Registry.
+> * **Artifact Registry API**: Checks if `artifactregistry.googleapis.com` is enabled.
+>
+> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
+>
+> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
 
-* **Google Cloud SDK**: Verifies `gcloud` is installed.
-* **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
-* **`kubectl` Installation**: Checks if `kubectl` is installed.
-* **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
-* **Container Credential Helper**: Checks if Docker is configured for GCR and Artifact Registry.
-* **Artifact Registry API**: Checks if `artifactregistry.googleapis.com` is enabled.
+## 2. Prepare Sample Application Code
 
-If any non-foundational component is missing or unconfigured, `gcluster` will:
-1. Accumulate the required commands to fix the environment (tailored to your OS where possible).
-2. Write these commands to a setup script at `~/.gcluster/setup_prereqs.sh`.
-3. Fail the command with a clear error message instructing you to inspect and run the script: `bash ~/.gcluster/setup_prereqs.sh`.
-
-This ensures full transparency and gives you control over what gets installed on your system.
-
-**State Persistence:** Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
-
-## 2. Clone the Repository
-
-Clone the `cluster-toolkit` repository to your local machine:
-
-```bash
-git clone https://github.com/GoogleCloudPlatform/hpc-toolkit cluster-toolkit
-cd cluster-toolkit
-```
-
-## 3. Build the `gcluster` Binary
-
-Navigate to the `cluster-toolkit` directory (if not already there) and build the `gcluster` binary:
-
-```bash
-make
-```
-
-This command compiles the Go source code, including the `gcluster job submit` command, and creates an executable named `gcluster` in the current directory.
-
-## 4. Prepare Sample Application Code
-
-Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. Crane will package all files in this directory and add them to the image.
+Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool will package all files in this directory and add them to the image.
 
 ### `cluster-toolkit/job_details/app.py`
 
@@ -67,91 +42,64 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> Crane does not execute a Dockerfile. It simply copies the contents of the build context directory into the image. If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It simply copies the contents of the build context directory into the image. If you need to install dependencies, make sure they are already present in your `--base-image`.
 
-## 5. Deploy a GKE Cluster
+## 3. Deploy a GKE Cluster
 
 For this example, we'll deploy a basic GKE cluster using the `hpc-gke.yaml` blueprint.
 
-* **Ensure `gcloud` is configured with your project ID and a region/zone where GKE is available.**
+> [!TIP]
+> **Configuring gcloud Defaults**
+>
+> While not strictly required for this tutorial (as we pass variables explicitly), you can configure your default project and region in `gcloud` for convenience:
+>
+> ```bash
+> gcloud config set project <PROJECT_ID>
+> gcloud config set compute/region <REGION/ZONE> # Or your preferred region
+> ```
 
-    ```bash
-        gcloud config set project <PROJECT_ID>
-        gcloud config set compute/region <REGION/ZONE> # Or your preferred region
-        ```
+### 3.1 Create the Deployment Directory
 
-    * **Create the deployment directory:**
+Create the deployment directory using the `hpc-gke.yaml` blueprint:
 
-    ```bash
-    ./gcluster create examples/hpc-gke.yaml --vars="project_id=<PROJECT_ID>,deployment_name=<CLUSTER_NAME>,region=<REGION/ZONE>,gcp_public_cidrs_access_enabled=false,authorized_cidr=$(curl -s ifconfig.me)/32"
-    ```
+```bash
+./gcluster create examples/hpc-gke.yaml --vars="project_id=<PROJECT_ID>,deployment_name=<CLUSTER_NAME>,region=<REGION/ZONE>,gcp_public_cidrs_access_enabled=false,authorized_cidr=$(curl -s ifconfig.me)/32"
+```
 
-    *Replace `<PROJECT_ID>` with your actual GCP Project ID.*
+*Note: Please ensure that you replace all placeholders enclosed in angle brackets (such as `<PROJECT_ID>`, `<CLUSTER_NAME>`, and `<REGION/ZONE>`) with your actual environment values before executing the command.*
 
-* **Deploy the GKE cluster:**
+### 3.2 Deploy the GKE Cluster
 
-    ```bash
-    ./gcluster deploy <CLUSTER_NAME>
-    ```
+Deploy the GKE cluster:
 
-    *This command will show a Terraform plan. You will be prompted to confirm the changes (type `a` and press Enter).*
+```bash
+./gcluster deploy <CLUSTER_NAME>
+```
 
-    *This deployment process can take a significant amount of time (e.g., 10-20 minutes or more) as it provisions cloud resources.* Wait for the command to complete successfully.
+*This command will show a Terraform plan. You will be prompted to confirm the changes (type `a` and press Enter).*
 
-## 6. `gcluster job submit` Command Reference
+*This deployment process can take a significant amount of time (e.g., 10-20 minutes or more) as it provisions cloud resources.* Wait for the command to complete successfully.
 
-The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue. It can use pre-built images or build images on-the-fly using Crane.
+## 4. Submit the Sample Job
 
-### Supported Flags
-
-Here are the flags currently supported by `gcluster job submit`:
-
-* `-i, --image string`: Name of a pre-built container image to run. Must include the full path including registry (e.g., `<region>-docker.pkg.dev/my-project/my-repo/my-image:tag`). Use this if your image is already pushed to a registry.
-* `-B, --base-image string`: Name of the base container image for Crane to build upon (e.g., `python:3.9-slim`). Required when using `--build-context` for an on-the-fly build.
-* `-b, --build-context string`: Path to the build context directory for Crane (e.g., `./job_details`). Required with `--base-image`. Crane will package all files in this directory and append them as a new layer to the base image (it does not require or execute a Dockerfile).
-* `-e, --command string`: Command to execute in the container (e.g., `'python app.py'`). This overrides the `CMD` instruction in your `Dockerfile`. (Required)
-* `-a, --accelerator string`: Type of accelerator to request (e.g., `'nvidia-h100-mega-80gb'` or machine type like `n2-standard-32`). (Required) It also supports shorthand strings for TPUs like `v6e-8` to request total chips; the tool will resolve the machine type and calculate `vms-per-slice` and `topology` automatically.
-* `-o, --dry-run-out string`: Path to output the generated Kubernetes manifest instead of applying it directly to the cluster. Useful for inspection.
-* `-c, --cluster string`: Name of the GKE cluster to deploy the job to. Optional if set in configuration.
-* `-l, --location string`: Location (Zone or Region) of the GKE cluster. Optional if set in configuration.
-* `-p, --project string`: Google Cloud Project ID. Optional if set in configuration.
-* `-f, --platform string`: Target platform for the image build (e.g., `linux/amd64`, `linux/arm64`). Used with `--base-image`. (Default: `linux/amd64`)
-* `-w, --name string`: Name of the job (JobSet) to create. This name will be used for Kubernetes resources. (Required)
-* `--queue string`: Name of the Kueue LocalQueue to submit the job to. (Default: Auto-discovered from the cluster)
-* `--nodes int`: Number of JobSet replicas (slices). (Default: `1`)
-* `--vms-per-slice int`: Number of VMs (pods) per slice. (Default: `1`). Can be auto-calculated for TPUs if `--topology` is provided.
-* `--topology string`: TPU slice topology (e.g., `2x2x1`). Required for total-chip calculation if `--vms-per-slice` is omitted.
-* `--max-restarts int`: Maximum number of restarts for the JobSet before failing. (Default: `1`)
-* `--gke-ttl-after-finished string`: Time to retain the JobSet after it finishes (e.g. `5m`, `1h`, `3600`). (Default: `1h`)
-* `--grace-period string`: Time to wait before forcefully terminating a pod (e.g. `30s`, `2m`). Gives the workload time to save checkpoints or clean up distributed state during job cancellation or hardware preemption events (like Spot VM evictions). (Default: `30s`)
-* `--mount stringArray`: Mount a storage volume (format: `<src>:<dest>[:<mode>]`, mode can be `'ro'` or `'rw'`, default `'ro'`). Can be specified multiple times.
-* `--pathways`: If present, gcluster will generate a manifest for a Pathways job.
-* `--pathways-gcs-location string`: Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.
-* `--pathways-proxy-server-image string`: The image for the Pathways proxy server.
-* `--pathways-server-image string`: The image for the Pathways server.
-* `--pathways-worker-image string`: The image for the Pathways worker.
-* `--pathways-headless`: If present, the user's workload container will not be deployed within the `pathways-head` job.
-* `--pathways-elastic-slices int`: Configures the number of elastic slices.
-* `--pathways-max-slice-restarts int`: Maximum times the workers in a slice can be restarted.
-* `--pathways-proxy-args string`: Arbitrary additional command-line arguments for `pathways-proxy`.
-* `--pathways-server-args string`: Arbitrary additional command-line arguments for `pathways-rm`.
-* `--pathways-worker-args string`: Arbitrary additional command-line arguments for `pathways-worker`.
-* `--pathways-colocated-python-sidecar-image string`: Image for an optional Python-based sidecar container.
-* `--pathways-head-np string`: The node pool to use for the Pathways head job.
-
-## 7. Submit the Sample Job with `gcluster job submit`
-
-Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image using Crane and push it to Artifact Registry in your project.
+Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image and push it to Artifact Registry in your project.
 
 > [!IMPORTANT]
 > The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`.
 
-* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the name of the Artifact Registry repository when using `--build-context` for on-the-fly builds (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job.
-* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context`. `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`). The command will fail if both are missing.
+* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the name of the Artifact Registry repository when using `--build-context` for on-the-fly builds (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job. If it does not exist, you can create it with:
 
-### Unified Job Submission
+    ```bash
+    gcloud artifacts repositories create <REPOSITORY_NAME> \
+        --repository-format=docker \
+        --location=<REGION>
+    ```
 
-By specifying the `--accelerator` flag, you can use the exact same command to deploy to a standard CPU cluster (using machine type like `n2-standard-32`) or an accelerated GPU/TPU cluster (using accelerator type like `nvidia-l4`). The orchestrator will calculate the necessary resource requests and limits based on the specified accelerator or machine type.
+* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context` (usually set automatically by your OS). `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`). The command will fail if both are missing.
+
+### 4.1 Unified Job Submission
+
+By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GKE accelerator type like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
 
 > [!TIP]
 > **Simplify Commands with Configuration**: You can set these values once using the configuration command and omit them from subsequent commands:
@@ -168,47 +116,62 @@ By specifying the `--accelerator` flag, you can use the exact same command to de
 > ./gcluster job config list
 > ```
 
-* **Submit the Job:**
-
-    ```bash
-    ./gcluster job submit \
-      --project <PROJECT_ID> \
-      --cluster <CLUSTER_NAME> \
-      --location <REGION/ZONE> \
-      --base-image python:3.9-slim \
-      --build-context job_details \
-      --command "python app.py" \
-      --name my-python-app-job \
-      --accelerator n2-standard-32
-    ```
-
-    *Replace `<PROJECT_ID>` with your actual GCP Project ID.*
-
-    This command will:
-    1. Verify/install the JobSet CRD on your cluster.
-    2. Auto-discover the Kueue LocalQueue name from the cluster.
-    3. Use the hardware Accelerator Type installed on the cluster nodes and map the necessary resource requests.
-    4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
-    5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
-
-### 7.1 Example: Submit Job with Persistent Storage (Mounting Bucket)
-
-You can mount Cloud Storage buckets or host paths using the `--mount` flag. By default, mounts are read-only. You can specify read-write mode by appending `:rw` to the mount string:
+### 4.2 Submit the Job
 
 ```bash
 ./gcluster job submit \
   --project <PROJECT_ID> \
   --cluster <CLUSTER_NAME> \
   --location <REGION/ZONE> \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --command "python app.py" \
+  --name my-python-app-job \
+  --compute-type n2-standard-32
+```
+
+*Note: Please ensure that you replace all placeholders enclosed in angle brackets (such as `<PROJECT_ID>`, `<CLUSTER_NAME>`, and `<REGION/ZONE>`) with your actual environment values before executing the command.*
+
+This command will:
+1. Verify/install the JobSet CRD on your cluster.
+2. Auto-discover the Kueue LocalQueue name from the cluster.
+3. Use the compute type installed on the cluster nodes and map the necessary resource requests.
+4. Build a container image from the job_details directory using python:3.9-slim as the base, and push it to Artifact Registry.
+5. Generate and apply an intelligently configured Kubernetes JobSet manifest to your cluster.
+
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
+
+### 4.3 Example for Multi-Slice GPU Job
+
+If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 4 nodes each), you can use `--num-slices` and `--num-nodes`:
+
+```bash
+./gcluster job submit \
+  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+  --command "python train.py" \
+  --name my-gpu-job \
+  --compute-type l4-1 \
+  --num-slices 2 \
+  --num-nodes 4
+```
+
+*This creates a JobSet with 2 replicas, each having 4 pods, totaling 8 nodes.*
+
+### 4.4 Example: Submit Job with Persistent Storage (Mounting Bucket)
+
+You can mount Cloud Storage buckets or host paths using the `--mount` flag. By default, mounts are read-only. You can specify read-write mode by appending `:rw` to the mount string:
+
+```bash
+./gcluster job submit \
   --name my-storage-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --mount "gs://<YOUR_BUCKET_NAME>:/data:rw"
 ```
 
-## 8. Verify the Job
+## 5. Verify the Job
 
 Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
@@ -216,10 +179,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     You can check the status of your submitted job directly with `gcluster job list`:
 
     ```bash
-    ./gcluster job list \
-      --project <PROJECT_ID> \
-      --cluster <CLUSTER_NAME> \
-      --location <REGION/ZONE>
+    ./gcluster job list
     ```
 
     Look for `my-python-app-job` with a `Succeeded` status.
@@ -228,10 +188,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     You can view the logs of your submitted job directly with `gcluster job logs`:
 
     ```bash
-    ./gcluster job logs my-python-app-job \
-      --project <PROJECT_ID> \
-      --cluster <CLUSTER_NAME> \
-      --location <REGION/ZONE>
+    ./gcluster job logs my-python-app-job
     ```
 
     You should see the output:
@@ -241,26 +198,34 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     This is a sample application running on GKE.
     ```
 
-## 8. Verify Phase 2 Features (Advanced Scheduling & Lifecycle)
+* **Cancel Jobs:**
+    You can clean up a specific job without destroying the entire cluster:
 
-### 8.1 Run with Advanced Scheduling Flags
+    ```bash
+    ./gcluster job cancel my-python-app-job
+    ```
+
+    Verify it's gone by running `gcluster job list` again.
+
+## 6. Advanced Workloads
+
+*Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
+
+### 6.1 Run with Advanced Scheduling Flags
 
 Try running a job with advanced scheduling options.
 
-**Example 1: Target Specific Nodes (Node Constraint)**
-Use `--node-constraint` to target specific hardware (e.g., C2 nodes). This maps to node labels in GKE and aligns with SLURM's `--constraint` flag for future compatibility.
+**Example 1: Target a Specific Node Pool (Node Constraint)**
+Use `--node-constraint` to target a specific node pool. This maps to node labels in GKE and aligns with SLURM's `--constraint` flag for future compatibility.
 
 ```bash
 ./gcluster job submit \
-  --project <PROJECT_ID> \
-  --cluster <CLUSTER_NAME> \
-  --location <REGION/ZONE> \
-  --name my-machine-job \
+  --name my-nodepool-job \
   --command "python app.py" \
-  --accelerator c2-standard-60 \
+  --compute-type c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --node-constraint "node.kubernetes.io/instance-type=c2-standard-60"
+  --node-constraint "cloud.google.com/gke-nodepool=my-custom-nodepool"
 ```
 
 **Example 2: Use Placement Policy**
@@ -276,7 +241,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
 **Example 3: Pod Failure Policy**
-Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `max-restarts` budget).
+Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
 
 ```bash
 ./gcluster job submit \
@@ -301,12 +266,9 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
 ./gcluster job submit \
-  --project <PROJECT_ID> \
-  --cluster <CLUSTER_NAME> \
-  --location <REGION/ZONE> \
   --name my-kueue-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --queue "my-local-queue"
@@ -314,20 +276,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
 
-### 8.2 Cancel Jobs
-
-You can clean up specific job without destroying the entire cluster.
-
-```bash
-./gcluster job cancel my-python-app-job \
-  --project <PROJECT_ID> \
-  --cluster <CLUSTER_NAME> \
-  --location <REGION/ZONE>
-```
-
-Verify it's gone by running `gcluster job list` again.
-
-### 8.3 Job Retention (TTL)
+### 6.3 Job Retention (TTL)
 
 By default, finished jobs are kept for 1 hour. You can change this using `--gke-ttl-after-finished` and pass flexible durations.
 
@@ -336,7 +285,7 @@ By default, finished jobs are kept for 1 hour. You can change this using `--gke-
 ./gcluster job submit ... --gke-ttl-after-finished 2h  # Keep for 2 hours
 ```
 
-### 8.4 Graceful Termination (Grace Period)
+### 6.4 Graceful Termination (Grace Period)
 
 You can give your workloads a buffer period to save checkpoints or perform cleanups before they are forcefully killed using `--grace-period`.
 
@@ -344,7 +293,7 @@ You can give your workloads a buffer period to save checkpoints or perform clean
 ./gcluster job submit ... --grace-period 2m # Allow 2 minutes for cleanup
 ```
 
-### 8.4 Topology & Scheduler
+### 6.5 Topology & Scheduler
 
 **Example 1: Topology Awareness**
 Request a specific TPU slice topology using `--topology`.
@@ -358,7 +307,7 @@ Request a specific TPU slice topology using `--topology`.
   --base-image python:3.9-slim \
   --build-context job_details \
   --command "python app.py" \
-  --accelerator tpu-v6e-slice \
+  --compute-type tpu-v6e-slice \
   --topology 4x4
 ```
 
@@ -372,17 +321,19 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
   --location <REGION/ZONE> \
   --name my-scheduler-job \
   --command "python app.py" \
-  --accelerator n2-standard-32 \
+  --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
   --gke-scheduler gke.io/topology-aware-auto
 ```
 
-## 9. Sophisticated Workloads: MaxText Llama3.1-8B (TPU v6e)
+## 7. Sophisticated Workloads: MaxText
+
+### 7.1 Llama3.1-8B on TPU v6e
 
 This section describes how to deploy a more complex workload, specifically training a Llama3.1-8B model using MaxText on a TPU v6e cluster.
 
-### 9.1 Prepare MaxText Workload Directory
+#### 7.1.1 Prepare MaxText Workload Directory
 
 Create a directory named `maxtext_workload_v6e` and place the following files inside it.
 
@@ -558,15 +509,14 @@ $GCLUSTER job submit \
     --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && pip install psutil jaxtyping tiktoken sentencepiece ray fastapi uvicorn portpicker pydantic ninja Pillow gcsfs omegaconf jsonlines PyYAML safetensors tabulate tensorstore transformers datasets evaluate nltk pandas ml_collections ml_dtypes pathwaysutils orbax grain tensorflow_text tensorflow_datasets tqdm && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-v6e8-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
-    --accelerator v6e-8 \
-    --nodes 1 \
-    --vms-per-slice 2 \
+    --compute-type v6e-8 \
+    --num-slices 1 \
     --topology 2x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
 ```
 
-### 9.2 Build and Submit
+#### 7.1.2 Build and Submit
 
 ```bash
 cd maxtext_workload_v6e
@@ -574,7 +524,7 @@ cd maxtext_workload_v6e
 ./submit.sh
 ```
 
-### 9.3 Verify Job and Logs
+#### 7.1.3 Verify Job and Logs
 
 You can verify the job status and check logs using `gcluster` or `kubectl`.
 
@@ -598,11 +548,11 @@ kubectl get pods --namespace default -l jobset.sigs.k8s.io/jobset-name=maxtext-l
 kubectl logs <POD_NAME> --namespace default
 ```
 
-## 10. Sophisticated Workloads: MaxText Llama3.1-8B (TPU v7x)
+### 7.2 Llama3.1-8B on TPU v7x
 
 This section describes how to deploy the MaxText workload specifically optimized for TPU v7x (Ironwood) hardware.
 
-### 10.1 Prepare MaxText v7x Workload Directory
+#### 7.2.1 Prepare MaxText v7x Workload Directory
 
 Create a directory named `maxtext_workload_v7x` and place the following files inside it.
 
@@ -811,15 +761,31 @@ $GCLUSTER job submit \
     --location $LOCATION \
     --image $IMAGE_NAME \
     --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
-    --accelerator tpu7x-32 \
-    --nodes 1 \
-    --vms-per-slice 8 \
+    --compute-type tpu7x-32 \
+    --num-slices 1 \
     --topology 2x4x4 \
     --priority medium \
     --service-account workload-identity-k8s-sa
 ```
 
-### 10.2 Build and Submit
+To disable parallel containers and use a single container per VM, add the `--gke-disable-parallel-containers` flag:
+
+```bash
+$GCLUSTER job submit \
+    --name maxtext-llama3-1-final-tpu7x-32 \
+    --cluster $CLUSTER_NAME \
+    --location $LOCATION \
+    --image $IMAGE_NAME \
+    --command "cd /app && sed -i 's/use_vertex_tensorboard=false/use_vertex_tensorboard=false run_name=llama3-1-7x-test1/g' run_maxtext.sh && bash run_maxtext.sh $OUTPUT_DIR" \
+    --compute-type tpu7x-32 \
+    --num-slices 1 \
+    --topology 2x4x4 \
+    --priority medium \
+    --service-account workload-identity-k8s-sa \
+    --gke-disable-parallel-containers
+```
+
+#### 7.2.2 Build and Submit
 
 ```bash
 cd maxtext_workload_v7x
@@ -827,7 +793,7 @@ cd maxtext_workload_v7x
 ./submit.sh
 ```
 
-### 10.3 Verify Job and Logs
+#### 7.2.3 Verify Job and Logs
 
 TPU v7x utilizes Megacore, which initializes 2 logical devices per chip. For a 32-chip slice (2x4x4 topology), you should see 64 logical devices in the logs.
 
@@ -854,7 +820,123 @@ completed step: 4, seconds: 1.182, TFLOP/s/device: 167.154, Tokens/s/device: 346
 completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 3452.840, loss: 9.184
 ```
 
-## 11. Troubleshooting: ImagePullBackOff
+## 8. `gcluster job` Command Reference
+
+### 8.1 Common Flags
+*These flags are common to almost all `gcluster job` subcommands (except `config`). They can be set as defaults via `config set`.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-c, --cluster` | `string` | Name of the target GKE cluster. |
+| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
+| `-p, --project` | `string` | Google Cloud Project ID. |
+
+### 8.2 Configuration Commands
+*Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
+
+#### `gcluster job config set [key] [value]`
+Sets a persistent configuration property.
+
+* **Supported Keys:**
+  * `project`: Google Cloud Project ID
+  * `cluster`: GKE Cluster Name
+  * `location`: GKE Cluster Location (region or zone)
+
+**Example:**
+
+```bash
+./gcluster job config set project my-awesome-project
+```
+
+#### `gcluster job config list`
+Lists all persistent configuration properties currently set.
+
+### 8.3 `submit` Flags
+The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
+
+#### 8.3.1 General Flags
+*These flags control core workload execution, identity, and basic build context options regardless of the underlying hardware paradigm.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. *(Required)* |
+| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required)* |
+| `--compute-type` | `string` | The hardware target for the job. Accepts a full GCE machine type (e.g., 'n2-standard-32'), a GKE accelerator type (e.g., 'nvidia-l4'), or a TPU shorthand string representing total chips/cores (e.g., 'v6e-8'). *(Required)* The tool will automatically resolve the machine type, calculate num-nodes, and deduce the correct TPU topology if needed. |
+| `-i, --image` | `string` | Full registry path of a pre-built container image to run. |
+| `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). |
+| `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. |
+| `-f, --platform` | `string` | Target platform architecture for the image build (Default: `linux/amd64`). |
+| `-o, --dry-run-out` | `string` | Local path to save the generated Kubernetes manifest instead of applying it. |
+| `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
+| `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
+| `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
+| `--mount` | `stringArray` | Mount storage volumes or buckets using the `<src>:<dest>[:<mode>]` format. |
+| `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
+| `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
+| `--verbose` | `bool` | Enable verbose logging for the workload. |
+
+*(Note: `--cluster`, `--location`, and `--project` are also supported as common flags, see 8.1)*
+
+#### 8.3.2 TPU Related Flags
+*Use these flags to orchestrate specialized TPU multi-slice topologies or leverage the Pathways distributed execution framework.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Required if `--num-nodes` is omitted. |
+| `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
+| `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when --pathways is set)* |
+| `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
+| `--pathways-server-image` | `string` | Container image for the Pathways resource manager / server. |
+| `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
+| `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
+| `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
+| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted. |
+| `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |
+| `--pathways-server-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-rm`. |
+| `--pathways-worker-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-worker`. |
+| `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. |
+| `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
+
+#### 8.3.3 GPU Related Flags
+*Use these flags to tune specialized multi-GPU topologies and related node parameters.*
+
+> [!NOTE]
+> Currently, GPU workloads leverage the standard **General Flags** (such as passing `--compute-type nvidia-l4` or `--compute-type nvidia-h100-8px`) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
+
+#### 8.3.4 GKE & Advanced Orchestration Flags
+*These flags unlock advanced GKE capabilities, including Kueue queue priorities, workload identities, network placements, and robust lifecycle failure policies.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
+| `--priority` | `string` | Priority class or level assigned to the job queue (e.g., `low`, `medium`, `high`). |
+| `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
+| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
+| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. |
+| `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
+| `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
+| `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
+| `--image-pull-secret` | `string` | Secret name required to authenticate and pull images from private container registries. |
+| `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
+| `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
+| `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
+
+### 8.4 `list` Flags
+*Use these flags to filter the list of jobs.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `--status` | `string` | Filter jobs by status (e.g., `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). |
+| `--name-contains` | `string` | Filter jobs by name containing the specified string. |
+
+### 8.5 `logs` Flags
+*Use these flags when fetching logs.*
+
+| Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-f, --follow` | `flag` | Stream logs continuously (like `tail -f`). |
+
+## 9. Troubleshooting: ImagePullBackOff
 
 If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
 
@@ -871,7 +953,7 @@ gcloud artifacts repositories add-iam-policy-binding <REPOSITORY_NAME> \
 > [!TIP]
 > You can find the service account used by your node pool in the GKE console or by running `kubectl get nodes -o jsonpath='{.items[*].spec.providerID}'`.
 
-## 12. Cleanup
+## 10. Cleanup
 
 To avoid incurring unnecessary costs, destroy the deployed GKE cluster and its resources:
 

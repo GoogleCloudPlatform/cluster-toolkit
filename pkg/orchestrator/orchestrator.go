@@ -53,7 +53,8 @@ type JobDefinition struct {
 	BuildContext    string
 	Platform        string
 	CommandToRun    string
-	AcceleratorType string
+	ComputeType     string
+	MachineType     string
 	DryRunManifest  string
 	ProjectID       string
 	ClusterName     string
@@ -62,7 +63,7 @@ type JobDefinition struct {
 	WorkloadName                  string
 	KueueQueueName                string
 	NumSlices                     int
-	VmsPerSlice                   int
+	NodesPerSlice                 int
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
@@ -73,13 +74,14 @@ type JobDefinition struct {
 	PodFailurePolicy   map[string]interface{}
 	RestartOnExitCodes []int
 
-	ImagePullSecrets   string
-	ServiceAccountName string
-	Topology           string
-	GKEScheduler       string
-	AwaitJobCompletion bool
-	Timeout            string
-	PriorityClassName  string
+	ImagePullSecrets      string
+	ServiceAccountName    string
+	Topology              string
+	GKEScheduler          string
+	AwaitJobCompletion    bool
+	UseParallelContainers bool
+	Timeout               string
+	PriorityClassName     string
 
 	// Pathways-specific fields
 	IsPathwaysJob bool

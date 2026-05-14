@@ -50,6 +50,9 @@ vars:
   v6e_node_pool_disk_size_gb: 100
   version_prefix: "1.35."
 
+  # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
+  enable_pathways_for_tpus: true
+
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
@@ -167,7 +170,7 @@ deployment_groups:
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
-      enable_pathways_for_tpus: true
+      enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
       configure_workload_identity_sa: true
       enable_filestore_csi: true
       enable_gcsfuse_csi: true

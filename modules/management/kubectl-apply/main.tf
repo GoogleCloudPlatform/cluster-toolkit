@@ -20,7 +20,7 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   kueue_config_content = join("\n---\n", compact([
-    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
+    (var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
       pathways_nodepool_name = "cpu-np"
       pathways_cpu_quota     = 480
       pathways_memory_quota  = "2000G"
@@ -31,7 +31,7 @@ locals {
       file(var.kueue.config_path)
     ) : ""
   ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false))
 
   webhook_wait_duration = "60s"
 
@@ -53,9 +53,9 @@ locals {
     for name, cqs in local.merged_cluster_queues : {
       apiVersion = cqs[0].apiVersion
       kind       = cqs[0].kind
-      metadata   = cqs[0].metadata
+      metadata   = merge([for cq in cqs : cq.metadata if try(cq.metadata, null) != null]...)
       spec = merge(
-        try(cqs[0].spec, {}),
+        merge([for cq in cqs : cq.spec if try(cq.spec, null) != null]...),
         {
           resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
         }
@@ -184,9 +184,28 @@ module "install_kueue" {
   chart_version    = var.kueue.version
   namespace        = "kueue-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/kueue/kueue-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/kueue/kueue-helm-values.yaml"),
+    var.kueue.controller_cpu != null || var.kueue.controller_memory != null || var.kueue.controller_replicas != null ? yamlencode({
+      controllerManager = merge(
+        var.kueue.controller_replicas != null ? { replicas = var.kueue.controller_replicas } : {},
+        var.kueue.controller_cpu != null || var.kueue.controller_memory != null ? {
+          manager = {
+            resources = {
+              requests = merge(
+                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
+                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+              )
+              limits = merge(
+                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
+                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+              )
+            }
+          }
+        } : {}
+      )
+    }) : ""
+  ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
@@ -232,9 +251,23 @@ module "install_jobset" {
   chart_version    = var.jobset.version
   namespace        = "jobset-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/jobset/jobset-helm-values.yaml")
-  ]
+  values_yaml = compact([
+    file("${path.module}/jobset/jobset-helm-values.yaml"),
+    var.jobset.controller_cpu != null || var.jobset.controller_memory != null ? yamlencode({
+      controller = {
+        resources = {
+          requests = merge(
+            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
+            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+          )
+          limits = merge(
+            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
+            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+          )
+        }
+      }
+    }) : ""
+  ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
 }
 

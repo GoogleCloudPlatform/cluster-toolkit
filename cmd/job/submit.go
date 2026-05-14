@@ -16,6 +16,7 @@ package job
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"os"
 	"slices"
 	"time"
@@ -28,20 +29,22 @@ import (
 )
 
 var (
-	imageName       string
-	baseImage       string
-	buildContext    string
-	commandToRun    string
-	acceleratorType string
-	dryRunManifest  string
+	imageName      string
+	baseImage      string
+	buildContext   string
+	commandToRun   string
+	computeType    string
+	dryRunManifest string
 
 	workloadName     string
 	kueueQueueName   string
-	numSlicesOrNodes int
-	vmsPerSlice      int
-	maxRestarts      int
+	numNodes         int
+	numSlices        int
+	restarts         int
 	ttlAfterFinished string
 	gracePeriodStr   string
+
+	gkeDisableParallelContainers bool
 
 	placementPolicy string
 	nodeConstraint  map[string]string
@@ -104,17 +107,18 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&baseImage, "base-image", "B", "", "Name of the base image for Crane to build upon (e.g., python:3.9-slim). Requires --build-context.")
 	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "b", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
 	SubmitCmd.Flags().StringVarP(&commandToRun, "command", "e", "", "Command to execute in the container (e.g., 'python train.py'). Required.")
-	SubmitCmd.Flags().StringVarP(&acceleratorType, "accelerator", "a", "", "Type of accelerator to request (e.g., 'nvidia-tesla-a100').")
+	SubmitCmd.Flags().StringVar(&computeType, "compute-type", "", "Type of compute to request (e.g., 'n2-standard-32', 'nvidia-l4', 'v6e-8').")
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
-	SubmitCmd.Flags().IntVar(&numSlicesOrNodes, "nodes", 1, "Number of JobSet replicas (or Slices for TPUs).")
-	SubmitCmd.Flags().IntVar(&vmsPerSlice, "vms-per-slice", 0, "Number of VMs (pods) per slice. Defaults to auto-calculated value for TPUs.")
-	SubmitCmd.Flags().IntVar(&maxRestarts, "max-restarts", 1, "Maximum number of restarts for the JobSet before failing.")
+	SubmitCmd.Flags().IntVar(&numNodes, "num-nodes", 1, "The number of nodes to use per group/slice. Defaults to 1 for CPU/GPU, or auto-calculated for TPUs.")
+	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
+	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
+	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU v7/v7x on GKE.")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
 	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
@@ -147,10 +151,13 @@ func init() {
 
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("name")
-	_ = SubmitCmd.MarkFlagRequired("accelerator")
+	_ = SubmitCmd.MarkFlagRequired("compute-type")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
+	if err := config.ValidateHardwareRequest(computeType, topology, placementPolicy); err != nil {
+		return err
+	}
 	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
@@ -175,22 +182,26 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		awaitJobCompletion = true
 	}
 
+	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
+		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+	}
+
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
 		BaseImage:                     baseImage,
 		BuildContext:                  buildContext,
 		Platform:                      platform,
 		CommandToRun:                  commandToRun,
-		AcceleratorType:               acceleratorType,
+		ComputeType:                   computeType,
 		DryRunManifest:                dryRunManifest,
 		ProjectID:                     projectID,
 		ClusterName:                   clusterName,
 		ClusterLocation:               location,
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
-		NumSlices:                     numSlicesOrNodes,
-		VmsPerSlice:                   vmsPerSlice,
-		MaxRestarts:                   maxRestarts,
+		NumSlices:                     numSlices,
+		NodesPerSlice:                 numNodes,
+		MaxRestarts:                   restarts,
 		TtlSecondsAfterFinished:       ttlSeconds,
 		TerminationGracePeriodSeconds: gracePeriodSeconds,
 		PlacementPolicy:               placementPolicy,
@@ -202,6 +213,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Topology:                      topology,
 		GKEScheduler:                  gkeScheduler,
 		AwaitJobCompletion:            awaitJobCompletion,
+		UseParallelContainers:         !gkeDisableParallelContainers,
 		Timeout:                       timeoutStr,
 		PriorityClassName:             priorityClassName,
 		IsPathwaysJob:                 isPathwaysJob,
