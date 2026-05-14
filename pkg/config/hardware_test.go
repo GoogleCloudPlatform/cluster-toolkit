@@ -217,33 +217,6 @@ func TestExtractTopologyFromWorkloadPolicy(t *testing.T) {
 
 }
 
-func TestInjectCompactPlacementPolicy(t *testing.T) {
-	mod1 := &Module{
-		Settings: Dict{},
-	}
-	injectCompactPlacementPolicy(mod1, "4x4x4")
-	if !mod1.Settings.Has("placement_policy") {
-		t.Fatal("expected placement_policy to be injected")
-	}
-	pp1 := mod1.Settings.Get("placement_policy").AsValueMap()
-	if pp1["type"].AsString() != "COMPACT" {
-		t.Errorf("expected pp type COMPACT, got %v", pp1["type"])
-	}
-	if pp1["tpu_topology"].AsString() != "4x4x4" {
-		t.Errorf("expected pp topology 4x4x4, got %v", pp1["tpu_topology"])
-	}
-
-	ppOrig := cty.ObjectVal(map[string]cty.Value{"foo": cty.StringVal("bar")})
-	mod2 := &Module{
-		Settings: Dict{}.With("placement_policy", ppOrig),
-	}
-	injectCompactPlacementPolicy(mod2, "2x2x2")
-	pp2 := mod2.Settings.Get("placement_policy").AsValueMap()
-	if pp2["type"].AsString() != "COMPACT" || pp2["tpu_topology"].AsString() != "2x2x2" || pp2["foo"].AsString() != "bar" {
-		t.Errorf("mod2 placement policy incorrect: %v", pp2)
-	}
-}
-
 func TestExpandHardwareSettings(t *testing.T) {
 	bp := Blueprint{}
 
@@ -289,9 +262,7 @@ func TestExpandHardwareSettings(t *testing.T) {
 	if count3 != 16 {
 		t.Errorf("expected static_node_count 16, got %d", count3)
 	}
-	if !mod3.Settings.Has("placement_policy") {
-		t.Errorf("expected placement_policy to be injected for multi-node setups")
-	}
+
 	// Test that it skips non-TPU machine types
 	mod4 := &Module{
 		Settings: Dict{}.
@@ -304,6 +275,21 @@ func TestExpandHardwareSettings(t *testing.T) {
 	}
 	if mod4.Settings.Has("static_node_count") {
 		t.Errorf("expected static_node_count NOT to be set for non-TPU machine type")
+	}
+
+	// Test that it skips Flex Start pools
+	mod5 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("ct6e-standard-4t")).
+			With("tpu_topology", cty.StringVal("2x2")).
+			With("enable_flex_start", cty.BoolVal(true)),
+	}
+	err = expandHardwareSettings(bp, mod5)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if mod5.Settings.Has("static_node_count") {
+		t.Errorf("expected static_node_count NOT to be set when enable_flex_start is true")
 	}
 }
 
