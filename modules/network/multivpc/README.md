@@ -75,31 +75,31 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_vpcs"></a> [vpcs](#module\_vpcs) | ../vpc | n/a |
 
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [terraform_data.global_ip_cidr_suffix](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_allowed_ssh_ip_ranges"></a> [allowed\_ssh\_ip\_ranges](#input\_allowed\_ssh\_ip\_ranges) | A list of CIDR IP ranges from which to allow ssh access | `list(string)` | `[]` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
@@ -128,12 +128,14 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_additional_networks"></a> [additional\_networks](#output\_additional\_networks) | Network interfaces for each subnetwork created by this module |
 | <a name="output_network_ids"></a> [network\_ids](#output\_network\_ids) | IDs of the new VPC network |
 | <a name="output_network_names"></a> [network\_names](#output\_network\_names) | Names of the new VPC networks |
+| <a name="output_network_project_ids"></a> [network\_project\_ids](#output\_network\_project\_ids) | Project IDs of the new VPC networks |
 | <a name="output_network_self_links"></a> [network\_self\_links](#output\_network\_self\_links) | Self link of the new VPC network |
 | <a name="output_subnetwork_addresses"></a> [subnetwork\_addresses](#output\_subnetwork\_addresses) | IP address range of the primary subnetwork |
 | <a name="output_subnetwork_names"></a> [subnetwork\_names](#output\_subnetwork\_names) | Names of the subnetwork created in each network |
+| <a name="output_subnetwork_project_ids"></a> [subnetwork\_project\_ids](#output\_subnetwork\_project\_ids) | Project IDs of the subnetworks |
 | <a name="output_subnetwork_self_links"></a> [subnetwork\_self\_links](#output\_subnetwork\_self\_links) | Self link of the primary subnetwork |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

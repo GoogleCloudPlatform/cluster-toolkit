@@ -162,19 +162,19 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_cloud_router"></a> [cloud\_router](#module\_cloud\_router) | terraform-google-modules/cloud-router/google | ~> 7.3 |
 | <a name="module_nat_ip_addresses"></a> [nat\_ip\_addresses](#module\_nat\_ip\_addresses) | terraform-google-modules/address/google | ~> 4.1 |
 | <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 13.0 |
@@ -182,7 +182,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [terraform_data.cloud_nat_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.network_profile_firewall_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.secondary_ranges_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -190,7 +190,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_additional_subnetworks"></a> [additional\_subnetworks](#input\_additional\_subnetworks) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `list(map(string))` | `null` | no |
 | <a name="input_allowed_ssh_ip_ranges"></a> [allowed\_ssh\_ip\_ranges](#input\_allowed\_ssh\_ip\_ranges) | A list of CIDR IP ranges from which to allow ssh access | `list(string)` | `[]` | no |
 | <a name="input_default_primary_subnetwork_size"></a> [default\_primary\_subnetwork\_size](#input\_default\_primary\_subnetwork\_size) | The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks | `number` | `15` | no |
@@ -231,14 +231,16 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the new VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |
+| <a name="output_network_project_id"></a> [network\_project\_id](#output\_network\_project\_id) | Project ID of the new VPC network |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the new VPC network |
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Primary subnetwork object |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | IP address range of the primary subnetwork |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the primary subnetwork |
+| <a name="output_subnetwork_project_id"></a> [subnetwork\_project\_id](#output\_subnetwork\_project\_id) | Project ID of the primary subnetwork |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Self link of the primary subnetwork |
 | <a name="output_subnetwork_stack_type"></a> [subnetwork\_stack\_type](#output\_subnetwork\_stack\_type) | Stack type of the primary subnetwork |
 | <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | Full list of subnetwork objects belonging to the new VPC network |

@@ -24,6 +24,11 @@ output "subnetwork_name" {
   value       = data.google_compute_subnetwork.primary_subnetwork.name
 }
 
+output "subnetwork_project_id" {
+  description = "Project ID of the subnetwork"
+  value       = data.google_compute_subnetwork.primary_subnetwork.project
+}
+
 output "subnetwork_self_link" {
   description = "Subnetwork self-link in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.self_link

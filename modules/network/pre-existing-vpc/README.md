@@ -66,14 +66,14 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 
 ## Modules
@@ -83,14 +83,14 @@ No modules.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google_compute_network.vpc](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network) | data source |
 | [google_compute_subnetwork.primary_subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the existing VPC network | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region in which to search for primary subnetwork | `string` | n/a | yes |
@@ -99,12 +99,14 @@ No modules.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the existing VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the existing VPC network |
+| <a name="output_network_project_id"></a> [network\_project\_id](#output\_network\_project\_id) | Project ID of the existing VPC network |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the existing VPC network |
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Full subnetwork object in the primary region |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | Subnetwork IP range in the primary region |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the subnetwork in the primary region |
+| <a name="output_subnetwork_project_id"></a> [subnetwork\_project\_id](#output\_subnetwork\_project\_id) | Project ID of the subnetwork in the primary region |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Subnetwork self-link in the primary region |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
