@@ -52,6 +52,7 @@ deployment_groups:
     - startup
     settings:
       name_prefix: workstation
-      machine_type: e2-standard-8
+      machine_type: n4-standard-8
+      disk_type: hyperdisk-balanced
       labels:
         ghpc_role: workstation

@@ -261,7 +261,7 @@ variable "system_node_pool_node_count" {
 variable "system_node_pool_machine_type" {
   description = "Machine type for the system node pool."
   type        = string
-  default     = "e2-standard-4"
+  default     = "n4-standard-4"
 }
 
 variable "system_node_pool_disk_size_gb" {
@@ -273,7 +273,7 @@ variable "system_node_pool_disk_size_gb" {
 variable "system_node_pool_disk_type" {
   description = "Disk type for each node of the system node pool."
   type        = string
-  default     = null
+  default     = "hyperdisk-balanced"
 }
 
 variable "system_node_pool_taints" {

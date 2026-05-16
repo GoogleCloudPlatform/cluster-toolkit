@@ -60,7 +60,8 @@ steps:
     echo '    source: modules/compute/vm-instance'                >> $${EXAMPLE_BP}
     echo '    use: [network1]'                                    >> $${EXAMPLE_BP}
     echo '    settings:'                                          >> $${EXAMPLE_BP}
-    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      machine_type: n4-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      disk_type: hyperdisk-balanced'                    >> $${EXAMPLE_BP}
     echo '      zone: us-central1-a'                              >> $${EXAMPLE_BP}
 
     # Adding node pool with reservation defined
@@ -68,7 +69,8 @@ steps:
     echo '    source: modules/compute/gke-node-pool'              >> $${EXAMPLE_BP}
     echo '    use: [gke_cluster, node_pool_service_account]'      >> $${EXAMPLE_BP}
     echo '    settings:'                                          >> $${EXAMPLE_BP}
-    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      machine_type: n4-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      disk_type: hyperdisk-balanced'                    >> $${EXAMPLE_BP}
     echo '      zones: [us-central1-a]'                           >> $${EXAMPLE_BP}
     echo '      static_node_count: 0'                             >> $${EXAMPLE_BP}
     echo '      is_reservation_active: false'                     >> $${EXAMPLE_BP}

@@ -49,12 +49,12 @@ deployment_groups:
       login_node_specs:
       - name_prefix: gfluxfw-login
         machine_arch: x86-64
-        machine_type: e2-standard-4
+        machine_type: n4-standard-4
         instances: 1
         properties: []
         boot_script: null
       manager_name_prefix: gfluxfw
-      manager_machine_type: e2-standard-8
+      manager_machine_type: n4-standard-8
 
       subnetwork: $(flux-net.subnetwork_self_link)
 

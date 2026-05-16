@@ -178,7 +178,7 @@ resource "google_compute_instance" "server_vm" {
     initialize_params {
       image = "projects/rocky-linux-cloud/global/images/rocky-linux-8-v20220126"
       size  = 30
-      type  = "pd-ssd"
+      type  = "hyperdisk-balanced"
     }
   }
 

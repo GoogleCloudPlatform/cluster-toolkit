@@ -64,7 +64,7 @@ Through `cert_manager_values`, `prometheus_values`, `slurm_operator_values`, and
                 - key: "node.kubernetes.io/instance-type"
                   operator: In
                   values:
-                  - e2-standard-8 # base_pool's machine-type
+                  - n4-standard-8 # base_pool's machine-type
 ```
 
 This creates a Slinky cluster with the following attributes:

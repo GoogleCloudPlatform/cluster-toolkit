@@ -67,7 +67,8 @@ deployment_groups:
     use: [network, homefs]
     settings:
       name_prefix: ls1
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
+      disk_type: hyperdisk-balanced
       labels:
         ghpc_role: license
       disable_public_ips: true

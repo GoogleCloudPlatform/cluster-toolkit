@@ -47,7 +47,8 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [network1, startup]
     settings:
-      machine_type: e2-standard-4
+      machine_type: n4-standard-4
+      disk_type: hyperdisk-balanced
 
   - id: waiter
     source: community/modules/scripts/wait-for-startup

@@ -19,7 +19,7 @@ The following example creates a group placement resource policy and applies it t
     source: modules/compute/gke-node-pool
     use: [group_placement_1]
     settings:
-      machine_type: e2-standard-8
+      machine_type: n4-standard-8
     outputs: [instructions]
 ```
 
