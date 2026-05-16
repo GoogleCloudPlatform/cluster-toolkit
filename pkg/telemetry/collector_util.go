@@ -255,7 +255,7 @@ func getWindowsVersion() string {
 	if err != nil {
 		return "Windows (unknown version)"
 	}
-	return "Windows " + strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out))
 }
 
 // parseOsReleaseField helper to clean up quotes from /etc/os-release values
