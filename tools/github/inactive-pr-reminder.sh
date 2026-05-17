@@ -29,41 +29,79 @@ TEAM_TO_TAG="@GoogleCloudPlatform/hpc-toolkit"
 # get_approval_status checks if a PR has a successful "multi-approvers" status check.
 # Arguments:
 #	$1: PR number.
-#   $2: The JSON object for the statusCheckRollup of a PR.
+#   $2: The full PR JSON object.
 # Outputs:
 #   Writes descriptive messages to stderr.
 #   Returns 0 if the PR is approved, 1 otherwise.
 get_approval_status() {
 	local pr_number=$1
-	local status_checks_json=$2
-	echo "Checking approval status for PR #${pr_number}..." >&2
-	if echo "$status_checks_json" | jq -e 'any(.contexts[] | select(.context | contains("multi-approvers"))); .state == "SUCCESS")' >/dev/null; then
+	local pr_json=$2
+	# echo "Checking approval status for PR #${pr_number}..." >&2 # Keep this line for basic info
+	local status_checks_json
+	status_checks_json=$(echo "$pr_json" | jq -c '.statusCheckRollup')
+	if echo "$status_checks_json" | jq -e '.[] | select(.name == "multi-approvers / multi-approvers" and .conclusion == "SUCCESS")' >/dev/null; then
 		echo "PR #${pr_number} has sufficient approvals." >&2
-		return 0 # true
+		echo "0" # true
+	else
+		echo "PR #${pr_number} does not have sufficient approvals." >&2
+		echo "1" # false
 	fi
-	echo "PR #${pr_number} does not have sufficient approvals." >&2
-	return 1 # false
 }
 
-# calculate_inactivity returns the number of days a PR has been inactive.
+# calculate_inactivity returns the number of days a PR has been inactive based on human activity.
 # Arguments:
 #   $1: PR number.
-#   $2: The `updatedAt` timestamp string.
+#   $2: The JSON array of the PR's comments.
+#   $3: The PR's `createdAt` timestamp string (initial creation time).
+#   $4: The JSON array of the PR's latest reviews.
 # Outputs:
 #   Writes descriptive message to stderr.
 #   Writes the number of inactive days to stdout.
 calculate_inactivity() {
 	local pr_number=$1
-	local updated_at=$2
+	local comments_json=$2
+	local pr_created_at=$3
+	local latest_reviews_json=$4
+
+	local latest_human_activity_timestamp="$pr_created_at" # Start with PR creation as baseline
+
+	# Check latest non-bot comment activity
+	local latest_comment_updated_at
+	latest_comment_updated_at=$(echo "$comments_json" | jq -r '
+		map(select(.body | contains("<!-- PR_INACTIVITY_REMINDER -->") | not)) |
+		map(select(.createdAt | type == "string")) | # Ensure createdAt is a string
+		map(.createdAt) |
+		max // null # Get the max, or null if the array is empty
+	')
+
+	if [[ -n "$latest_comment_updated_at" && "$latest_comment_updated_at" != "null" ]]; then
+		if [[ "$(date -d "$latest_human_activity_timestamp" +%s)" -lt "$(date -d "$latest_comment_updated_at" +%s)" ]]; then
+			latest_human_activity_timestamp="$latest_comment_updated_at"
+		fi
+	fi
+
+	# Check latest review activity
+	local latest_review_updated_at
+	latest_review_updated_at=$(echo "$latest_reviews_json" | jq -r '
+		map(select(.createdAt | type == "string")) | # Ensure createdAt is a string
+		map(.createdAt) |
+		max // null # Get the max, or null if the array is empty
+	')
+
+	if [[ -n "$latest_review_updated_at" && "$latest_review_updated_at" != "null" ]]; then
+		if [[ "$(date -d "$latest_human_activity_timestamp" +%s)" -lt "$(date -d "$latest_review_updated_at" +%s)" ]]; then
+			latest_human_activity_timestamp="$latest_review_updated_at"
+		fi
+	fi
+
 	local updated_at_seconds now_seconds inactive_seconds inactive_days
-	updated_at_seconds=$(date -d "$updated_at" +%s)
+	updated_at_seconds=$(date -d "$latest_human_activity_timestamp" +%s)
 	now_seconds=$(date +%s)
 	inactive_seconds=$((now_seconds - updated_at_seconds))
 	inactive_days=$((inactive_seconds / 86400))
 	echo "PR #${pr_number} has been inactive for ${inactive_days} days." >&2
 	echo "$inactive_days"
 }
-
 # close_pr_if_overdue closes a PR if it is past its closing threshold and unapproved.
 # Arguments:
 #   $1: PR number.
@@ -137,25 +175,22 @@ send_reminder_if_needed() {
 process_pr() {
 	local pr_json=$1
 
-	# Efficiently extract all needed values from the JSON object at once.
-	local pr_number is_draft pr_author updated_at review_decision comments_json status_checks_json
-	# A tab character is used as the delimiter for `read`
-	IFS=$'\t' read -r pr_number is_draft pr_author updated_at review_decision comments_json status_checks_json < <(
-		echo "$pr_json" | jq -r '[.number, .isDraft, .author.login, .updatedAt, .reviewDecision, (.comments | tojson), (.statusCheckRollup | tojson)] | @tsv'
+	local pr_number pr_author review_decision created_at
+	IFS=$'\t' read -r pr_number pr_author review_decision created_at < <(
+		echo "$pr_json" | jq -r '[.number, .author.login, .reviewDecision, .createdAt] | @tsv'
 	)
+
+	# complex JSON arrays use individual jq -c calls
+	local comments_json
+	comments_json=$(echo "$pr_json" | jq -c '.comments')
+	local latest_reviews_json
+	latest_reviews_json=$(echo "$pr_json" | jq -c '.latestReviews')
 
 	echo "---"
 	echo "Checking PR #${pr_number}"
-
-	if [[ "$is_draft" == "true" ]]; then
-		echo "PR #${pr_number} is a draft, skipping."
-		return
-	fi
-
 	local approval_status_code inactive_days
-	get_approval_status "$pr_number" "$status_checks_json"
-	approval_status_code=$?
-	inactive_days=$(calculate_inactivity "$pr_number" "$updated_at")
+	approval_status_code=$(get_approval_status "$pr_number" "$pr_json")
+	inactive_days=$(calculate_inactivity "$pr_number" "$comments_json" "$created_at" "$latest_reviews_json")
 
 	# return immediately if closing the PR, else check if a reminder is needed
 	close_pr_if_overdue "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" && return
@@ -164,14 +199,33 @@ process_pr() {
 
 # --- Main Logic ---
 main() {
-	echo "Fetching open pull requests..."
-	# Fetch all necessary PR data in a single call, then pipe each PR as a
-	# JSON object to the process_pr function.
-	gh pr list --json number,updatedAt,isDraft,comments,author,reviewDecision,statusCheckRollup |
+	echo "Fetching all non-draft pull requests..."
+	local attempt_num=1
+	local -r MAX_ATTEMPTS=2
+	local -r SLEEP_DELAY=5
+
+	while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
+		echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
+		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews); then
+			break
+		fi
+
+		if [ "$attempt_num" -ge "$MAX_ATTEMPTS" ]; then
+			echo "Failed to fetch PR numbers after $MAX_ATTEMPTS attempts. Exiting." >&2
+			exit 1
+		else
+			echo "Failed to fetch PRs on attempt $attempt_num. Retrying in $SLEEP_DELAY seconds..." >&2
+			sleep "$SLEEP_DELAY"
+			attempt_num=$((attempt_num + 1))
+		fi
+	done
+
+	echo "$pr_list_output" |
 		jq -c '.[]' |
 		while read -r pr_json; do
 			process_pr "$pr_json"
 		done
+
 	echo "---"
 	echo "All pull requests checked."
 }
