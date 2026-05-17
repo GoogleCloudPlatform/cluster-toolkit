@@ -155,9 +155,6 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
-	if err := config.ValidateHardwareRequest(computeType, topology, placementPolicy); err != nil {
-		return err
-	}
 	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err

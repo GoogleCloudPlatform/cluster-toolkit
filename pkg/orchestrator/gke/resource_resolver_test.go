@@ -235,12 +235,7 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		wantTopology    string
 		wantErr         bool
 	}{
-		{
-			name:            "Valid shorthand in map",
-			acceleratorType: "v4-8",
-			wantType:        "ct4p-hightpu-4t", // Resolves to full machine type
-			wantErr:         false,
-		},
+
 		{
 			name:            "Valid full type in map values",
 			acceleratorType: "ct4p-hightpu-4t",
@@ -264,6 +259,27 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			wantErr:         true,
 		},
 		{
+			name:            "Valid shorthand in map",
+			acceleratorType: "v4-8",
+			nodePools:       []string{"ct4p-hightpu-4t"},
+			wantType:        "ct4p-hightpu-4t",
+			wantTopology:    "2x2x1",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "2x2x1\n"}},
+			},
+			wantErr: false,
+		},
+		{
+			name:            "Valid shorthand in map fails with conflicting cluster topology",
+			acceleratorType: "v4-8",
+			nodePools:       []string{"ct4p-hightpu-4t"},
+			wantType:        "ct4p-hightpu-4t",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "16x16\n"}},
+			},
+			wantErr: true,
+		},
+		{
 			name:            "Ambiguous shorthand resolved",
 			acceleratorType: "v6e",
 			nodePools:       []string{"ct6e-standard-8t"},
@@ -282,6 +298,29 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			wantType:        "ct6e-standard-8t", // Resolves to full machine type
 			wantTopology:    "16x16",
 			wantErr:         false,
+		},
+		{
+			name:            "TPU shorthand with invalid size (not power of 2)",
+			acceleratorType: "v6e-12",
+			wantErr:         true,
+		},
+		{
+			name:            "TPU shorthand with topology suffix fails",
+			acceleratorType: "v6e-4x4",
+			wantErr:         true,
+		},
+		{
+			name:            "TPU shorthand with valid size >= 16",
+			acceleratorType: "v6e-32",
+			nodePools:       []string{"ct6e-standard-8t"},
+			wantType:        "ct6e-standard-8t",
+			wantTopology:    "4x8",
+			wantErr:         false,
+		},
+		{
+			name:            "TPU7x shorthand fails with explicit topology requirement",
+			acceleratorType: "tpu7x-32",
+			wantErr:         true,
 		},
 	}
 

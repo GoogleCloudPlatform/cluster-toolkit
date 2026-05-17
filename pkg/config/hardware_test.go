@@ -312,8 +312,8 @@ func TestResolveTopologyForChips(t *testing.T) {
 			name:       "tpu7x 2048 chips",
 			prefix:     "tpu7x",
 			totalChips: 2048,
-			wantShape:  "8x16x16",
-			wantErr:    false,
+			wantShape:  "",
+			wantErr:    true,
 		},
 		{
 			name:       "v6e 1 chip",
@@ -347,7 +347,8 @@ func TestResolveTopologyForChips(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips))
+			resolvedMachineType := ResolveMachineType(tt.prefix)
+			got, err := ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips), resolvedMachineType)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ResolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -449,25 +450,29 @@ func TestGetCandidatesForShorthand(t *testing.T) {
 
 func TestValidateHardwareRequest(t *testing.T) {
 	tests := []struct {
-		name            string
-		machineType     string
-		topology        string
-		placementPolicy string
-		wantErr         bool
+		name        string
+		machineType string
+		topology    string
+		wantErr     bool
 	}{
-		{"Valid TPU v4", "v4-8", "2x2x1", "", false},
-		{"Valid TPU v6e", "v6e-8", "2x2", "", false},
-		{"Invalid TPU v6e shape", "v6e-8", "3x3", "", true},
-		{"Valid TPU v5litepod", "v5litepod-16", "4x4", "", false},
-		{"Invalid TPU v5litepod shape", "v5litepod-16", "3x3", "", true},
-		{"Invalid TPU v4 dimensions", "v4-8", "2x2", "", true}, // Needs 3D
-		{"Invalid TPU v4 shape", "v4-8", "3x3x3", "", true},
-		{"Unknown TPU family fails", "tpu-v7-8", "2x2x2", "", true},
-		{"Non-TPU skips validation", "l4-1", "invalid", "", false},
+		{"Valid TPU v4", "ct4p-hightpu-4t", "2x2x1", false},
+		{"Valid TPU v6e", "v6e-8", "2x2", false},
+		{"Invalid TPU v6e shape", "v6e-8", "3x3", true},
+		{"Valid TPU v5litepod", "v5litepod-16", "4x4", false},
+		{"Invalid TPU v5litepod shape", "v5litepod-16", "3x3", true},
+		{"Invalid TPU v4 dimensions", "ct4p-hightpu-4t", "2x2", true}, // Needs 3D
+		{"Invalid TPU v4 shape", "ct4p-hightpu-4t", "3x3x3", true},
+		{"Unknown TPU family fails", "tpu-v7-8", "2x2x2", true},
+		{"Non-TPU skips validation", "l4-1", "invalid", false},
+		{"Valid non-standard v4 shape", "ct4p-hightpu-4t", "4x4x12", false},
+		{"Valid non-standard v5p shape", "ct5p-hightpu-4t", "4x4x12", false},
+		{"Invalid v5p shape (unsorted)", "ct5p-hightpu-4t", "4x12x4", true},
+		{"Valid v4 shape (unsorted)", "ct4p-hightpu-4t", "4x12x4", false},
+		{"Topology exceeding max cubes", "ct4p-hightpu-4t", "16x16x32", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateHardwareRequest(tt.machineType, tt.topology, tt.placementPolicy)
+			err := ValidateHardwareRequest(tt.machineType, tt.topology)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateHardwareRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -533,20 +538,28 @@ func TestCheckTopologyContainment(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "V6e invalid subset shape",
+			name:      "V6e invalid subset shape (fits geometrically)",
 			requested: "3x3",
 			container: "4x4",
 			accelType: "v6e",
-			wantFit:   false,
-			wantErr:   true,
+			wantFit:   true,
+			wantErr:   false,
 		},
 		{
-			name:      "V4 invalid subset shape",
+			name:      "V4 invalid subset shape (fits geometrically)",
 			requested: "3x3x3",
 			container: "4x4x4",
 			accelType: "v4",
-			wantFit:   false,
-			wantErr:   true,
+			wantFit:   true,
+			wantErr:   false,
+		},
+		{
+			name:      "V4 valid non-standard subset shape",
+			requested: "4x4x12",
+			container: "4x4x16",
+			accelType: "v4",
+			wantFit:   true,
+			wantErr:   false,
 		},
 	}
 

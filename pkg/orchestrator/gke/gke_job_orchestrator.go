@@ -862,10 +862,7 @@ func (g *GKEOrchestrator) queryAllMachineTypes() ([]string, error) {
 	return unique, nil
 }
 
-func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (string, error) {
-	if !config.IsTPU(job.MachineType) {
-		return "", nil // Rejects GPU topologies implicitly
-	}
+func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (string, bool, error) {
 
 	if g.topologyCache == nil {
 		g.topologyCache = make(map[string]string)
@@ -873,29 +870,42 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 
 	cacheKey := job.Topology + ":" + job.MachineType
 	if val, ok := g.topologyCache[cacheKey]; ok {
-		return val, nil
+		isDyn, err := g.verifyDynamicSlicingActive(ManifestOptions{
+			ClusterName:     job.ClusterName,
+			ClusterLocation: job.ClusterLocation,
+			ComputeType:     job.ComputeType,
+		})
+		if err != nil {
+			logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
+		}
+		return val, isDyn, nil
 	}
 
-	top, handled, err := g.resolveDynamicSlicingTopology(job)
+	top, dynSlicing, err := g.resolveDynamicSlicingTopology(job)
 	if err != nil {
-		return "", err
+		return "", dynSlicing, err
 	}
-	if handled {
+	if dynSlicing {
 		g.topologyCache[cacheKey] = top
-		return top, nil
+		return top, dynSlicing, nil
 	}
 
-	if job.Topology != "" {
-		if err := config.ValidateHardwareRequest(job.MachineType, job.Topology, ""); err != nil {
-			return "", err
+	if job.Topology == "" {
+		topo, err := config.ResolveTopologyForChips(job.ComputeType, job.MachineType)
+		if err == nil {
+			logging.Info("Auto-resolved topology %s for shorthand %s", topo, job.ComputeType)
+			job.Topology = topo
+		} else {
+			if !strings.Contains(err.Error(), "invalid accelerator type format") {
+				return "", false, err
+			}
 		}
 	}
 
 	logging.Info("Auto-discovering Topology for %s...", job.MachineType)
-
 	output, err := g.queryDiscoveredTopologies()
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	topologies := g.parseTopologies(output)
@@ -904,7 +914,7 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 	if err == nil {
 		g.topologyCache[cacheKey] = res
 	}
-	return res, err
+	return res, false, err
 }
 
 func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string]bool, accelType string) (string, error) {
@@ -968,11 +978,15 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDef
 		return "", false, nil
 	}
 
-	if active, _ := g.verifyDynamicSlicingActive(ManifestOptions{
+	active, err := g.verifyDynamicSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
 		ClusterLocation: job.ClusterLocation,
 		ComputeType:     job.ComputeType,
-	}); active {
+	})
+	if err != nil {
+		logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
+	}
+	if active {
 		logging.Info("Dynamic-slicing detected. Skipping strict physical state queries for topology.")
 		if job.Topology != "" {
 			dims := strings.Split(job.Topology, "x")
