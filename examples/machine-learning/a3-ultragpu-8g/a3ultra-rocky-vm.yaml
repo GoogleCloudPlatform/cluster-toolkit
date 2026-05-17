@@ -1,0 +1,347 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: a3u-rocky-vm
+
+vars:
+  project_id: # supply project ID
+  deployment_name: a3u-rocky-vm
+  region: europe-west1
+  zone: europe-west1-b
+  reservation_name: # supply reservation name
+  cluster_size: 2
+  a3u_provisioning_model: RESERVATION_BOUND
+  instance_image:
+    project: rocky-linux-cloud
+    family: rocky-linux-9-optimized-gcp
+  net0_range: 192.168.0.0/19
+  net1_range: 192.168.64.0/18
+  filestore_ip_range: 192.168.32.0/29
+  rdma_net_range: 192.168.128.0/18
+  hostname_prefix: $(vars.deployment_name)
+  local_ssd_mountpoint: /mnt/localssd
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: a3ultra-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.deployment_name)-mrdma-sub
+        count: 8
+        ip_range: $(vars.rdma_net_range)
+        region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-rdma
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [a3ultra-net-0]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+    outputs:
+    - network_storage
+
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - $(vars.hostname_prefix)-*
+      local_ssd_filesystem:
+        mountpoint: $(vars.local_ssd_mountpoint)
+        permissions: "1777" # must quote numeric filesystem permissions!
+
+      runners:
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+
+      - type: shell
+        destination: install_docker.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+          dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+      # Typical install docker from CTK does not work as expected for Rocky 9
+      - type: ansible-local
+        destination: install_docker.yml
+        content: |
+          ---
+          - name: Install Docker
+            hosts: localhost
+            become: true
+            vars:
+              docker_data_root: "$(vars.local_ssd_mountpoint)/docker"
+              docker_daemon_config: |
+                {
+                  "data-root": "$(vars.local_ssd_mountpoint)/docker"
+                }
+              enable_docker_world_writable: true
+            tasks:
+            - name: Create Docker daemon configuration
+              ansible.builtin.copy:
+                dest: /etc/docker/daemon.json
+                mode: '0644'
+                content: '{{ docker_daemon_config }}'
+                # validate flag requires Docker server version 23.0 and above
+                # can add this back after private A3 DLVM image is deprecated
+                # this image comes with Docker version 20.10.17
+                # validate: /usr/bin/dockerd --validate --config-file %s
+              when: docker_daemon_config
+              notify:
+              - Restart Docker
+            - name: Create Docker service override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/docker.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: '0755'
+            - name: Create Docker service override configuration
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/docker.service.d/data-root.conf
+                mode: '0644'
+                content: |
+                  [Unit]
+                  {% if docker_data_root %}
+                  RequiresMountsFor={{ docker_data_root }}
+                  {% endif %}
+                  After=mount-localssd-raid.service
+            - name: Create Docker socket override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/docker.socket.d
+                state: directory
+                owner: root
+                group: root
+                mode: '0755'
+              when: enable_docker_world_writable
+            - name: Create Docker socket override configuration
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/docker.socket.d/world-writable.conf
+                mode: '0644'
+                content: |
+                  [Socket]
+                  SocketMode=0666
+              when: enable_docker_world_writable
+              notify:
+              - Reload SystemD
+              - Recreate Docker socket
+            - name: Delete Docker socket override configuration
+              ansible.builtin.file:
+                path: /etc/systemd/system/docker.socket.d/world-writable.conf
+                state: absent
+              when: not enable_docker_world_writable
+              notify:
+              - Reload SystemD
+              - Recreate Docker socket
+
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            - name: Recreate Docker socket
+              ansible.builtin.service:
+                name: docker.socket
+                state: restarted
+            - name: Restart Docker
+              ansible.builtin.service:
+                name: docker.service
+                state: restarted
+
+            post_tasks:
+            - name: Start Docker
+              ansible.builtin.service:
+                name: docker.service
+                state: started
+                enabled: true
+
+      - type: shell
+        destination: install_nvidia.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+
+          dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+          dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+          dnf clean all
+          dnf -y install cuda-toolkit-12-8
+          dnf -y module install nvidia-driver:open-dkms
+          dnf -y install libnccl libnccl-devel
+
+      - type: shell
+        destination: install_mellanox.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+
+          echo "[doca]
+          name=DOCA Online Repo
+          baseurl=https://linux.mellanox.com/public/repo/doca/2.10.0/rhel9.5/x86_64/
+          enabled=1
+          gpgcheck=0" > /etc/yum.repos.d/doca.repo
+
+          dnf clean all
+          dnf -y install doca-ofed
+
+      - type: shell
+        destination: install_nccl_gib.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          gcloud auth configure-docker us-docker.pkg.dev
+          docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
+            us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.5 install --install-nccl
+
+      # (Optional) Set defaults compatible with NCCL-GIB
+      - type: data
+        destination: /etc/environment
+        content: |
+          PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/usr/local/cuda/bin"
+          # The following are set to enable the NCCL gIB network plugin
+          NCCL_HOME=/usr/local/gib
+          LD_LIBRARY_PATH=/usr/local/gib/lib64
+          # End of NCCL gIB section
+
+      # (Optional) Update ldconfig in order to prefer NCCL-GIB
+      - type: data
+        destination: /etc/ld.so.conf.d/000_nccl-gib.conf
+        content: |
+          /usr/local/gib/lib64
+
+      # Remove Extra rdma-core from nccl-plugin installation
+      - type: shell
+        destination: remove_plugin_rdma_core.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          rm -rf /usr/local/gib/lib64/libib* \
+            /usr/local/gib/lib64/libmlx5* \
+            /usr/local/gib/lib64/librdmacm.so* \
+            /usr/local/gib/lib64/ibacm/
+
+      - type: ansible-local
+        destination: update_ldconfig.yml
+        content: |
+          ---
+          - name: Update ldconfig
+            hosts: localhost
+            become: true
+            tasks:
+            - name: Configure ldconfig
+              ansible.builtin.command: /usr/sbin/ldconfig
+
+
+  - id: a3ultra-vms
+    source: modules/compute/vm-instance
+    use: [startup-script, homefs]
+    settings:
+      machine_type: a3-ultragpu-8g
+      instance_count: $(vars.cluster_size)
+      name_prefix: $(vars.hostname_prefix)
+      disk_type: hyperdisk-balanced
+      automatic_restart: true
+      on_host_maintenance: TERMINATE
+      reservation_name: $(vars.reservation_name)
+      provisioning_model: $(vars.a3u_provisioning_model)
+      network_interfaces:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=a3ultra-net-0.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          },
+          {
+            network=null,
+            subnetwork=a3ultra-net-1.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+          a3ultra-rdma-net.subnetwork_interfaces,
+        ))
+
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(a3ultra-vms.name)
+      timeout: 7200
