@@ -16,6 +16,8 @@ Since the login node has the same mounted storage and is a homogeneous machine
 to the Google Cloud Batch compute VMs, it can be used to inspect shared file
 systems and test installed software before submitting a Google Cloud Batch job.
 
+> **Note on Testing:** The login node is intended for environment verification (checking paths, storage mounts, and single-node execution). It is a single VM instance and does not support testing multi-node MPI communication. To test multi-node behavior, you must submit the Batch job to the service.
+
 ## Example
 
 ```yaml
