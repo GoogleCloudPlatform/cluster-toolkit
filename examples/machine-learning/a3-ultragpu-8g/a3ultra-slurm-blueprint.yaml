@@ -24,7 +24,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260225
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.12.1
   # Cluster env settings
@@ -37,7 +37,7 @@ vars:
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: $(vars.project_id)
-    family: $(vars.deployment_name)-u22
+    family: $(vars.deployment_name)-u24
   disk_size_gb: 100
   nccl_gib_version: 1.1.0
   libnccl_version: 2.27.5-1+cuda12.9
@@ -127,7 +127,6 @@ deployment_groups:
             "install_gcsfuse": true,
             "install_lustre": false,
             "install_managed_lustre": false,
-            "install_nvidia_repo": true,
             "install_ompi": true,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
@@ -152,75 +151,78 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-      - type: shell
-        destination: install-cuda-toolkit.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          add-nvidia-repositories -y
-          apt install -y \
-              cuda-toolkit-12-8 \
-              datacenter-gpu-manager-4-cuda12=1:4.5.2-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.2-1 \
-              datacenter-gpu-manager-4-core=1:4.5.2-1
-
-          # 2. Hold ALL components
-          apt-mark hold \
-              datacenter-gpu-manager-4-cuda12 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
-
       - type: ansible-local
-        destination: settings_nvidia_dcgm.yml
+        destination: install_cuda_and_dcgm.yml
         content: |
           ---
-          - name: Nvidia and DGMA settings
+          - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
+              nvidia_packages:
+                - cuda-toolkit-13-0
+                - datacenter-gpu-manager-4-cuda13
+                - datacenter-gpu-manager-4-dev
+                - datacenter-gpu-manager-4-core
             tasks:
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
-            - name: Create nvidia-persistenced override directory
-              ansible.builtin.file:
-                path: /etc/systemd/system/nvidia-persistenced.service.d
-                state: directory
-                owner: root
-                group: root
-                mode: 0o755
-            - name: Configure nvidia-persistenced override
-              ansible.builtin.copy:
-                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
-                owner: root
-                group: root
-                mode: 0o644
-                content: |
-                  [Service]
-                  ExecStart=
-                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
-              notify: Reload SystemD
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: "{{ cuda_repo_url }}"
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install NVIDIA packages
+                ansible.builtin.apt:
+                  name: "{{ item }}"
+                  state: present
+                  allow_downgrade: yes
+                loop: "{{ nvidia_packages }}"
+
+              - name: Freeze NVIDIA packages
+                ansible.builtin.dpkg_selections:
+                  name: "{{ item }}"
+                  selection: hold
+                loop: "{{ nvidia_packages }}"
+
+              - name: Create nvidia-persistenced override directory
+                ansible.builtin.file:
+                  path: /etc/systemd/system/nvidia-persistenced.service.d
+                  state: directory
+                  owner: root
+                  group: root
+                  mode: 0o755
+
+              - name: Configure nvidia-persistenced override
+                ansible.builtin.copy:
+                  dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                  owner: root
+                  group: root
+                  mode: 0o644
+                  content: |
+                    [Service]
+                    ExecStart=
+                    ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+                notify: Reload SystemD
+
             handlers:
             - name: Reload SystemD
               ansible.builtin.systemd:
                 daemon_reload: true
+
             post_tasks:
-            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
-              ansible.builtin.service:
-                name: nvidia-dcgm.service
-                state: stopped
-                enabled: false
-            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
-              ansible.builtin.service:
-                name: nvidia-persistenced.service
-                state: stopped
-                enabled: false
+              - name: Disable NVIDIA services by default (Slurm starts them on boot)
+                ansible.builtin.service:
+                  name: "{{ item }}"
+                  state: stopped
+                  enabled: false
+                loop:
+                  - nvidia-dcgm.service
+                  - nvidia-persistenced.service
 
       - type: ansible-local
         destination: install_ibverbs_utils.yml
@@ -239,6 +241,14 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH ${HOME}/.enroot
+      - type: shell
+        destination: stop_packer_early.sh
+        content: |
+          #!/bin/bash
+          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
+          LOG_DEST=`curl -s -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null`
+          if [ -n "\$LOG_DEST" ]; then rm -f "\$LOG_DEST"; fi
+          gcloud compute instances add-metadata `hostname -s` --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: image
   modules:
@@ -474,6 +484,21 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
+          # Required for enroot/pyxis to work
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
+
+          # 2. Ensure /etc/hostname exists (needed by enroot/pyxis)
+          if [ ! -f /etc/hostname ]; then
+            hostname > /etc/hostname
+          fi
       # Install NCCL
       - type: ansible-local
         destination: install_nccl.yml
