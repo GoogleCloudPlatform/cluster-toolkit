@@ -242,7 +242,7 @@ func getMacVersion() string {
 	if err != nil {
 		return "Darwin (unknown version)"
 	}
-	return strings.TrimSpace(string(out))
+	return "Darwin " + strings.TrimSpace(string(out))
 }
 
 // getWindowsVersion uses the ver command to get the Windows version.
