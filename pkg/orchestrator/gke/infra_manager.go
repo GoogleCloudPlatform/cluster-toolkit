@@ -28,8 +28,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
+
+	"github.com/google/safetext/yamltemplate"
 
 	"hpc-toolkit/pkg/orchestrator"
 
@@ -264,7 +265,7 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
 	logging.Info("Installing Kueue PriorityClasses...")
-	priorityClassesTmpl, err := template.ParseFS(templatesFS, "templates/priority_classes.tmpl")
+	priorityClassesTmpl, err := yamltemplate.New("priority_classes.tmpl").ParseFS(templatesFS, "templates/priority_classes.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse priority_classes.tmpl: %w", err)
 	}
@@ -292,7 +293,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	}
 
 	// Install LocalQueue
-	localQueueTmpl, err := template.ParseFS(templatesFS, "templates/local_queue.tmpl")
+	localQueueTmpl, err := yamltemplate.ParseFS(templatesFS, "templates/local_queue.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
 	}
