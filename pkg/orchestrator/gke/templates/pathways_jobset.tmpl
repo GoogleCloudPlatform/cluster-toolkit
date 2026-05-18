@@ -41,7 +41,7 @@ spec:
         backoffLimit: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -63,7 +63,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if not .Pathways.Headless}}
             initContainers:
@@ -183,7 +183,7 @@ spec:
                 echo "GCluster End: $(date)"
                 exit $EXIT_CODE
 {{- if .VolumeMountsYAML }}
-{{.VolumeMountsYAML}}
+{{StructuralData .VolumeMountsYAML}}
 {{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
@@ -191,7 +191,7 @@ spec:
               image: {{.Pathways.ColocatedPythonSidecarImage}}
             {{- end}}
             volumes:
-{{.VolumesYAML}}
+{{StructuralData .VolumesYAML}}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -205,7 +205,7 @@ spec:
         backoffLimit: {{.WorkerBackoffLimit}}
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -214,7 +214,7 @@ spec:
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
             annotations:
 {{- if .TopologyAnnotation }}
-{{.TopologyAnnotation}}
+{{StructuralData .TopologyAnnotation}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
               gke-gcsfuse/volumes: "true"
@@ -229,7 +229,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if .PriorityClassName }}
             priorityClassName: {{.PriorityClassName}}
@@ -287,18 +287,18 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
-{{.ResourcesString}}
+{{StructuralData .ResourcesString}}
             volumes:
-{{.VolumesYAML}}
+{{StructuralData .VolumesYAML}}
 {{- if .NodeSelector }}
             nodeSelector:
-{{.NodeSelector}}
+{{(StructuralData .NodeSelector)}}
 {{- end }}
 {{- if .Affinity }}
             affinity:
-{{.Affinity}}
+{{(StructuralData .Affinity)}}
 {{- end }}
 {{- if .Tolerations }}
             tolerations:
-{{.Tolerations}}
+{{(StructuralData .Tolerations)}}
 {{- end }}

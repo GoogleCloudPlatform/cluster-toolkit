@@ -29,8 +29,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
+
+	"github.com/google/safetext/yamltemplate"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -321,7 +322,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 
-	tmpl, err := template.ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
+	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
@@ -693,7 +694,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
 	}
 
 	// Render and apply LocalQueue
-	localQueueTmpl, err := template.ParseFS(templatesFS, "templates/local_queue.tmpl")
+	localQueueTmpl, err := yamltemplate.New("local_queue.tmpl").ParseFS(templatesFS, "templates/local_queue.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
 	}
