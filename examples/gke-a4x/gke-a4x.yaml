@@ -38,17 +38,11 @@ vars:
   # The number of nodes to be created
   static_node_count:
 
-  system_node_pool_disk_size_gb: 200
-  a4x_node_pool_disk_size_gb: 100
-  k8s_service_account_name: workload-identity-k8s-sa
-
   # The name of the compute engine reservation of A4X nodes in the form of
   # <project>/<reservation-name>
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
-  compute_nodepool_machine_type: a4x-highgpu-4g
-  system_nodepool_machine_type: e2-standard-16
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
@@ -57,6 +51,11 @@ vars:
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
   version_prefix: "1.35."
+  system_node_pool_disk_size_gb: 200
+  a4x_node_pool_disk_size_gb: 100
+  k8s_service_account_name: workload-identity-k8s-sa
+  compute_nodepool_machine_type: a4x-highgpu-4g
+  system_nodepool_machine_type: e2-standard-16
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
