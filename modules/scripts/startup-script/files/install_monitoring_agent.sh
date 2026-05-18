@@ -86,7 +86,7 @@ handle_debian() {
 
 	install_stackdriver_agent() {
 		# Fixes the 404 issue on modern platforms like Ubuntu 24.04/Cloud Shell
-		export REPO_CODENAME=jammy
+		grep -qi "Ubuntu 24.04" /etc/os-release && export REPO_CODENAME=jammy
 		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}"
 		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}"
 		service stackdriver-agent start || true
