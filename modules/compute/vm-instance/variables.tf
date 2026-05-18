@@ -62,6 +62,12 @@ variable "auto_delete_boot_disk" {
   default     = true
 }
 
+variable "enable_secure_boot" {
+  description = "Enable secure boot for the vm instances.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
