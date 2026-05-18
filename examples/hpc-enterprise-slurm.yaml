@@ -67,11 +67,11 @@ deployment_groups:
     settings:
       name: controller
       project_roles:
+      - bigquery.dataOwner # needed if enable_bigquery_load is enabled
       - compute.instanceAdmin.v1
       - iam.serviceAccountUser
       - logging.logWriter
       - monitoring.metricWriter
-      - pubsub.admin
       - storage.objectViewer
 
   - id: login_sa
@@ -90,7 +90,7 @@ deployment_groups:
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
-      - storage.objectCreator
+      - storage.objectUser
 
   - id: homefs
     source: modules/file-system/filestore
