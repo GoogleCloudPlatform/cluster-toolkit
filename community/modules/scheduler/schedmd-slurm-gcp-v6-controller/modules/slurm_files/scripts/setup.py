@@ -36,6 +36,7 @@ from util import (
     install_custom_scripts,
 )
 import conf
+import conf_v2505
 import conf_v2411
 import slurmsync
 
@@ -469,8 +470,10 @@ def setup_controller(is_primary: bool):
     # Topology and configuration
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
-    if util.slurm_version_gte(lkp.slurm_version, "25.05"):
-        conf.generate_configs_slurm_v2505(lkp)
+    if util.slurm_version_gte(lkp.slurm_version, "25.11"):
+        conf.generate_configs_slurm_v2511(lkp)
+    elif util.slurm_version_gte(lkp.slurm_version, "25.05"):
+        conf_v2505.generate_configs_slurm_v2505(lkp)
     else:
         conf_v2411.generate_configs_slurm_v2411(lkp)
 

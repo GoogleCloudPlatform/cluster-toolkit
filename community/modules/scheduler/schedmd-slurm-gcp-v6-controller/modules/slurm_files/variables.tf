@@ -382,6 +382,15 @@ variable "cloud_parameters" {
   nullable = false
 }
 
+variable "experimental" {
+  description = "Experimental Slurm settings."
+  type = object({
+    enable_async_reply = optional(bool, false)
+  })
+  default  = {}
+  nullable = false
+}
+
 ##########
 # HYBRID #
 ##########

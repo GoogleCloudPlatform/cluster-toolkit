@@ -20,6 +20,7 @@ from collections import defaultdict
 import logging
 import json
 import conf
+import conf_v2505
 from pathlib import Path
 import util
 from util import dirs, slurmdirs
@@ -134,7 +135,7 @@ def install_topology_conf(lkp: util.Lookup) -> None:
 def generate_configs_slurm_v2411(lkp: util.Lookup) -> None:
     conf.install_slurm_conf(lkp)
     conf.install_slurmdbd_conf(lkp)
-    conf.gen_cloud_conf(lkp)
+    conf_v2505.gen_cloud_conf(lkp)
     conf.gen_cloud_gres_conf(lkp)
     conf.install_gres_conf(lkp)
     conf.install_cgroup_conf(lkp)
