@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 from time import sleep
-
+from util import lookup
 log = logging.getLogger()
 
 DWS_EOL_RESERVATION_DURATION = 10 # minutes
@@ -71,15 +71,24 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   nodeset = lkp.node_nodeset(model)
   assert len(nodeset.zone_policy_allow) > 0
   region = lkp.node_region(model)
-
   assert nodeset.dws_flex.enabled
+  
 
   uid = str(uuid.uuid4())[:8]
   if job_id:
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-job-{job_id}-{uid}"
   else:
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
-
+ 
+   
+  # Create Workload Policy if applicable
+  max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
+  log.info(f"Creating workload policy with name={mig_name} and max distance={max_distance}")
+  wp  = create_workload_policy_request(mig_name, region, nodeset.dws_flex.max_distance)
+  op = wp.execute()
+  res = util.wait_for_operation(op)
+  assert "error" not in res, f"{res}"
+  
   # Create MIG
   req = lkp.compute.regionInstanceGroupManagers().insert(
     project=lkp.project,
@@ -94,7 +103,10 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
         ],
         targetShape="ANY_SINGLE_ZONE" ),
       updatePolicy = dict(instanceRedistributionType = "NONE" ),
-      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
+      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), 
+      resourcePolicies=dict(
+          workloadPolicy= res["targetLink"]
+      )
     )
   )
   util.log_api_request(req)
@@ -252,3 +264,22 @@ def suspend_flex_nodes(nodes: List[str], lkp: util.Lookup) -> None:
   
   for node_template, nodes in not_provisioned.items():
     _suspend_provisioning_inst(nodes, node_template, lkp)
+
+
+# Shoud be used in case of MIG and that to support Compact Placement only
+def create_workload_policy_request (wp_name:str, region: str,max_distance: Optional[int]):
+    """this function would create a workload policy"""
+    config = {
+        "name": wp_name,
+        "region": region,
+        "groupPlacementPolicy": {
+            "collocation": "COLLOCATED",
+            "maxDistance": max_distance,
+        },
+    }
+    request = lookup().compute.resourcePolicies().insert(
+        project=lookup().project, region=region, body=config
+    )
+    log.info(request)
+    util.log_api_request(request)
+    return request
