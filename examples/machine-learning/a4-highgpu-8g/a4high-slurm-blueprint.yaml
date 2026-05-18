@@ -16,6 +16,9 @@
 blueprint_name: a4high-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   deployment_name: # supply deployment name
   project_id: # supply project ID
   region: # supply region
@@ -162,9 +165,9 @@ deployment_groups:
           apt update -y
           apt install -y \
               cuda-toolkit-12-8 \
-              datacenter-gpu-manager-4-cuda12=1:4.5.2-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.2-1 \
-              datacenter-gpu-manager-4-core=1:4.5.2-1
+              datacenter-gpu-manager-4-cuda12=1:4.5.3-1 \
+              datacenter-gpu-manager-4-dev=1:4.5.3-1 \
+              datacenter-gpu-manager-4-core=1:4.5.3-1
 
           # 2. Hold ALL components
           apt-mark hold \
@@ -640,18 +643,7 @@ deployment_groups:
         ThreadsPerCore: 2
       additional_networks:
         $(concat(
-          [{
-            network=null,
-            subnetwork=a4high-slurm-net-1.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip="",
-            stack_type=null,
-            access_config=[],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+          a4high-slurm-net-1.instance_additional_networks,
           a4high-slurm-rdma-net.subnetwork_interfaces
         ))
 

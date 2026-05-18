@@ -14,50 +14,21 @@
 # limitations under the License.
 set -e -o pipefail
 
-LEGACY_MONITORING_PACKAGE='stackdriver-agent'
-LEGACY_MONITORING_SCRIPT_URL='https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh'
-LEGACY_LOGGING_PACKAGE='google-fluentd'
-LEGACY_LOGGING_SCRIPT_URL='https://dl.google.com/cloudagents/add-logging-agent-repo.sh'
+# Dynamic directory lookup to find vendored local scripts
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+LEGACY_MONITORING_SCRIPT="${SCRIPT_DIR}/add-monitoring-agent-repo.sh"
+LEGACY_LOGGING_SCRIPT="${SCRIPT_DIR}/add-logging-agent-repo.sh"
+OPSAGENT_SCRIPT="${SCRIPT_DIR}/add-google-cloud-ops-agent-repo.sh"
 
+LEGACY_MONITORING_PACKAGE='stackdriver-agent'
+LEGACY_LOGGING_PACKAGE='google-fluentd'
 OPSAGENT_PACKAGE='google-cloud-ops-agent'
-OPSAGENT_SCRIPT_URL='https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh'
 
 ops_or_legacy="${1:-legacy}"
 
 fail() {
 	echo >&2 "[$(date +'%Y-%m-%dT%H:%M:%S%z')] $*"
 	exit 1
-}
-
-# Secure, generalized installer wrapper that eliminates curl | bash
-install_agent_shared() {
-	local script_url="$1"
-	local install_cmd="$2"
-	local script_name
-	script_name=$(basename "${script_url}")
-	
-	local tmp_dir
-	tmp_dir=$(mktemp -d /tmp/add-agent-repo.XXXXXXXX)
-	chmod 700 "${tmp_dir}"
-	local tmp_script="${tmp_dir}/${script_name}"
-
-	local MAX_RETRY=50
-	local RETRY=0
-	until [ ${RETRY} -eq ${MAX_RETRY} ] || {
-		curl -fsS -o "${tmp_script}" "${script_url}" &&
-			bash "${tmp_script}" --also-install &&
-			${install_cmd}
-	}; do
-		RETRY=$((RETRY + 1))
-		echo >&2 "WARNING: Installation step for ${script_name} failed on try ${RETRY} of ${MAX_RETRY}"
-		sleep 5
-	done
-
-	rm -rf "${tmp_dir}"
-
-	if [ $RETRY -eq $MAX_RETRY ]; then
-		fail "Installation step for ${script_name} was not successful after ${MAX_RETRY} attempts."
-	fi
 }
 
 handle_debian() {
@@ -80,22 +51,28 @@ handle_debian() {
 			grep "${OPSAGENT_PACKAGE} is installed"
 	}
 
+	install_with_retry() {
+		MAX_RETRY=5
+		RETRY=0
+		# REMEDIATION: Execute the vendored local script instead of piping from curl
+		until [ ${RETRY} -eq ${MAX_RETRY} ] || bash "${1}" --also-install; do
+			RETRY=$((RETRY + 1))
+			echo "WARNING: Installation of ${1} failed on try ${RETRY} of ${MAX_RETRY}"
+			sleep 5
+		done
+		if [ $RETRY -eq $MAX_RETRY ]; then
+			echo "ERROR: Installation of ${1} was not successful after ${MAX_RETRY} attempts."
+			exit 1
+		fi
+	}
+
 	install_opsagent() {
-		run_package_install() {
-			apt-get update && apt-get install -y "${OPSAGENT_PACKAGE}"
-		}
-		install_agent_shared "${OPSAGENT_SCRIPT_URL}" run_package_install
+		install_with_retry "${OPSAGENT_SCRIPT}"
 	}
 
 	install_stackdriver_agent() {
-		run_monitoring_install() {
-			apt-get update && apt-get install -y "${LEGACY_MONITORING_PACKAGE}"
-		}
-		run_logging_install() {
-			apt-get install -y "${LEGACY_LOGGING_PACKAGE}"
-		}
-		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}" run_monitoring_install
-		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}" run_logging_install
+		install_with_retry "${LEGACY_MONITORING_SCRIPT}"
+		install_with_retry "${LEGACY_LOGGING_SCRIPT}"
 		service stackdriver-agent start
 		service google-fluentd start
 	}
@@ -122,21 +99,14 @@ handle_redhat() {
 	}
 
 	install_opsagent() {
-		run_package_install() {
-			yum install -y "${OPSAGENT_PACKAGE}"
-		}
-		install_agent_shared "${OPSAGENT_SCRIPT_URL}" run_package_install
+		# REMEDIATION: Execute the vendored local script instead of piping from curl
+		bash "${OPSAGENT_SCRIPT}" --also-install
 	}
 
 	install_stackdriver_agent() {
-		run_monitoring_install() {
-			yum install -y "${LEGACY_MONITORING_PACKAGE}"
-		}
-		run_logging_install() {
-			yum install -y "${LEGACY_LOGGING_PACKAGE}"
-		}
-		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}" run_monitoring_install
-		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}" run_logging_install
+		# REMEDIATION: Execute the vendored local scripts instead of piping from curl
+		bash "${LEGACY_MONITORING_SCRIPT}" --also-install
+		bash "${LEGACY_LOGGING_SCRIPT}" --also-install
 		service stackdriver-agent start
 		service google-fluentd start
 	}
