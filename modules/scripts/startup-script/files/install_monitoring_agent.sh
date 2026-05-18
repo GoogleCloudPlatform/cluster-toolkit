@@ -89,8 +89,8 @@ handle_debian() {
 		grep -qi "Ubuntu 24.04" /etc/os-release && export REPO_CODENAME=jammy
 		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}"
 		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}"
-		service stackdriver-agent start || true
-		service google-fluentd start || true
+		service stackdriver-agent start
+		service google-fluentd start
 	}
 }
 
