@@ -37,11 +37,24 @@ VM will be created.
 
 ### Use shared-vpc
 
-If a network is created in different project, this module can be used to
-reference the network. To use a network from a different project first make sure
-you have a [cloud nat][cloudnat] and [IAP][iap] forwarding. For more details,
-refer [shared-vpc][shared-vpc-doc]
+The `project_id` in this module refers to the project containing the VPC
+network. In a [Shared VPC][shared-vpc] configuration this is the host project,
+not the service project where workloads are deployed.
 
+```yaml
+- id: network1
+  source: modules/network/pre-existing-vpc
+  settings:
+    project_id: $(vars.network_project_id)
+    network_name: your-shared-network
+    subnetwork_name: your-shared-subnetwork
+```
+
+When using a Shared VPC, ensure you have [Cloud NAT][cloudnat] and [IAP][iap]
+forwarding configured. For a complete example, see
+[hpc-slurm-sharedvpc][shared-vpc-doc].
+
+[shared-vpc]: https://cloud.google.com/vpc/docs/shared-vpc
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
 [shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml-community-badge-experimental-badge
@@ -92,7 +105,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the existing VPC network | `string` | `"default"` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID containing the VPC network. Typically the deployment project, but for Shared VPC configurations set this to the host project ID. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region in which to search for primary subnetwork | `string` | n/a | yes |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of the pre-existing VPC subnetwork; defaults to var.network\_name if set to null. | `string` | `null` | no |
 
