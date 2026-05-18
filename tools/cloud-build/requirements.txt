@@ -1,5 +1,4 @@
-pre-commit
-ansible
-pyyaml
-google-cloud-build
-argparse
+pre-commit==4.6.0
+ansible==13.6.0
+pyyaml==6.0.3
+google-cloud-build==3.36.0
