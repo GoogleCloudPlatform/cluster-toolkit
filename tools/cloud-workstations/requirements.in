@@ -1,7 +1,7 @@
 addict==2.4.0
 backcall==0.2.0
 cachetools==5.3.1
-certifi==2023.7.22
+certifi==2024.7.4
 charset-normalizer==3.2.0
 decorator==5.1.1
 docopt==0.6.2
@@ -45,6 +45,6 @@ rsa==4.9
 six==1.16.0
 traitlets==5.9.0
 uritemplate==4.1.1
-urllib3==2.6.3
+urllib3==2.7.0
 wcwidth==0.2.6
 yarg==0.1.9
