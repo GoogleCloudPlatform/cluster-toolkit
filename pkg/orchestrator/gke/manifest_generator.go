@@ -20,7 +20,8 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"strings"
-	"text/template"
+
+	"github.com/google/safetext/yamltemplate"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,7 +46,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
 
-	tmpl, err := template.ParseFS(templatesFS, "templates/jobset.tmpl")
+	tmpl, err := yamltemplate.New("jobset.tmpl").ParseFS(templatesFS, "templates/jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse jobset template: %w", err)
 	}
