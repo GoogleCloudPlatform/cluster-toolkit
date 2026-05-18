@@ -80,7 +80,7 @@ handle_debian() {
 
 	install_opsagent() {
 		# Fixes the 404 issue on modern platforms like Ubuntu 24.04/Cloud Shell
-		export REPO_CODENAME=jammy
+		grep -qi "Ubuntu 24.04" /etc/os-release && export REPO_CODENAME=jammy
 		install_agent_shared "${OPSAGENT_SCRIPT_URL}"
 	}
 
