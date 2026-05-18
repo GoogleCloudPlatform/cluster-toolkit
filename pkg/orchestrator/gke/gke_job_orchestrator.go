@@ -1797,7 +1797,10 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 			nodeSelector = make(map[string]string)
 		}
 		if !isDynamicSlicing {
-			nodeSelector["cloud.google.com/gke-tpu-topology"] = schedOpts.Topology
+			_, hasFallback := schedOpts.NodeAffinityLabels[tpuTopologyLabel]
+			if !hasFallback {
+				nodeSelector[tpuTopologyLabel] = schedOpts.Topology
+			}
 		}
 	}
 
