@@ -17,9 +17,10 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 
-SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts"
-if SCRIPTS_DIR not in sys.path:
-    sys.path.append(SCRIPTS_DIR)  # TODO: make this more robust
+from pathlib import Path
+PARENT_DIR = str(Path(__file__).resolve().parent.parent)
+if PARENT_DIR not in sys.path:
+    sys.path.insert(0, PARENT_DIR)
 
 import util
 
@@ -56,6 +57,7 @@ class TstPartition:
 class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
+    experimental: dict[str, Any] = field(default_factory=dict)
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
@@ -64,6 +66,9 @@ class TstCfg:
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)

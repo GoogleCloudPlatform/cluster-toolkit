@@ -482,6 +482,15 @@ variable "cloud_parameters" {
   nullable = false
 }
 
+variable "experimental" {
+  description = "Experimental Slurm settings. Enable at your own risk."
+  type = object({
+    enable_async_reply = optional(bool, false)
+  })
+  default  = {}
+  nullable = false
+}
+
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller

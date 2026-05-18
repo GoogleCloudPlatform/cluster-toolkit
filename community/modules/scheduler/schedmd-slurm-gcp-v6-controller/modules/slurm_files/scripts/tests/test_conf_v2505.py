@@ -134,12 +134,12 @@ TopologyParam=SwitchAsNodeRank"""),
     ])
 def test_conflines(cfg, want):
     lkp = util.Lookup(cfg)
-    lkp.cfg.slurm_version = "24.11"
+    lkp.cfg.slurm_version = "25.05"
     lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))
     assert conflines(lkp) == want
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     lkp = util.Lookup(cfg)
-    lkp.cfg.slurm_version = "24.11"
+    lkp.cfg.slurm_version = "25.05"
     lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))
     assert conflines(lkp) == want

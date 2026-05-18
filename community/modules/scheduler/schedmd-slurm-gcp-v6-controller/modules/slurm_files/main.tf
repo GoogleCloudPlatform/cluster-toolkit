@@ -69,6 +69,7 @@ locals {
     task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
     task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
     cloud_parameters    = var.cloud_parameters
+    experimental        = var.experimental
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -183,6 +184,7 @@ locals {
     "tools/task-epilog",
     "tools/task-prolog",
     "conf.py",
+    "conf_v2505.py",
     "conf_v2411.py",
     "file_cache.py",
     "get_tpu_vmcount.py",
@@ -209,6 +211,7 @@ locals {
     "tools/task-epilog",
     "tools/task-prolog",
     "conf.py",
+    "conf_v2505.py",
     "conf_v2411.py",
     "file_cache.py",
     "get_tpu_vmcount.py",

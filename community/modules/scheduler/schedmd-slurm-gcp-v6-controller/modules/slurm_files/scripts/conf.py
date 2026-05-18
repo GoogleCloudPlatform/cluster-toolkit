@@ -95,6 +95,9 @@ def conflines(lkp: util.Lookup) -> str:
 
     no_comma_params = get("no_comma_params", False)
 
+    experimental = lkp.cfg.get("experimental", {}) or {}
+    enable_async_reply = experimental.get("enable_async_reply", False)
+
     any_gpus = any(
         lkp.template_info(nodeset.instance_template).gpu
         for nodeset in lkp.cfg.nodeset.values()
@@ -121,6 +124,7 @@ def conflines(lkp: util.Lookup) -> str:
             "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
             "enable_configless",
             "idle_on_node_suspend",
+            "enable_async_reply" if enable_async_reply else None,
         ],
         "GresTypes": [
             "gpu" if any_gpus else None,
@@ -774,7 +778,7 @@ def install_topology_yaml(lkp: util.Lookup) -> None:
     util.chown_slurm(summary_file, mode=0o600)
 
 
-def generate_configs_slurm_v2505(lkp: util.Lookup) -> None:
+def generate_configs_slurm_v2511(lkp: util.Lookup) -> None:
     install_slurm_conf(lkp)
     install_slurmdbd_conf(lkp)
     gen_cloud_conf(lkp)
