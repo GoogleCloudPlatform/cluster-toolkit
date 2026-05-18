@@ -32,10 +32,9 @@ fail() {
 # Secure, generalized installer wrapper that eliminates curl | bash
 install_agent_shared() {
 	local script_url="$1"
-	local install_cmd="$2"
 	local script_name
 	script_name=$(basename "${script_url}")
-	
+
 	local tmp_dir
 	tmp_dir=$(mktemp -d /tmp/add-agent-repo.XXXXXXXX)
 	chmod 700 "${tmp_dir}"
@@ -45,8 +44,7 @@ install_agent_shared() {
 	local RETRY=0
 	until [ ${RETRY} -eq ${MAX_RETRY} ] || {
 		curl -fsS -o "${tmp_script}" "${script_url}" &&
-			bash "${tmp_script}" --also-install &&
-			${install_cmd}
+			bash "${tmp_script}" --also-install
 	}; do
 		RETRY=$((RETRY + 1))
 		echo >&2 "WARNING: Installation step for ${script_name} failed on try ${RETRY} of ${MAX_RETRY}"
@@ -81,23 +79,18 @@ handle_debian() {
 	}
 
 	install_opsagent() {
-		run_package_install() {
-			apt-get update && apt-get install -y "${OPSAGENT_PACKAGE}"
-		}
-		install_agent_shared "${OPSAGENT_SCRIPT_URL}" run_package_install
+		# Fixes the 404 issue on modern platforms like Ubuntu 24.04/Cloud Shell
+		export REPO_CODENAME=jammy
+		install_agent_shared "${OPSAGENT_SCRIPT_URL}"
 	}
 
 	install_stackdriver_agent() {
-		run_monitoring_install() {
-			apt-get update && apt-get install -y "${LEGACY_MONITORING_PACKAGE}"
-		}
-		run_logging_install() {
-			apt-get install -y "${LEGACY_LOGGING_PACKAGE}"
-		}
-		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}" run_monitoring_install
-		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}" run_logging_install
-		service stackdriver-agent start
-		service google-fluentd start
+		# Fixes the 404 issue on modern platforms like Ubuntu 24.04/Cloud Shell
+		export REPO_CODENAME=jammy
+		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}"
+		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}"
+		service stackdriver-agent start || true
+		service google-fluentd start || true
 	}
 }
 
@@ -122,23 +115,14 @@ handle_redhat() {
 	}
 
 	install_opsagent() {
-		run_package_install() {
-			yum install -y "${OPSAGENT_PACKAGE}"
-		}
-		install_agent_shared "${OPSAGENT_SCRIPT_URL}" run_package_install
+		install_agent_shared "${OPSAGENT_SCRIPT_URL}"
 	}
 
 	install_stackdriver_agent() {
-		run_monitoring_install() {
-			yum install -y "${LEGACY_MONITORING_PACKAGE}"
-		}
-		run_logging_install() {
-			yum install -y "${LEGACY_LOGGING_PACKAGE}"
-		}
-		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}" run_monitoring_install
-		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}" run_logging_install
-		service stackdriver-agent start
-		service google-fluentd start
+		install_agent_shared "${LEGACY_MONITORING_SCRIPT_URL}"
+		install_agent_shared "${LEGACY_LOGGING_SCRIPT_URL}"
+		service stackdriver-agent start || true
+		service google-fluentd start || true
 	}
 }
 
