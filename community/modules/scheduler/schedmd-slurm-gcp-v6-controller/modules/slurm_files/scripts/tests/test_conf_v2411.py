@@ -17,7 +17,8 @@ from mock import Mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
 
 from util import NSDict
-from conf import conflines
+import addict # type: ignore
+from conf_v2505 import conflines
 import util
 
 
