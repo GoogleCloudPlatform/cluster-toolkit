@@ -90,18 +90,20 @@
       poll: 10
       changed_when: false
 
-    - name: "Run CHS standard suite"
+    - name: "Run CHS suites"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite standard
-      register: chs_run
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite {{ item }}
+      loop: "{{ chs_suites | default(['standard']) }}"
+      register: chs_runs
       async: 3000
       poll: 10
       changed_when: false
 
     - name: CHS run output
       ansible.builtin.debug:
-        var: chs_run.stdout_lines
+        msg: "{{ item.stdout_lines }}"
+      loop: "{{ chs_runs.results }}"
 
   rescue:
   - name: CHS Test Failure
