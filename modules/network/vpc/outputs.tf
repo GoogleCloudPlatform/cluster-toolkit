@@ -72,3 +72,9 @@ output "nat_ips" {
   description = "External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used)"
   value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])
 }
+
+output "additional_networks" {
+  description = "Network interface details compatible with gke-node-pool additional_networks"
+  value       = local.output_subnets_gke
+  depends_on  = [module.vpc, module.cloud_router]
+}
