@@ -46,8 +46,8 @@ custom_vars:
 instance_type: "tpu7x"
 scheduler: "gke"
 chs_suites:
-  - lite
-  - standard
+- lite
+- standard
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
 - test-validation/test-gke-ml-diagnostics.yml
