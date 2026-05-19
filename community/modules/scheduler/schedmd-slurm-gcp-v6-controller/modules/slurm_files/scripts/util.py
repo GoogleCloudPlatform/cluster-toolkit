@@ -162,16 +162,27 @@ class MachineType:
 
     @property
     def sockets(self) -> int:
+        if self.family == "n2d":
+            if "highmem" in self.name:
+                return 2 if self.guest_cpus >= 24 else 1
+            else:
+                return 2 if self.guest_cpus > 64 else 1
+        elif self.family == "n2":
+            # Without access to min-cpu-platform to distinguish ICX vs CLX,
+            # we default to the CLX split point (>= 32 vCPUs).
+            return 2 if self.guest_cpus >= 32 else 1
+
         return {
             "h3": 2,
             "h4d": 2,
-            "c2d": 2 if self.guest_cpus > 56 else 1,
             "a3": 2,
             "c2": 2 if self.guest_cpus > 30 else 1,
-            "c3": 2 if self.guest_cpus > 88 else 1,
+            "c2d": 2 if self.guest_cpus > 56 else 1,
+            "c3": 4 if self.guest_cpus > 88 else (2 if self.guest_cpus > 44 else 1),
             "c3d": 2 if self.guest_cpus > 180 else 1,
-            "c4": 2 if self.guest_cpus > 96 else 1,
+            "c4": 4 if self.guest_cpus > 96 else (2 if self.guest_cpus > 48 else 1),
             "c4d": 2 if self.guest_cpus > 192 else 1,
+            "n1": 2 if self.guest_cpus > 64 else 1,
         }.get(
             self.family,
             1,  # assume 1 socket for all other families
@@ -2064,18 +2075,19 @@ class Lookup:
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        machine_conf.threads_per_core = 1
-        _div = 2 if getThreadsPerCore(template) == 1 else 1
+        threadsPerCore = getThreadsPerCore(template)
+        machine_conf.threads_per_core = threadsPerCore
+        _div = 2 if threadsPerCore == 1 else 1
         # Check if visibleCoreCount is specified in the instance template
         visible_cores = template.advancedMachineFeatures.visibleCoreCount
         if visible_cores:
-            machine_conf.cpus = int(visible_cores) * getThreadsPerCore(template)
+            machine_conf.cpus = int(visible_cores) * threadsPerCore
         else:
             machine_conf.cpus = (
                 int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
             )
         # Calculate cores_per_socket once for both cases
-        machine_conf.cores_per_socket = machine_conf.cpus // machine_conf.sockets
+        machine_conf.cores_per_socket = (machine_conf.cpus // machine_conf.threads_per_core) // machine_conf.sockets
         # Because the actual memory on the host will be different than
         # what is configured (e.g. kernel will take it). From
         # experiments, about 16 MB per GB are used (plus about 400 MB
