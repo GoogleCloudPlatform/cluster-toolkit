@@ -102,8 +102,10 @@
 
     - name: CHS run output
       ansible.builtin.debug:
-        msg: "{{ item.stdout_lines }}"
+        msg: "{{ item.stdout }}"
       loop: "{{ chs_runs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
   rescue:
   - name: CHS Test Failure
