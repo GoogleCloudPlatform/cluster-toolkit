@@ -63,7 +63,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_NAME,
 		OS_VERSION,
 		TERRAFORM_VERSION,
-		BILLING_ACCOUNT_ID,
 		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
@@ -115,17 +114,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
-				EXIT_CODE:          "0",
-				COMMAND_FLAGS:      "force,project",
-				REGION:             "us-central1",
-				ZONE:               "us-central1-a",
-				MACHINE_TYPE:       "c2-standard-8",
-				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
-				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
-				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
-				BILLING_ACCOUNT_ID: "",
-				INSTALLATION_MODE:  SOURCE,
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "0",
+				COMMAND_FLAGS:     "force,project",
+				REGION:            "us-central1",
+				ZONE:              "us-central1-a",
+				MACHINE_TYPE:      "c2-standard-8",
+				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
+				INSTALLATION_MODE: SOURCE,
 			},
 		},
 		{
@@ -143,17 +141,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
-				EXIT_CODE:          "1",
-				COMMAND_FLAGS:      "",
-				REGION:             "",
-				ZONE:               "",
-				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
-				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
-				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
-				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
-				BILLING_ACCOUNT_ID: "",
-				INSTALLATION_MODE:  BINARY,
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "1",
+				COMMAND_FLAGS:     "",
+				REGION:            "",
+				ZONE:              "",
+				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
+				INSTALLATION_MODE: BINARY,
 			},
 		},
 	}

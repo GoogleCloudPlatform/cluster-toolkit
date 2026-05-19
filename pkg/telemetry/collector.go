@@ -73,7 +73,6 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
-	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
@@ -91,7 +90,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
 		ProjectNumber:    getProjectNumber(c.blueprint),
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		BillingAccountId: getBillingAccountId(c.blueprint),
 		ReleaseVersion:   getReleaseVersion(),
 		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
