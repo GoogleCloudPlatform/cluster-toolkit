@@ -51,6 +51,9 @@ vars:
   # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
   enable_pathways_for_tpus: true
 
+  # Accelerator type for Kueue configuration
+  accelerator_type: tpu7x
+
 # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
@@ -232,7 +235,7 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * vars.autoscaling_max_node_count * gke-tpu-7x-pool.tpu_chips_per_node)
-          accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
 

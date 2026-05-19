@@ -51,6 +51,10 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
     }
+    precondition {
+      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || try(var.kueue.config_path, "") != "" || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
+      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
+    }
   }
 }
 
