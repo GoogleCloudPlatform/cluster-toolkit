@@ -42,6 +42,7 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
+  version_prefix: "1.35."
 
 deployment_groups:
 - group: primary
@@ -143,8 +144,8 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.35.3-gke.1522000"
-      release_channel: RAPID
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
         start_time: "2025-12-01T00:00:00Z"
