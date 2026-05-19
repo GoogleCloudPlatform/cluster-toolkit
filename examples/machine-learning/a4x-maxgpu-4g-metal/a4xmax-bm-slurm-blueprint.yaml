@@ -303,8 +303,8 @@ deployment_groups:
           set -e -o pipefail
           export DEBIAN_FRONTEND=noninteractive
 
-          # mft depends on dkms
-          apt install -y dkms
+          # Ensure DKMS and headers for the current kernel are installed
+          sudo apt-get install -y dkms linux-headers-\$(uname -r)
 
           mkdir -p /opt/src
           cd /opt/src
@@ -313,15 +313,16 @@ deployment_groups:
           cd mft-4.34.0-145-aarch64-deb
           ./install.sh
           cd ..
-          # remove
           rm -rf mft-4.34.0-145-aarch64-deb
 
-          export DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
+          # Update to a newer DOCA version if available to support kernel 6.17
           BASE_URL=https://linux.mellanox.com/public/repo/doca
-          DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
+          DOCA_VERSION="3.3.0"  # Verify compatibility with kernel 6.17
+          DOCA_SUFFIX="${DOCA_VERSION}/ubuntu24.04/arm64-sbsa/"
           DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
-          curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
-          echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
+          
+          curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub > /dev/null
+          echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" | sudo tee /etc/apt/sources.list.d/doca.list
           sudo apt-get update
           sudo apt-get -y install doca-ofed
       - type: data
@@ -345,13 +346,6 @@ deployment_groups:
           set -e -x
           echo "Enabling openibd service..."
           sudo systemctl enable openibd
-      - type: shell
-        destination: stop_packer_early.sh
-        content: |
-          #!/bin/bash
-          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
-          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: image
   modules:
@@ -366,6 +360,17 @@ deployment_groups:
       source_image_project_id: [$(vars.build_from_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
+      metadata:
+        user-data: |
+          #cloud-config
+          create_hostname_file: true
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
     use:
     - a4x-max-slurm-image-net
     - slurm-build-script
