@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+
+
+#
+
 blueprint_name: gke-a4x
 
 vars:
