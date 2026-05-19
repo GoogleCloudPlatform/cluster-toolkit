@@ -2075,13 +2075,13 @@ class Lookup:
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        threadsPerCore = getThreadsPerCore(template)
-        machine_conf.threads_per_core = threadsPerCore
-        _div = 2 if threadsPerCore == 1 else 1
+        threads_per_core = getThreadsPerCore(template)
+        machine_conf.threads_per_core = threads_per_core
+        _div = 2 if threads_per_core == 1 else 1
         # Check if visibleCoreCount is specified in the instance template
         visible_cores = template.advancedMachineFeatures.visibleCoreCount
         if visible_cores:
-            machine_conf.cpus = int(visible_cores) * threadsPerCore
+            machine_conf.cpus = int(visible_cores) * threads_per_core
         else:
             machine_conf.cpus = (
                 int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
