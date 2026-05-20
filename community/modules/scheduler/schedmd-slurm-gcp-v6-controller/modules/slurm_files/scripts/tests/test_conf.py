@@ -195,7 +195,13 @@ UnkillableStepTimeout=300
 TreeWidth=128
 TopologyParam=SwitchAsNodeRank"""),
     ])
-def test_conflines(cfg, want):
+@pytest.mark.parametrize(
+    "version",
+    ["24.11", "25.05", "25.11"]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines(mock_slurm_version, version, cfg, want):
+    mock_slurm_version.return_value = version
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
@@ -206,6 +212,43 @@ def test_conflines(cfg, want):
     assert conf.conflines(lkp) == want
 
 
+@pytest.mark.parametrize(
+    "version,expect_async",
+    [
+        ("24.11", False),
+        ("25.05", False),
+        ("25.11", True),
+    ]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_async_reply(mock_slurm_version, version, expect_async):
+    cfg = TstCfg(
+        install_dir="ukulele",
+        experimental={
+            "enable_async_reply": True,
+        },
+    )
+    mock_slurm_version.return_value = version
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    
+    res = conf.conflines(lkp)
+    if expect_async:
+        assert "enable_async_reply" in res
+        # Validate exact expected output structure for 25.11 with async reply
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply" in res
+    else:
+        assert "enable_async_reply" not in res
+        # Validate exact expected output structure for older versions without async reply
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
+
+
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["25.05", "25.11"]
+)
 @pytest.mark.parametrize(
     "cfg,gputype,gpucount,want",
     [
@@ -221,8 +264,8 @@ def test_conflines(cfg, want):
          "NodeName=m22-turbo-[0-4] Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
     ])
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
-def test_gen_cloud_gres_conf_lines(mock_slurm_version, cfg, gputype, gpucount, want):
-    mock_slurm_version.return_value = "25.05"
+def test_gen_cloud_gres_conf_lines(mock_slurm_version, version, cfg, gputype, gpucount, want):
+    mock_slurm_version.return_value = version
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type=gputype, count=gpucount)

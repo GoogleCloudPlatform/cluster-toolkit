@@ -131,15 +131,19 @@ def install_topology_conf(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, mode=0o600)
     util.chown_slurm(summary_file, mode=0o600)
 
+class SlurmConfigGeneratorV2411(conf.SlurmConfigGenerator):
+    """Slurm 24.11 configuration generator."""
+
+    def install_jobsubmit_lua(self) -> None:
+        # 24.11 does not support or need job_submit.lua
+        pass
+
+    def generate_topology(self) -> None:
+        # 24.11 uses topology.conf instead of topology.yaml
+        if self.lkp.cfg.nodeset:
+            _, summary = gen_topology_conf(self.lkp)
+            summary.dump(self.lkp)
+            install_topology_conf(self.lkp)
+
 def generate_configs_slurm_v2411(lkp: util.Lookup) -> None:
-    conf.install_slurm_conf(lkp)
-    conf.install_slurmdbd_conf(lkp)
-    conf.gen_cloud_conf(lkp)
-    conf.gen_cloud_gres_conf(lkp)
-    conf.install_gres_conf(lkp)
-    conf.install_cgroup_conf(lkp)
-    # do not generate topology until nodesets are present
-    if lkp.cfg.nodeset:
-        _, summary = gen_topology_conf(lkp)
-        summary.dump(lkp)
-        install_topology_conf(lkp)
+    SlurmConfigGeneratorV2411(lkp).generate_configs()
