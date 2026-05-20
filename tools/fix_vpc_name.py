@@ -24,7 +24,7 @@ def modify_vpcs(blueprint_path, prefix):
     if data and 'deployment_groups' in data:
         for group in data['deployment_groups']:
             for module in group.get('modules', []):
-                if module.get('source') == 'modules/file-system/filestore':
+                if module.get('source') in ['modules/file-system/filestore', 'modules/file-system/managed-lustre']:
                     uses = module.get('use', [])
                     for u in uses:
                         for g2 in data['deployment_groups']:
