@@ -37,3 +37,7 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
                 conf_options["SlurmctldParameters"] = ["enable_async_reply"]
                 
         return conf_options
+
+
+def generate_configs_slurm_v2511(lkp: util.Lookup) -> None:
+    SlurmConfigGeneratorV2511(lkp).generate_configs()
