@@ -55,6 +55,22 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || try(var.kueue.config_path, "") != "" || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
     }
+    precondition {
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || var.kueue.accelerator_topology_mode == "PROVISION_ONLY"
+      error_message = "When enable_dynamic_slicing_for_tpus is true, accelerator_topology_mode must be 'PROVISION_ONLY'."
+    }
+    precondition {
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || var.kueue.enable_slice_controller == true
+      error_message = "When enable_dynamic_slicing_for_tpus is true, enable_slice_controller must be true."
+    }
+    precondition {
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || length(regexall("^tpu7x", coalesce(var.kueue.machine_type, ""))) > 0
+      error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a tpu7x machine type."
+    }
+    precondition {
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || try(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type"))
+      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
+    }
   }
 }
 
@@ -128,14 +144,18 @@ variable "kueue" {
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
     # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go. (note the 'v' prefix there)
-    version                  = optional(string, "0.17.1")
-    install                  = optional(bool, false)
-    config_path              = optional(string, null)
-    config_template_vars     = optional(map(any), null)
-    enable_pathways_for_tpus = optional(bool, false)
-    controller_cpu           = optional(string, null)
-    controller_memory        = optional(string, null)
-    controller_replicas      = optional(number, null)
+    version                         = optional(string, "0.17.1")
+    install                         = optional(bool, false)
+    config_path                     = optional(string, null)
+    config_template_vars            = optional(map(any), null)
+    enable_pathways_for_tpus        = optional(bool, false)
+    enable_dynamic_slicing_for_tpus = optional(bool, false)
+    accelerator_topology_mode       = optional(string, null)
+    machine_type                    = optional(string, null)
+    enable_slice_controller         = optional(bool, null)
+    controller_cpu                  = optional(string, null)
+    controller_memory               = optional(string, null)
+    controller_replicas             = optional(number, null)
   })
   default = {}
 }
