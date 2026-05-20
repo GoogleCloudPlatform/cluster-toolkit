@@ -67,6 +67,24 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "slurm_backup_controller_name" {
+  type        = string
+  description = "The backup controller name."
+  default     = null
+}
+
+variable "accounting_storage_backup_host" {
+  type        = string
+  description = "The backup accounting storage host."
+  default     = null
+}
+
+variable "backup_controller_key_timeout" {
+  description = "The time in seconds for the backup controller to wait for the shared key to become available."
+  type        = number
+  default     = 300
+}
+
 variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.

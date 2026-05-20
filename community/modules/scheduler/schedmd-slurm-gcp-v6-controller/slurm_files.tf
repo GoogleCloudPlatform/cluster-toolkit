@@ -137,6 +137,7 @@ module "slurm_files" {
 
   project_id                    = var.project_id
   slurm_cluster_name            = local.slurm_cluster_name
+  slurm_backup_controller_name  = var.enable_backup_controller ? local.slurm_backup_controller_name : null
   bucket_dir                    = var.bucket_dir
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
