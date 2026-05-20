@@ -132,8 +132,10 @@ limitations under the License.
 | <a name="output_additional_networks"></a> [additional\_networks](#output\_additional\_networks) | Network interfaces for each subnetwork created by this module |
 | <a name="output_network_ids"></a> [network\_ids](#output\_network\_ids) | IDs of the new VPC network |
 | <a name="output_network_names"></a> [network\_names](#output\_network\_names) | Names of the new VPC networks |
+| <a name="output_network_project_ids"></a> [network\_project\_ids](#output\_network\_project\_ids) | Project IDs of the new VPC networks |
 | <a name="output_network_self_links"></a> [network\_self\_links](#output\_network\_self\_links) | Self link of the new VPC network |
 | <a name="output_subnetwork_addresses"></a> [subnetwork\_addresses](#output\_subnetwork\_addresses) | IP address range of the primary subnetwork |
 | <a name="output_subnetwork_names"></a> [subnetwork\_names](#output\_subnetwork\_names) | Names of the subnetwork created in each network |
+| <a name="output_subnetwork_project_ids"></a> [subnetwork\_project\_ids](#output\_subnetwork\_project\_ids) | Project IDs of the subnetworks |
 | <a name="output_subnetwork_self_links"></a> [subnetwork\_self\_links](#output\_subnetwork\_self\_links) | Self link of the primary subnetwork |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

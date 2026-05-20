@@ -112,7 +112,7 @@ source "googlecompute" "toolkit_image" {
   omit_external_ip            = var.omit_external_ip
   use_internal_ip             = var.omit_external_ip
   subnetwork                  = var.subnetwork_name
-  network_project_id          = var.network_project_id
+  network_project_id          = var.network_project_id != null ? var.network_project_id : var.subnetwork_project_id
   service_account_email       = var.service_account_email
   scopes                      = var.service_account_scopes
   source_image                = var.source_image

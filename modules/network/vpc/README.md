@@ -237,10 +237,12 @@ limitations under the License.
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the new VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |
+| <a name="output_network_project_id"></a> [network\_project\_id](#output\_network\_project\_id) | Project ID of the new VPC network |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the new VPC network |
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Primary subnetwork object |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | IP address range of the primary subnetwork |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the primary subnetwork |
+| <a name="output_subnetwork_project_id"></a> [subnetwork\_project\_id](#output\_subnetwork\_project\_id) | Project ID of the primary subnetwork |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Self link of the primary subnetwork |
 | <a name="output_subnetwork_stack_type"></a> [subnetwork\_stack\_type](#output\_subnetwork\_stack\_type) | Stack type of the primary subnetwork |
 | <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | Full list of subnetwork objects belonging to the new VPC network |

@@ -139,9 +139,11 @@ limitations under the License.
 | ---- | ----------- |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the new VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |
+| <a name="output_network_project_id"></a> [network\_project\_id](#output\_network\_project\_id) | Project ID of the new VPC network |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the new VPC network |
 | <a name="output_subnetwork_interfaces"></a> [subnetwork\_interfaces](#output\_subnetwork\_interfaces) | Full list of subnetwork objects belonging to the new VPC network (compatible with vm-instance and Slurm modules) |
 | <a name="output_subnetwork_interfaces_gke"></a> [subnetwork\_interfaces\_gke](#output\_subnetwork\_interfaces\_gke) | Full list of subnetwork objects belonging to the new VPC network (compatible with gke-node-pool) |
 | <a name="output_subnetwork_name_prefix"></a> [subnetwork\_name\_prefix](#output\_subnetwork\_name\_prefix) | Prefix of the RDMA subnetwork names |
+| <a name="output_subnetwork_project_id"></a> [subnetwork\_project\_id](#output\_subnetwork\_project\_id) | Project ID of the primary subnetwork |
 | <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | Full list of subnetwork objects belonging to the new VPC network |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
