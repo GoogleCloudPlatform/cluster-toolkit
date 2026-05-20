@@ -246,6 +246,10 @@ def test_conflines_async_reply(mock_slurm_version, version, expect_async):
 
 
 @pytest.mark.parametrize(
+    "version",
+    ["25.05", "25.11"]
+)
+@pytest.mark.parametrize(
     "cfg,gputype,gpucount,want",
     [
         (TstCfg(),
@@ -260,8 +264,8 @@ def test_conflines_async_reply(mock_slurm_version, version, expect_async):
          "NodeName=m22-turbo-[0-4] Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
     ])
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
-def test_gen_cloud_gres_conf_lines(mock_slurm_version, cfg, gputype, gpucount, want):
-    mock_slurm_version.return_value = "25.11"
+def test_gen_cloud_gres_conf_lines(mock_slurm_version, version, cfg, gputype, gpucount, want):
+    mock_slurm_version.return_value = version
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
