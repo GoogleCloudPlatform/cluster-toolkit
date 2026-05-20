@@ -25,7 +25,7 @@ vars:
   hostname_prefix: $(vars.deployment_name)
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
+    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260225
   instance_image:
     project: $(vars.project_id)
     family: jbvm-ubuntu2404-accelerator-arm64
