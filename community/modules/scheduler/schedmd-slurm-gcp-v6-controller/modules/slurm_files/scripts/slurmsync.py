@@ -47,7 +47,6 @@ from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
-import conf_v2505
 import conf_v2411
 import watch_delete_vm_op
 import repair
@@ -468,12 +467,7 @@ def reconfigure_slurm():
     util.update_config(cfg_new)
 
     if lookup().is_controller:
-        if util.slurm_version_gte(lookup().slurm_version, "25.11"):
-            conf.generate_configs_slurm_v2511(lookup())
-        elif util.slurm_version_gte(lookup().slurm_version, "25.05"):
-            conf_v2505.generate_configs_slurm_v2505(lookup())
-        else:
-            conf_v2411.generate_configs_slurm_v2411(lookup())
+        conf.get_generator(lookup()).generate_configs()
 
         log.info("Restarting slurmctld to make changes take effect.")
         try:
