@@ -262,44 +262,99 @@ deployment_groups:
                 state: stopped
                 enabled: false
 
-      - type: shell
-        destination: install_dmabuf_patched.sh
+      - type: ansible-local
+        destination: install_dmabuf.yml
         content: |
-          #!/bin/bash
-          set -ex -o pipefail
+          ---
+          - name: Install patched DMABUF import helper
+            hosts: all
+            become: true
+            tasks:
+            - name: Setup apt-transport-artifact-registry repository
+              ansible.builtin.apt_repository:
+                repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
+                state: present
+                filename: artifact-registry
 
-          # 1. Add Artifact Registry apt repo driver repo
-          echo "deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main" > /etc/apt/sources.list.d/artifact-registry.list
-          apt-get update
-          apt-get install -y apt-transport-artifact-registry
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - apt-transport-artifact-registry
+                - dkms
+                state: present
+                update_cache: true
 
-          # 2. Now add the ar+https repo
-          echo "deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main" > /etc/apt/sources.list.d/gpudirect-tcpxo.list
+            - name: Setup gpudirect-tcpxo apt repository
+              ansible.builtin.apt_repository:
+                repo: deb [arch=all trusted=yes] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                state: present
+                filename: gpudirect-tcpxo
 
-          # 3. Install dependencies
-          apt-get update
-          apt-get install -y dkms
+            - name: Create temp directory for dmabuf package
+              ansible.builtin.file:
+                path: /tmp/dmabuf_pkg
+                state: directory
+                mode: '0755'
 
-          # 3. Download package
-          mkdir -p /tmp/dmabuf_pkg
-          cd /tmp/dmabuf_pkg
-          apt-get update # Update again to make sure we see the new repo
-          apt-get download dmabuf-import-helper
+            - name: Download dmabuf-import-helper package
+              ansible.builtin.command:
+                cmd: apt-get download dmabuf-import-helper
+                chdir: /tmp/dmabuf_pkg
+              register: download_res
+              changed_when: download_res.rc == 0
 
-          # 4. Extract package
-          dpkg -x *.deb .
+            - name: Extract dmabuf-import-helper deb package
+              ansible.builtin.command:
+                cmd: dpkg-deb -x "{{ item }}" .
+                chdir: /tmp/dmabuf_pkg
+              with_fileglob:
+              - "/tmp/dmabuf_pkg/*.deb"
+              register: extract_res
+              changed_when: extract_res.rc == 0
 
-          # 5. Move source to /usr/src
-          rm -rf /usr/src/dmabuf-import-helper-1.1
-          mv usr/src/dmabuf-import-helper-1.1 /usr/src/
+            - name: Clean existing dmabuf source in /usr/src
+              ansible.builtin.file:
+                path: /usr/src/dmabuf-import-helper-1.1
+                state: absent
 
-          # 6. Apply fix for kernel 6.17
-          sed -i 's/MODULE_IMPORT_NS(DMA_BUF)/MODULE_IMPORT_NS("DMA_BUF")/' /usr/src/dmabuf-import-helper-1.1/import-helper.c
+            - name: Move dmabuf-import-helper source to /usr/src
+              ansible.builtin.command:
+                cmd: mv /tmp/dmabuf_pkg/usr/src/dmabuf-import-helper-1.1 /usr/src/
+              register: move_res
+              changed_when: move_res.rc == 0
 
-          # 7. Build and install via DKMS
-          dkms add -m dmabuf-import-helper -v 1.1
-          dkms build -m dmabuf-import-helper -v 1.1
-          dkms install -m dmabuf-import-helper -v 1.1
+            - name: Patch import-helper.c for kernel 6.17 compatibility
+              ansible.builtin.replace:
+                path: /usr/src/dmabuf-import-helper-1.1/import-helper.c
+                regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
+                replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+
+            - name: Check if dmabuf-import-helper DKMS module is already added
+              ansible.builtin.command:
+                cmd: dkms status -m dmabuf-import-helper -v 1.1
+              register: dkms_status
+              failed_when: false
+              changed_when: false
+
+            - name: Add dmabuf-import-helper to DKMS
+              ansible.builtin.command:
+                cmd: dkms add -m dmabuf-import-helper -v 1.1
+              when: "'added' not in dkms_status.stdout and 'installed' not in dkms_status.stdout"
+
+            - name: Build dmabuf-import-helper via DKMS
+              ansible.builtin.command:
+                cmd: dkms build -m dmabuf-import-helper -v 1.1
+              when: "'installed' not in dkms_status.stdout"
+
+            - name: Install dmabuf-import-helper via DKMS
+              ansible.builtin.command:
+                cmd: dkms install -m dmabuf-import-helper -v 1.1
+              when: "'installed' not in dkms_status.stdout"
+
+            - name: Clean up temp directory
+              ansible.builtin.file:
+                path: /tmp/dmabuf_pkg
+                state: absent
       - type: ansible-local
         destination: aperture_devices.yml
         content: |
@@ -392,6 +447,9 @@ deployment_groups:
       metadata:
         user-data: |
           #cloud-config
+          prefer_fqdn_over_hostname: false
+          preserve_hostname: true
+          create_hostname_file: true
           write_files:
           - path: /etc/apt/apt.conf.d/20auto-upgrades
             permissions: '0644'
@@ -669,7 +727,7 @@ deployment_groups:
       machine_type: c2-standard-8
       enable_cleanup_compute: true
       enable_external_prolog_epilog: true
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       controller_startup_script: $(controller_startup.startup_script)
       login_startup_script: |
         #!/bin/bash
