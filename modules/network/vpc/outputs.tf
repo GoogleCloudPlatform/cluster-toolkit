@@ -73,7 +73,7 @@ output "nat_ips" {
   value       = flatten([for ipmod in module.nat_ip_addresses : ipmod.addresses])
 }
 
-output "additional_networks" {
+output "instance_additional_networks" {
   description = "Network interface details compatible with gke-node-pool additional_networks"
   value       = local.output_subnets_gke
   depends_on  = [module.vpc, module.cloud_router]

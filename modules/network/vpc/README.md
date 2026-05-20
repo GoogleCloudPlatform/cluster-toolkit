@@ -233,7 +233,7 @@ limitations under the License.
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_additional_networks"></a> [additional\_networks](#output\_additional\_networks) | Network interface details compatible with gke-node-pool additional\_networks |
+| <a name="output_instance_additional_networks"></a> [instance\_additional\_networks](#output\_instance\_additional\_networks) | Network interface details compatible with gke-node-pool additional\_networks |
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the new VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |
