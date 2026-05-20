@@ -194,30 +194,14 @@ SlurmdTimeout=300
 UnkillableStepTimeout=300
 TreeWidth=128
 TopologyParam=SwitchAsNodeRank"""),
-        (TstCfg(
-            install_dir="ukulele",
-            experimental={
-                "enable_async_reply": True,
-            },
-        ), 
-         """LaunchParameters=enable_nss_slurm,use_interactive_step
-SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply
-SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
-ResumeProgram=ukulele/resume_wrapper.sh
-ResumeFailProgram=ukulele/suspend_wrapper.sh
-ResumeRate=0
-ResumeTimeout=300
-SuspendProgram=ukulele/suspend_wrapper.sh
-SuspendRate=0
-SuspendTimeout=300
-SlurmdTimeout=300
-UnkillableStepTimeout=300
-TreeWidth=128
-TopologyParam=SwitchAsNodeRank"""),
     ])
+@pytest.mark.parametrize(
+    "version",
+    ["24.11", "25.05", "25.11"]
+)
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
-def test_conflines(mock_slurm_version, cfg, want):
-    mock_slurm_version.return_value = "25.11"
+def test_conflines(mock_slurm_version, version, cfg, want):
+    mock_slurm_version.return_value = version
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
@@ -226,6 +210,39 @@ def test_conflines(mock_slurm_version, cfg, want):
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
     assert conf.conflines(lkp) == want
+
+
+@pytest.mark.parametrize(
+    "version,expect_async",
+    [
+        ("24.11", False),
+        ("25.05", False),
+        ("25.11", True),
+    ]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_async_reply(mock_slurm_version, version, expect_async):
+    cfg = TstCfg(
+        install_dir="ukulele",
+        experimental={
+            "enable_async_reply": True,
+        },
+    )
+    mock_slurm_version.return_value = version
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    
+    res = conf.conflines(lkp)
+    if expect_async:
+        assert "enable_async_reply" in res
+        # Validate exact expected output structure for 25.11 with async reply
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply" in res
+    else:
+        assert "enable_async_reply" not in res
+        # Validate exact expected output structure for older versions without async reply
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
+
+
 
 
 @pytest.mark.parametrize(

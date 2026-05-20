@@ -79,94 +79,151 @@ def topology_plugin(lkp: util.Lookup) -> str:
         return TOPOLOGY_TREE
     return cp[key]
 
+class SlurmConfigGenerator:
+    """Base Slurm configuration generator. Represents Slurm 25.05 baseline."""
+
+    def __init__(self, lkp: util.Lookup):
+        self.lkp = lkp
+
+    def get_conf_options(self) -> dict:
+        params = self.lkp.cfg.cloud_parameters
+        def get(key, default):
+            """
+            Returns the value of the key in params if it exists and is not None,
+            otherwise returns supplied default.
+            We can't rely on the `dict.get` method because the value could be `None` as
+            well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
+            TODO: Simplify once NSDict is removed from the codebase.
+            """
+            if key not in params or params[key] is None:
+                return default
+            return params[key]
+
+        no_comma_params = get("no_comma_params", False)
+
+        any_gpus = any(
+            self.lkp.template_info(nodeset.instance_template).gpu
+            for nodeset in self.lkp.cfg.nodeset.values()
+        )
+
+        any_tpu = any(
+            tpu_nodeset is not None
+            for part in self.lkp.cfg.partitions.values()
+            for tpu_nodeset in part.partition_nodeset_tpu
+        )
+
+        any_gke = any(
+            self.lkp.nodeset_is_gke(nodeset)
+            for nodeset in self.lkp.cfg.nodeset.values()
+        )
+
+        any_dynamic = any(bool(p.partition_feature) for p in self.lkp.cfg.partitions.values())
+        comma_params = {
+            "LaunchParameters": [
+                "enable_nss_slurm",
+                "use_interactive_step",
+            ],
+            "SlurmctldParameters": [
+                "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
+                "enable_configless",
+                "idle_on_node_suspend",
+            ],
+            "GresTypes": [
+                "gpu" if any_gpus else None,
+            ],
+        }
+
+        scripts_dir = self.lkp.cfg.install_dir or dirs.scripts
+        prolog_path = Path(dirs.custom_scripts / "prolog.d")
+        epilog_path = Path(dirs.custom_scripts / "epilog.d")
+        task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
+        task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
+        default_tree_width = 65533 if any_dynamic else 128
+
+        return {
+            **(comma_params if not no_comma_params else {}),
+            "Prolog": f"{prolog_path}/*" if self.lkp.cfg.prolog_scripts else None,
+            "Epilog": f"{epilog_path}/*" if self.lkp.cfg.epilog_scripts else None,
+            "TaskProlog": f"{task_prolog_path}/task-prolog" if self.lkp.cfg.task_prolog_scripts else None,
+            "TaskEpilog": f"{task_epilog_path}/task-epilog" if self.lkp.cfg.task_epilog_scripts else None,
+            "PrologFlags": get("prolog_flags", None),
+            "SwitchType": get("switch_type", None),
+            "PrivateData": get("private_data", []),
+            "SchedulerParameters": get("scheduler_parameters", [
+                "bf_continue",
+                "salloc_wait_nodes",
+                "ignore_prefer_validation",
+            ]),
+            "ResumeProgram": f"{scripts_dir}/resume_wrapper.sh",
+            "ResumeFailProgram": f"{scripts_dir}/suspend_wrapper.sh",
+            "ResumeRate": get("resume_rate", 0),
+            "ResumeTimeout": get("resume_timeout", 300),
+            "SuspendProgram": f"{scripts_dir}/suspend_wrapper.sh",
+            "SuspendRate": get("suspend_rate", 0),
+            "SuspendTimeout": get("suspend_timeout", 300),
+            "SlurmdTimeout": get("slurmd_timeout", 300),
+            "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
+            "TreeWidth": get("tree_width", default_tree_width),
+            "JobSubmitPlugins": "lua" if any_tpu else None,
+            "TopologyPlugin": topology_plugin(self.lkp) if self.lkp.cfg.nodeset else None,
+            "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
+        }
+
+    def conflines(self) -> str:
+        conf_options = self.get_conf_options()
+        return dict_to_conf(conf_options, delim="\n")
+
+    def make_cloud_conf(self) -> str:
+        """generate cloud.conf snippet"""
+        lines = [
+            FILE_PREAMBLE,
+            self.conflines(),
+            *(nodeset_lines(n, self.lkp) for n in self.lkp.cfg.nodeset.values()),
+            *(nodeset_dyn_lines(n) for n in self.lkp.cfg.nodeset_dyn.values()),
+            *(nodeset_tpu_lines(n, self.lkp) for n in self.lkp.cfg.nodeset_tpu.values()),
+            *(partitionlines(p, self.lkp) for p in self.lkp.cfg.partitions.values()),
+            *(suspend_exc_lines(self.lkp)),
+        ]
+        return "\n\n".join(filter(None, lines))
+
+    def gen_cloud_conf(self) -> None:
+        content = self.make_cloud_conf()
+        conf_file = self.lkp.etc_dir / "cloud.conf"
+        conf_file.write_text(content)
+        util.chown_slurm(conf_file, mode=0o644)
+
+    def generate_topology(self) -> None:
+        if self.lkp.cfg.nodeset:
+            _, summary = gen_topology_yaml(self.lkp)
+            summary.dump(self.lkp)
+            install_topology_yaml(self.lkp)
+
+    def install_jobsubmit_lua(self) -> None:
+        install_jobsubmit_lua(self.lkp)
+
+    def generate_configs(self) -> None:
+        install_slurm_conf(self.lkp)
+        install_slurmdbd_conf(self.lkp)
+        self.gen_cloud_conf()
+        gen_cloud_gres_conf(self.lkp)
+        install_gres_conf(self.lkp)
+        install_cgroup_conf(self.lkp)
+        self.install_jobsubmit_lua()
+        self.generate_topology()
+
+def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
+    """Factory function to return the correct Slurm config generator version."""
+    if util.slurm_version_gte(lkp.slurm_version, "25.11"):
+        from conf_v2511 import SlurmConfigGeneratorV2511
+        return SlurmConfigGeneratorV2511(lkp)
+    elif util.slurm_version_gte(lkp.slurm_version, "25.05"):
+        return SlurmConfigGenerator(lkp)
+    else:
+        from conf_v2411 import SlurmConfigGeneratorV2411
+        return SlurmConfigGeneratorV2411(lkp)
+
 def conflines(lkp: util.Lookup) -> str:
-    params = lkp.cfg.cloud_parameters
-    def get(key, default):
-        """
-        Returns the value of the key in params if it exists and is not None,
-        otherwise returns supplied default.
-        We can't rely on the `dict.get` method because the value could be `None` as
-        well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
-        TODO: Simplify once NSDict is removed from the codebase.
-        """
-        if key not in params or params[key] is None:
-            return default
-        return params[key]
-
-    no_comma_params = get("no_comma_params", False)
-
-    experimental = lkp.cfg.get("experimental", {}) or {}
-    enable_async_reply = experimental.get("enable_async_reply", False)
-
-    any_gpus = any(
-        lkp.template_info(nodeset.instance_template).gpu
-        for nodeset in lkp.cfg.nodeset.values()
-    )
-
-    any_tpu = any(
-        tpu_nodeset is not None
-        for part in lkp.cfg.partitions.values()
-        for tpu_nodeset in part.partition_nodeset_tpu
-    )
-
-    any_gke = any(
-        lkp.nodeset_is_gke(nodeset)
-        for nodeset in lkp.cfg.nodeset.values()
-    )
-
-    any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
-    comma_params = {
-        "LaunchParameters": [
-            "enable_nss_slurm",
-            "use_interactive_step",
-        ],
-        "SlurmctldParameters": [
-            "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
-            "enable_configless",
-            "idle_on_node_suspend",
-            "enable_async_reply" if enable_async_reply else None,
-        ],
-        "GresTypes": [
-            "gpu" if any_gpus else None,
-        ],
-    }
-
-    scripts_dir = lkp.cfg.install_dir or dirs.scripts
-    prolog_path = Path(dirs.custom_scripts / "prolog.d")
-    epilog_path = Path(dirs.custom_scripts / "epilog.d")
-    task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
-    task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
-    default_tree_width = 65533 if any_dynamic else 128
-
-    conf_options = {
-        **(comma_params if not no_comma_params else {}),
-        "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
-        "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
-        "TaskProlog": f"{task_prolog_path}/task-prolog" if lkp.cfg.task_prolog_scripts else None,
-        "TaskEpilog": f"{task_epilog_path}/task-epilog" if lkp.cfg.task_epilog_scripts else None,
-        "PrologFlags": get("prolog_flags", None),
-        "SwitchType": get("switch_type", None),
-        "PrivateData": get("private_data", []),
-        "SchedulerParameters": get("scheduler_parameters", [
-            "bf_continue",
-            "salloc_wait_nodes",
-            "ignore_prefer_validation",
-        ]),
-        "ResumeProgram": f"{scripts_dir}/resume_wrapper.sh",
-        "ResumeFailProgram": f"{scripts_dir}/suspend_wrapper.sh",
-        "ResumeRate": get("resume_rate", 0),
-        "ResumeTimeout": get("resume_timeout", 300),
-        "SuspendProgram": f"{scripts_dir}/suspend_wrapper.sh",
-        "SuspendRate": get("suspend_rate", 0),
-        "SuspendTimeout": get("suspend_timeout", 300),
-        "SlurmdTimeout": get("slurmd_timeout", 300),
-        "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
-        "TreeWidth": get("tree_width", default_tree_width),
-        "JobSubmitPlugins": "lua" if any_tpu else None,
-        "TopologyPlugin": topology_plugin(lkp) if lkp.cfg.nodeset else None,
-        "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
-    }
-    return dict_to_conf(conf_options, delim="\n")
+    return get_generator(lkp).conflines()
 
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
@@ -290,25 +347,11 @@ def suspend_exc_lines(lkp: util.Lookup) -> Iterable[str]:
 
 
 def make_cloud_conf(lkp: util.Lookup) -> str:
-    """generate cloud.conf snippet"""
-    lines = [
-        FILE_PREAMBLE,
-        conflines(lkp),
-        *(nodeset_lines(n, lkp) for n in lkp.cfg.nodeset.values()),
-        *(nodeset_dyn_lines(n) for n in lkp.cfg.nodeset_dyn.values()),
-        *(nodeset_tpu_lines(n, lkp) for n in lkp.cfg.nodeset_tpu.values()),
-        *(partitionlines(p, lkp) for p in lkp.cfg.partitions.values()),
-        *(suspend_exc_lines(lkp)),
-    ]
-    return "\n\n".join(filter(None, lines))
+    return get_generator(lkp).make_cloud_conf()
 
 
 def gen_cloud_conf(lkp: util.Lookup) -> None:
-    content = make_cloud_conf(lkp)
-
-    conf_file = lkp.etc_dir / "cloud.conf"
-    conf_file.write_text(content)
-    util.chown_slurm(conf_file, mode=0o644)
+    get_generator(lkp).gen_cloud_conf()
 
 
 def install_slurm_conf(lkp: util.Lookup) -> None:
@@ -779,14 +822,4 @@ def install_topology_yaml(lkp: util.Lookup) -> None:
 
 
 def generate_configs_slurm_v2511(lkp: util.Lookup) -> None:
-    install_slurm_conf(lkp)
-    install_slurmdbd_conf(lkp)
-    gen_cloud_conf(lkp)
-    gen_cloud_gres_conf(lkp)
-    install_gres_conf(lkp)
-    install_cgroup_conf(lkp)
-    install_jobsubmit_lua(lkp)
-    if lkp.cfg.nodeset:
-        _, summary = gen_topology_yaml(lkp)
-        summary.dump(lkp)
-        install_topology_yaml(lkp)
+    get_generator(lkp).generate_configs()
