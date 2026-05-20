@@ -25,7 +25,7 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
         conf_options = super().get_conf_options()
         
         # Add experimental enable_async_reply feature if requested
-        experimental = self.lkp.cfg.get("experimental", {}) or {}
+        experimental = self.lkp.cfg.experimental or {}
         enable_async_reply = experimental.get("enable_async_reply", False)
         
         if enable_async_reply:
