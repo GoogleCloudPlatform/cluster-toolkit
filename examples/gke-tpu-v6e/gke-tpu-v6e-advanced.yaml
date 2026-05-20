@@ -187,21 +187,7 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-tpu-v6e-net-1.network_name,
-            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-tpu-v6e-net-1.instance_additional_networks)
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: $(vars.version_prefix)
@@ -224,21 +210,7 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-tpu-v6e-net-1.network_name,
-            subnetwork=gke-tpu-v6e-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-tpu-v6e-net-1.instance_additional_networks)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
