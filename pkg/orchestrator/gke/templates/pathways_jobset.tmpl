@@ -41,7 +41,7 @@ spec:
         backoffLimit: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -60,7 +60,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if not .Pathways.Headless}}
             initContainers:
@@ -138,7 +138,7 @@ spec:
                 {{.CommandToRun}}
 {{- if .VolumeMountsYAML }}
               volumeMounts:
-{{.VolumeMountsYAML}}
+{{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
@@ -150,7 +150,7 @@ spec:
               hostPath:
                 path: /tmp
                 type: DirectoryOrCreate
-{{.VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -161,7 +161,7 @@ spec:
         backoffLimit: {{.WorkerBackoffLimit}}
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -178,7 +178,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if .PriorityClassName }}
             priorityClassName: {{.PriorityClassName}}
@@ -234,7 +234,7 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-{{.ResourcesString}}
+{{(StructuralData .ResourcesString)}}
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
@@ -243,16 +243,16 @@ spec:
               hostPath:
                 path: /tmp
                 type: DirectoryOrCreate
-{{.VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
 {{- if .NodeSelector }}
             nodeSelector:
-{{.NodeSelector}}
+{{(StructuralData .NodeSelector)}}
 {{- end }}
 {{- if .Affinity }}
             affinity:
-{{.Affinity}}
+{{(StructuralData .Affinity)}}
 {{- end }}
 {{- if .Tolerations }}
             tolerations:
-{{.Tolerations}}
+{{(StructuralData .Tolerations)}}
 {{- end }}
