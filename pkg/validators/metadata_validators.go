@@ -461,3 +461,127 @@ func (c *ConditionalValidator) Validate(
 	}
 	return nil
 }
+
+// ConditionalRegexValidator enforces that a 'dependent' variable matches or does not match
+// a regex 'pattern' when one or more 'triggers' meet their expected values.
+type ConditionalRegexValidator struct{}
+
+func (c *ConditionalRegexValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int,
+) error {
+	modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+
+	triggers, dependent, re, matchExpected, err := parseRuleInputs(rule, string(mod.ID), modPath)
+	if err != nil {
+		return err
+	}
+
+	if !evalTriggers(bp, group, modIdx, mod, triggers) {
+		return nil
+	}
+
+	dependentVal, depPath := getSettingWithFallback(bp, group, modIdx, mod, dependent)
+	if dependentVal.IsNull() || dependentVal == cty.NilVal || dependentVal.Type() != cty.String {
+		return nil
+	}
+
+	matched := re.MatchString(dependentVal.AsString())
+	if matched != matchExpected {
+		msg := rule.ErrorMessage
+		if msg == "" {
+			if matchExpected {
+				msg = fmt.Sprintf("variable %q value %q must match pattern %q when conditions are met", dependent, dependentVal.AsString(), re.String())
+			} else {
+				msg = fmt.Sprintf("variable %q value %q must not match pattern %q when conditions are met", dependent, dependentVal.AsString(), re.String())
+			}
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
+	}
+
+	return nil
+}
+
+func parseRuleInputs(rule modulereader.ValidationRule, modID string, modPath config.Path) (map[string]interface{}, string, *regexp.Regexp, bool, error) {
+	triggersRaw, ok := rule.Inputs["triggers"].(map[string]interface{})
+	if !ok {
+		trigger, ok := rule.Inputs["trigger"].(string)
+		if !ok {
+			return nil, "", nil, false, config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'triggers' or 'trigger'", modID), Path: modPath}
+		}
+		triggersRaw = map[string]interface{}{trigger: rule.Inputs["trigger_value"]}
+	}
+
+	dependentName, ok := parseString(rule.Inputs["dependent"])
+	if !ok {
+		return nil, "", nil, false, config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'dependent'", modID), Path: modPath}
+	}
+
+	patternRaw, ok := rule.Inputs["pattern"].(string)
+	if !ok || patternRaw == "" {
+		return nil, "", nil, false, config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'pattern'", modID), Path: modPath}
+	}
+
+	re, err := regexp.Compile(patternRaw)
+	if err != nil {
+		return nil, "", nil, false, config.BpError{Err: fmt.Errorf("failed to compile regex for module %q: %v", modID, err), Path: modPath}
+	}
+
+	matchExpected, err := parseBoolInput(rule.Inputs, "match_expected", true)
+	if err != nil {
+		return nil, "", nil, false, config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", modID, err), Path: modPath}
+	}
+
+	return triggersRaw, dependentName, re, matchExpected, nil
+}
+
+func getSettingWithFallback(
+	bp config.Blueprint,
+	group config.Group,
+	modIdx int,
+	mod config.Module,
+	name string,
+) (cty.Value, config.Path) {
+	if vals, path, err := getModuleSettingValues(bp, group, modIdx, mod, name); err == nil && len(vals) > 0 {
+		return vals[0], path
+	}
+	path := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(name)
+	info := mod.InfoOrDie()
+	for _, input := range info.Inputs {
+		if input.Name == name {
+			if input.Default != nil {
+				return convertToCty(input.Default), path
+			}
+			break
+		}
+	}
+	return cty.NilVal, path
+}
+
+func evalTriggers(
+	bp config.Blueprint,
+	group config.Group,
+	modIdx int,
+	mod config.Module,
+	triggers map[string]interface{},
+) bool {
+	for name, expectedValRaw := range triggers {
+		expectedVal := convertToCty(expectedValRaw)
+		actualVal, _ := getSettingWithFallback(bp, group, modIdx, mod, name)
+
+		var matches bool
+		if actualVal.IsNull() || actualVal == cty.NilVal {
+			matches = !isVarSet([]cty.Value{expectedVal}) || expectedVal.False()
+		} else {
+			matches = actualVal.Equals(expectedVal).True()
+		}
+
+		if !matches {
+			return false
+		}
+	}
+	return true
+}
