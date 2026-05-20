@@ -878,7 +878,3 @@ def install_topology_yaml(lkp: util.Lookup) -> None:
 
     util.chown_slurm(yaml_file, mode=0o644)
     util.chown_slurm(summary_file, mode=0o600)
-
-
-def generate_configs_slurm_v2511(lkp: util.Lookup) -> None:
-    get_generator(lkp).generate_configs()
