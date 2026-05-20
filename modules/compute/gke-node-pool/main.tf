@@ -313,6 +313,16 @@ resource "google_container_node_pool" "node_pool" {
       # Ignore local/ephemeral ssd configs as they are tied to machine types.
       node_config[0].ephemeral_storage_local_ssd_config,
       node_config[0].local_nvme_ssd_block_config,
+      # GKE's API does not persist `placementPolicy.type` — only
+      # `placementPolicy.policyName` round-trips on refresh. The
+      # resource-policy module's `placement_policy` output sets
+      # `type = "COMPACT"` whenever `workload_policy.type != null`,
+      # which causes terraform to plan `placement_policy.type:
+      # null -> "COMPACT"` on every refresh after the first apply,
+      # which in turn triggers a rolling node update on every apply
+      # for no functional change (compact placement is enforced via
+      # `policyName`).
+      placement_policy[0].type,
     ]
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
