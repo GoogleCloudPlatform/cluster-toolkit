@@ -36,7 +36,7 @@ import (
 
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
-	// Passing nil for args prevents GetBlueprint from attempting to read a file
+	// Passing nil for args prevents getBlueprint from attempting to read a file
 	c := NewCollector(cmd, nil, SOURCE)
 
 	if c == nil {
