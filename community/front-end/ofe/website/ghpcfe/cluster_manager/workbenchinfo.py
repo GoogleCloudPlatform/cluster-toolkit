@@ -124,7 +124,7 @@ USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?
         slurm_config_segment = ""
         try:
             cid = self.workbench.attached_cluster.cloud_id
-            if getattr(self.workbench.attached_cluster, 'enable_slurm_auth', True):
+            if getattr(self.workbench.attached_cluster, 'enable_slurm_auth', False):
                 slurm_config_segment=f"""\
 useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
@@ -132,9 +132,9 @@ echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 tmpdir=$(mktemp -d)
 currdir=$PWD
 cd $tmpdir
-wget https://download.schedmd.com/slurm/slurm-23.11-latest.tar.bz2
-tar xf slurm-23.11-latest.tar.bz2
-cd slurm-23.11*/
+wget https://download.schedmd.com/slurm/slurm-24.05-latest.tar.bz2
+tar xf slurm-24.05-latest.tar.bz2
+cd slurm-24.05*/
 
 ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
 make -j $(nproc)
@@ -156,6 +156,8 @@ chmod 400 /etc/slurm/slurm.key
 chown slurm:slurm /etc/slurm/slurm.key
 umount /mnt/clusterkey
 rmdir /mnt/clusterkey
+
+mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
 """
             else:
                 slurm_config_segment=f"""\
