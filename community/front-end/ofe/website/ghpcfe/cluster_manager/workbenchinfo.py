@@ -130,6 +130,9 @@ useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 
 tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+set -e
+
 currdir=$PWD
 cd $tmpdir
 wget https://download.schedmd.com/slurm/slurm-24.05-latest.tar.bz2
@@ -139,14 +142,8 @@ cd slurm-24.05*/
 ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
 make -j $(nproc)
 make install
-# Throw an error if the slurm install fails
-if [ "$?" -ne "0" ]; then
-    echo "BRINGUP FAILED"
-    exit 1
-fi
 
 cd $currdir
-rm -r $tmpdir
 
 mkdir -p /mnt/clusterkey
 mkdir -p /etc/slurm
@@ -178,6 +175,9 @@ useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 
 tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+set -e
+
 currdir=$PWD
 cd $tmpdir
 wget https://download.schedmd.com/slurm/slurm-21.08-latest.tar.bz2
@@ -192,14 +192,8 @@ cd slurm-21.08*/
 ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
 make -j $(nproc)
 make install
-# Throw an error if the slurm install fails
-if [ "$?" -ne "0" ]; then
-    echo "BRINGUP FAILED"
-    exit 1
-fi
 
 cd $currdir
-rm -r $tmpdir
 
 
 mkdir -p /etc/slurm
