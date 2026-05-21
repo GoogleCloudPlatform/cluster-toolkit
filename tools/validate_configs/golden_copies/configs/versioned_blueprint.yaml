@@ -19,9 +19,6 @@ toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
 toolkit_modules_version: v1.49.0
 
 vars:
-  # Set to true to enable the secure Slurm Native Authentication standard.
-  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
-  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: versioned
   region: us-central1
