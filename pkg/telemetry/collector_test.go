@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"io"
 	"net/http"
 	"os"
@@ -215,7 +216,7 @@ vars:
 
 	// 3. Create a dummy deployment directory with an artifacts folder
 	deployDir := filepath.Join(tmpDir, "my-deployment")
-	artifactsDir := filepath.Join(deployDir, ".ghpc", "artifacts")
+	artifactsDir := modulewriter.ArtifactsDir(deployDir)
 	_ = os.MkdirAll(artifactsDir, 0755)
 	expandedBpPath := filepath.Join(artifactsDir, "expanded_blueprint.yaml")
 	expandedBpContent := []byte(`
@@ -283,7 +284,7 @@ vars:
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := tc.setupCmd()
-			bp := GetBlueprint(cmd, tc.args)
+			bp := getBlueprint(cmd, tc.args)
 
 			if tc.expectIsEmpty {
 				// Assert that the returned Blueprint is effectively empty

@@ -38,7 +38,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func GetBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
+func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
 	}
@@ -100,6 +100,7 @@ func mergeCLIVars(cmd *cobra.Command, bp *config.Blueprint) {
 
 		key := arr[0]
 		var v config.YamlValue
+		// Use YAML unmarshal to support complex types (lists, maps) passed via CLI.
 		if err := yaml.Unmarshal([]byte(arr[1]), &v); err == nil {
 			bp.Vars = bp.Vars.With(key, v.Unwrap())
 		}
