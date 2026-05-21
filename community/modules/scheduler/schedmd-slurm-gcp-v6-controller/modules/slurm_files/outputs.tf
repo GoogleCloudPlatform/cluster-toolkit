@@ -34,8 +34,13 @@ output "config" {
   value       = local.config
 
   precondition {
-    condition     = var.enable_hybrid ? can(coalesce(var.slurm_control_host)) : true
-    error_message = "Input slurm_control_host is required."
+    condition     = var.enable_hybrid ? can(coalesce(var.hybrid_conf.slurm_control_host)) : true
+    error_message = "Input slurm_control_host is required in hybrid mode."
+  }
+
+  precondition {
+    condition     = var.enable_hybrid ? can(coalesce(var.slurm_cluster_name)) : true
+    error_message = "Input slurm_cluster_name is required in hybrid mode."
   }
 
   precondition {
