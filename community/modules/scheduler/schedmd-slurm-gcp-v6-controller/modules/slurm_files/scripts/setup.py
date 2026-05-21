@@ -897,6 +897,25 @@ def setup_cloud_ops() -> None:
             raise
 
 
+def get_config(bucket = None):
+    sleep_seconds = 5
+    while True:
+        try:
+            if bucket is not None:
+                lookup().hybrid_setup = True
+            _, cfg = util.fetch_config(bucket=bucket)
+            util.update_config(cfg)
+            if bucket is not None:
+                lookup().hybrid_setup = True
+            break
+        except util.DeffetiveStoredConfigError as e:
+            log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
+        except Exception:
+            log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
+        time.sleep(sleep_seconds)
+    log.info("Config fetched")
+
+
 def populate_etc_hosts(lkp: util.Lookup) -> None:
     """Populate static IP mappings for controllers in /etc/hosts to bypass DNS propagation latency."""
     log.info("Populating /etc/hosts with controller IP mappings")
@@ -968,22 +987,18 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
             log.error(f"Failed to write to /etc/hosts: {e}")
 
 
+def setup_hybrid(bucket: str):
+    log.info("Starting hybrid setup, fetching config")
+    get_config(bucket)
+    log.info("Generating the config files")
+    conf.generate_configs_slurm_v2505(lookup())
+    log.info("Success")
+
 def main():
     start_motd()
 
     log.info("Starting setup, fetching config")
-    sleep_seconds = 5
-    while True:
-        try:
-            _, cfg = util.fetch_config()
-            util.update_config(cfg)
-            break
-        except util.DeffetiveStoredConfigError as e:
-            log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
-        except Exception as e:
-            log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
-        time.sleep(sleep_seconds)
-    log.info("Config fetched")
+    get_config()
     lkp = lookup()
     populate_etc_hosts(lkp)
     setup_cloud_ops()
@@ -1030,10 +1045,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
     parser.add_argument("--hybrid", dest="hybrid", action="store_true", help="Do the hybrid setup.")
-    _ = util.init_log_and_parse(parser)
+    parser.add_argument("--bucket", dest="bucket", help="The bucket URI where config.yaml is.")
+    args = util.init_log_and_parse(parser)
 
     try:
-        main()
+        if args.hybrid:
+            if args.bucket:
+                setup_hybrid(args.bucket)
+            else:
+                log.error("--bucket argument cannot be empty when using --hybrid")
+                log.error("Aborting setup...")
+        else:
+            main()
     except Exception:
         log.exception("Aborting setup...")
         failed_motd()
