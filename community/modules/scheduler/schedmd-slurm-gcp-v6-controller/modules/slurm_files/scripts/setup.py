@@ -456,6 +456,14 @@ def setup_controller():
     elif result.returncode > 1:
         result.check_returncode()  # will raise error
 
+    # Remove clustername file to prevent CLUSTER ID MISMATCH errors when
+    # controller is recreated but slurmdbd retains state from previous cluster.
+    # slurmctld will get the correct cluster ID from slurmdbd on startup.
+    clustername_file = Path(slurmdirs.state / "clustername")
+    if clustername_file.exists():
+        log.info(f"Removing {clustername_file} to prevent cluster ID mismatch")
+        clustername_file.unlink()
+
     run("systemctl enable slurmctld", timeout=30)
     run("systemctl restart slurmctld", timeout=30)
 
