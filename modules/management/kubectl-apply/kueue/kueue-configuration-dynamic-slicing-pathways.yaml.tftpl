@@ -21,7 +21,7 @@ metadata:
   name: tpu-flavor
 spec:
   nodeLabels:
-    cloud.google.com/gke-tpu-accelerator: $${accelerator_type}
+    cloud.google.com/gke-tpu-accelerator: ${accelerator_type}
   topologyName: dynamic-slicing-topology
   tolerations:
   - effect: NoSchedule
@@ -53,15 +53,15 @@ spec:
     - name: "tpu-flavor"
       resources:
       - name: "google.com/tpu"
-        nominalQuota: $${tpu_quota}
+        nominalQuota: ${tpu_quota}
   - coveredResources: ["cpu", "memory"]
     flavors:
     - name: pathways-flavor
       resources:
       - name: cpu
-        nominalQuota: $${pathways_cpu_quota}
+        nominalQuota: ${pathways_cpu_quota}
       - name: memory
-        nominalQuota: $${pathways_memory_quota}
+        nominalQuota: ${pathways_memory_quota}
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: LocalQueue

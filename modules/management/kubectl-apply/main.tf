@@ -22,11 +22,11 @@ locals {
   enable_pathways  = var.enable_pathways_for_tpus || var.kueue.enable_pathways_for_tpus
   enable_slicing   = var.kueue.enable_dynamic_slicing_for_tpus
 
-  kueue_default_config_template = (local.enable_pathways && local.enable_slicing) ? "${path.module}/kueue/kueue-configuration-dynamic-slicing-pathways.yaml.tftpl" : (
-    local.enable_slicing ? "${path.module}/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl" : (
-      local.enable_pathways ? "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl" : ""
-    )
-  )
+  kueue_default_config_template = lookup({
+    "true-true"  = "${path.module}/kueue/kueue-configuration-dynamic-slicing-pathways.yaml.tftpl",
+    "false-true" = "${path.module}/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl",
+    "true-false" = "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl",
+  }, "${local.enable_pathways}-${local.enable_slicing}", "")
 
 
   kueue_config_template_vars = merge(

@@ -175,7 +175,6 @@ deployment_groups:
         enable_dynamic_slicing_for_tpus: $(vars.enable_dynamic_slicing_for_tpus)
         accelerator_topology_mode: $(gke-tpu-7x-pool.accelerator_topology_mode)
         machine_type: $(gke-tpu-7x-pool.machine_type)
-        enable_slice_controller: $(gke-tpu-7x-cluster.enable_slice_controller)
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)

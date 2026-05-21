@@ -60,10 +60,6 @@ resource "terraform_data" "kueue_validations" {
       error_message = "When enable_dynamic_slicing_for_tpus is true, accelerator_topology_mode must be 'PROVISION_ONLY'."
     }
     precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || var.kueue.enable_slice_controller == true
-      error_message = "When enable_dynamic_slicing_for_tpus is true, enable_slice_controller must be true."
-    }
-    precondition {
       condition     = !var.kueue.enable_dynamic_slicing_for_tpus || length(regexall("^tpu7x", coalesce(var.kueue.machine_type, ""))) > 0
       error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a tpu7x machine type."
     }
@@ -152,7 +148,6 @@ variable "kueue" {
     enable_dynamic_slicing_for_tpus = optional(bool, false)
     accelerator_topology_mode       = optional(string, null)
     machine_type                    = optional(string, null)
-    enable_slice_controller         = optional(bool, null)
     controller_cpu                  = optional(string, null)
     controller_memory               = optional(string, null)
     controller_replicas             = optional(number, null)
