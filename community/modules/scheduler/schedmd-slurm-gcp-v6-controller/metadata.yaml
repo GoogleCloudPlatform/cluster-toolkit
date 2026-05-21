@@ -48,4 +48,4 @@ ghpc:
       trigger_value: false
       dependent: enable_slurm_auth
       dependent_value: true
-    error_message: "⚠️ DEPRECATION NOTICE: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please plan to migrate to Slurm Native Authentication by setting enable_slurm_auth: true. See docs/slurm-native-auth-migration-guide.md for the destroy-and-recreate migration steps."
+    error_message: "DEPRECATION NOTICE: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please plan to migrate to Slurm Native Authentication by setting enable_slurm_auth: true. See docs/slurm-native-auth-migration-guide.md for the destroy-and-recreate migration steps."
