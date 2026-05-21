@@ -456,8 +456,13 @@ func (c *ConditionalValidator) Validate(
 	}
 	dependentExpectedVals := evaluateAndFlatten(dependentExpectedVal)
 	if !ValuesMatch(dependentVal, dependentExpectedVals) {
-		return config.BpError{Err: fmt.Errorf("%s\n variable '%s' value doesn't match\n expected: '%s', got: '%s'",
-			rule.ErrorMessage, dependentName, formatValue(dependentExpectedVals), formatValue(dependentVal)), Path: depPath}
+		msg := rule.ErrorMessage
+		if msg == "" {
+			msg = fmt.Sprintf("variable '%s' value doesn't match\n expected: '%s', got: '%s'",
+				dependentName, formatValue(dependentExpectedVals), formatValue(dependentVal))
+		}
+		return config.BpError{Err: fmt.Errorf("%s", msg), Path: depPath}
 	}
+
 	return nil
 }

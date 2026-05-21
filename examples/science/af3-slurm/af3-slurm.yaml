@@ -18,6 +18,9 @@ blueprint_name: af3-slurm
 # this blueprint should be used with the extra variables defined in
 # af3-slurm-deployment.yaml
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   # Image settings
   base_image:
     project: schedmd-slurm-public

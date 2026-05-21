@@ -59,8 +59,11 @@ associated slurm controller:
   * Required: **Yes**
   * Contains slurm configuration files such as `slurm.conf`.
 * `/etc/munge`
-  * Required: **Yes**
+  * Required: **Yes** (if using legacy MUNGE authentication)
   * Contains the munge key file, `munge.key`.
+* `/etc/slurm`
+  * Required: **Yes** (if using Slurm Native Authentication)
+  * Contains the native authentication token file, `slurm.key`. Must be distributed manually with strict `0400` permissions to custom hybrid/on-prem submission hosts.
 * `/home`
   * Required: No, but recommended
   * Though not required, having the home directory shared between the controller

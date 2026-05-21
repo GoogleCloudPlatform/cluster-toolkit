@@ -17,6 +17,9 @@
 blueprint_name: slurm-gcp-v6-hpc-centos7
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: zonal-policies
   region: us-central1

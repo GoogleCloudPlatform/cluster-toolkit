@@ -15,6 +15,9 @@
 blueprint_name: a3high-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   sys_net_range: 172.16.0.0/16
   filestore_ip_range: 192.168.0.0/29
   source_image_project_id: ubuntu-os-cloud

@@ -212,7 +212,7 @@
   gather_facts: false  # must wait until host is reachable
   ignore_unreachable: true  # ensure always block will run even if SSH fails
   vars:
-    key_type: "munge"
+    key_type: "slurm"
   tasks:
   - name: Slurm Test Block
     vars:

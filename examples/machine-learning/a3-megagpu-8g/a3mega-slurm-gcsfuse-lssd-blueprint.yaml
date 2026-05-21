@@ -23,6 +23,9 @@ validators:
   skip: true
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images

@@ -16,6 +16,9 @@
 blueprint_name: a4xc
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   test_name: a4xc
   deployment_name: # supply deployment name
   project_id: # supply project ID
