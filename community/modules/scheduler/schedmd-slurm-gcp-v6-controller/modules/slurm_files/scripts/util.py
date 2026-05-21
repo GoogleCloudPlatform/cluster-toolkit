@@ -725,18 +725,33 @@ class DeffetiveStoredConfigError(Exception):
 
 
 def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
-    if not cfg.slurm_log_dir:
-        cfg.slurm_log_dir = dirs.log
-    if not cfg.slurm_bin_dir:
-        cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
-    if not cfg.slurm_control_host:
-        try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
-            cfg.slurm_control_host = control_dns_name
-        except MetadataNotFoundError:
-            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
-    if not cfg.slurm_control_host_port:
-        cfg.slurm_control_host_port = "6820-6830"
+    hybrid_conf = cfg.hybrid_conf
+    if not hybrid_conf:
+        if not cfg.slurm_log_dir:
+            cfg.slurm_log_dir = dirs.log
+        if not cfg.slurm_bin_dir:
+            cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
+        if not cfg.slurm_control_host:
+            try:
+                control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
+                cfg.slurm_control_host = control_dns_name
+            except MetadataNotFoundError:
+                cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+        if not cfg.slurm_control_host_port:
+            cfg.slurm_control_host_port = "6820-6830"
+    else:
+        #Required values
+        cfg.slurm_control_host = hybrid_conf.slurm_control_host
+        #Default by terraform
+        cfg.slurm_control_host_port = hybrid_conf.slurm_control_host_port
+        #Default by python
+        cfg.slurm_log_dir = hybrid_conf.slurm_log_dir if hybrid_conf.slurm_log_dir else dirs.log
+        cfg.slurm_bin_dir = hybrid_conf.slurm_bin_dir if hybrid_conf.slurm_bin_dir else slurmdirs.prefix / "bin"
+        #Optional values
+        if hybrid_conf.slurm_control_addr:
+            cfg.slurm_control_addr = hybrid_conf.slurm_control_addr
+        if hybrid_conf.google_app_cred_path:
+            cfg.google_app_cred_path = hybrid_conf.google_app_cred_path
     return cfg
 
 @dataclass

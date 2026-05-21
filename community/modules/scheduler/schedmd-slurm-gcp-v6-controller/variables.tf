@@ -867,6 +867,46 @@ EOD
   default     = false
 }
 
+variable "hybrid_conf" {
+  description = "The hybrid configuration"
+  type = object({
+    slurm_bin_dir           = optional(string)
+    slurm_log_dir           = optional(string)
+    slurm_control_host      = string
+    slurm_control_host_port = optional(string)
+    slurm_control_addr      = optional(string)
+    slurm_uid               = optional(number)
+    slurm_gid               = optional(number)
+    service_account_email   = optional(string)
+    google_app_cred_path    = optional(string)
+  })
+  default = null
+}
+
+variable "output_dir" {
+  type        = string
+  description = <<EOD
+Directory where this module will write its files to. These files include:
+cloud.conf; cloud_gres.conf; config.yaml; resume.py; suspend.py; and util.py.
+EOD
+  default     = null
+}
+
+variable "install_dir" {
+  type        = string
+  description = <<EOD
+Directory where the hybrid configuration directory will be installed on the
+on-premise controller (e.g. /etc/slurm/hybrid). This updates the prefix path
+for the resume and suspend scripts in the generated `cloud.conf` file.
+
+This variable should be used when the TerraformHost and the SlurmctldHost
+are different.
+
+This will default to var.output_dir if null.
+EOD
+  default     = null
+}
+
 # DEPRECATED VARIABLES
 
 variable "enable_devel" { # tflint-ignore: terraform_unused_declarations
