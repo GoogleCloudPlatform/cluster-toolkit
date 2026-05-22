@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,27 +34,78 @@ import (
 	billing "cloud.google.com/go/billing/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
+
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
-func getBlueprint(args []string) config.Blueprint {
+func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
 	}
 
-	targetPath := args[0]
-
-	// If the argument is a directory, it indicates a deployment folder (e.g., used in 'deploy' or 'destroy').
-	// We read the expanded blueprint from the artifacts directory instead.
-	if info, err := os.Stat(targetPath); err == nil && info.IsDir() {
-		targetPath = filepath.Join(modulewriter.ArtifactsDir(targetPath), modulewriter.ExpandedBlueprintName)
-	}
+	targetPath := resolveBlueprintPath(args[0])
 
 	bp, _, err := config.NewBlueprint(targetPath)
 	if err != nil {
 		return config.Blueprint{} // Return empty if it fails to parse
 	}
 
+	mergeDeploymentFileVars(cmd, &bp)
+	mergeCLIVars(cmd, &bp)
+
 	return bp
+}
+
+func resolveBlueprintPath(targetPath string) string {
+	// If the argument is a directory, it indicates a deployment folder (e.g., used in 'deploy' or 'destroy').
+	// We read the expanded blueprint from the artifacts directory instead.
+	if info, err := os.Stat(targetPath); err == nil && info.IsDir() {
+		return filepath.Join(modulewriter.ArtifactsDir(targetPath), modulewriter.ExpandedBlueprintName)
+	}
+	return targetPath
+}
+
+func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
+		return
+	}
+
+	ds, _, err := config.NewDeploymentSettings(flag.Value.String())
+	if err != nil {
+		return
+	}
+
+	vars := bp.Vars.Items()
+	maps.Copy(vars, ds.Vars.Items())
+	bp.Vars = config.NewDict(vars)
+}
+
+func mergeCLIVars(cmd *cobra.Command, bp *config.Blueprint) {
+	flag := cmd.Flag("vars")
+	if flag == nil {
+		return
+	}
+
+	varsSlice, err := cmd.Flags().GetStringSlice("vars")
+	if err != nil {
+		return
+	}
+
+	for _, cliVar := range varsSlice {
+		arr := strings.SplitN(cliVar, "=", 2)
+		if len(arr) != 2 {
+			continue
+		}
+
+		key := arr[0]
+		var v config.YamlValue
+		// Use YAML unmarshal to support complex types (lists, maps) passed via CLI.
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err == nil {
+			bp.Vars = bp.Vars.With(key, v.Unwrap())
+		}
+	}
 }
 
 func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]string {

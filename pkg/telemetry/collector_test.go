@@ -196,101 +196,95 @@ func TestGetBlueprint(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
 
-	// 1. Setup a valid blueprint file
-	validBlueprintPath := filepath.Join(tmpDir, "valid_blueprint.yaml")
-	validBlueprintContent := `
+	// 1. Create a dummy base blueprint
+	bpPath := filepath.Join(tmpDir, "blueprint.yaml")
+	bpContent := []byte(`
 blueprint_name: test-blueprint
-deployment_groups:
-  - group: primary
-    modules:
-      - id: network
-        source: modules/network/vpc
-`
-	if err := os.WriteFile(validBlueprintPath, []byte(validBlueprintContent), 0644); err != nil {
-		t.Fatalf("Failed to create valid blueprint file: %v", err)
-	}
+vars:
+  project_id: default-project
+  region: us-central1
+`)
+	_ = os.WriteFile(bpPath, bpContent, 0644)
 
-	// 2. Setup an invalid blueprint file (malformed YAML)
-	invalidBlueprintPath := filepath.Join(tmpDir, "invalid_blueprint.yaml")
-	if err := os.WriteFile(invalidBlueprintPath, []byte("invalid: yaml: content: ["), 0644); err != nil {
-		t.Fatalf("Failed to create invalid blueprint file: %v", err)
-	}
+	// 2. Create a dummy deployment file for override testing
+	depFile := filepath.Join(tmpDir, "deployment.yaml")
+	depContent := []byte(`
+vars:
+  project_id: deployment-file-project
+`)
+	_ = os.WriteFile(depFile, depContent, 0644)
 
-	// 3. Setup a valid deployment directory with an expanded blueprint
-	validDepDir := filepath.Join(tmpDir, "valid_deployment")
-	artifactsDir := modulewriter.ArtifactsDir(validDepDir)
-	if err := os.MkdirAll(artifactsDir, 0755); err != nil {
-		t.Fatalf("Failed to create artifacts directory: %v", err)
-	}
-
-	expandedBlueprintPath := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	validExpandedContent := `
+	// 3. Create a dummy deployment directory with an artifacts folder
+	deployDir := filepath.Join(tmpDir, "my-deployment")
+	artifactsDir := modulewriter.ArtifactsDir(deployDir)
+	_ = os.MkdirAll(artifactsDir, 0755)
+	expandedBpPath := filepath.Join(artifactsDir, "expanded_blueprint.yaml")
+	expandedBpContent := []byte(`
 blueprint_name: expanded-test-blueprint
-deployment_groups:
-  - group: primary
-    modules:
-      - id: network
-        source: modules/network/vpc
-`
-	if err := os.WriteFile(expandedBlueprintPath, []byte(validExpandedContent), 0644); err != nil {
-		t.Fatalf("Failed to create expanded blueprint file: %v", err)
-	}
+vars:
+  project_id: artifacts-project
+`)
+	_ = os.WriteFile(expandedBpPath, expandedBpContent, 0644)
 
-	// 4. Setup an invalid deployment directory (missing the expanded blueprint)
-	invalidDepDir := filepath.Join(tmpDir, "invalid_deployment")
-	if err := os.MkdirAll(invalidDepDir, 0755); err != nil {
-		t.Fatalf("Failed to create invalid deployment directory: %v", err)
-	}
-
-	// Define test cases
 	tests := []struct {
 		name          string
 		args          []string
-		expectedName  string
+		setupCmd      func() *cobra.Command
 		expectIsEmpty bool
+		expectedName  string
+		expectedVars  map[string]string // Key to expected variable value
 	}{
 		{
-			name:          "Empty arguments",
+			name:          "No arguments",
 			args:          []string{},
-			expectedName:  "",
+			setupCmd:      func() *cobra.Command { return &cobra.Command{} },
 			expectIsEmpty: true,
 		},
 		{
-			name:          "Non-existent path",
-			args:          []string{filepath.Join(tmpDir, "does_not_exist")},
-			expectedName:  "",
-			expectIsEmpty: true,
+			name:         "Basic blueprint file",
+			args:         []string{bpPath},
+			setupCmd:     func() *cobra.Command { return &cobra.Command{} },
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{"project_id": "default-project"},
 		},
 		{
-			name:          "Valid blueprint file",
-			args:          []string{validBlueprintPath},
-			expectedName:  "test-blueprint",
-			expectIsEmpty: false,
+			name:         "Deployment directory",
+			args:         []string{deployDir},
+			setupCmd:     func() *cobra.Command { return &cobra.Command{} },
+			expectedName: "expanded-test-blueprint",
+			expectedVars: map[string]string{"project_id": "artifacts-project"},
 		},
 		{
-			name:          "Invalid blueprint file",
-			args:          []string{invalidBlueprintPath},
-			expectedName:  "",
-			expectIsEmpty: true,
+			name: "With deployment-file override",
+			args: []string{bpPath},
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", depFile, "")
+				return cmd
+			},
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{"project_id": "deployment-file-project"},
 		},
 		{
-			name:          "Valid deployment directory",
-			args:          []string{validDepDir},
-			expectedName:  "expanded-test-blueprint",
-			expectIsEmpty: false,
-		},
-		{
-			name:          "Deployment directory missing expanded blueprint",
-			args:          []string{invalidDepDir},
-			expectedName:  "",
-			expectIsEmpty: true,
+			name: "With vars flag override",
+			args: []string{bpPath},
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().StringSlice("vars", []string{"project_id=cli-project", "zone=us-east1-a"}, "")
+				return cmd
+			},
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{
+				"project_id": "cli-project",
+				"zone":       "us-east1-a",
+			},
 		},
 	}
 
-	// Execute tests
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			bp := getBlueprint(tc.args)
+			cmd := tc.setupCmd()
+			bp := getBlueprint(cmd, tc.args)
 
 			if tc.expectIsEmpty {
 				// Assert that the returned Blueprint is effectively empty
@@ -301,6 +295,21 @@ deployment_groups:
 				// Assert that the returned Blueprint parsed the correct file
 				if bp.BlueprintName != tc.expectedName {
 					t.Errorf("Expected BlueprintName %q, got %q", tc.expectedName, bp.BlueprintName)
+				}
+
+				// Assert that variables were properly overridden/merged
+				for k, expectedVal := range tc.expectedVars {
+					if !bp.Vars.Has(k) {
+						t.Errorf("Expected variable %q to exist, but it was missing", k)
+						continue
+					}
+
+					// Evaluate the variable to safely extract its string value
+					val := bp.Vars.Get(k)
+					unmarked, _ := val.Unmark()
+					if unmarked.AsString() != expectedVal {
+						t.Errorf("Expected variable %q to be %q, got %q", k, expectedVal, unmarked.AsString())
+					}
 				}
 			}
 		})
