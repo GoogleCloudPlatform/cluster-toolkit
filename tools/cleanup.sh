@@ -140,6 +140,29 @@ is_excluded() {
 	return 1 # Not excluded
 }
 
+# Returns 0 if $1 (creation timestamp) is newer than or equal to $CUTOFF_TIME.
+# Returns 1 otherwise (meaning resource is older and candidate for deletion).
+is_newer() {
+	local creation_time="$1"
+	[[ -z "$creation_time" ]] && return 1
+
+	local creation_seconds cutoff_seconds
+	if ! creation_seconds=$(date -d "$creation_time" -u +%s 2>/dev/null); then
+		log "WARNING" "Failed to parse creation timestamp: $creation_time"
+		return 1
+	fi
+	if ! cutoff_seconds=$(date -d "$CUTOFF_TIME" -u +%s 2>/dev/null); then
+		log "WARNING" "Failed to parse cutoff time: $CUTOFF_TIME"
+		return 1
+	fi
+
+	if [[ $creation_seconds -ge $cutoff_seconds ]]; then
+		return 0 # Newer (should be protected)
+	else
+		return 1 # Older
+	fi
+}
+
 # Executes the delete command if not in DRY_RUN mode.
 execute_delete() {
 	local resource_type="$1"
@@ -202,24 +225,33 @@ populate_protected_resources() {
 	declare -A INSTANCES_TO_PROTECT # Map instance_name -> zone
 	declare -A TPUS_TO_PROTECT      # Map tpu_name -> zone
 
-	# Part 1: Protect instances, templates, and networks used by EXCLUDED GKE clusters.
+	# Part 1: Protect instances, templates, and networks used by EXCLUDED or NEW GKE clusters.
 	log "INFO" "Checking for GKE clusters to protect..."
 	local clusters_data
-	if ! clusters_data=$(gcloud container clusters list --project="$PROJECT_ID" --format="value(name,location,resourceLabels.map())"); then
+	if ! clusters_data=$(gcloud container clusters list --project="$PROJECT_ID" --format="value(name,location,createTime,resourceLabels.map())"); then
 		log "ERROR" "Failed to list GKE clusters."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r cluster_name location labels_str; do
+		while IFS=$'\t' read -r cluster_name location create_time labels_str; do
 			if [[ -z "$cluster_name" ]]; then
 				log "DEBUG" "Skipping GKE cluster line with empty name."
 				continue
 			fi
 
-			if ! is_excluded "$cluster_name" "$labels_str"; then # Returns 1 if NOT excluded
+			local protect=false
+			if is_excluded "$cluster_name" "$labels_str"; then
+				protect=true
+				log "INFO" "GKE Cluster ${cluster_name} is protected because it is in the exclusion list."
+			elif is_newer "$create_time"; then
+				protect=true
+				log "INFO" "GKE Cluster ${cluster_name} (created: $create_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "false" ]]; then
 				continue
 			fi
 
-			log "INFO" "GKE Cluster ${cluster_name} in ${location} is PROTECTED."
+			log "INFO" "Protecting GKE Cluster ${cluster_name} and its sub-resources..."
 			EXCLUSION_MAP["${cluster_name}"]=1 # Add cluster itself to exclusion map
 
 			local node_pools_data
@@ -303,18 +335,29 @@ populate_protected_resources() {
 		done <<<"$clusters_data"
 	fi
 
-	# Part 2: Protect instances based on their name in EXCLUSION_MAP or labels.
+	# Part 2: Protect instances based on their name in EXCLUSION_MAP, labels, or creation time.
 	log "INFO" "Checking for Compute Instances to protect..."
 	local instances_data
 	if ! instances_data=$(gcloud compute instances list \
 		--project="$PROJECT_ID" \
-		--format="value(name,zone.basename(),labels.map())"); then
+		--format="value(name,zone.basename(),creationTimestamp,labels.map())"); then
 		log "ERROR" "Failed to list Compute Instances."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r inst_name zone labels_str; do
+		while IFS=$'\t' read -r inst_name zone creation_time labels_str; do
 			[[ -z "$inst_name" ]] && continue
-			if is_excluded "$inst_name" "$labels_str"; then # Returns 0 if excluded
+
+			local protect=false
+			if [[ -n "${EXCLUSION_MAP[${inst_name}]:-}" ]]; then
+				protect=true
+			elif is_excluded "$inst_name" "$labels_str"; then
+				protect=true
+			elif is_newer "$creation_time"; then
+				protect=true
+				log "INFO" "Instance ${inst_name} (created: $creation_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "true" ]]; then
 				if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
 					log "INFO" "Protecting Instance: ${inst_name} in ${zone}"
 					EXCLUSION_MAP["${inst_name}"]=1
@@ -385,21 +428,31 @@ populate_protected_resources() {
 		done
 	fi
 
-	# Part 4: Protect TPU VMs based on their name in EXCLUSION_MAP or labels.
+	# Part 4: Protect TPU VMs based on their name in EXCLUSION_MAP, labels, or creation time.
 	log "INFO" "Checking for TPU VMs to protect..."
 	local tpus_data
-	if ! tpus_data=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="value(name,ZONE,labels.map())"); then
+	if ! tpus_data=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="value(name,ZONE,createTime,labels.map())"); then
 		log "ERROR" "Failed to list TPU VMs."
 		((ERROR_COUNT++)) || true
 	else
 		if [[ -z "$tpus_data" ]]; then
 			log "INFO" "No TPU VMs found in project $PROJECT_ID."
 		else
-			while IFS=$'\t' read -r tpu_name tpu_zone tpu_labels; do
+			while IFS=$'\t' read -r tpu_name tpu_zone create_time tpu_labels; do
 				[[ -z "$tpu_name" ]] && continue
 				log "DEBUG" "Read TPU: name='${tpu_name}', zone='${tpu_zone}', labels='${tpu_labels}'"
 
-				if is_excluded "$tpu_name" "$tpu_labels"; then # Returns 0 if excluded
+				local protect=false
+				if [[ -n "${EXCLUSION_MAP[${tpu_name}]:-}" ]]; then
+					protect=true
+				elif is_excluded "$tpu_name" "$tpu_labels"; then
+					protect=true
+				elif is_newer "$create_time"; then
+					protect=true
+					log "INFO" "TPU VM ${tpu_name} (created: $create_time) is protected because it was created after cutoff time."
+				fi
+
+				if [[ "$protect" == "true" ]]; then
 					if ! [[ -v EXCLUSION_MAP["$tpu_name"] ]]; then
 						log "INFO" "Protecting TPU VM '${tpu_name}' in ${tpu_zone} by adding to exclusion map."
 						EXCLUSION_MAP["${tpu_name}"]=1
@@ -503,17 +556,17 @@ populate_protected_resources() {
 		done <<<"$templates_data"
 	fi
 
-	# Part 8: Protect Networks used by EXCLUDED Managed Lustre instances.
+	# Part 8: Protect Networks used by EXCLUDED or NEW Managed Lustre instances.
 	log "INFO" "Checking for Managed Lustre instances to protect networks for..."
 
 	local lustre_data
 	if ! lustre_data=$(gcloud lustre instances list \
 		--project="$PROJECT_ID" \
 		--location=- \
-		--format="value(name,location)"); then
+		--format="value(name,location,createTime)"); then
 		log "WARNING" "Failed to list Managed Lustre instances for network protection."
 	else
-		while IFS=$'\t' read -r name location; do
+		while IFS=$'\t' read -r name location create_time; do
 			[[ -z "$name" ]] && continue
 
 			# Fetch label correctly
@@ -528,8 +581,18 @@ populate_protected_resources() {
 				labels_str="time-to-live=$label_value"
 			fi
 
+			local protect=false
 			if is_excluded "$name" "$labels_str"; then
+				protect=true
+			elif is_newer "$create_time"; then
+				protect=true
+				log "INFO" "Managed Lustre instance ${name} (created: $create_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "true" ]]; then
 				log "INFO" "Managed Lustre instance ${name} in ${location} is PROTECTED."
+				# Add to EXCLUSION_MAP to prevent deletion of the Lustre instance itself
+				EXCLUSION_MAP["${name}"]=1
 
 				local network_uri
 				network_uri=$(gcloud lustre instances describe "$name" \
@@ -728,18 +791,20 @@ try:
             print(f"  - Role: {r}, Member: {m}")
     else:
         print(f"Applying bulk IAM policy update to remove {removed_count} bindings...")
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            temp_name = f.name
-            json.dump(policy, f)
-            
-        res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, temp_name, "--format=json"], capture_output=True, text=True)
-        if os.path.exists(temp_name):
-            os.remove(temp_name)
-        
-        if res2.returncode != 0:
-            print("ERROR: Failed to set IAM policy:", res2.stderr)
-            sys.exit(1)
-        print("SUCCESS: Successfully removed all deleted service accounts from IAM policy in bulk!")
+        temp_name = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+                temp_name = f.name
+                json.dump(policy, f)
+                
+            res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, temp_name, "--format=json"], capture_output=True, text=True)
+            if res2.returncode != 0:
+                print("ERROR: Failed to set IAM policy:", res2.stderr)
+                sys.exit(1)
+            print("SUCCESS: Successfully removed all deleted service accounts from IAM policy in bulk!")
+        finally:
+            if temp_name and os.path.exists(temp_name):
+                os.remove(temp_name)
 except Exception as e:
     print(f"ERROR: An unexpected error occurred: {e}")
     sys.exit(1)
