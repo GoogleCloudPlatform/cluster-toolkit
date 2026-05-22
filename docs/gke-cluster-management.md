@@ -183,17 +183,17 @@ gcloud container clusters update CLUSTER_NAME \
 
 #### Step 2: Upgrade Node Pools
 
-* After the control plane upgrade completes, click the **Nodes** tab on the cluster details page.  
-* Click the name of the node pool you want to upgrade.
+1. After the control plane upgrade completes, click the **Nodes** tab on the cluster details page.
+2. Click the name of the node pool you want to upgrade.
 
-* Click **Edit** at the top of the page.  
-* Click **Change** next to **Node version**, select the target version, and click **Save**.
+3. Click **Edit** at the top of the page.
+4. Click **Change** next to **Node version**, select the target version, and click **Save**.
 
 
 #### Changing Release Channel via Console (UI)
 
-* Under **Cluster basics** on the cluster details page, find the **Release channel** field and click **Edit**.  
-* Select the new channel and click **Save Changes**.
+1. Under **Cluster basics** on the cluster details page, find the **Release channel** field and click **Edit**.
+2. Select the new channel and click **Save Changes**.
 
 ## 3\. Cluster Toolkit Team Updates
 
@@ -217,7 +217,3 @@ When performing manual upgrades, following aspects need to be considered:
   * No Immediate Disruption: Changing the release channel is a metadata operation on the control plane and does not cause nodes to restart or be replaced, provided the current cluster version is valid in the new channel.  
   * Version Compatibility: The cluster's current version must be supported in the target channel. You may need to upgrade the cluster first if it's on a version too old for the new channel.  
 * **Monitoring Upgrade Progress**: Monitor the upgrade progress to ensure nodes successfully transition to the new version. You can monitor the status in the Google Cloud Console under the GKE section.
-
-
-
-
