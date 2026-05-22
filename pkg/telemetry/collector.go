@@ -28,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zclconf/go-cty/cty"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -219,22 +217,14 @@ func getMachineType(bp config.Blueprint) string {
 	modules := config.GetAllBpModules(&bp)
 
 	evalAndAdd := func(key string, m config.Module) {
-		if m.Settings.Has(key) {
-			keyValue := m.Settings.Get(key)
-			// Evaluate the value to resolve expressions like $(vars.key)
-			evaluatedKey, err := bp.Eval(keyValue)
-			if err != nil {
-				return
-			}
-			// Some module outputs or references carry cty marks, so we unmark them safely before use.
-			unmarkedKey, _ := evaluatedKey.Unmark()
-			if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-				mType := unmarkedKey.AsString()
-				if !seen[mType] {
-					machineTypes = append(machineTypes, mType)
-					seen[mType] = true
-				}
-			}
+		mType := extractExplicitMachineType(bp, key, m)
+		if mType == "" {
+			mType = extractDefaultMachineType(key, m)
+		}
+
+		if mType != "" && !seen[mType] {
+			machineTypes = append(machineTypes, mType)
+			seen[mType] = true
 		}
 	}
 

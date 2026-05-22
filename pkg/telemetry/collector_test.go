@@ -613,7 +613,7 @@ func TestGetMachineType(t *testing.T) {
 		want string
 	}{
 		{
-			name: "Extracts machine_type",
+			name: "Extracts explicit machine_type",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
@@ -632,7 +632,7 @@ func TestGetMachineType(t *testing.T) {
 			want: "c2-standard-8",
 		},
 		{
-			name: "Extracts node_type (TPU)",
+			name: "Extracts explicit node_type (TPU)",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
@@ -651,7 +651,7 @@ func TestGetMachineType(t *testing.T) {
 			want: "v4-8",
 		},
 		{
-			name: "Extracts system_node_pool_machine_type (GKE)",
+			name: "Extracts explicit system_node_pool_machine_type (GKE)",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
@@ -670,38 +670,26 @@ func TestGetMachineType(t *testing.T) {
 			want: "e2-standard-16",
 		},
 		{
-			name: "Extracts all three from different modules",
+			name: "Extracts default machine_type when omitted from blueprint",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
 						Name: config.GroupName("primary"),
 						Modules: []config.Module{
 							{
-								ID: config.ModuleID("gke_cluster"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
-								}),
-							},
-							{
-								ID: config.ModuleID("tpu_node"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"node_type": cty.StringVal("v4-8"),
-								}),
-							},
-							{
-								ID: config.ModuleID("compute_node"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type": cty.StringVal("n2-standard-4"),
-								}),
+								ID: config.ModuleID("controller_node"),
+								// The real embedded controller module has a default `machine_type: "c2-standard-4"`
+								Source: "../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller",
+								Kind:   config.TerraformKind,
 							},
 						},
 					},
 				},
 			},
-			want: "e2-standard-16,v4-8,n2-standard-4",
+			want: "c2-standard-4",
 		},
 		{
-			name: "Deduplicates matching machine types",
+			name: "Deduplicates matching machine types across modules",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
@@ -739,7 +727,9 @@ func TestGetMachineType(t *testing.T) {
 						Name: config.GroupName("primary"),
 						Modules: []config.Module{
 							{
-								ID: config.ModuleID("compute_node"),
+								ID:     config.ModuleID("vpc"),
+								Source: "../../modules/network/vpc",
+								Kind:   config.TerraformKind,
 								Settings: config.NewDict(map[string]cty.Value{
 									"some_other_setting": cty.StringVal("c2-standard-8"),
 								}),
