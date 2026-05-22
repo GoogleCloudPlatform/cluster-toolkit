@@ -186,7 +186,7 @@ func extractDefaultMachineType(key string, m config.Module) string {
 	}
 
 	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if m.Kind != config.TerraformKind && m.Kind != config.PackerKind {
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
 		return ""
 	}
 

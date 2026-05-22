@@ -214,12 +214,24 @@ func getProjectNumber(bp config.Blueprint) string {
 func getMachineType(bp config.Blueprint) string {
 	var machineTypes []string
 	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
-	modules := config.GetAllBpModules(&bp)
 
-	evalAndAdd := func(key string, m config.Module) {
-		mType := extractExplicitMachineType(bp, key, m)
+	for _, m := range config.GetAllBpModules(&bp) {
+		var mType string
+		// 1. Try explicit settings first
+		for _, key := range machineTypeSettings {
+			if t := extractExplicitMachineType(bp, key, m); t != "" {
+				mType = t
+				break
+			}
+		}
+		// 2. If no explicit setting, try defaults
 		if mType == "" {
-			mType = extractDefaultMachineType(key, m)
+			for _, key := range machineTypeSettings {
+				if t := extractDefaultMachineType(key, m); t != "" {
+					mType = t
+					break
+				}
+			}
 		}
 
 		if mType != "" && !seen[mType] {
@@ -228,11 +240,6 @@ func getMachineType(bp config.Blueprint) string {
 		}
 	}
 
-	for _, m := range modules {
-		for _, key := range machineTypeSettings {
-			evalAndAdd(key, m)
-		}
-	}
 	return strings.Join(machineTypes, ",")
 }
 
