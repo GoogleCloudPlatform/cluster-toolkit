@@ -73,7 +73,7 @@ deployment_groups:
 Run `gcluster deploy` to create the cluster. Sample command:
 
 ```shell
-./gcluster deploy examples/<path-to-blueprint.yaml>
+./gcluster deploy <path-to-blueprint.yaml>
 ```
 
 **Note**: For many machine types, deploy command would also have the deployment config file as well. Refer the respective READMEs of machine types in the toolkit for exact deployment commands.
@@ -81,6 +81,13 @@ Run `gcluster deploy` to create the cluster. Sample command:
 ### 2.2 Upgrading an Existing Cluster
 
 To upgrade an existing cluster, you can perform a manual version upgrade to a specific target version or change the cluster's release channel to align with a different stability track. This section covers procedures for upgrading both the master control plane and individual node pools using either the **`gcloud` CLI** or the **Google Cloud Console (UI).**
+
+> [!WARNING]
+> **Configuration Drift**: Performing manual upgrades via `gcloud` or the Google Cloud Console will cause configuration drift. The actual state of the cluster will no longer match the Terraform state managed by the Cluster Toolkit.
+>
+> To maintain the blueprint as the source of truth, the preferred method is to update the `version_prefix` or `release_channel` in the blueprint and run `./gcluster deploy <path-to-blueprint.yaml>`.
+>
+> If a manual upgrade is performed, subsequent toolkit operations may attempt to revert the cluster to the version defined in the blueprint unless the blueprint is also updated to match.
 
 ### Upgrading via gcloud CLI
 
@@ -203,7 +210,7 @@ Periodically, the Cluster Toolkit team will update the default versions defined 
 2. **Re-Deploy**: Regenerate your Terraform code from your blueprints using the updated toolkit and apply the changes. This ensures you pick up the new defaults without necessarily hardcoding versions in your blueprints.
 
 ```shell
-./gcluster deploy -d PATH_TO_DEPLOYMENT_FILE PATH_TO_BLUEPRINT_FILE.yaml
+./gcluster deploy <path-to-blueprint.yaml>
 ```
 
 ## 4\. Important Considerations During Upgrades
