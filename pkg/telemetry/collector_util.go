@@ -128,20 +128,6 @@ func getBpModulesList(bp config.Blueprint) []string {
 	return modules
 }
 
-func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil
-	}
-	modules := make([]config.Module, 0)
-	for _, m := range config.GetAllBpModules(&bp) {
-		if re.MatchString(m.Source) {
-			modules = append(modules, m)
-		}
-	}
-	return modules
-}
-
 func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	for _, m := range modulesList {
 		for _, p := range patterns {

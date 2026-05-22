@@ -101,8 +101,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 							Name: config.GroupName("primary"),
 							Modules: []config.Module{
 								{
-									ID: config.ModuleID("compute_pool"),
-									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
+									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
 										"machine_type": cty.StringVal("c2-standard-8"),
@@ -609,120 +608,155 @@ func TestGetKeyFromBlueprint(t *testing.T) {
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {
-		name     string
-		setupBp  func() config.Blueprint
-		expected string
+		name string
+		bp   config.Blueprint
+		want string
 	}{
 		{
-			name: "Single machine type in module",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("compute_pool"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
-									}),
-								},
+			name: "Extracts machine_type",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "c2-standard-8",
+			want: "c2-standard-8",
 		},
 		{
-			name: "Multiple different machine types",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("login_node"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("n2-standard-2"),
-									}),
-								},
-								{
-									ID:     config.ModuleID("lcontroller_node"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("n2-standard-2"),
-									}),
-								},
-								{
-									ID:     config.ModuleID("compute_pool"),
-									Source: "modules/compute/gke-node-pool",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
-									}),
-								},
+			name: "Extracts node_type (TPU)",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("tpu_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_type": cty.StringVal("v4-8"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "n2-standard-2,c2-standard-8",
+			want: "v4-8",
 		},
 		{
-			name: "TPU node type module (schedmd-slurm-gcp-v6-nodeset-tpu)",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("tpu_nodeset"),
-									Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu",
-									Settings: config.NewDict(map[string]cty.Value{
-										"node_type": cty.StringVal("v4-8"),
-									}),
-								},
+			name: "Extracts system_node_pool_machine_type (GKE)",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("gke_cluster"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "v4-8",
+			want: "e2-standard-16",
 		},
 		{
-			name: "No machine types in modules",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:       config.ModuleID("vpc_network"),
-									Source:   "modules/network/vpc",
-									Settings: config.NewDict(map[string]cty.Value{}),
-								},
+			name: "Extracts all three from different modules",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("gke_cluster"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
+								}),
+							},
+							{
+								ID: config.ModuleID("tpu_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_type": cty.StringVal("v4-8"),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("n2-standard-4"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "",
+			want: "e2-standard-16,v4-8,n2-standard-4",
+		},
+		{
+			name: "Deduplicates matching machine types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node3_tpu"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2-standard-8",
+		},
+		{
+			name: "Returns empty string if no types are found",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"some_other_setting": cty.StringVal("c2-standard-8"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bp := tt.setupBp()
-
-			actual := getMachineType(bp)
-
-			if actual != tt.expected {
-				t.Errorf("getMachineType() = %q, want %q", actual, tt.expected)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getMachineType(tc.bp)
+			if got != tc.want {
+				t.Errorf("getMachineType() = %q; want %q", got, tc.want)
 			}
 		})
 	}

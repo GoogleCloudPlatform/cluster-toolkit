@@ -35,7 +35,11 @@ import (
 )
 
 var (
-	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	machineTypeSettings = []string{
+		"machine_type",                  // Usual setting for specifying machine type.
+		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
+		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -212,7 +216,7 @@ func getProjectNumber(bp config.Blueprint) string {
 func getMachineType(bp config.Blueprint) string {
 	var machineTypes []string
 	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
-	modules := getModulesWithPattern(machineTypeModulePattern, bp)
+	modules := config.GetAllBpModules(&bp)
 
 	evalAndAdd := func(key string, m config.Module) {
 		if m.Settings.Has(key) {
@@ -235,8 +239,9 @@ func getMachineType(bp config.Blueprint) string {
 	}
 
 	for _, m := range modules {
-		evalAndAdd("machine_type", m)
-		evalAndAdd("node_type", m) // For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
+		for _, key := range machineTypeSettings {
+			evalAndAdd(key, m)
+		}
 	}
 	return strings.Join(machineTypes, ",")
 }
