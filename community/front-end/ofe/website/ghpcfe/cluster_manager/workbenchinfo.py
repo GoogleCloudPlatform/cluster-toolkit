@@ -160,8 +160,8 @@ mount slurm-{cid}-controller:/slurm/key_distribution /mnt/clusterkey
 cp /mnt/clusterkey/slurm.key /etc/slurm/slurm.key
 chmod 400 /etc/slurm/slurm.key
 chown slurm:slurm /etc/slurm/slurm.key
-umount /mnt/clusterkey
-rmdir /mnt/clusterkey
+umount -f /mnt/clusterkey || true
+rm -rf /mnt/clusterkey
 
 # Mount configurations directory exported by Gcluster v6 controller
 mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
