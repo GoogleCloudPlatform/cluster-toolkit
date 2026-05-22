@@ -70,6 +70,7 @@ steps:
       ENABLE_SPOT="false"
       sed -i '/instance_labels:/,+1d' "$${VARS_FILE}"
       sed -i '/enable_spot: true/d' "$${VARS_FILE}"
+      sed -i '/a4h_enable_spot_vm: true/d' "$${VARS_FILE}"
     else
       echo "INFO: Using $${VARS_FILE} as it is for SPOT provisioning."
     fi
