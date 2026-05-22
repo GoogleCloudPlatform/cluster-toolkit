@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,9 +77,9 @@ func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
 		return
 	}
 
-	for k, v := range ds.Vars.Items() {
-		bp.Vars = bp.Vars.With(k, v)
-	}
+	vars := bp.Vars.Items()
+	maps.Copy(vars, ds.Vars.Items())
+	bp.Vars = config.NewDict(vars)
 }
 
 func mergeCLIVars(cmd *cobra.Command, bp *config.Blueprint) {
