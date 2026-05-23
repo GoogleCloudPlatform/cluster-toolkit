@@ -29,7 +29,7 @@ Modify your blueprint to specify the GKE version and release channel as shown be
 In your Cluster Toolkit blueprint, you can control the GKE version via `version_prefix` var:  
 Blueprint snippet:
 
-```
+```yaml
 # ...
 deployment_groups:
 - group: primary
@@ -57,7 +57,7 @@ GKE offers Release Channels (RAPID, REGULAR, STABLE) which can be configured in 
 
 Blueprint snippet:
 
-```
+```yaml
 # ...
 deployment_groups:
 - group: primary
@@ -138,7 +138,7 @@ gcloud container clusters describe CLUSTER_NAME \
 
 **Expected Output:**
 
-```
+```yaml
 currentMasterVersion: TARGET_GKE_VERSION
 releaseChannel:
   channel: REGULAR
@@ -158,7 +158,7 @@ gcloud container node-pools describe NODE_POOL_NAME \
 
 **Expected Output:**
 
-```
+```yaml
 version: TARGET_GKE_VERSION
 ```
 
@@ -187,7 +187,6 @@ gcloud container clusters update CLUSTER_NAME \
 4. Upgrade Control Plane: Select the option to upgrade the cluster control plane.  
 5. Save Changes: Select your target version and click **Save Changes** to start the upgrade.
 
-
 #### Step 2: Upgrade Node Pools
 
 1. After the control plane upgrade completes, click the **Nodes** tab on the cluster details page.
@@ -195,7 +194,6 @@ gcloud container clusters update CLUSTER_NAME \
 
 3. Click **Edit** at the top of the page.
 4. Click **Change** next to **Node version**, select the target version, and click **Save**.
-
 
 #### Changing Release Channel via Console (UI)
 
