@@ -121,6 +121,10 @@ class ClusterForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
+        # Set default for new creations to True (Native Auth)
+        if not self.instance.id:
+            self.fields['enable_slurm_auth'].initial = True
+
         # For machine types, will use JS to get valid types dependent on
         # cloud zone. So bypass cleaning and choices
         def prep_dynamic_select(field, value):
@@ -180,6 +184,7 @@ class ClusterForm(forms.ModelForm):
             "use_cloudsql",
             "use_bigquery",
             "use_containers",
+            "enable_slurm_auth",
         )
 
         widgets = {
@@ -224,6 +229,7 @@ class ClusterForm(forms.ModelForm):
             "use_cloudsql": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "use_containers": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "enable_slurm_auth": forms.CheckboxInput(attrs={"class": "required checkbox"}),
         }
 
 

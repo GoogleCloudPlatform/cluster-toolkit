@@ -14,6 +14,9 @@
 ---
 blueprint_name: slurm-h4d
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   project_id: ## Set GCP Project ID Here ##
   deployment_name: slurm-h4d
   region: us-central1
