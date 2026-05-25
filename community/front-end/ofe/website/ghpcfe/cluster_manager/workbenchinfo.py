@@ -127,11 +127,11 @@ USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogin/users?
             # Safe upgrade fallback default locked to False!
             if getattr(self.workbench.attached_cluster, 'enable_slurm_auth', False):
                 slurm_config_segment=f"""\
-useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
+getent passwd slurm >/dev/null || useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 
 tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT
+trap 'umount /mnt/clusterkey 2>/dev/null || true; rm -rf "$tmpdir"' EXIT
 set -e
 
 # Dynamically install all build tools, libraries, and utilities matching the OS package manager
@@ -163,8 +163,10 @@ chown slurm:slurm /etc/slurm/slurm.key
 umount -f /mnt/clusterkey || true
 rm -rf /mnt/clusterkey
 
-# Mount configurations directory exported by Gcluster v6 controller
-mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
+# Mount configurations exported by Gcluster v6 controller using clean symlinks
+mkdir -p /mnt/slurm_configs
+mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
+ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
             else:
                 slurm_config_segment=f"""\
@@ -182,11 +184,11 @@ mount slurm-{cid}-controller:/etc/munge /mnt/clustermunge
 cp /mnt/clustermunge/munge.key /etc/munge/munge.key
 chmod 400 /etc/munge/munge.key
 chown munge:munge /etc/munge/munge.key
-umount /mnt/clustermunge
-rmdir /mnt/clustermunge
+umount -f /mnt/clustermunge || true
+rm -rf /mnt/clustermunge
 systemctl restart munge
 
-useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
+getent passwd slurm >/dev/null || useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 
 tmpdir=$(mktemp -d)
@@ -211,8 +213,11 @@ make install
 cd $currdir
 
 
+# Mount configurations exported by Gcluster v6 controller using clean symlinks
+mkdir -p /mnt/slurm_configs
+mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
 mkdir -p /etc/slurm
-mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
+ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
         except AttributeError:
             pass
