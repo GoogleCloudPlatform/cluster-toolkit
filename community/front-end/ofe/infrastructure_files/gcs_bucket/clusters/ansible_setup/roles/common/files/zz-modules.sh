@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# shellcheck shell=sh
+
 if command -v module >/dev/null 2>&1; then
-  case ":${MODULEPATH:-}:" in
-    *:/opt/cluster/modulefiles:*) ;;
-    *) module use /opt/cluster/modulefiles ;;
-  esac
+	case ":${MODULEPATH:-}:" in
+	*:/opt/cluster/modulefiles:*) ;;
+	*) module use /opt/cluster/modulefiles ;;
+	esac
 fi

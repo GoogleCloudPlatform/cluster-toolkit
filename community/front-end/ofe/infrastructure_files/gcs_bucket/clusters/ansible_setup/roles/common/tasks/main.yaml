@@ -35,7 +35,7 @@
 
 - name: Use Modules for C shells
   ansible.builtin.copy:
-    src: zz-modules.csh
+    src: zz-modules-csh
     dest: /etc/profile.d/zz-modules.csh
     owner: root
     mode: 0755
