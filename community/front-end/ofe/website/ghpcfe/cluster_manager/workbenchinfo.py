@@ -170,6 +170,10 @@ ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
             else:
                 slurm_config_segment=f"""\
+tmpdir=$(mktemp -d)
+trap 'umount /mnt/clustermunge 2>/dev/null || true; rm -rf "$tmpdir"' EXIT
+set -e
+
 # Dynamically install legacy authentication tools
 if command -v apt-get >/dev/null; then
     apt-get update && apt-get install -y munge libmunge-dev wget tar bzip2 jq curl build-essential libssl-dev libpam0g-dev
@@ -190,10 +194,6 @@ systemctl restart munge
 
 getent passwd slurm >/dev/null || useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
-
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT
-set -e
 
 currdir=$PWD
 cd $tmpdir

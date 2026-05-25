@@ -317,6 +317,75 @@ the credentials as the [`google_app_cred_path`][inputappcred] setting in the
 [sakey]: https://cloud.google.com/docs/authentication/provide-credentials-adc#local-key
 [inputappcred]: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/v1.44.2/community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md#input_google_app_cred_path
 
+### Distributing Slurm Native Authentication Token manually
+
+Unlike compute and login nodes residing within your Google Cloud VPC (which securely mount the temporary NFS distribution share on startup and copy the token automatically), external submission hosts and on-premise submit nodes in a hybrid setup cannot resolve internal GCP VPC NFS shares.
+
+For hybrid clusters utilizing Slurm Native Authentication, administrators **must manually extract, securely transfer, and configure the secret `slurm.key` token** on all on-premise submit and compute nodes.
+
+Follow these step-by-step instructions to manually distribute and register the token safely:
+
+#### Step 1: Extract the Token from the GCP Controller Node
+
+Log into your deployed GCP Slurm Controller Node, switch to root, and extract the generated token:
+
+```bash
+# SSH to your cloud controller
+gcloud compute ssh <cloud_controller_name> --zone=<cloud_zone>
+
+# View and copy the key (or extract directly)
+sudo cat /etc/slurm/slurm.key
+```
+
+> [!IMPORTANT]
+> The token string is a highly sensitive cryptographic secret that establishes total daemon auth control. Treat it with the equivalent security boundaries as private SSH keys or root password files.
+
+#### Step 2: Securely Transfer the Token to On-Premise Nodes
+
+Use `scp` or a secure, encrypted transport layer to copy the token from the GCP controller directly to your target on-premise nodes:
+
+```bash
+# Simulates transfer from controller to an on-prem node
+scp /etc/slurm/slurm.key admin@<on_prem_node_ip>:/tmp/slurm.key
+```
+
+#### Step 3: Configure Token Permissions and Ownership on the On-Premise Node
+
+Log into the target on-premise node. Place the token under the `/etc/slurm/` configurations folder and enforce strict security permissions matching SchedMD requirements:
+
+```bash
+# Log into target on-premise node, and elevate to root
+sudo su -
+
+# Ensure the etc configurations directory exists
+mkdir -p /etc/slurm/
+
+# Move token to secure location
+mv /tmp/slurm.key /etc/slurm/slurm.key
+
+# Set user & group ownership to the local 'slurm' account
+# (Verify that the UID/GID matches your local configuration standards!)
+chown slurm:slurm /etc/slurm/slurm.key
+
+# Restrict permissions strictly to read-only for the slurm user
+chmod 0400 /etc/slurm/slurm.key
+```
+
+#### Step 4: Validate Token Authentication Integrity
+
+Verify that the local on-premise node's Slurm command tools can successfully handshake with the GCP cloud controller through the secure network tunnel:
+
+```bash
+# Run status checks using the target config context
+scontrol ping
+```
+
+> [!TIP]
+> If you experience authentication connection hangs or job rejects:
+>
+> 1. Run `ls -l /etc/slurm/slurm.key` on the on-premise node and verify that it matches: `-r-------- 1 slurm slurm 128 ...`
+> 2. Open `/var/log/slurmctld.log` on the GCP Controller node, and check for: `error: auth/slurm: key validation failed...` (which signifies a token string mismatch between the on-prem node and the controller!).
+
 ### Prepare NFS
 
 For the four default mounted directories described in [NFS Mounts](#nfs-mounts),
