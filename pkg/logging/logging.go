@@ -65,11 +65,11 @@ func Error(f string, a ...any) {
 
 // Fatal prints message to stderr and ends the program with exit code 1
 func Fatal(f string, a ...any) {
-	FatalWithCode(1, f, a...)
+	ExitWithCode(1, f, a...)
 }
 
-// FatalWithCode prints message to stderr and ends the program with the specified exit code
-func FatalWithCode(exitCode int, f string, a ...any) {
+// ExitWithCode ends the program with the specified exit code. It prints a message to stdout if exitCode is 0, or stderr otherwise.
+func ExitWithCode(exitCode int, f string, a ...any) {
 	defer Exit(exitCode)
 
 	msg := fmt.Sprintf(f, a...)

@@ -194,7 +194,7 @@ Please select an option [d,a,s,c]: `)
 		case "d":
 			fmt.Println(c.Full)
 		case "s":
-			logging.FatalWithCode(0, "user chose to stop execution of gcluster rather than make proposed changes to infrastructure")
+			logging.ExitWithCode(0, "user chose to stop execution of gcluster rather than make proposed changes to infrastructure")
 		}
 	}
 }
