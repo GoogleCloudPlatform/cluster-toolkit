@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"maps"
 	"os"
@@ -27,16 +28,16 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 
 	billing "cloud.google.com/go/billing/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
-
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
@@ -128,20 +129,6 @@ func getBpModulesList(bp config.Blueprint) []string {
 	return modules
 }
 
-func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil
-	}
-	modules := make([]config.Module, 0)
-	for _, m := range config.GetAllBpModules(&bp) {
-		if re.MatchString(m.Source) {
-			modules = append(modules, m)
-		}
-	}
-	return modules
-}
-
 func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	for _, m := range modulesList {
 		for _, p := range patterns {
@@ -161,6 +148,77 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 			return v.AsString()
 		}
 	}
+	return ""
+}
+
+// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
+func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+	if !m.Settings.Has(key) {
+		return ""
+	}
+
+	keyValue := m.Settings.Get(key)
+	// Evaluate the value to resolve expressions like $(vars.key)
+	evaluatedKey, err := bp.Eval(keyValue)
+	if err != nil {
+		return ""
+	}
+
+	// Some module outputs or references carry cty marks, so we unmark them safely before use.
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+		return unmarkedKey.AsString()
+	}
+
+	return ""
+}
+
+// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
+func extractDefaultMachineType(key string, m config.Module) string {
+	if m.Source == "" {
+		return ""
+	}
+
+	kindStr := m.Kind.String()
+	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+
+	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return ""
+	}
+
+	type result struct {
+		mi  modulereader.ModuleInfo
+		err error
+	}
+	resCh := make(chan result, 1)
+
+	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
+	go func() {
+		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
+		resCh <- result{mi: mi, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		if res.err != nil {
+			return ""
+		}
+		for _, input := range res.mi.Inputs {
+			if input.Name == key && input.Default != nil {
+				// Verify the default is a string (protects against complex types)
+				if mType, ok := input.Default.(string); ok {
+					return mType
+				}
+			}
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Timeout reached: gracefully return empty string to prevent blocking
+	}
+
 	return ""
 }
 

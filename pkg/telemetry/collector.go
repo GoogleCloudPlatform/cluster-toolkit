@@ -28,14 +28,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zclconf/go-cty/cty"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 var (
-	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	machineTypeSettings = []string{
+		"machine_type",                  // Usual setting for specifying machine type.
+		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
+		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -212,32 +214,32 @@ func getProjectNumber(bp config.Blueprint) string {
 func getMachineType(bp config.Blueprint) string {
 	var machineTypes []string
 	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
-	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 
-	evalAndAdd := func(key string, m config.Module) {
-		if m.Settings.Has(key) {
-			keyValue := m.Settings.Get(key)
-			// Evaluate the value to resolve expressions like $(vars.key)
-			evaluatedKey, err := bp.Eval(keyValue)
-			if err != nil {
-				return
+	for _, m := range config.GetAllBpModules(&bp) {
+		var mType string
+		// 1. Try explicit settings first
+		for _, key := range machineTypeSettings {
+			if t := extractExplicitMachineType(bp, key, m); t != "" {
+				mType = t
+				break
 			}
-			// Some module outputs or references carry cty marks, so we unmark them safely before use.
-			unmarkedKey, _ := evaluatedKey.Unmark()
-			if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-				mType := unmarkedKey.AsString()
-				if !seen[mType] {
-					machineTypes = append(machineTypes, mType)
-					seen[mType] = true
+		}
+		// 2. If no explicit setting, try defaults
+		if mType == "" {
+			for _, key := range machineTypeSettings {
+				if t := extractDefaultMachineType(key, m); t != "" {
+					mType = t
+					break
 				}
 			}
 		}
+
+		if mType != "" && !seen[mType] {
+			machineTypes = append(machineTypes, mType)
+			seen[mType] = true
+		}
 	}
 
-	for _, m := range modules {
-		evalAndAdd("machine_type", m)
-		evalAndAdd("node_type", m) // For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
-	}
 	return strings.Join(machineTypes, ",")
 }
 
