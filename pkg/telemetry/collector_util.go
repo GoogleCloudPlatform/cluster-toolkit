@@ -269,23 +269,30 @@ func evaluateIsGoogler() bool {
 	return checkGcloudConfigForInternalUser()
 }
 
-func checkGcloudConfigForInternalUser() bool {
-	var configDir string
-
+// getGcloudConfigDir resolves the gcloud configuration directory based on environment and OS.
+func getGcloudConfigDir() (string, error) {
 	// Respect the CLOUDSDK_CONFIG environment variable if set
 	if envDir := os.Getenv("CLOUDSDK_CONFIG"); envDir != "" {
-		configDir = envDir
-	} else {
-		// Fall back to OS-specific default paths
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return false
-		}
-		// Default to Linux/macOS path, override if Windows
-		configDir = filepath.Join(homeDir, ".config", "gcloud")
-		if runtime.GOOS == "windows" {
-			configDir = filepath.Join(os.Getenv("APPDATA"), "gcloud")
-		}
+		return envDir, nil
+	}
+
+	// Fall back to OS-specific default paths
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("APPDATA"), "gcloud"), nil
+	}
+
+	return filepath.Join(homeDir, ".config", "gcloud"), nil
+}
+
+func checkGcloudConfigForInternalUser() bool {
+	configDir, err := getGcloudConfigDir()
+	if err != nil {
+		return false
 	}
 
 	// Find the active configuration name
@@ -308,26 +315,35 @@ func checkGcloudConfigForInternalUser() bool {
 	}
 
 	// Parse the INI-style file to extract the account under [core]
+	email := extractAccountFromConfig(configBytes)
+	return isInternalEmail(email)
+}
+
+// extractAccountFromConfig parses the INI-style gcloud config bytes to extract the account email.
+func extractAccountFromConfig(configBytes []byte) string {
 	lines := strings.Split(string(configBytes), "\n")
 	inCoreSection := false
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			inCoreSection = (line == "[core]")
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
 			continue
 		}
 
-		if inCoreSection && strings.HasPrefix(line, "account") {
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inCoreSection = strings.EqualFold(line, "[core]")
+			continue
+		}
+
+		if inCoreSection {
 			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				email := strings.TrimSpace(parts[1])
-				return isInternalEmail(email)
+			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "account" {
+				return strings.TrimSpace(parts[1])
 			}
 		}
 	}
-
-	return false
+	return ""
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.
