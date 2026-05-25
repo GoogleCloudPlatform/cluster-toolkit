@@ -318,7 +318,7 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset global state initialized by PersistentPreRun to ensure clean slates
-			userConfigExists = false
+			UserConfigExists = false
 			telemetryCollector = nil
 
 			// Inject a dummy command to trigger specific error cases
@@ -345,8 +345,8 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 			}
 
 			// 2. Verify PersistentPreRun Initialization Logic
-			if !userConfigExists {
-				t.Errorf("Expected userConfigExists to be true, got false. PersistentPreRun did not execute.")
+			if !UserConfigExists {
+				t.Errorf("Expected UserConfigExists to be true, got false. PersistentPreRun did not execute.")
 			}
 			if telemetryCollector == nil {
 				t.Errorf("Expected telemetryCollector to be initialized, got nil.")

@@ -49,7 +49,7 @@ var (
 var (
 	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
 	telemetryCollector *telemetry.Collector
-	userConfigExists   bool = false
+	UserConfigExists   bool = false
 )
 
 var (
@@ -76,7 +76,7 @@ func init() {
 		initDependencies(cmd)
 		if err := config.InitUserConfig(); err == nil {
 			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
-			userConfigExists = true
+			UserConfigExists = true
 
 			// Register the fatal hook to flush telemetry on hard failures
 			logging.FatalHook = func(exitCode int) {
@@ -141,7 +141,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 
-	if config.IsTelemetryEnabled() && userConfigExists {
+	if config.IsTelemetryEnabled() && UserConfigExists {
 		telemetryCollector.Execute(exitCode)
 	}
 
