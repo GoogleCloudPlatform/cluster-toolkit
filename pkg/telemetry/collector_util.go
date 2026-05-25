@@ -232,11 +232,19 @@ var getProjectBillingAccount = func(ctx context.Context, projectID string) strin
 	req := &billingpb.GetProjectBillingInfoRequest{
 		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	info, err := client.GetProjectBillingInfo(ctx, req)
-	if err != nil {
-		return ""
+
+	var info *billingpb.ProjectBillingInfo
+	var apiErr error
+
+	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	for attempt := 1; attempt <= 3; attempt++ {
+		info, apiErr = client.GetProjectBillingInfo(ctx, req)
+		if apiErr == nil {
+			return info.GetBillingAccountName()
+		}
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
-	return info.GetBillingAccountName()
+	return ""
 }
 
 // fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
@@ -247,11 +255,20 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	}
 	defer client.Close()
 	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
-	project, err := client.GetProject(ctx, req)
-	if err != nil {
-		return "", err
+
+	var project *resourcemanagerpb.Project
+	var apiErr error
+
+	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	for attempt := 1; attempt <= 3; attempt++ {
+		project, apiErr = client.GetProject(ctx, req)
+		if apiErr == nil {
+			return project.Name, nil
+		}
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
-	return project.Name, nil
+
+	return "", apiErr
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.
