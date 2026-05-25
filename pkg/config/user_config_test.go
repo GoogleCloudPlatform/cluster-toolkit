@@ -51,7 +51,7 @@ func TestInitUserConfig_NewUser(t *testing.T) {
 	}
 
 	// Verify File creation
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		t.Errorf("Expected config file to be created at %s", configFile)
 	}
@@ -61,7 +61,7 @@ func TestInitUserConfig_ExistingUser(t *testing.T) {
 	tempDir := setupTestEnv(t)
 
 	// Pre-populate an existing config file
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 
 	existingData := UserConfig{
@@ -89,7 +89,7 @@ func TestInitUserConfig_CorruptFile(t *testing.T) {
 	tempDir := setupTestEnv(t)
 
 	// Create a corrupt config file (invalid JSON)
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 	_ = os.WriteFile(configFile, []byte("{invalid_json_here]"), 0644)
 
@@ -136,7 +136,7 @@ func TestSetTelemetry(t *testing.T) {
 	}
 
 	// Verify File on-disk state
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	data, _ := os.ReadFile(configFile)
 
 	var settings UserConfig
@@ -200,7 +200,7 @@ func TestSetIsGoogler(t *testing.T) {
 	}
 
 	// Verify File on-disk state
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	data, _ := os.ReadFile(configFile)
 
 	var settings UserConfig
@@ -216,7 +216,7 @@ func TestInitUserConfig_ExistingIsGoogler(t *testing.T) {
 	tempDir := setupTestEnv(t)
 
 	// Pre-populate an existing config file
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 
 	isGoogler := false
