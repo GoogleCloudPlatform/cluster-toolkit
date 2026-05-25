@@ -15,12 +15,9 @@
 package telemetry
 
 import (
-	"bytes"
 	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -323,30 +320,18 @@ func getBillingAccountId(bp config.Blueprint) string {
 
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
 func getIsGoogler() bool {
-	// Check Application Default Credentials (ADC) for Service Accounts.
-	// CI pipelines usually inject credentials via this environment variable.
-	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if adcPath != "" {
-		isInternal, err := checkADCForInternalUser(adcPath)
-		if err == nil && isInternal {
-			return true
-		}
+	// Check if the value is already cached in the local config file
+	if cached := config.GetIsGoogler(); cached != nil {
+		return *cached
 	}
 
-	// Fall back to checking the active gcloud authenticated account.
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/account")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
+	// Evaluate if the user is internal
+	isInternal := evaluateIsGoogler()
 
-	if err := cmd.Run(); err == nil && stdout.Len() > 0 {
-		email := strings.TrimSpace(stdout.String())
-		if isInternalEmail(email) {
-			return true
-		}
-	}
-	return false
+	// Cache the evaluated result in the local config for future commands
+	_ = config.SetIsGoogler(isInternal)
+
+	return isInternal
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

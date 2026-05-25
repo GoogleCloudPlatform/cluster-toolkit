@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -252,6 +253,81 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 		return "", err
 	}
 	return project.Name, nil
+}
+
+func evaluateIsGoogler() bool {
+	// Check Application Default Credentials (ADC) for Service Accounts. CI pipelines usually inject credentials via this environment variable.
+	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if adcPath != "" {
+		isInternal, err := checkADCForInternalUser(adcPath)
+		if err == nil && isInternal {
+			return true
+		}
+	}
+
+	// Fall back to reading the gcloud active config file directly.
+	return checkGcloudConfigForInternalUser()
+}
+
+func checkGcloudConfigForInternalUser() bool {
+	var configDir string
+
+	// Respect the CLOUDSDK_CONFIG environment variable if set
+	if envDir := os.Getenv("CLOUDSDK_CONFIG"); envDir != "" {
+		configDir = envDir
+	} else {
+		// Fall back to OS-specific default paths
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		// Default to Linux/macOS path, override if Windows
+		configDir = filepath.Join(homeDir, ".config", "gcloud")
+		if runtime.GOOS == "windows" {
+			configDir = filepath.Join(os.Getenv("APPDATA"), "gcloud")
+		}
+	}
+
+	// Find the active configuration name
+	activeConfigPath := filepath.Join(configDir, "active_config")
+	activeConfigBytes, err := os.ReadFile(activeConfigPath)
+	if err != nil {
+		return false
+	}
+
+	activeConfig := strings.TrimSpace(string(activeConfigBytes))
+	if activeConfig == "" {
+		return false
+	}
+
+	// Read the active configuration file
+	configFile := filepath.Join(configDir, "configurations", "config_"+activeConfig)
+	configBytes, err := os.ReadFile(configFile)
+	if err != nil {
+		return false
+	}
+
+	// Parse the INI-style file to extract the account under [core]
+	lines := strings.Split(string(configBytes), "\n")
+	inCoreSection := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inCoreSection = (line == "[core]")
+			continue
+		}
+
+		if inCoreSection && strings.HasPrefix(line, "account") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				email := strings.TrimSpace(parts[1])
+				return isInternalEmail(email)
+			}
+		}
+	}
+
+	return false
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.

@@ -161,3 +161,84 @@ func TestGenerateUniqueID(t *testing.T) {
 		t.Errorf("Expected generateUniqueID to be deterministic for the same machine/user context")
 	}
 }
+
+// TestGetIsGoogler_Nil verifies the default state of the cache for a new user.
+func TestGetIsGoogler_Nil(t *testing.T) {
+	_ = setupTestEnv(t)
+
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	// For a fresh config without the is_googler key, the pointer should be nil.
+	if GetIsGoogler() != nil {
+		t.Errorf("Expected GetIsGoogler to return nil initially, got %v", *GetIsGoogler())
+	}
+}
+
+// TestSetIsGoogler verifies setting the cache updates memory and persists to disk.
+func TestSetIsGoogler(t *testing.T) {
+	tempDir := setupTestEnv(t)
+
+	// Initialize first to set up the baseline
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig setup failed: %v", err)
+	}
+
+	// Action: update is_googler cache
+	err = SetIsGoogler(true)
+	if err != nil {
+		t.Fatalf("SetIsGoogler failed: %v", err)
+	}
+
+	// Verify in-memory state
+	cached := GetIsGoogler()
+	if cached == nil || !*cached {
+		t.Errorf("Expected IsGoogler to be true in memory state")
+	}
+
+	// Verify File on-disk state
+	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	data, _ := os.ReadFile(configFile)
+
+	var settings UserConfig
+	_ = json.Unmarshal(data, &settings)
+
+	if settings.IsGoogler == nil || !*settings.IsGoogler {
+		t.Errorf("Expected is_googler to be true in file, got: %v", settings.IsGoogler)
+	}
+}
+
+// TestInitUserConfig_ExistingIsGoogler verifies loading an existing config file that contains the cached value.
+func TestInitUserConfig_ExistingIsGoogler(t *testing.T) {
+	tempDir := setupTestEnv(t)
+
+	// Pre-populate an existing config file
+	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
+
+	isGoogler := false
+	existingData := UserConfig{
+		UserID:           "existing-test-id",
+		TelemetryEnabled: true,
+		IsGoogler:        &isGoogler,
+	}
+	data, _ := json.Marshal(existingData)
+	_ = os.WriteFile(configFile, data, 0644)
+
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	// Verify the in-memory state loaded the existing IsGoogler data
+	cached := GetIsGoogler()
+	if cached == nil {
+		t.Fatalf("Expected IsGoogler to be loaded from file, got nil")
+	}
+	if *cached != false {
+		t.Errorf("Expected IsGoogler to be false, got true")
+	}
+}

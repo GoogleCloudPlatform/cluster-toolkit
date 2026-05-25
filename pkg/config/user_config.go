@@ -23,10 +23,13 @@ import (
 	"path/filepath"
 )
 
-// UserConfig holds the in-memory state of the user's telemetry preferences
+const configFileName = "telemetry_config.json"
+
+// UserConfig holds the in-memory state of the user information and telemetry preferences.
 type UserConfig struct {
 	UserID           string `json:"user_id"`
 	TelemetryEnabled bool   `json:"telemetry_enabled"`
+	IsGoogler        *bool  `json:"is_googler,omitempty"`
 }
 
 // globalUserConfig is the package-level variable holding the state during execution
@@ -40,7 +43,7 @@ func InitUserConfig() error {
 		TelemetryEnabled: true, // Default telemetry state
 	}
 
-	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+	configFile := filepath.Join(getLocalDirPath(false), configFileName)
 
 	// Try to read from the local config file
 	if data, err := os.ReadFile(configFile); err == nil {
@@ -74,9 +77,24 @@ func SetTelemetry(telemetry bool) error {
 	return nil
 }
 
+// GetIsGoogler returns the cached IsGoogler value if it exists, otherwise nil. This refers to whether the user is internal to Google or not.
+func GetIsGoogler() *bool {
+	return globalUserConfig.IsGoogler
+}
+
+// SetIsGoogler sets the IsGoogler status and persists it to disk.
+func SetIsGoogler(isGoogler bool) error {
+	globalUserConfig.IsGoogler = &isGoogler
+	err := SaveToFile()
+	if err != nil {
+		return fmt.Errorf("failed to save state to file: %v", err)
+	}
+	return nil
+}
+
 // SaveToFile saves the in-memory state back to a local JSON file
 func SaveToFile() error {
-	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+	configFile := filepath.Join(getLocalDirPath(false), configFileName)
 
 	data, err := json.MarshalIndent(globalUserConfig, "", "  ")
 	if err != nil {
