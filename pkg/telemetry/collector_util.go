@@ -223,10 +223,10 @@ func extractDefaultMachineType(key string, m config.Module) string {
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
+var getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer client.Close()
 	req := &billingpb.GetProjectBillingInfoRequest{
@@ -240,7 +240,7 @@ var getProjectBillingAccount = func(ctx context.Context, projectID string) strin
 	for attempt := 1; attempt <= 3; attempt++ {
 		info, apiErr = client.GetProjectBillingInfo(ctx, req)
 		if apiErr == nil {
-			return info.GetBillingAccountName()
+			return info.GetBillingAccountName(), nil
 		}
 		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
 		if attempt == 3 || ctx.Err() != nil {
@@ -248,7 +248,7 @@ var getProjectBillingAccount = func(ctx context.Context, projectID string) strin
 		}
 		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
-	return ""
+	return "", apiErr
 }
 
 // fetchProjectName retrieves the project name (which contains the project number) for a given project ID.

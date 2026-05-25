@@ -1017,87 +1017,51 @@ func TestGetIsVmInstance(t *testing.T) {
 	}
 }
 
-// TestGetProjectNumber verifies that the project number is correctly fetched
-// or gracefully fails depending on the blueprint configuration and API response.
+// TestGetProjectNumber verifies that the project number is correctly fetched or gracefully fails depending on the API response.
 func TestGetProjectNumber(t *testing.T) {
 	tests := []struct {
 		name      string
-		blueprint config.Blueprint
+		projectID string
 		clientErr error
 		mockErr   error
 		want      string
 	}{
 		{
-			name: "success_1",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("test-project-1"),
-				}),
-			},
-			want: "1234567890",
+			name:      "success_1",
+			projectID: "test-project-1",
+			want:      "1234567890",
 		},
 		{
-			name: "success_2",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("test-project-2"),
-				}),
-			},
-			want: "9876543210",
+			name:      "success_2",
+			projectID: "test-project-2",
+			want:      "9876543210",
 		},
 		{
-			name: "no_project_id",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{}),
-			},
-			want: "",
+			name:      "no_project_id",
+			projectID: "",
+			want:      "",
 		},
 		{
-			name: "client_creation_error",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("any-project"),
-				}),
-			},
+			name:      "client_creation_error",
+			projectID: "any-project",
 			clientErr: errors.New("failed to create client"),
 			want:      "",
 		},
 		{
-			name: "api_error",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("error-project"),
-				}),
-			},
-			mockErr: errors.New("project not found"),
-			want:    "",
+			name:      "api_error",
+			projectID: "error-project",
+			mockErr:   errors.New("project not found"),
+			want:      "",
 		},
 		{
-			name: "api_returns_empty_name",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal(""),
-				}),
-			},
-			want: "",
+			name:      "api_returns_empty_name",
+			projectID: "empty-name-project",
+			want:      "",
 		},
 		{
-			name: "api_returns_nil_project",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("nil-project"),
-				}),
-			},
-			want: "",
-		},
-		{
-			name: "project_id_not_string_type",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.NumberIntVal(123),
-				}),
-			},
-			want: "",
+			name:      "api_returns_nil_project",
+			projectID: "nil-project",
+			want:      "",
 		},
 	}
 
@@ -1122,10 +1086,13 @@ func TestGetProjectNumber(t *testing.T) {
 				if projectID == "test-project-2" {
 					return "projects/9876543210", nil
 				}
+				if projectID == "empty-name-project" || projectID == "nil-project" {
+					return "", nil
+				}
 				return "", errors.New("not found")
 			}
 
-			got := getProjectNumber(tt.blueprint)
+			got := getProjectNumber(tt.projectID)
 			if got != tt.want {
 				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
 			}
@@ -1141,55 +1108,46 @@ func TestGetBillingAccountId(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		setupBp            func() config.Blueprint
+		projectID          string
 		mockBillingAccount string
+		mockErr            error
 		expected           string
 	}{
 		{
-			name: "Missing project_id in blueprint",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{}),
-				}
-			},
+			name:               "Missing project_id",
+			projectID:          "",
 			mockBillingAccount: "",
 			expected:           "",
 		},
 		{
-			name: "Project ID present but no billing account returned",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{
-						"project_id": cty.StringVal("test-project-123"),
-					}),
-				}
-			},
+			name:               "Project ID present but no billing account returned",
+			projectID:          "test-project-123",
 			mockBillingAccount: "",
 			expected:           "",
 		},
 		{
-			name: "Project ID present and billing account trimmed",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{
-						"project_id": cty.StringVal("test-project-123"),
-					}),
-				}
-			},
+			name:               "Project ID present and billing account trimmed",
+			projectID:          "test-project-123",
 			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
 			expected:           "012345-6789AB-CDEF01",
+		},
+		{
+			name:               "Project ID present but API fails",
+			projectID:          "test-project-123",
+			mockBillingAccount: "",
+			mockErr:            errors.New("api error"),
+			expected:           "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock the GCP call for this specific test case
-			getProjectBillingAccount = func(ctx context.Context, projectID string) string {
-				return tt.mockBillingAccount
+			// Mock the GCP call for this specific test case, now returning (string, error)
+			getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
+				return tt.mockBillingAccount, tt.mockErr
 			}
 
-			bp := tt.setupBp()
-			actual := getBillingAccountId(bp)
+			actual := getBillingAccountId(tt.projectID)
 
 			if actual != tt.expected {
 				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)

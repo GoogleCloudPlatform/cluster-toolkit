@@ -85,14 +85,16 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	project_id := getKeyFromBlueprint("project_id", c.blueprint)
+
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
 		EventType:        "gclusterCLI",
 		EventName:        getCommandName(c.eventCmd),
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:    getProjectNumber(c.blueprint),
+		ProjectNumber:    getProjectNumber(project_id),
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: getBillingAccountId(c.blueprint),
+		BillingAccountId: getBillingAccountId(project_id),
 		ReleaseVersion:   getReleaseVersion(),
 		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
@@ -194,13 +196,12 @@ func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
 }
 
-func getProjectNumber(bp config.Blueprint) string {
-	projectID := getKeyFromBlueprint("project_id", bp)
+func getProjectNumber(projectID string) string {
 	if projectID == "" {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
 	defer cancel()
 
 	projectName, err := fetchProjectName(ctx, projectID)
@@ -307,18 +308,19 @@ func getTerraformVersion() string {
 	return version
 }
 
-func getBillingAccountId(bp config.Blueprint) string {
-	projectID := getKeyFromBlueprint("project_id", bp)
-	if projectID != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
-		billingAccount := getProjectBillingAccount(ctx, projectID)
-		if billingAccount != "" {
-			return strings.TrimPrefix(billingAccount, "billingAccounts/")
-		}
+func getBillingAccountId(projectID string) string {
+	if projectID == "" {
+		return ""
 	}
-	return ""
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	defer cancel()
+
+	billingAccount, err := getProjectBillingAccount(ctx, projectID)
+	if err != nil || billingAccount == "" {
+		return ""
+	}
+	return strings.TrimPrefix(billingAccount, "billingAccounts/")
 }
 
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
