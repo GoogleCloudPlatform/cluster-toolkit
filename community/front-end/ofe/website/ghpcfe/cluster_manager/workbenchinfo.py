@@ -134,24 +134,27 @@ tmpdir=$(mktemp -d)
 trap 'umount /mnt/clusterkey 2>/dev/null || true; rm -rf "$tmpdir"' EXIT
 set -e
 
-# Dynamically install all build tools, libraries, and utilities matching the OS package manager
-if command -v apt-get >/dev/null; then
-    apt-get update && apt-get install -y build-essential libssl-dev libpam0g-dev wget tar bzip2 jq curl
-elif command -v yum >/dev/null; then
-    yum groupinstall -y "Development Tools" && yum install -y openssl-devel pam-devel wget tar bzip2 jq curl
+# Dynamically install all build tools and compile Slurm 24.05 only if not already installed (prevents 5-min reboot overhead)
+if ! command -v scontrol >/dev/null; then
+    # Dynamically install all build tools, libraries, and utilities matching the OS package manager
+    if command -v apt-get >/dev/null; then
+        apt-get update && apt-get install -y build-essential libssl-dev libpam0g-dev wget tar bzip2 jq curl
+    elif command -v yum >/dev/null; then
+        yum groupinstall -y "Development Tools" && yum install -y openssl-devel pam-devel wget tar bzip2 jq curl
+    fi
+
+    currdir=$PWD
+    cd $tmpdir
+    wget https://download.schedmd.com/slurm/slurm-24.05-latest.tar.bz2
+    tar xf slurm-24.05-latest.tar.bz2
+    cd slurm-24.05*/
+
+    ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
+    make -j $(nproc)
+    make install
+
+    cd $currdir
 fi
-
-currdir=$PWD
-cd $tmpdir
-wget https://download.schedmd.com/slurm/slurm-24.05-latest.tar.bz2
-tar xf slurm-24.05-latest.tar.bz2
-cd slurm-24.05*/
-
-./configure --prefix=/usr/local --sysconfdir=/etc/slurm
-make -j $(nproc)
-make install
-
-cd $currdir
 
 # Temporary mount and persistent resilient key copy mapping
 mkdir -p /mnt/clusterkey
@@ -163,9 +166,9 @@ chown slurm:slurm /etc/slurm/slurm.key
 umount -f /mnt/clusterkey || true
 rm -rf /mnt/clusterkey
 
-# Mount configurations exported by Gcluster v6 controller using clean symlinks
+# Mount configurations exported by Gcluster v6 controller using clean idempotent symlinks
 mkdir -p /mnt/slurm_configs
-mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
+grep -qs '/mnt/slurm_configs ' /proc/mounts || mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
 ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
             else:
@@ -174,12 +177,15 @@ tmpdir=$(mktemp -d)
 trap 'umount /mnt/clustermunge 2>/dev/null || true; rm -rf "$tmpdir"' EXIT
 set -e
 
-# Dynamically install legacy authentication tools
-if command -v apt-get >/dev/null; then
-    apt-get update && apt-get install -y munge libmunge-dev wget tar bzip2 jq curl build-essential libssl-dev libpam0g-dev
-elif command -v yum >/dev/null; then
-    yum install -y munge munge-devel wget tar bzip2 jq curl openssl-devel pam-devel
-    yum groupinstall -y "Development Tools"
+# Dynamically install all build tools and compile Slurm 21.08 only if not already installed (prevents 5-min reboot overhead)
+if ! command -v scontrol >/dev/null; then
+    # Dynamically install legacy authentication tools
+    if command -v apt-get >/dev/null; then
+        apt-get update && apt-get install -y munge libmunge-dev wget tar bzip2 jq curl build-essential libssl-dev libpam0g-dev
+    elif command -v yum >/dev/null; then
+        yum install -y munge munge-devel wget tar bzip2 jq curl openssl-devel pam-devel
+        yum groupinstall -y "Development Tools"
+    fi
 fi
 
 mkdir -p /mnt/clustermunge
@@ -195,27 +201,24 @@ systemctl restart munge
 getent passwd slurm >/dev/null || useradd --system -u981 -U -m -d /var/lib/slurm -s /bin/bash slurm
 echo "N" > /sys/module/nfs/parameters/nfs4_disable_idmapping
 
-currdir=$PWD
-cd $tmpdir
-wget https://download.schedmd.com/slurm/slurm-21.08-latest.tar.bz2
-tar xf slurm-21.08-latest.tar.bz2
-cd slurm-21.08*/
+# Compile Slurm only if not already installed
+if ! command -v scontrol >/dev/null; then
+    currdir=$PWD
+    cd $tmpdir
+    wget https://download.schedmd.com/slurm/slurm-21.08-latest.tar.bz2
+    tar xf slurm-21.08-latest.tar.bz2
+    cd slurm-21.08*/
 
+    ./configure --prefix=/usr/local --sysconfdir=/etc/slurm
+    make -j $(nproc)
+    make install
 
-#wget https://download.schedmd.com/slurm/slurm-22.05-latest.tar.bz2
-#tar xf slurm-22.05-latest.tar.bz2
-#cd slurm-22.05*/
+    cd $currdir
+fi
 
-./configure --prefix=/usr/local --sysconfdir=/etc/slurm
-make -j $(nproc)
-make install
-
-cd $currdir
-
-
-# Mount configurations exported by Gcluster v6 controller using clean symlinks
+# Mount configurations exported by Gcluster v6 controller using clean idempotent symlinks
 mkdir -p /mnt/slurm_configs
-mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
+grep -qs '/mnt/slurm_configs ' /proc/mounts || mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
 mkdir -p /etc/slurm
 ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
