@@ -146,8 +146,11 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 
-	if config.IsTelemetryEnabled() && userConfigExists {
-		telemetryCollector.Execute(exitCode)
+	// Ensure telemetry is executed exactly once on normal exits to prevent recurrency
+	if telemetryFlushed.CompareAndSwap(false, true) {
+		if config.IsTelemetryEnabled() && userConfigExists {
+			telemetryCollector.Execute(exitCode)
+		}
 	}
 
 	return err
