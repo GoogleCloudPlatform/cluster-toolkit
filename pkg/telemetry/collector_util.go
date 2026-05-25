@@ -242,6 +242,10 @@ var getProjectBillingAccount = func(ctx context.Context, projectID string) strin
 		if apiErr == nil {
 			return info.GetBillingAccountName()
 		}
+		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
+		if attempt == 3 || ctx.Err() != nil {
+			break
+		}
 		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
 	return ""
@@ -264,6 +268,10 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 		project, apiErr = client.GetProject(ctx, req)
 		if apiErr == nil {
 			return project.Name, nil
+		}
+		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
+		if attempt == 3 || ctx.Err() != nil {
+			break
 		}
 		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}

@@ -310,7 +310,7 @@ func getTerraformVersion() string {
 func getBillingAccountId(bp config.Blueprint) string {
 	projectID := getKeyFromBlueprint("project_id", bp)
 	if projectID != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
 		billingAccount := getProjectBillingAccount(ctx, projectID)
