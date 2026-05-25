@@ -63,15 +63,25 @@ func Error(f string, a ...any) {
 	errorlog.Printf("%s: %s", formatTs(), msg)
 }
 
-// Fatal prints message to stderr and ends the program
+// Fatal prints message to stderr and ends the program with exit code 1
 func Fatal(f string, a ...any) {
-	defer Exit(1)
+	FatalWithCode(1, f, a...)
+}
+
+// FatalWithCode prints message to stderr and ends the program with the specified exit code
+func FatalWithCode(exitCode int, f string, a ...any) {
+	defer Exit(exitCode)
 
 	msg := fmt.Sprintf(f, a...)
-	fatallog.Printf("%s: %s", formatTs(), msg)
+
+	if exitCode == 0 {
+		infolog.Printf("%s: %s", formatTs(), msg)
+	} else {
+		fatallog.Printf("%s: %s", formatTs(), msg)
+	}
 
 	// Execute the hook if it is registered
 	if FatalHook != nil {
-		FatalHook(1)
+		FatalHook(exitCode)
 	}
 }
