@@ -160,7 +160,7 @@ deployment_groups:
           set -e -x
           echo "Setting up asapd-lite service from Docker image..."
 
-          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4"
+          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8"
 
           # Authenticate Docker with gcloud
           gcloud auth configure-docker us-docker.pkg.dev -q
