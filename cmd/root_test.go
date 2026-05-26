@@ -262,10 +262,11 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 	t.Setenv("APPDATA", tempDir) // For Windows compatibility
 	t.Setenv("HOME", tempDir)    // For macOS/Linux compatibility
 
-	// Ensure config is initialized and telemetry is explicitly turned OFF
-	// to prevent actual network/telemetry calls during unit tests.
+	// Ensure config is initialized and telemetry is explicitly turned OFF to prevent actual network/telemetry calls during unit tests.
 	_ = config.InitUserConfig()
 	_ = config.SetTelemetry(false)
+	// Reset the flag at the start of the test block
+	telemetryFlushed.Store(false)
 
 	// Create a real *exec.ExitError for testing the exit code unwrapping logic
 	execCmd := exec.Command("false")
@@ -322,6 +323,9 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 			// Reset global state initialized by PersistentPreRun to ensure clean slates
 			userConfigExists = false
 			telemetryCollector = nil
+
+			// Reset the flag between subtests
+			telemetryFlushed.Store(false)
 
 			// Inject a dummy command to trigger specific error cases
 			dummyCmd := tt.setupCmd()
