@@ -1,0 +1,6 @@
+google-api-python-client
+google-cloud-secret-manager
+google-cloud-pubsub
+pyyaml
+addict
+httplib2
