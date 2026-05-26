@@ -373,7 +373,7 @@ If the flag is not provided, you will be interactively asked to confirm the down
 
 The Toolkit supports Packer templates in the contemporary [HCL2 file
 format][pkrhcl2] and not in the legacy JSON file format. We require the use of
-Packer 1.7.9 or above, and recommend using the latest release.
+Packer 1.15.3 or above, and recommend using the latest release.
 
 The Toolkit's [Packer template module documentation][pkrmodreadme] describes
 input variables and their behavior. An [image-building example][pkrexample]
