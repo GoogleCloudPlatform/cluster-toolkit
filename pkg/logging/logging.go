@@ -23,6 +23,11 @@ import (
 	"github.com/fatih/color"
 )
 
+const (
+	successExitCode = 0
+	failureExitCode = 1
+)
+
 var (
 	infolog      *log.Logger
 	errorlog     *log.Logger
@@ -65,7 +70,7 @@ func Error(f string, a ...any) {
 
 // Fatal prints message to stderr and ends the program with exit code 1
 func Fatal(f string, a ...any) {
-	ExitWithCode(1, f, a...)
+	ExitWithCode(failureExitCode, f, a...)
 }
 
 // ExitWithCode ends the program with the specified exit code. It prints a message to stdout if exitCode is 0, or stderr otherwise.
@@ -74,7 +79,7 @@ func ExitWithCode(exitCode int, f string, a ...any) {
 
 	msg := fmt.Sprintf(f, a...)
 
-	if exitCode == 0 {
+	if exitCode == successExitCode {
 		infolog.Printf("%s: %s", formatTs(), msg)
 	} else {
 		fatallog.Printf("%s: %s", formatTs(), msg)
