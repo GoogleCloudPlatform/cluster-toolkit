@@ -1,0 +1,4 @@
+pip==25.0
+wheel==0.45.1
+setuptools==80.8.0
+ansible==8.7.0

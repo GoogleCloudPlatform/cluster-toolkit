@@ -14,12 +14,10 @@
 # limitations under the License.
 
 set -ex
-REQ_ANSIBLE_VERSION=2.15
-REQ_ANSIBLE_PIP_VERSION=8.7.0
-REQ_PIP_WHEEL_VERSION=0.45.1
-REQ_PIP_SETUPTOOLS_VERSION=80.8.0
-REQ_PIP_MAJOR_VERSION=25
 REQ_PYTHON3_VERSION=9
+
+# Path to hashed requirements file
+REQ_FILE="install_ansible_requirements.txt"
 
 apt_wait() {
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
@@ -183,23 +181,9 @@ main() {
 	venv_python_path=${venv_path}/bin/python3
 
 	# Upgrade pip if necessary
-	pip_version=$(${venv_python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
-	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
-		${venv_python_path} -m pip install --upgrade pip
-	fi
-
-	# upgrade wheel if necessary
-	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel" || true)
-	if [ "$wheel_pkg" != "wheel==${REQ_PIP_WHEEL_VERSION}" ]; then
-		${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION}
-	fi
-
-	# upgrade setuptools if necessary
-	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools" || true)
-	if [ "$setuptools_pkg" != "setuptools==${REQ_PIP_SETUPTOOLS_VERSION}" ]; then
-		${venv_python_path} -m pip install -U setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
-	fi
+	${venv_python_path} -m pip install \
+		--require-hashes \
+		-r "${REQ_FILE}"
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
@@ -212,19 +196,13 @@ main() {
 		EOF
 	fi
 
-	# Install ansible
 	ansible_version=""
+
 	if command -v ansible-playbook 1>/dev/null; then
 		ansible_version=$(ansible-playbook --version 2>/dev/null | sed -nr 's/^ansible-playbook.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
-		ansible_major_vers=$(echo "${ansible_version}" | cut -d '.' -f 1)
-		ansible_minor_vers=$(echo "${ansible_version}" | cut -d '.' -f 2)
-		ansible_req_major_vers=$(echo "${REQ_ANSIBLE_VERSION}" | cut -d '.' -f 1)
-		ansible_req_minor_vers=$(echo "${REQ_ANSIBLE_VERSION}" | cut -d '.' -f 2)
+		echo "Installed ansible version: ${ansible_version}"
 	fi
-	if [ -z "${ansible_version}" ] || [ "${ansible_major_vers}" -ne "${ansible_req_major_vers}" ] ||
-		[ "${ansible_minor_vers}" -lt "${ansible_req_minor_vers}" ]; then
-		${venv_python_path} -m pip install ansible=="${REQ_ANSIBLE_PIP_VERSION}"
-	fi
+
 	while read -r cmd; do
 		if ! [ -L "/usr/bin/${cmd}" ]; then
 			ln -s "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
