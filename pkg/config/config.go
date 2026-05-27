@@ -1244,7 +1244,15 @@ const gkeClusterModule = "modules/scheduler/gke-cluster"
 
 // ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
 func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
-	versions := make([]string, 0)
+	hasGKE := false
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		if strings.Contains(m.Source, gkeClusterModule) {
+			hasGKE = true
+		}
+	})
+	if !hasGKE {
+		return nil, nil
+	}
 
 	projectID := GetKeyFromBlueprint("project_id", *bp)
 	region := GetKeyFromBlueprint("region", *bp)
@@ -1252,6 +1260,7 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 		return nil, fmt.Errorf("project_id and region must be defined in vars")
 	}
 
+	versions := make([]string, 0)
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if strings.Contains(m.Source, gkeClusterModule) {
 

@@ -15,20 +15,20 @@
 package validators
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/telemetry"
-
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 )
 
-const SecurityAdvisoriesFilePath = "pkg/validators/security-advisories.json"
+//go:embed security-advisories.json
+var securityAdvisoriesJSON []byte
 
 type Advisory struct {
 	CVE             string            `json:"cve"`
@@ -45,7 +45,7 @@ type VulnerabilityDB struct {
 
 // PerformGkeVersionSecurityChecks
 func PerformGkeVulnerabilitiesCheck(cmd *cobra.Command, args []string) {
-	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-checks")
+	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
 
 	// 3. evaluate security vulnerabilities BEFORE Terraform starts
 	if !skipSecurity {
@@ -76,12 +76,7 @@ func PerformGkeVulnerabilitiesCheck(cmd *cobra.Command, args []string) {
 func fetchAdvisories() (*VulnerabilityDB, error) {
 	var db VulnerabilityDB
 
-	securityAdvisories, err := os.ReadFile(SecurityAdvisoriesFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("no Security Advisories file found: %v", err)
-	}
-
-	if err := json.Unmarshal(securityAdvisories, &db); err != nil {
+	if err := json.Unmarshal(securityAdvisoriesJSON, &db); err != nil {
 		return nil, fmt.Errorf("failed to parse Security advisories: %v", err)
 	}
 
