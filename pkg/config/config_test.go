@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,6 +35,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/api/option"
 	. "gopkg.in/check.v1"
 )
 
@@ -1409,5 +1411,168 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 				t.Errorf("expected blueprints %v, got %v", tc.expected, blueprints)
 			}
 		})
+	}
+}
+
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		setupBp  func() Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region",
+			key:  "region",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Valid zone",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Missing key",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := GetKeyFromBlueprint(tt.key, bp)
+
+			if actual != tt.expected {
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFetchLatestGKEVersionForPrefix(t *testing.T) {
+	// 1. Create a mock HTTP server simulating the GCP Container API Response
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the API URL path is correctly formatted
+		expectedPath := "/v1/projects/test-project/locations/us-central1/serverConfig"
+		if r.URL.Path != expectedPath {
+			t.Errorf("Expected path %q, got %q", expectedPath, r.URL.Path)
+		}
+
+		// Provide a mock JSON response matching container.ServerConfig
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{
+			"channels": [
+				{
+					"channel": "RAPID",
+					"validVersions": ["1.35.3-gke.1943000", "1.36.0-gke.1555000"]
+				},
+				{
+					"channel": "REGULAR",
+					"validVersions": ["1.34.7-gke.1292000", "1.35.1-gke.1000"]
+				}
+			]
+		}`)
+	}))
+	defer mockServer.Close()
+
+	// 2. Pass options to route traffic to the mock server and disable auth
+	clientOpt := option.WithEndpoint(mockServer.URL)
+	noAuthOpt := option.WithoutAuthentication()
+
+	tests := []struct {
+		name        string
+		prefix      string
+		wantVersion string
+	}{
+		{
+			name:        "Highest version across all channels for 1.35 prefix",
+			prefix:      "1.35.",
+			wantVersion: "1.35.3-gke.1943000", // Matches RAPID, which is higher than REGULAR's 1.35.1
+		},
+		{
+			name:        "Highest version for 1.34 prefix",
+			prefix:      "1.34.",
+			wantVersion: "1.34.7-gke.1292000",
+		},
+		{
+			name:        "Fallback to empty if no matching prefix is found",
+			prefix:      "1.29.",
+			wantVersion: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := fetchLatestGKEVersionForPrefix("test-project", "us-central1", tc.prefix, clientOpt, noAuthOpt)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if got != tc.wantVersion {
+				t.Errorf("fetchLatestGKEVersionForPrefix() = %v, want %v", got, tc.wantVersion)
+			}
+		})
+	}
+}
+
+func TestResolveGKEVersions(t *testing.T) {
+	// 1. Stub the network call out completely to isolate blueprint parsing
+	originalFetchGKEVersionFunc := fetchGKEVersionFunc
+	defer func() { fetchGKEVersionFunc = originalFetchGKEVersionFunc }() // Restore original after test
+
+	fetchGKEVersionFunc = func(projectID, region, prefix string) (string, error) {
+		if prefix == "1.35." {
+			return "1.35.3-gke.1943000", nil
+		}
+		return "", nil
+	}
+
+	// 2. Setup mock Blueprint
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"project_id": cty.StringVal("test-project"),
+			"region":     cty.StringVal("us-central1"),
+		}),
+		Groups: []Group{
+			{
+				Name: GroupName("primary"),
+				Modules: []Module{
+					{
+						Source: "modules/scheduler/gke-cluster",
+						Settings: NewDict(map[string]cty.Value{
+							"version_prefix": cty.StringVal("1.35."),
+						}),
+					},
+				},
+			},
+		}}
+
+	versions, err := ResolveGKEVersions(&bp)
+	if err != nil {
+		t.Fatalf("ResolveGKEVersions returned unexpected error: %v", err)
+	}
+
+	if len(versions) != 1 || versions[0] != "1.35.3-gke.1943000" {
+		t.Errorf("ResolveGKEVersions() = %v, want %v", versions, []string{"1.35.3-gke.1943000"})
 	}
 }

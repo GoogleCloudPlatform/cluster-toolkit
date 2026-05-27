@@ -38,6 +38,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"google.golang.org/api/container/v1"
+	"google.golang.org/api/option"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -1282,7 +1283,7 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 
 			// 2. Check for version_prefix safely
 			if versionPrefix := getEvaluatedString("version_prefix"); versionPrefix != "" {
-				latestVersion, _ := fetchLatestGKEVersionForPrefix(projectID, region, versionPrefix)
+				latestVersion, _ := fetchGKEVersionFunc(projectID, region, versionPrefix)
 				if latestVersion != "" {
 					versions = append(versions, latestVersion)
 				} else {
@@ -1298,12 +1299,18 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 	return versions, nil
 }
 
+// Allow overriding the fetch function for testing ResolveGKEVersions
+var fetchGKEVersionFunc = func(projectID, region, prefix string) (string, error) {
+	// Call the real function with default options
+	return fetchLatestGKEVersionForPrefix(projectID, region, prefix)
+}
+
 // fetchLatestGKEVersionForPrefix calls the GKE API to get the version a new cluster would use.
-func fetchLatestGKEVersionForPrefix(projectID, region, prefix string) (string, error) {
+func fetchLatestGKEVersionForPrefix(projectID, region, prefix string, opts ...option.ClientOption) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	service, err := container.NewService(ctx)
+	service, err := container.NewService(ctx, opts...)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container service client: %w", err)
 	}
