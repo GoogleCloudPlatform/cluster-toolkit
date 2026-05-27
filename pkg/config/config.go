@@ -37,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
+	"google.golang.org/api/container/v1"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -1236,4 +1237,102 @@ func worker(version string, jobs <-chan string, results chan<- string, wg *sync.
 		resp.Body.Close()
 		cancel() // Release the context resources
 	}
+}
+
+const gkeClusterModule = "modules/scheduler/gke-cluster"
+
+// ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
+func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
+	versions := make([]string, 0)
+
+	projectID := GetKeyFromBlueprint("project_id", *bp)
+	region := GetKeyFromBlueprint("region", *bp)
+	if projectID == "" || region == "" {
+		return nil, fmt.Errorf("project_id and region must be defined in vars")
+	}
+
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		if strings.Contains(m.Source, gkeClusterModule) {
+
+			// Helper function to safely get and evaluate a setting from the blueprint
+			getEvaluatedString := func(key string) string {
+				val := m.Settings.Get(key)
+				if val.IsNull() {
+					return ""
+				}
+
+				// Evaluate the expression using the blueprint's evaluation context
+				evaluatedVal, err := bp.Eval(val)
+				if err != nil {
+					return ""
+				}
+
+				// Ensure the evaluated result is a string and not null
+				if evaluatedVal.Type() == cty.String && !evaluatedVal.IsNull() {
+					return evaluatedVal.AsString()
+				}
+				return ""
+			}
+
+			// 1. Check for min_master_version safely
+			if version := getEvaluatedString("min_master_version"); version != "" {
+				versions = append(versions, version)
+				return // Proceed to the next module
+			}
+
+			// 2. Check for version_prefix safely
+			if versionPrefix := getEvaluatedString("version_prefix"); versionPrefix != "" {
+				latestVersion, _ := fetchLatestGKEVersionForPrefix(projectID, region, versionPrefix)
+				if latestVersion != "" {
+					versions = append(versions, latestVersion)
+				} else {
+					// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
+					// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
+					versions = append(versions, versionPrefix)
+				}
+			}
+
+		}
+	})
+
+	return versions, nil
+}
+
+// fetchLatestGKEVersionForPrefix calls the GKE API to get the version a new cluster would use.
+func fetchLatestGKEVersionForPrefix(projectID, region, prefix string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	service, err := container.NewService(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container service client: %w", err)
+	}
+
+	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
+	serverConfig, err := service.Projects.Locations.GetServerConfig(parent).Context(ctx).Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to get server config: %w", err)
+	}
+
+	var latestVersion = ""
+	for _, channel := range serverConfig.Channels {
+		// Find the latest valid version that matches the prefix. This is the version with which the cluster would get created.
+		for _, version := range channel.ValidVersions {
+			if strings.HasPrefix(version, prefix) && version > latestVersion {
+				latestVersion = version
+			}
+		}
+	}
+	return latestVersion, nil
+}
+
+func GetKeyFromBlueprint(key string, bp Blueprint) string {
+	val, err := bp.Eval(GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
 }

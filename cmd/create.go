@@ -50,7 +50,8 @@ func addCreateFlags(c *cobra.Command) *cobra.Command {
 		"Forces overwrite of existing deployment directory. \n"+
 			"If set, --overwrite-deployment is implied. \n"+
 			"No validation is performed on the existing deployment directory.")
-	return addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/)
+
+	return addGkeVulnerabilitiesCheckFlag(addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/))
 }
 
 func init() {
@@ -76,6 +77,7 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplDir := doCreate(cmd, args[0])
+	validators.PerformGkeVulnerabilitiesCheck(cmd, args)
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)

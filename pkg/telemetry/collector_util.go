@@ -40,7 +40,7 @@ import (
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
-func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
+func GetBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
 	}

@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -65,6 +66,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 			}
 		})
 	}
+	validators.PerformGkeVulnerabilitiesCheck(cmd, args)
 	doDeploy(deplRoot)
 }
 

@@ -49,7 +49,7 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 		eventCmd:         cmd,
 		eventArgs:        args,
 		eventStartTime:   time.Now(),
-		blueprint:        getBlueprint(cmd, args),
+		blueprint:        GetBlueprint(cmd, args),
 		installationMode: installationMode,
 		metadata:         make(map[string]string),
 	}
@@ -245,11 +245,11 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	return getKeyFromBlueprint("region", bp)
+	return config.GetKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	return getKeyFromBlueprint("zone", bp)
+	return config.GetKeyFromBlueprint("zone", bp)
 }
 
 // getModules returns a comma-separated string of sanitized module names.
