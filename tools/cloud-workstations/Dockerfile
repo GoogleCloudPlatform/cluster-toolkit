@@ -37,8 +37,16 @@ RUN wget https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_V
     mv shellcheck-${SHELLCHECK_VER}/shellcheck /usr/local/bin/shellcheck && \
     rm -rf shellcheck-*
 
-# --- Install TFLint ---
-RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+# --- Install TFLint Securely ---
+RUN curl -fsSLo /tmp/tflint_linux_amd64.zip \
+      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip && \
+    curl -fsSLo /tmp/checksums.txt \
+      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/checksums.txt && \
+    cd /tmp && \
+    grep "tflint_linux_amd64.zip" checksums.txt | sha256sum -c - && \
+    unzip /tmp/tflint_linux_amd64.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/tflint && \
+    rm -f /tmp/tflint_linux_amd64.zip /tmp/checksums.txt
 
 # --- Add HashiCorp Repo and Install Terraform/Packer ---
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
