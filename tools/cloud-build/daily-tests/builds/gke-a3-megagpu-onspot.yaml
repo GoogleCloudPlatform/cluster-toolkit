@@ -57,11 +57,6 @@ steps:
     fi
     set -x
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-    else
-        make
-    fi
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     EXAMPLE_BP=examples/gke-a3-megagpu/gke-a3-megagpu.yaml
@@ -101,7 +96,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 \
-      --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="enable_spot=$${ENABLE_SPOT}" \
       --extra-vars="@$${GKE_VARS_FILE}"

@@ -45,11 +45,6 @@ steps:
   - |
     set -x -e
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-    else
-        make
-    fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     REGION=us-west8
@@ -62,7 +57,7 @@ steps:
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --extra-vars="test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
       --extra-vars="region=$${REGION} zone=$${ZONE} "\

@@ -48,11 +48,6 @@ steps:
   - |
     set -x -e
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-    else
-        make
-    fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/storage-gke.yaml
@@ -67,8 +62,8 @@ steps:
     bash tools/add_ttl_label.sh "$${SG_EXAMPLE}"
     python3 tools/fix_vpc_name.py $${SG_EXAMPLE} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:

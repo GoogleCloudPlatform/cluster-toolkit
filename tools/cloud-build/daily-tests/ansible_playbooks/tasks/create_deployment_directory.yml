@@ -30,22 +30,25 @@
     deployment_vars_str: "--vars \"\\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\"\" --vars \"\\\"') }}\\\"\""
   when: cli_deployment_vars is defined and cli_deployment_vars is mapping
 
-- name: Extract gcluster bundle
+- name: Get gcluster bundle or build
   ansible.builtin.shell: |
     set -e
-    unzip -o gcluster-bundle.zip > /dev/null
-    unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
-    # Grant execution permissions to the binary
-    chmod +x gcluster
+    if [ "{{ test_prefix | default('') }}" == "daily-" ]; then
+        gsutil cp gs://{{ gcluster_gcs_path }}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip > /dev/null && unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
   args:
     chdir: "{{ workspace }}"
-  when: test_prefix | default('') == "daily-"
-  register: unzip_output
+  register: bundle_output
 
-- name: Print extraction summary
+- name: Print build or extraction output
   ansible.builtin.debug:
-    msg: "{{ unzip_output.stdout }}"
-  when: test_prefix | default('') == "daily-" and unzip_output.stdout is defined
+    msg: "{{ bundle_output.stdout }}"
+  when: bundle_output.stdout is defined
 
 - name: Create Blueprint
   ansible.builtin.command: |
