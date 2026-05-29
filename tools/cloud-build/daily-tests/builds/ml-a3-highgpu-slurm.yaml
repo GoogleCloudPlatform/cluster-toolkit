@@ -58,7 +58,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
-      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}  gcluster_gcs_path=$${GCLUSTER_GCS_PATH}"\
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}"\
       --extra-vars="region=$${REGION} zone=$${ZONE} "\
       --extra-vars="tcpx_kernel_login=$${TCPX_KERNEL_LOGIN} tcpx_kernel_password=$${TCPX_KERNEL_PASSWORD} keyserver_ubuntu_key=$${KEYSERVER_UBUNTU_KEY} "\
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm.yml"
