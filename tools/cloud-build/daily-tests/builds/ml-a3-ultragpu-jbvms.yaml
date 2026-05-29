@@ -45,9 +45,6 @@ steps:
     cd /workspace
     if [ "${_TEST_PREFIX}" == "daily-" ]; then
         gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip > /dev/null && unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $$2 " " $$3 " (Total size: " $$1 " bytes)."}'
-        # Grant execution permissions to the binary
-        chmod +x gcluster
     else
         make
     fi
@@ -63,7 +60,7 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
         --user=sa_106486320838376751393 \
-        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-ultragpu-jbvms.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
