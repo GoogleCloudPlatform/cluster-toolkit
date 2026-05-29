@@ -46,18 +46,7 @@ locals {
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 
-  default_monitoring_component = [
-    "SYSTEM_COMPONENTS",
-    "POD",
-    "DAEMONSET",
-    "DEPLOYMENT",
-    "STATEFULSET",
-    "STORAGE",
-    "HPA",
-    "CADVISOR",
-    "KUBELET",
-    "JOBSET"
-  ]
+
 
   default_logging_component = [
     "SYSTEM_COMPONENTS",
@@ -386,7 +375,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   monitoring_config {
-    enable_components = var.enable_dcgm_monitoring ? concat(local.default_monitoring_component, ["DCGM"]) : local.default_monitoring_component
+    enable_components = var.enable_dcgm_monitoring ? distinct(concat(var.monitoring_components, ["DCGM"])) : var.monitoring_components
     managed_prometheus {
       enabled = true
       auto_monitoring_config {
