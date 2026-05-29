@@ -575,6 +575,11 @@ The blueprint contains the following:
 * A `batch-job-template` that builds a Batch job to execute the WRF job.
 * A `batch-login` VM that can be used to test and submit the Batch job.
 
+> **_NOTE:_** **Multi-Node Architecture:** This blueprint provisions a single login node and a multi-node compute cluster (defaulting to 2 compute nodes).
+>
+> * **Login Node:** A single VM instance used to install software, stage data, and submit jobs.
+> * **Compute Nodes:** Dynamically provisioned when the job is submitted, based on the `batch-job` module settings.
+
 **Usage instructions:**
 
 1. Spack install

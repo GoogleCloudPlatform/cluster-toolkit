@@ -157,7 +157,7 @@ deployment_groups:
       runnables:
       - script: . /share/wrfv3/submit_wrfv3.sh;
       machine_type: c2-standard-60
-      task_count: 2
+      task_count: 2 # This provisions 2 compute nodes (in mpi_mode, task_count_per_node defaults to 1)
       mpi_mode: true
       allow_automatic_updates: false
 
