@@ -80,14 +80,37 @@ Run `gcluster deploy` to create the cluster. Sample command:
 
 ### 2.2 Upgrading an Existing Cluster
 
-To upgrade an existing cluster, you can perform a manual version upgrade to a specific target version or change the cluster's release channel to align with a different stability track. This section covers procedures for upgrading both the master control plane and individual node pools using either the **`gcloud` CLI** or the **Google Cloud Console (UI).**
+To upgrade an existing cluster, you can perform a version upgrade to a specific target version or change the cluster's release channel to align with a different stability track. This section covers procedures for upgrading both the master control plane and individual node pools using **Cluster Toolkit blueprints**, the **`gcloud` CLI**, or the **Google Cloud Console (UI)**.
 
 > [!WARNING]
 > **Configuration Drift**: Performing manual upgrades via `gcloud` or the Google Cloud Console will cause configuration drift. The actual state of the cluster will no longer match the Terraform state managed by the Cluster Toolkit.
 >
-> To maintain the blueprint as the source of truth, the preferred method is to update the `version_prefix` or `release_channel` in the blueprint and run `./gcluster deploy <path-to-blueprint.yaml>`.
+> To maintain the blueprint as the source of truth, the preferred method is to update the `version_prefix` or `release_channel` in the blueprint and run `./gcluster deploy <path-to-blueprint.yaml> -w`.
 >
 > If a manual upgrade is performed, subsequent toolkit operations may attempt to revert the cluster to the version defined in the blueprint unless the blueprint is also updated to match.
+
+### Upgrading via Blueprint
+
+To maintain your blueprint as the source of truth and avoid configuration drift, the recommended way to upgrade an existing cluster is by updating the blueprint and redeploying.
+
+#### Step 1: Update Blueprint
+Modify your blueprint file to specify the new GKE version or release channel.
+
+Example: Update `version_prefix` to a new minor version or specific patch.
+
+```yaml
+    settings:
+      version_prefix: "1.31." # Upgrading to 1.31
+```
+
+#### Step 2: Redeploy
+Run the `gcluster deploy` command again pointing to your blueprint:
+
+```shell
+./gcluster deploy <path-to-blueprint.yaml> -w
+```
+
+Cluster Toolkit will detect the configuration change in the underlying Terraform state and initiate the upgrade of the cluster control plane and node pools.
 
 ### Upgrading via gcloud CLI
 
@@ -215,7 +238,9 @@ Periodically, the Cluster Toolkit team will update the default versions defined 
 
 When performing manual upgrades, following aspects need to be considered:
 
-* **Disruption and Reboots**: Upgrading GKE clusters requires node replacement or restarts. Using `gcloud container clusters upgrade CLUSTER_NAME --node-pool=NODE_POOL_NAME` will trigger a rolling update of that node pool, replacing old nodes with new ones running the updated version. This process is disruptive as pods will be evicted and rescheduled.  
+* **Disruption and Reboots**:
+  * Upgrading GKE node pools requires node replacement or restarts. Whether triggered via blueprint redeployment, `gcloud` CLI, or the Cloud Console, upgrading a node pool initiates a rolling update. This process replaces old nodes with new ones running the updated version, which is disruptive as pods will be evicted and rescheduled.
+  * Standard rolling upgrades are disruptive to tightly-coupled distributed workloads (e.g., multi-node training jobs using `JobSet`). Losing a single node in a distributed job usually causes the entire job to fail. For these workloads, operators should gracefully pause or drain their jobs (e.g., scaling JobSets/deployments to 0) and verify that a successful checkpoint has been saved to persistent storage before initiating a node pool upgrade.
 * **Pod Disruption Budgets (PDBs)**: GKE respects PDBs during upgrades. If a PDB is overly restrictive, it can block or slow down the upgrade process. Conversely, ensure PDBs are configured correctly to maintain application availability during the rolling update.  
 * **Storage Persistence**: Temporary storage volumes (like `emptyDir`) are deleted when nodes are replaced. Persistent disks (PVs) are unaffected.  
 * **Channel Changes**:  
