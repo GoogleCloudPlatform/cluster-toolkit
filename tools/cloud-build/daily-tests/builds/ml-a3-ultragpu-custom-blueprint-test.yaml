@@ -56,7 +56,6 @@ steps:
       exit 1
     fi
     set -x
-    cd /workspace && make
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/tools/cloud-build/daily-tests/blueprints/a3ultra-custom-image-blueprint.yaml"
@@ -80,6 +79,7 @@ steps:
       --extra-vars="project=$${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="enable_spot=$${ENABLE_SPOT}" \
+      --extra-vars="build_gcluster_from_source=true" \
       --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
       --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
       --extra-vars="@$${VARS_FILE}"
