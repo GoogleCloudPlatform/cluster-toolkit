@@ -78,9 +78,15 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 
 	term := &affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0]
 
-	// Handle pipe-separated constraints and smart merging for topology
-	for k, v := range opts.NodeAffinityLabels {
-		// True if this is a topology label that needs to be merged with a baseline topology.
+	// Collect and sort keys of NodeAffinityLabels to ensure deterministic output
+	keys := make([]string, 0, len(opts.NodeAffinityLabels))
+	for k := range opts.NodeAffinityLabels {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		v := opts.NodeAffinityLabels[k]
 		isTopologyMerge := (k == tpuTopologyLabel) && (opts.Topology != "") && (!opts.IsDynamicSlicing)
 		hasPipe := strings.Contains(v, "|")
 
@@ -88,26 +94,14 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 			continue
 		}
 
-		var values []string
-		if isTopologyMerge {
-			values = append(values, opts.Topology)
+		values, err := parseAffinityValues(k, v, opts.Topology, isTopologyMerge)
+		if err != nil {
+			return nil, err
 		}
 
-		if v != "" {
-			for _, val := range strings.Split(v, "|") {
-				trimmed := strings.TrimSpace(val)
-				if trimmed == "" {
-					return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
-				}
-				if k == tpuTopologyLabel && !config.TopologyRegex.MatchString(trimmed) {
-					return nil, fmt.Errorf("invalid topology format %q for key %s", trimmed, k)
-				}
-				if !slices.Contains(values, trimmed) {
-					values = append(values, trimmed)
-				}
-			}
+		if len(values) == 0 {
+			continue
 		}
-
 		term.MatchExpressions = append(
 			term.MatchExpressions,
 			corev1.NodeSelectorRequirement{
@@ -121,7 +115,35 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 	return affinity, nil
 }
 
-func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
+func parseAffinityValues(k string, v string, topology string, isTopologyMerge bool) ([]string, error) {
+	if v == "" && !isTopologyMerge {
+		return nil, nil
+	}
+
+	var values []string
+	if isTopologyMerge {
+		values = append(values, topology)
+	}
+
+	if v != "" {
+		for _, val := range strings.Split(v, "|") {
+			trimmed := strings.TrimSpace(val)
+			if trimmed == "" {
+				return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
+			}
+			if k == tpuTopologyLabel && !config.TopologyRegex.MatchString(trimmed) {
+				return nil, fmt.Errorf("invalid topology format %q for key %s", trimmed, k)
+			}
+			if !slices.Contains(values, trimmed) {
+				values = append(values, trimmed)
+			}
+		}
+	}
+
+	return values, nil
+}
+
+func GetTopologyAnnotation(topology string, machineType string, numSlices int) map[string]string {
 	if topology == "" {
 		return nil
 	}
@@ -131,9 +153,14 @@ func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
 		annotationKey = "kueue.x-k8s.io/podset-slice-required-topology"
 	}
 
+	partitionValue := fmt.Sprintf("cloud.google.com/gke-tpu-slice-%s-id", topology)
+	if strings.Contains(machineType, "tpu7x") {
+		partitionValue = fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology)
+	}
+
 	return map[string]string{
 		"cloud.google.com/gke-tpu-slice-topology": topology,
-		annotationKey: fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology),
+		annotationKey: partitionValue,
 	}
 }
 

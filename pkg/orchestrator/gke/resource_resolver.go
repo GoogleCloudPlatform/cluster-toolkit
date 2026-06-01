@@ -116,7 +116,8 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, nil
 	}
 
-	if val, ok := g.dynamicSlicingCache[opts.ComputeType]; ok {
+	cacheKey := opts.ComputeType + ":" + opts.Topology
+	if val, ok := g.dynamicSlicingCache[cacheKey]; ok {
 		return val, nil
 	}
 
@@ -124,12 +125,12 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode != 0 {
 		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
-		g.dynamicSlicingCache[opts.ComputeType] = false
+		g.dynamicSlicingCache[cacheKey] = false
 		return false, nil
 	}
 
 	if !g.hasSliceAdmissionCheck() {
-		g.dynamicSlicingCache[opts.ComputeType] = false
+		g.dynamicSlicingCache[cacheKey] = false
 		return false, nil
 	}
 
@@ -138,19 +139,36 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	if err != nil {
 		return false, err
 	}
+
+	active := g.checkNodePoolsDynamicSlicing(requestedMachineName, opts)
+	g.dynamicSlicingCache[cacheKey] = active
+	return active, nil
+}
+
+func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName string, opts ManifestOptions) bool {
 	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == requestedMachineName {
-			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
-				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
-				g.dynamicSlicingCache[opts.ComputeType] = true
-				return true, nil
+		if np.Config.MachineType != requestedMachineName {
+			continue
+		}
+		if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
+			logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
+			return true
+		}
+
+		// Intent Check: Compare requested topology vs node pool physical topology
+		if physicalTopology, ok := np.Config.Labels[tpuTopologyLabel]; ok && opts.Topology != "" {
+			contained, err := config.CheckTopologyContainment(opts.Topology, physicalTopology, opts.ComputeType)
+			if err != nil {
+				logging.Warn("Failed to check topology containment for %s and %s: %v", opts.Topology, physicalTopology, err)
+			} else if contained && opts.Topology != physicalTopology {
+				logging.Info("Dynamic-slicing sub-slicing intent detected: requested topology %s is a proper subset of discovered physical topology %s for node pool %s.", opts.Topology, physicalTopology, np.Name)
+				return true
 			}
 		}
 	}
 
-	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
-	g.dynamicSlicingCache[opts.ComputeType] = false
-	return false, nil
+	logging.Info("Node pool does not have PROVISION_ONLY mode or dynamic sub-slicing intent. Dynamic-slicing not active.")
+	return false
 }
 
 func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {

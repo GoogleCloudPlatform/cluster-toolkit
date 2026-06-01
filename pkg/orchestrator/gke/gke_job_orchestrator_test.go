@@ -947,6 +947,93 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: true,
 		},
 		{
+			name: "Success - Dynamic-slicing active via sub-slicing intent (static reservation)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu-v6e-slice",
+				Topology:        "2x4",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu-v6e-slice",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "4x4",
+						},
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get crd topologies.kueue.x-k8s.io": {
+					{ExitCode: 0},
+				},
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: true,
+		},
+		{
+			name: "Success - TPU7x Dynamic-slicing active via sub-slicing intent (static reservation)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "2x2x1",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "4x4x4",
+						},
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get crd topologies.kueue.x-k8s.io": {
+					{ExitCode: 0},
+				},
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: true,
+		},
+		{
+			name: "Failure - Requested topology matches physical topology (not dynamic sub-slicing)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu-v6e-slice",
+				Topology:        "4x4",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu-v6e-slice",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "4x4",
+						},
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get crd topologies.kueue.x-k8s.io": {
+					{ExitCode: 0},
+				},
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: false,
+		},
+		{
 			name: "Failure - No TPU",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
