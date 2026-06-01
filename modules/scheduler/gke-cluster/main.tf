@@ -107,8 +107,13 @@ data "google_container_engine_versions" "version_prefix_filter" {
 }
 
 locals {
-  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  master_version = var.min_master_version != null ? var.min_master_version : (
+    var.release_channel != "UNSPECIFIED" ?
+    data.google_container_engine_versions.version_prefix_filter.release_channel_latest_version[var.release_channel] :
+    data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  )
 }
+
 
 
 module "slice_controller_version_check" {
