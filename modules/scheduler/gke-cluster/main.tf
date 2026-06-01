@@ -115,7 +115,6 @@ locals {
 }
 
 
-
 module "slice_controller_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
