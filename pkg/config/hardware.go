@@ -31,7 +31,7 @@ var tpuFamilyDefaults = map[string]int{
 }
 
 var tpuRegex = regexp.MustCompile(`^v[4-6][ep]?(-\d+)?$`)
-var TopologyRegex = regexp.MustCompile(`^[0-9]+x[0-9]+(x[0-9]+)?$`)
+var TopologyRegex = regexp.MustCompile("^[1-9][0-9]*x[1-9][0-9]*(x[1-9][0-9]*)?$")
 
 type tpu3DConstraints struct {
 	maxCubes int

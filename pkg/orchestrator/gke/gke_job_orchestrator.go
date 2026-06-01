@@ -1873,8 +1873,8 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 	return "", nil
 }
 
-func (g *GKEOrchestrator) buildTopologyAnnotation(topology string) string {
-	topologyAnnotation := GetTopologyAnnotation(topology)
+func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, numSlices int) string {
+	topologyAnnotation := GetTopologyAnnotation(topology, numSlices)
 	if len(topologyAnnotation) > 0 {
 		b, err := yaml.Marshal(topologyAnnotation)
 		if err == nil {

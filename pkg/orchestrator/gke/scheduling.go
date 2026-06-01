@@ -121,12 +121,19 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 	return affinity, nil
 }
 
-func GetTopologyAnnotation(topology string) map[string]string {
+func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
 	if topology == "" {
 		return nil
 	}
+
+	annotationKey := "kueue.x-k8s.io/podset-required-topology"
+	if numSlices > 1 {
+		annotationKey = "kueue.x-k8s.io/podset-slice-required-topology"
+	}
+
 	return map[string]string{
 		"cloud.google.com/gke-tpu-slice-topology": topology,
+		annotationKey: fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology),
 	}
 }
 
