@@ -38,15 +38,13 @@ RUN wget https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_V
     rm -rf shellcheck-*
 
 # --- Install TFLint Securely ---
-RUN curl -fsSLo /tmp/tflint_linux_amd64.zip \
-      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip && \
-    curl -fsSLo /tmp/checksums.txt \
-      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/checksums.txt && \
-    cd /tmp && \
-    grep "tflint_linux_amd64.zip" checksums.txt | sha256sum -c - && \
-    unzip /tmp/tflint_linux_amd64.zip -d /usr/local/bin && \
+RUN TFLINT_ZIP_HASH="c004ec45ade3caf87cd4089feb1d2af9f7df57b13140a36df8a63c0a8cc69f14" && \
+    curl -fsSLo /tmp/tflint_linux_amd64.zip \
+      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION:-v0.62.1}/tflint_linux_amd64.zip && \
+    echo "${TFLINT_ZIP_HASH}  /tmp/tflint_linux_amd64.zip" | sha256sum -c - && \
+    unzip -o /tmp/tflint_linux_amd64.zip -d /usr/local/bin && \
     chmod +x /usr/local/bin/tflint && \
-    rm -f /tmp/tflint_linux_amd64.zip /tmp/checksums.txt
+    rm -f /tmp/tflint_linux_amd64.zip
 
 # --- Add HashiCorp Repo and Install Terraform/Packer ---
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
