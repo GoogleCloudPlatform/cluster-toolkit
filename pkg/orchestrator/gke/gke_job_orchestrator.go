@@ -1859,7 +1859,11 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 }
 
 func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, error) {
-	if affinity := GetAffinity(schedOpts); affinity != nil {
+	affinity, err := GetAffinity(schedOpts)
+	if err != nil {
+		return "", err
+	}
+	if affinity != nil {
 		b, err := k8syaml.Marshal(affinity)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal affinity: %w", err)

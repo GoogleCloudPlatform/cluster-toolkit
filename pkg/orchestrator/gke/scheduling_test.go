@@ -37,7 +37,10 @@ func TestGetNodeSelector(t *testing.T) {
 
 func TestGetAffinity(t *testing.T) {
 	opts := SchedulingOptions{}
-	affinity := GetAffinity(opts)
+	affinity, err := GetAffinity(opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if affinity == nil {
 		t.Fatal("Expected affinity, got nil")
 	}
@@ -133,6 +136,7 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 		opts       SchedulingOptions
 		wantKey    string
 		wantValues []string
+		wantErr    bool
 	}{
 		{
 			name: "pipe separated values (non-topology)",
@@ -167,15 +171,14 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 			wantValues: []string{"2x2x1", "2x2x2"},
 		},
 		{
-			name: "null safety with whitespace",
+			name: "null safety with whitespace (now fails)",
 			opts: SchedulingOptions{
 				Topology: "2x2x1",
 				NodeAffinityLabels: map[string]string{
 					"cloud.google.com/gke-tpu-topology": " | ",
 				},
 			},
-			wantKey:    "cloud.google.com/gke-tpu-topology",
-			wantValues: []string{"2x2x1"},
+			wantErr: true,
 		},
 		{
 			name: "null safety with empty string",
@@ -200,11 +203,38 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 			wantKey:    "cloud.google.com/gke-tpu-topology",
 			wantValues: []string{"2x2x2"},
 		},
+		{
+			name: "invalid topology format",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "invalid",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty element in list",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"pipe-key": "val1||val2",
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			affinity := GetAffinity(tt.opts)
+			affinity, err := GetAffinity(tt.opts)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if affinity == nil {
 				t.Fatal("Expected affinity, got nil")
 			}

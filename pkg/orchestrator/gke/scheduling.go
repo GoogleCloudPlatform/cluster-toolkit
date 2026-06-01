@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"slices"
 	"strings"
@@ -42,8 +43,8 @@ func GetNodeSelector(opts SchedulingOptions) map[string]string {
 		if strings.Contains(v, "|") {
 			continue
 		}
-		// Skip if it's topology and we have a baseline topology to merge with
-		if k == tpuTopologyLabel && opts.Topology != "" {
+		// Skip if it's topology (will go to affinity)
+		if k == tpuTopologyLabel {
 			continue
 		}
 		nodeSelector[k] = v
@@ -55,7 +56,7 @@ func GetNodeSelector(opts SchedulingOptions) map[string]string {
 	return nodeSelector
 }
 
-func GetAffinity(opts SchedulingOptions) *corev1.Affinity {
+func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 	// Build the inner term first to reduce nesting
 	defaultPoolExclusion := corev1.NodeSelectorTerm{
 		MatchExpressions: []corev1.NodeSelectorRequirement{
@@ -80,29 +81,31 @@ func GetAffinity(opts SchedulingOptions) *corev1.Affinity {
 	// Handle pipe-separated constraints and smart merging for topology
 	for k, v := range opts.NodeAffinityLabels {
 		// True if this is a topology label that needs to be merged with a baseline topology.
-		isTopologyMerge := (k == tpuTopologyLabel) && (opts.Topology != "")
+		isTopologyMerge := (k == tpuTopologyLabel) && (opts.Topology != "") && (!opts.IsDynamicSlicing)
 		hasPipe := strings.Contains(v, "|")
 
-		if !hasPipe && !isTopologyMerge {
+		if !hasPipe && k != tpuTopologyLabel {
 			continue
 		}
 
 		var values []string
-		if isTopologyMerge && !opts.IsDynamicSlicing {
+		if isTopologyMerge {
 			values = append(values, opts.Topology)
 		}
 
-		for _, val := range strings.Split(v, "|") {
-			if trimmed := strings.TrimSpace(val); trimmed != "" {
+		if v != "" {
+			for _, val := range strings.Split(v, "|") {
+				trimmed := strings.TrimSpace(val)
+				if trimmed == "" {
+					return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
+				}
+				if k == tpuTopologyLabel && !config.TopologyRegex.MatchString(trimmed) {
+					return nil, fmt.Errorf("invalid topology format %q for key %s", trimmed, k)
+				}
 				if !slices.Contains(values, trimmed) {
 					values = append(values, trimmed)
 				}
 			}
-		}
-
-		// Prevents invalid manifests if a user passes "|" by itself as node-constraints.
-		if len(values) == 0 {
-			continue
 		}
 
 		term.MatchExpressions = append(
@@ -115,7 +118,7 @@ func GetAffinity(opts SchedulingOptions) *corev1.Affinity {
 		)
 	}
 
-	return affinity
+	return affinity, nil
 }
 
 func GetTopologyAnnotation(topology string) map[string]string {
