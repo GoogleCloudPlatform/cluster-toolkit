@@ -99,7 +99,7 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 			switch adv.Status {
 			case "PENDING":
 				warnings = append(warnings, fmt.Sprintf(
-					"SECURITY WARNING: Your deployment is vulnerable to %s (%s). "+
+					"SECURITY WARNING: Your deployment might be vulnerable to %s (%s). "+
 						"Patches are currently PENDING in upstream GKE. See: %s",
 					adv.CVE, adv.Name, adv.Link))
 			case "PATCHED":
@@ -110,7 +110,7 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 					}
 					if semver.Compare(gkeVersion, patchedVersion) < 0 {
 						warnings = append(warnings, fmt.Sprintf(
-							"SECURITY WARNING: Your GKE version %s is vulnerable to %s (%s). "+
+							"SECURITY WARNING: Your GKE version %s might be vulnerable to %s (%s). "+
 								"Please upgrade your blueprint to at least %s. See: %s",
 							gkeVersion, adv.CVE, adv.Name, patchedVersion, adv.Link))
 					}
