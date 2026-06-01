@@ -161,13 +161,13 @@ func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName stri
 			if err != nil {
 				logging.Warn("Failed to check topology containment for %s and %s: %v", opts.Topology, physicalTopology, err)
 			} else if contained && opts.Topology != physicalTopology {
-				logging.Info("Dynamic-slicing sub-slicing intent detected: requested topology %s is a proper subset of discovered physical topology %s for node pool %s.", opts.Topology, physicalTopology, np.Name)
+				logging.Info("Dynamic-slicing topology subset detected: requested topology %s is a proper subset of discovered physical topology %s for node pool %s.", opts.Topology, physicalTopology, np.Name)
 				return true
 			}
 		}
 	}
 
-	logging.Info("Node pool does not have PROVISION_ONLY mode or dynamic sub-slicing intent. Dynamic-slicing not active.")
+	logging.Info("Node pool does not have PROVISION_ONLY mode or dynamic topology subset requirement. Dynamic-slicing not active.")
 	return false
 }
 

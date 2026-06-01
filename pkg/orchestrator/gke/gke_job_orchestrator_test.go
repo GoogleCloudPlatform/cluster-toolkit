@@ -947,7 +947,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: true,
 		},
 		{
-			name: "Success - Dynamic-slicing active via sub-slicing intent (static reservation)",
+			name: "Success - Dynamic-slicing active via topology subset (static reservation)",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -976,7 +976,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: true,
 		},
 		{
-			name: "Success - TPU7x Dynamic-slicing active via sub-slicing intent (static reservation)",
+			name: "Success - TPU7x Dynamic-slicing active via topology subset (static reservation)",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -1005,7 +1005,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: true,
 		},
 		{
-			name: "Failure - Requested topology matches physical topology (not dynamic sub-slicing)",
+			name: "Failure - Requested topology matches physical topology (not dynamic topology subset)",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
