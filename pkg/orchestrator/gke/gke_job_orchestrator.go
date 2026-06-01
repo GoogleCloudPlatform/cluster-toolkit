@@ -1816,7 +1816,10 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 			return fmt.Errorf("topology is not allowed for GPU and CPU jobs")
 		}
 		if !isDynamicSlicing {
-			nodeSelector["cloud.google.com/gke-tpu-topology"] = schedOpts.Topology
+			_, hasFallback := schedOpts.NodeAffinityLabels[tpuTopologyLabel]
+			if !hasFallback {
+				nodeSelector[tpuTopologyLabel] = schedOpts.Topology
+			}
 		}
 	}
 	return nil
@@ -1856,7 +1859,11 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 }
 
 func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, error) {
-	if affinity := GetAffinity(schedOpts); affinity != nil {
+	affinity, err := GetAffinity(schedOpts)
+	if err != nil {
+		return "", err
+	}
+	if affinity != nil {
 		b, err := k8syaml.Marshal(affinity)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal affinity: %w", err)

@@ -31,6 +31,7 @@ var tpuFamilyDefaults = map[string]int{
 }
 
 var tpuRegex = regexp.MustCompile(`^v[4-6][ep]?(-\d+)?$`)
+var TopologyRegex = regexp.MustCompile(`^[0-9]+x[0-9]+(x[0-9]+)?$`)
 
 type tpu3DConstraints struct {
 	maxCubes int
@@ -231,6 +232,11 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 // CalculateAcceleratorNodes derives the node count from topology and machine type.
 // If acceleratorsPerVM is <= 0, it falls back to deriving it from machineType or defaults.
 func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM int) (int, error) {
+	// Validate topology format
+	if !TopologyRegex.MatchString(topology) {
+		return 0, fmt.Errorf("provided topology has invalid format %q", topology)
+	}
+
 	// 1. Calculate Total Accelerators from topology
 	totalAccelerators := 1
 	for _, dim := range strings.Split(topology, "x") {
@@ -400,6 +406,9 @@ func ValidateHardwareRequest(machineType, topology string) error {
 }
 
 func validateTopologyMeshFormat(requested string, accelType string) error {
+	if !TopologyRegex.MatchString(requested) {
+		return fmt.Errorf("provided topology has invalid format %q", requested)
+	}
 	dims := strings.Split(requested, "x")
 	if matchesTPUFamily(accelType, valid2DTPUFamilies) {
 		if len(dims) != 2 {
