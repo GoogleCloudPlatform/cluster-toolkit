@@ -46,26 +46,6 @@ data "kubernetes_service_account_v1" "workload_sa" {
   depends_on = [var.k8s_prerequisites_ready]
 }
 
-resource "kubernetes_labels" "workload_namespace_labels" {
-  count       = var.gke_cluster_exists ? 1 : 0
-  api_version = "v1"
-  kind        = "Namespace"
-
-  metadata {
-    name = var.namespace
-  }
-
-  labels = {
-    "managed-mldiagnostics-gke" = "true"
-  }
-
-  depends_on = [
-    terraform_data.validate_namespace,
-    terraform_data.validate_sa,
-    terraform_data.validate_cert_manager
-  ]
-}
-
 module "install_mldiagnostics_webhook" {
   count            = var.gke_cluster_exists ? 1 : 0
   source           = "../kubectl-apply/helm_install"
@@ -77,7 +57,7 @@ module "install_mldiagnostics_webhook" {
   chart_version    = var.injection_webhook_version
   namespace        = local.mldiagnostics_namespace
   create_namespace = true
-  depends_on       = [var.k8s_prerequisites_ready, kubernetes_labels.workload_namespace_labels]
+  depends_on       = [var.k8s_prerequisites_ready]
 }
 
 module "install_mldiagnostics_connection_operator" {

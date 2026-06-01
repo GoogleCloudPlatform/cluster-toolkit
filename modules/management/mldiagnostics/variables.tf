@@ -47,14 +47,6 @@ variable "namespace" {
   default     = "default"
 }
 
-# Reserved for future work where behavior will be classified based on GKE version.
-# tflint-ignore: terraform_unused_declarations
-variable "gke_version" {
-  description = "The GKE version for the cluster"
-  type        = string
-  default     = null
-}
-
 variable "injection_webhook_version" {
   description = "The chart version for mldiagnostics-injection-webhook"
   type        = string
@@ -104,4 +96,20 @@ resource "terraform_data" "validate_cert_manager" {
   }
 
   depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
+}
+
+variable "enable_ml_diagnostics" {
+  description = "Indicates whether managed ML Diagnostics is enabled on the GKE cluster."
+  type        = bool
+  default     = false
+}
+
+# Validate that both managed and manual methods are not active at the same time
+resource "terraform_data" "validate_prevent_duplicate_install" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ml_diagnostics
+      error_message = "Cannot use the 'mldiagnostics' module if 'enable_ml_diagnostics' is set to true in the 'gke-cluster' module for GKE-managed ML Diagnostics. Please use only one method."
+    }
+  }
 }

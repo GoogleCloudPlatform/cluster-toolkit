@@ -41,9 +41,9 @@ limitations under the License.
 
 | Name | Type |
 | ---- | ---- |
-| [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [terraform_data.validate_cert_manager](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_namespace](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.validate_prevent_duplicate_install](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_sa](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
@@ -56,8 +56,8 @@ limitations under the License.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_connection_operator_version"></a> [connection\_operator\_version](#input\_connection\_operator\_version) | The chart version for mldiagnostics-connection-operator | `string` | `"0.21.0"` | no |
+| <a name="input_enable_ml_diagnostics"></a> [enable\_ml\_diagnostics](#input\_enable\_ml\_diagnostics) | Indicates whether managed ML Diagnostics is enabled on the GKE cluster. | `bool` | `false` | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
-| <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | The GKE version for the cluster | `string` | `null` | no |
 | <a name="input_injection_webhook_version"></a> [injection\_webhook\_version](#input\_injection\_webhook\_version) | The chart version for mldiagnostics-injection-webhook | `string` | `"0.25.0"` | no |
 | <a name="input_k8s_prerequisites_ready"></a> [k8s\_prerequisites\_ready](#input\_k8s\_prerequisites\_ready) | A static flag that signals to downstream modules that upstream dependencies are ready. | `any` | `false` | no |
 | <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account name used by the gke cluster | `string` | `"workload-identity-k8s-sa"` | no |

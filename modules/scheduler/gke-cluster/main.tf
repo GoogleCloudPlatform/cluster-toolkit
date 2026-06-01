@@ -110,6 +110,12 @@ module "slice_controller_version_check" {
   minimum_version = "1.35.0-gke.274500"
 }
 
+module "mldiagnostics_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = "1.35.0-gke.3065000"
+}
+
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
@@ -391,6 +397,13 @@ resource "google_container_cluster" "gke_cluster" {
   logging_config {
     enable_components = local.default_logging_component
   }
+
+  dynamic "managed_machine_learning_diagnostics_config" {
+    for_each = (var.enable_ml_diagnostics && module.mldiagnostics_version_check.is_greater_than_or_equal) ? [1] : []
+    content {
+      enabled = true
+    }
+  }
 }
 
 # We define explicit node pools, so that it can be modified without
@@ -556,6 +569,25 @@ resource "kubernetes_namespace" "user_namespace" {
 
   depends_on = [
     google_container_cluster.gke_cluster
+  ]
+}
+
+resource "kubernetes_labels" "workload_namespace_labels" {
+  count       = var.enable_ml_diagnostics ? 1 : 0
+  api_version = "v1"
+  kind        = "Namespace"
+
+  metadata {
+    name = var.namespace
+  }
+
+  labels = {
+    "managed-mldiagnostics-gke" = "true"
+  }
+
+  depends_on = [
+    google_container_cluster.gke_cluster,
+    kubernetes_namespace.user_namespace
   ]
 }
 
