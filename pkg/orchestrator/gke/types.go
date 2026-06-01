@@ -205,6 +205,7 @@ type gkeNodePoolConfig struct {
 	Accelerators            []gkeAccelerator            `json:"accelerators"`
 	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
 	Taints                  []gkeTaint                  `json:"taints"`
+	Labels                  map[string]string           `json:"labels,omitempty"`
 }
 
 type gkeAutoscaling struct {

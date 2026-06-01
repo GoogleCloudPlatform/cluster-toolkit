@@ -82,8 +82,12 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 			MemoryMb:  int(mt.MemoryMb),
 		}
 
-		count, accelType, _ := config.ResolveAcceleratorInfo(mt, machineType)
+		count, accelType, isTPU := config.ResolveAcceleratorInfo(mt, machineType)
 		if count > 0 {
+			// Fetch correct accelerator type for TPUs using map
+			if isTPU {
+				accelType = g.GenerateGKENodeSelectorLabel(machineType)
+			}
 			cap.Accelerators = append(cap.Accelerators, struct {
 				Count int    `json:"guestAcceleratorCount"`
 				Type  string `json:"guestAcceleratorType"`

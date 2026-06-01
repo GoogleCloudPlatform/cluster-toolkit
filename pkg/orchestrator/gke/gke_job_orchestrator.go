@@ -385,6 +385,9 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		"--project", job.ProjectID,
 		"--format=json")
 	if res.ExitCode != 0 {
+		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
+			return fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", job.ClusterName, job.ProjectID)
+		}
 		return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
 	}
 
@@ -903,21 +906,41 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 	}
 
 	logging.Info("Auto-discovering Topology for %s...", job.MachineType)
-	output, err := g.queryDiscoveredTopologies()
+	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
+	output, err := g.queryDiscoveredTopologies(accelLabel)
 	if err != nil {
 		return "", false, err
 	}
 
 	topologies := g.parseTopologies(output)
 
-	res, err := g.selectTopology(job.Topology, topologies, job.MachineType)
+	parts := strings.Split(job.ComputeType, "-")
+	var requestedChips int
+	if len(parts) == 2 {
+		// If parts[1] is not a valid integer, Atoi returns 0.
+		// We ignore the error and fall back to resolving without size restriction.
+		requestedChips, _ = strconv.Atoi(parts[1])
+	}
+	res, err := g.selectTopology(job.Topology, topologies, job.MachineType, requestedChips)
 	if err == nil {
 		g.topologyCache[cacheKey] = res
 	}
 	return res, false, err
 }
 
-func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string]bool, accelType string) (string, error) {
+func calculateChipsFromTopology(topology string) int {
+	parts := strings.Split(topology, "x")
+	chips := 1
+	for _, p := range parts {
+		n, _ := strconv.Atoi(p)
+		if n > 0 {
+			chips *= n
+		}
+	}
+	return chips
+}
+
+func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string]bool, accelType string, requestedChips int) (string, error) {
 	if len(topologies) == 0 {
 		if requested != "" {
 			logging.Info("Warning: No active topologies discovered from Kueue or Nodes. Fast-tracking provided topology: %s", requested)
@@ -931,6 +954,17 @@ func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string
 			return "", err
 		}
 		return requested, nil
+	}
+
+	if requestedChips > 0 {
+		for t := range topologies {
+			chips := calculateChipsFromTopology(t)
+			if chips == requestedChips {
+				logging.Info("Auto-discovered Topology matching requested size (%d chips): %s", requestedChips, t)
+				return t, nil
+			}
+		}
+		return "", fmt.Errorf("no discovered topologies match the requested size of %d chips", requestedChips)
 	}
 
 	uniqueTops := make([]string, 0, len(topologies))
@@ -1028,12 +1062,14 @@ func (g *GKEOrchestrator) parseTopologies(output string) map[string]bool {
 	return topologies
 }
 
-func (g *GKEOrchestrator) queryDiscoveredTopologies() (string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}")
+func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string) (string, error) {
+	selector := fmt.Sprintf("cloud.google.com/gke-tpu-accelerator=%s", accelLabel)
+
+	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 	output := strings.TrimSpace(res.Stdout)
 
 	if output == "" {
-		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}")
+		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("failed to query Nodes for topology: %s", res.Stderr)
 		}
@@ -1270,39 +1306,17 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition)
 		}
 	}
 
-	mapped := g.GenerateGKENodeSelectorLabel(job.MachineType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || config.IsTPU(mapped) {
+	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
+	if err != nil {
+		return false, 0, fmt.Errorf("failed to fetch machine capabilities for %s: %w", job.MachineType, err)
+	}
+
+	if len(cap.Accelerators) > 0 {
 		return false, 0, nil
 	}
 
-	count, err := g.FetchMachineCapacity(job.MachineType, job.ClusterLocation)
-	if err != nil {
-		return false, 0, fmt.Errorf("failed to describe machine type %s: %w", job.MachineType, err)
-	}
-	if count > 0 {
-		logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.MachineType)
-		return true, g.getEffectiveCPUs(job.MachineType, count), nil
-	}
-	return false, 0, nil
-}
-
-func (g *GKEOrchestrator) isKnownAccelerator(accelType string) bool {
-	if _, exists := config.AcceleratorShorthandMap[accelType]; exists {
-		return true
-	}
-
-	for _, realMachine := range config.AcceleratorShorthandMap {
-		if accelType == realMachine {
-			return true
-		}
-	}
-
-	mapped := g.GenerateGKENodeSelectorLabel(accelType)
-	if strings.Contains(strings.ToLower(mapped), "nvidia") || config.IsTPU(mapped) {
-		return true
-	}
-
-	return false
+	logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.MachineType)
+	return true, g.getEffectiveCPUs(job.MachineType, cap.GuestCpus), nil
 }
 
 func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition) (bool, int, error) {
@@ -1786,33 +1800,49 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 	return nil
 }
 
-func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isCPUMachine bool) (string, error) {
-	nodeSelector := GetNodeSelector(schedOpts)
-	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
-
-	isGPU := strings.Contains(strings.ToLower(accelLabel), "nvidia")
-
+func (g *GKEOrchestrator) addAcceleratorLabel(nodeSelector map[string]string, accelLabel string, isCPUMachine bool, machineType string) {
 	if accelLabel != "" && !isCPUMachine {
-		if nodeSelector == nil {
-			nodeSelector = make(map[string]string)
-		}
-		if strings.Contains(accelLabel, "tpu-v6e") || strings.Contains(accelLabel, "tpu7x") {
+		if config.IsTPU(machineType) {
 			nodeSelector["cloud.google.com/gke-tpu-accelerator"] = accelLabel
 		} else {
 			nodeSelector["cloud.google.com/gke-accelerator"] = accelLabel
 		}
 	}
+}
 
+func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, schedOpts SchedulingOptions, isGPU bool, isCPUMachine bool, isDynamicSlicing bool) error {
 	if schedOpts.Topology != "" {
-		if isGPU {
-			return "", fmt.Errorf("topology is not allowed for GPU jobs")
-		}
-		if nodeSelector == nil {
-			nodeSelector = make(map[string]string)
+		if isGPU || isCPUMachine {
+			return fmt.Errorf("topology is not allowed for GPU and CPU jobs")
 		}
 		if !isDynamicSlicing {
 			nodeSelector["cloud.google.com/gke-tpu-topology"] = schedOpts.Topology
 		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isCPUMachine bool) (string, error) {
+	nodeSelector := GetNodeSelector(schedOpts)
+	if nodeSelector == nil {
+		nodeSelector = make(map[string]string)
+	}
+	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch machine capabilities: %w", err)
+	}
+
+	var accelLabel string
+	if len(cap.Accelerators) > 0 {
+		accelLabel = cap.Accelerators[0].Type
+	}
+
+	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
+
+	g.addAcceleratorLabel(nodeSelector, accelLabel, isCPUMachine, job.MachineType)
+
+	if err := g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine, isDynamicSlicing); err != nil {
+		return "", err
 	}
 
 	if len(nodeSelector) > 0 {
