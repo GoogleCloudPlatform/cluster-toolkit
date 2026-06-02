@@ -80,13 +80,6 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
-      - type: shell
-        name: install-kernel-headers
-        destination: install_kernel_headers.sh
-        content: |
-          #!/bin/bash
-          sudo apt-get update
-          sudo apt-get install -y dkms linux-headers-\$(uname -r)
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |
