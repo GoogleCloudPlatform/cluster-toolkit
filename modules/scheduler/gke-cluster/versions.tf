@@ -28,10 +28,6 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = ">= 2.36"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = ">= 2.10.0"
-    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.91.0"

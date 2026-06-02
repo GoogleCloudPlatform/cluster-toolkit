@@ -101,6 +101,8 @@ locals {
   master_version = var.min_master_version != null ? var.min_master_version : (
     var.release_channel != "UNSPECIFIED" ? local.latest_channel_version : local.latest_master_version
   )
+
+  mldiagnostics_minimum_version = "1.35.0-gke.3065000"
 }
 
 
@@ -113,7 +115,7 @@ module "slice_controller_version_check" {
 module "mldiagnostics_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
-  minimum_version = "1.35.0-gke.3065000"
+  minimum_version = local.mldiagnostics_minimum_version
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -399,7 +401,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "managed_machine_learning_diagnostics_config" {
-    for_each = (var.enable_ml_diagnostics && module.mldiagnostics_version_check.is_greater_than_or_equal) ? [1] : []
+    for_each = var.enable_ml_diagnostics ? [1] : []
     content {
       enabled = true
     }
@@ -661,4 +663,13 @@ module "kubectl_apply" {
       }
     ] : []
   )
+}
+
+resource "terraform_data" "validate_ml_diagnostics_version" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version', or use the 'mldiagnostics' module instead."
+    }
+  }
 }
