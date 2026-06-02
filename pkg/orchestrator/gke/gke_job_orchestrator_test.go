@@ -1840,3 +1840,151 @@ func TestGetNodeCount(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateGKEManifest_EnableTASAnnotationsFlag(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:         "test-tas-flag-job",
+		CommandToRun:         "echo hello",
+		ComputeType:          "v6e-8",
+		Topology:             "2x4",
+		ClusterLocation:      "us-central1-a",
+		EnableTASAnnotations: false, // Explicitly disabled!
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors":               {{ExitCode: 0, Stdout: ""}},
+		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: "found"}},
+		"kubectl get admissioncheck":                {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "4x4"}},
+		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json":                             {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+	}
+
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-pool",
+			Config: gkeNodePoolConfig{
+				MachineType: "ct6e-standard-8t",
+				Labels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "4x4",
+				},
+			},
+		},
+	}
+
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	// Crucial check: The CLI resolved it as dynamic slicing because it's a 2x2 subset of 4x4
+	if !isDynamicSlicing {
+		t.Fatalf("Expected resolveHardwareRequirements to initially flag isDynamicSlicing as true")
+	}
+
+	// Now simulate gke_job_orchestrator submission override logic
+	if !job.EnableTASAnnotations {
+		isDynamicSlicing = false
+	}
+
+	if isDynamicSlicing {
+		t.Fatalf("Expected isDynamicSlicing to be overridden to false when EnableTASAnnotations is false")
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Because dynamic slicing was overridden to false:
+	// 1. NodeSelector MUST include the topology strictly (Fix A bypassed)
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x4") {
+		t.Errorf("Expected manifest to contain strict nodeSelector topology, but it was missing\nManifest: %s", manifest)
+	}
+
+	// 2. Kueue TAS annotations MUST NOT be injected (Fix B bypassed)
+	if strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology") {
+		t.Errorf("Expected manifest to NOT contain kueue TAS annotations, but they were found\nManifest: %s", manifest)
+	}
+}
+
+func TestGenerateGKEManifest_DynamicSlicingActive_V6e(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:         "test-tas-v6e-job",
+		CommandToRun:         "echo hello",
+		ComputeType:          "v6e-8",
+		Topology:             "2x4",
+		ClusterLocation:      "us-central1-a",
+		EnableTASAnnotations: true, // Enabled!
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors":               {{ExitCode: 0, Stdout: ""}},
+		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: "found"}},
+		"kubectl get admissioncheck":                {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "4x4"}},
+		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json":                             {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+	}
+
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-pool",
+			Config: gkeNodePoolConfig{
+				MachineType: "ct6e-standard-8t",
+				Labels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "4x4",
+				},
+			},
+		},
+	}
+
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	// Crucial check: The CLI resolved it as dynamic slicing because it's a 2x4 subset of 4x4
+	if !isDynamicSlicing {
+		t.Fatalf("Expected resolveHardwareRequirements to flag isDynamicSlicing as true")
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Because dynamic slicing is true:
+	// 1. NodeSelector MUST NOT include the topology strictly (Fix A)
+	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x4") {
+		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
+	}
+
+	// 2. Kueue TAS annotations MUST be injected (Fix B)
+	if !strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology: cloud.google.com/gke-tpu-slice-2x4-id") {
+		t.Errorf("Expected manifest to contain kueue TAS annotation, but it was missing or incorrect\nManifest: %s", manifest)
+	}
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-slice-topology: 2x4") {
+		t.Errorf("Expected manifest to contain gke-tpu-slice-topology annotation, but it was missing\nManifest: %s", manifest)
+	}
+}

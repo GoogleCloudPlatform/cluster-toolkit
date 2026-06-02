@@ -106,6 +106,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
+	if !job.EnableTASAnnotations {
+		isDynamicSlicing = false
+	}
 
 	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
@@ -1008,11 +1011,6 @@ func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies
 }
 
 func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDefinition) (string, bool, error) {
-	// This function should work only for TPU 7x
-	if !strings.Contains(job.MachineType, "tpu7x") {
-		return "", false, nil
-	}
-
 	active, err := g.verifyDynamicSlicingActive(ManifestOptions{
 		ClusterName:     job.ClusterName,
 		ClusterLocation: job.ClusterLocation,
@@ -1025,26 +1023,6 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDef
 	if active {
 		logging.Info("Dynamic-slicing detected. Skipping strict physical state queries for topology.")
 		if job.Topology != "" {
-			dims := strings.Split(job.Topology, "x")
-			if len(dims) != 3 {
-				return "", true, fmt.Errorf("invalid topology format %s. Must be AxBxC", job.Topology)
-			}
-
-			a, err1 := strconv.Atoi(dims[0])
-			b, err2 := strconv.Atoi(dims[1])
-			c, err3 := strconv.Atoi(dims[2])
-			if err1 != nil || err2 != nil || err3 != nil {
-				return "", true, fmt.Errorf("invalid topology dimensions in %s", job.Topology)
-			}
-
-			if a%4 != 0 || b%4 != 0 || c%4 != 0 {
-				return "", true, fmt.Errorf("all values in the topology %s must be a multiple of 4", job.Topology)
-			}
-
-			if (a*b*c)/64 > 144 {
-				return "", true, fmt.Errorf("requested cubes for topology %s exceeds the maximum limit of 144", job.Topology)
-			}
-
 			logging.Info("Validated provided Topology (Dynamic-Slicing): %s", job.Topology)
 			return job.Topology, true, nil
 		}

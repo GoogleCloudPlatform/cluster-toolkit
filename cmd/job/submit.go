@@ -57,11 +57,12 @@ var (
 	gkeScheduler       string
 	platform           string
 
-	awaitJobCompletion bool
-	timeoutStr         string
-	priorityClassName  string
-	isPathwaysJob      bool
-	verbose            bool
+	awaitJobCompletion   bool
+	timeoutStr           string
+	priorityClassName    string
+	isPathwaysJob        bool
+	verbose              bool
+	enableTASAnnotations bool
 
 	volumeStr []string
 	pathways  orchestrator.PathwaysJobDefinition
@@ -131,6 +132,7 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
+	SubmitCmd.Flags().BoolVar(&enableTASAnnotations, "gke-enable-tas", true, "Enable Dynamic Slicing & Topology-Aware Scheduling (TAS) coordinate annotation injections in generated manifests.")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
@@ -213,6 +215,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		UseParallelContainers:         !gkeDisableParallelContainers,
 		Timeout:                       timeoutStr,
 		PriorityClassName:             priorityClassName,
+		EnableTASAnnotations:          enableTASAnnotations,
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
 		Volumes:                       vols,

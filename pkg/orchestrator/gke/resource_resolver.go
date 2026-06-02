@@ -314,8 +314,8 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 			}
 		}
 
-		// 3. Resolve Topology
-		topology, isDynamicSlicing, err := g.resolveTopology(job)
+		var topology string
+		topology, isDynamicSlicing, err = g.resolveTopology(job)
 		if err != nil {
 			return JobProfile{}, isDynamicSlicing, err
 		}

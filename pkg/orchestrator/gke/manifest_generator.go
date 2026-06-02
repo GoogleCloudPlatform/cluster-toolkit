@@ -187,7 +187,9 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 		opts.ImagePullSecrets = g.indentYaml(imagePullSecretsStr, 16)
 	}
 
-	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices)
+	if isDynamicSlicing {
+		opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices)
+	}
 
 	tolerationsStr, err := g.resolveTolerations(job.MachineType)
 	if err != nil {

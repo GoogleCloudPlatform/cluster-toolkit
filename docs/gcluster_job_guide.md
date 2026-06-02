@@ -866,6 +866,8 @@ GCluster automatically translates a high-level TPU request into the specific sch
 
 Additionally, GCluster automatically includes standard TPU topology labels (`cloud.google.com/gke-tpu-slice-topology: <topology>`) in the JobSet workload template to guarantee topology-aware scheduling.
 
+This automated TAS annotation injection and nodeSelector decoupling is enabled by default. If you need to fallback to legacy manifest generation (without TAS annotations and with strict topology nodeSelectors), you can set the `--gke-enable-tas=false` flag.
+
 #### GKE Documentation Reference
 
 For a deeper conceptual understanding or custom configurations, refer to Google Cloud's official public guides:
@@ -996,6 +998,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
+| `--gke-enable-tas` | `bool` | Enable Dynamic Slicing & Topology-Aware Scheduling (TAS) coordinate annotation injections in generated manifests. (Default: `true`) |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
