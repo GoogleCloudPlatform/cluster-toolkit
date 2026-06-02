@@ -209,7 +209,7 @@ deployment_groups:
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
       enable_slice_controller: $(vars.enable_dynamic_slicing_for_tpus)
-    outputs: [instructions, enable_slice_controller]
+    outputs: [instructions]
 
   - id: workload_policy
     source: modules/compute/resource-policy
@@ -299,7 +299,7 @@ deployment_groups:
 
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [gke-tpu-7x-cluster, gke-tpu-7x-pool]
+    use: [gke-tpu-7x-cluster]
     settings:
       kueue:
         install: true

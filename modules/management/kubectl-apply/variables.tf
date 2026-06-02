@@ -60,11 +60,11 @@ resource "terraform_data" "kueue_validations" {
       error_message = "When enable_dynamic_slicing_for_tpus is true, accelerator_topology_mode must be 'PROVISION_ONLY'."
     }
     precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || length(regexall("^tpu7x", coalesce(var.kueue.machine_type, ""))) > 0
-      error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a tpu7x machine type."
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.machine_type != null && length(regexall("^(tpu|ct)", var.kueue.machine_type)) > 0)
+      error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a TPU machine type."
     }
     precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || try(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type"))
+      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
     }
   }
