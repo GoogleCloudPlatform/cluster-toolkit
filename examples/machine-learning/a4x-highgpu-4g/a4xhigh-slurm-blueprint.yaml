@@ -242,15 +242,6 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
-      # The script below is intended to bypass the packer script that fails on Ubuntu 24.04 images
-      # Once Ubuntu 24.04 no longer sets ${HOSTNAME} to the FQDN, this can be removed
-      - type: shell
-        destination: stop_packer_early.sh
-        content: |
-          #!/bin/bash
-          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
-          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: image
   modules:
