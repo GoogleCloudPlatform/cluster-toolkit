@@ -41,6 +41,7 @@ limitations under the License.
 
 | Name | Type |
 | ---- | ---- |
+| [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [terraform_data.validate_cert_manager](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_namespace](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.validate_prevent_duplicate_install](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
