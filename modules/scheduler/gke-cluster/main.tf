@@ -96,7 +96,11 @@ data "google_container_engine_versions" "version_prefix_filter" {
 }
 
 locals {
-  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  latest_master_version  = data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  latest_channel_version = lookup(data.google_container_engine_versions.version_prefix_filter.release_channel_latest_version, var.release_channel, local.latest_master_version)
+  master_version = var.min_master_version != null ? var.min_master_version : (
+    var.release_channel != "UNSPECIFIED" ? local.latest_channel_version : local.latest_master_version
+  )
 }
 
 
