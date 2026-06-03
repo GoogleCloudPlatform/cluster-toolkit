@@ -19,7 +19,6 @@ test_name: a4h-custom-blueprint-test
 deployment_name: a4h-custom-blueprint-test-{{ build }}
 slurm_cluster_name: "a4hsp{{ build[0:5] }}"
 workspace: /workspace
-build_gcluster_from_source: true
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/a4high-custom-image-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
