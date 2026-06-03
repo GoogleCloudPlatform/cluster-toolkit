@@ -1242,15 +1242,19 @@ func worker(version string, jobs <-chan string, results chan<- string, wg *sync.
 
 const gkeClusterModule = "modules/scheduler/gke-cluster"
 
-// ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
-func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
+func hasGKECluster(bp *Blueprint) bool {
 	hasGKE := false
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if strings.Contains(m.Source, gkeClusterModule) {
 			hasGKE = true
 		}
 	})
-	if !hasGKE {
+	return hasGKE
+}
+
+// ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
+func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
+	if !hasGKECluster(bp) {
 		return nil, nil
 	}
 
@@ -1262,25 +1266,22 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 
 	versions := make([]string, 0)
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		if strings.Contains(m.Source, gkeClusterModule) {
+		// 1. Check for min_master_version safely
+		if version := getEvaluatedString("min_master_version", m, bp); version != "" {
+			versions = append(versions, version)
+			return // Proceed to the next module
+		}
 
-			// 1. Check for min_master_version safely
-			if version := getEvaluatedString("min_master_version", m, bp); version != "" {
-				versions = append(versions, version)
-				return // Proceed to the next module
-			}
-
-			// 2. Check for version_prefix safely
-			if versionPrefix := getEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
-				if releaseChannel := getEvaluatedString("release_channel", m, bp); releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
-					latestVersion, _ := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
-					if latestVersion != "" {
-						versions = append(versions, latestVersion)
-					} else {
-						// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
-						// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
-						versions = append(versions, versionPrefix)
-					}
+		// 2. Check for version_prefix safely
+		if versionPrefix := getEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
+			if releaseChannel := getEvaluatedString("release_channel", m, bp); releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
+				latestVersion, _ := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
+				if latestVersion != "" {
+					versions = append(versions, latestVersion)
+				} else {
+					// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
+					// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
+					versions = append(versions, versionPrefix)
 				}
 			}
 		}
