@@ -56,7 +56,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     PROJECT_ID: ID of the project where the bucket is being created.\
     COMPUTE_REGION: the compute region where you want to store the state of the Terraform deployment.
 
-5. In the `examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d-deployment.yaml` file, fill in the following settings in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
+5. In the `examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d-deployment.yaml` file, fill in the following settings in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
 
     `bucket`: the name of the Cloud Storage bucket you created in the previous step.\
     `deployment_name`: the name of the deployment.\
@@ -65,7 +65,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     `zone`: the compute zone for the node pool of H4D machines.\
     `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.\
     **`enable_flex_start`**: enable DWS Flex Start.\
-    To modify advanced settings, edit `examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d.yaml`.
+    To modify advanced settings, edit `examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d.yaml`.
 
 6. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
@@ -78,8 +78,8 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
     ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d-deployment.yaml \
-    examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d.yaml
+    examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d-deployment.yaml \
+    examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d.yaml
     ```
 
 8. When prompted, select (A)pply to deploy the blueprint.
@@ -97,7 +97,7 @@ The example folder provides a sample job test-job.yaml that runs a sleep contain
 Any job applied to this node pool must meet the following requirements:
 * **Tolerations**: Because the `h4d-pool` node pool is tainted (`node-type=h4d:NoSchedule`) to prevent generic scheduling, any job you apply **must** include the matching toleration under `spec.template.spec.tolerations`
 
-  ```sh
+  ```yaml
   tolerations:
   - key: "node-type"
     operator: "Equal"
@@ -116,7 +116,7 @@ Any job applied to this node pool must meet the following requirements:
 2. Submit the sample test job:
 
     ```sh
-    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/test-job.yaml
+    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/test-job.yaml
     ```
 
 3. Monitor the scale-up and execution timeline:
