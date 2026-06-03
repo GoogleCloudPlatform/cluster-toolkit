@@ -867,7 +867,7 @@ For this example the following is needed in the selected region:
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
-of an existing image, `hpc-rocky-linux-8` in the case of this example.
+of an existing image, `hpc-rocky-linux-9` in the case of this example.
 
 The blueprint contains 3 groups:
 
