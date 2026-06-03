@@ -1255,13 +1255,13 @@ func hasGKECluster(bp *Blueprint) bool {
 // ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
 func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 	if !hasGKECluster(bp) {
-		return nil, nil
+		return []string{}, nil
 	}
 
 	projectID := GetKeyFromBlueprint("project_id", *bp)
 	region := GetKeyFromBlueprint("region", *bp)
 	if projectID == "" || region == "" {
-		return nil, fmt.Errorf("project_id and region must be defined in vars")
+		return []string{}, fmt.Errorf("project_id and region must be defined in vars")
 	}
 
 	versions := make([]string, 0)
