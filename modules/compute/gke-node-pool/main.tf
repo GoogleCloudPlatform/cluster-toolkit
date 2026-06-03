@@ -449,6 +449,14 @@ resource "google_container_node_pool" "node_pool" {
       )
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
+    precondition {
+      condition = !(
+        var.enable_flex_start &&
+        try(var.placement_policy.type == "COMPACT", false) &&
+        !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type))
+      )
+      error_message = "Compact placement with DWS Flex is only supported for A3 Ultra, A4, and H4D machine types."
+    }
   }
 }
 
