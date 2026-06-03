@@ -919,17 +919,18 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name: "Success - Dynamic-slicing active",
+			name: "Success - TPU7x Dynamic-slicing active via PROVISION_ONLY",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "4x4x4",
 			},
 			nodePools: []gkeJobNodePool{
 				{
 					Name: "test-pool",
 					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
+						MachineType: "tpu7x-standard-4t",
 					},
 					PlacementPolicy: &gkePlacementPolicy{
 						AcceleratorTopologyMode: "PROVISION_ONLY",
@@ -937,9 +938,6 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
 				"kubectl get admissioncheck -o json": {
 					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
 				},
@@ -947,7 +945,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: true,
 		},
 		{
-			name: "Success - Dynamic-slicing active via topology subset (static reservation)",
+			name: "Failure - Dynamic-slicing inactive for non-TPU7x via topology subset",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -965,18 +963,37 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 					},
 				},
 			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
+			mockResponses: nil,
+			wantResult:    false,
+		},
+		{
+			name: "Success - TPU7x Dynamic-slicing active via topology subset (static reservation)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "4x4x4",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+						Labels: map[string]string{
+							"cloud.google.com/gke-tpu-topology": "8x8x8",
+						},
+					},
 				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get admissioncheck -o json": {
 					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
 				},
 			},
-			wantResult: true,
+			wantResult: false,
 		},
 		{
-			name: "Success - TPU7x Dynamic-slicing active via topology subset (static reservation)",
+			name: "Failure - TPU7x Dynamic-slicing requested topology under 4x4x4",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -988,21 +1005,100 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 					Name: "test-pool",
 					Config: gkeNodePoolConfig{
 						MachineType: "tpu7x-standard-4t",
-						Labels: map[string]string{
-							"cloud.google.com/gke-tpu-topology": "4x4x4",
-						},
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						AcceleratorTopologyMode: "PROVISION_ONLY",
 					},
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
 				"kubectl get admissioncheck -o json": {
 					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
 				},
 			},
 			wantResult: true,
+			wantErr:    true,
+		},
+		{
+			name: "Failure - TPU7x Dynamic-slicing requested topology 2x4x8 (product 64 but a < 4)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "2x4x8",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						AcceleratorTopologyMode: "PROVISION_ONLY",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: true,
+			wantErr:    true,
+		},
+		{
+			name: "Failure - TPU7x Dynamic-slicing requested topology empty",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						AcceleratorTopologyMode: "PROVISION_ONLY",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: true,
+			wantErr:    true,
+		},
+		{
+			name: "Failure - TPU7x Dynamic-slicing requested topology 2D (4x4)",
+			opts: ManifestOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ComputeType:     "tpu7x-standard-4t",
+				Topology:        "4x4",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "test-pool",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						AcceleratorTopologyMode: "PROVISION_ONLY",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get admissioncheck -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
+				},
+			},
+			wantResult: true,
+			wantErr:    true,
 		},
 		{
 			name: "Failure - Requested topology matches physical topology (not dynamic topology subset)",
@@ -1023,15 +1119,8 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 					},
 				},
 			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: false,
+			mockResponses: nil,
+			wantResult:    false,
 		},
 		{
 			name: "Failure - No TPU",
@@ -1059,34 +1148,27 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 					},
 				},
 			},
-			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
-				"kubectl get admissioncheck -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"accelerator.gke.io/slice"}}]}`},
-				},
-			},
-			wantResult: false,
-			wantErr:    true,
+			mockResponses: nil,
+			wantResult:    false,
+			wantErr:       true,
 		},
 		{
 			name: "Failure - CRD not found",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
+				ComputeType:     "tpu7x-standard-4t",
 			},
 			nodePools: []gkeJobNodePool{
 				{
 					Name: "test-pool",
 					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
+						MachineType: "tpu7x-standard-4t",
 					},
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
 					{ExitCode: 1},
 				},
 			},
@@ -1097,13 +1179,13 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
+				ComputeType:     "tpu7x-standard-4t",
 			},
 			nodePools: []gkeJobNodePool{
 				{
 					Name: "test-pool",
 					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
+						MachineType: "tpu7x-standard-4t",
 					},
 					PlacementPolicy: &gkePlacementPolicy{
 						AcceleratorTopologyMode: "PROVISION_ONLY",
@@ -1111,9 +1193,6 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
 				"kubectl get admissioncheck -o json": {
 					{ExitCode: 0, Stdout: `{"items":[{"spec":{"controllerName":"other-controller"}}]}`},
 				},
@@ -1125,13 +1204,13 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
-				ComputeType:     "tpu-v6e-slice",
+				ComputeType:     "tpu7x-standard-4t",
 			},
 			nodePools: []gkeJobNodePool{
 				{
 					Name: "test-pool",
 					Config: gkeNodePoolConfig{
-						MachineType: "tpu-v6e-slice",
+						MachineType: "tpu7x-standard-4t",
 					},
 					PlacementPolicy: &gkePlacementPolicy{
 						AcceleratorTopologyMode: "PROVISION_ONLY",
@@ -1139,9 +1218,6 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 				},
 			},
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get crd topologies.kueue.x-k8s.io": {
-					{ExitCode: 0},
-				},
 				"kubectl get admissioncheck -o json": {
 					{ExitCode: 1, Stderr: "error"},
 				},
@@ -1152,6 +1228,13 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.mockResponses != nil {
+				if _, ok := tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"]; !ok {
+					tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"] = []shell.CommandResult{
+						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+					}
+				}
+			}
 			mockExecutor := NewMockExecutor(tt.mockResponses)
 			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.clusterDesc.NodePools = tt.nodePools
@@ -1841,25 +1924,23 @@ func TestGetNodeCount(t *testing.T) {
 	}
 }
 
-func TestGenerateGKEManifest_EnableTASAnnotationsFlag(t *testing.T) {
+func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 	setupMockMachineConfig(t)
 
 	job := orchestrator.JobDefinition{
-		WorkloadName:         "test-tas-flag-job",
-		CommandToRun:         "echo hello",
-		ComputeType:          "v6e-8",
-		Topology:             "2x4",
-		ClusterLocation:      "us-central1-a",
-		EnableTASAnnotations: false, // Explicitly disabled!
+		WorkloadName:    "test-tas-tpu7x-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "tpu7x-standard-4t",
+		Topology:        "4x4x4",
+		ClusterLocation: "us-central1-a",
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors":               {{ExitCode: 0, Stdout: ""}},
-		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: "found"}},
-		"kubectl get admissioncheck":                {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "4x4"}},
-		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
-		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json":                             {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "8x8x8"}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                            {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
 	}
 
 	mockExec := NewMockExecutor(mockResponses)
@@ -1869,10 +1950,10 @@ func TestGenerateGKEManifest_EnableTASAnnotationsFlag(t *testing.T) {
 		{
 			Name: "tpu-pool",
 			Config: gkeNodePoolConfig{
-				MachineType: "ct6e-standard-8t",
-				Labels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "4x4",
-				},
+				MachineType: "tpu7x-standard-4t",
+			},
+			PlacementPolicy: &gkePlacementPolicy{
+				AcceleratorTopologyMode: "PROVISION_ONLY",
 			},
 		},
 	}
@@ -1882,84 +1963,7 @@ func TestGenerateGKEManifest_EnableTASAnnotationsFlag(t *testing.T) {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
 
-	// Crucial check: The CLI resolved it as dynamic slicing because it's a 2x2 subset of 4x4
-	if !isDynamicSlicing {
-		t.Fatalf("Expected resolveHardwareRequirements to initially flag isDynamicSlicing as true")
-	}
-
-	// Now simulate gke_job_orchestrator submission override logic
-	if !job.EnableTASAnnotations {
-		isDynamicSlicing = false
-	}
-
-	if isDynamicSlicing {
-		t.Fatalf("Expected isDynamicSlicing to be overridden to false when EnableTASAnnotations is false")
-	}
-
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
-	if err != nil {
-		t.Fatalf("PrepareManifestOptions failed: %v", err)
-	}
-
-	manifest, err := orc.GenerateGKEManifest(opts, profile)
-	if err != nil {
-		t.Fatalf("GenerateGKEManifest failed: %v", err)
-	}
-
-	// Because dynamic slicing was overridden to false:
-	// 1. NodeSelector MUST include the topology strictly (Fix A bypassed)
-	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x4") {
-		t.Errorf("Expected manifest to contain strict nodeSelector topology, but it was missing\nManifest: %s", manifest)
-	}
-
-	// 2. Kueue TAS annotations MUST NOT be injected (Fix B bypassed)
-	if strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology") {
-		t.Errorf("Expected manifest to NOT contain kueue TAS annotations, but they were found\nManifest: %s", manifest)
-	}
-}
-
-func TestGenerateGKEManifest_DynamicSlicingActive_V6e(t *testing.T) {
-	setupMockMachineConfig(t)
-
-	job := orchestrator.JobDefinition{
-		WorkloadName:         "test-tas-v6e-job",
-		CommandToRun:         "echo hello",
-		ComputeType:          "v6e-8",
-		Topology:             "2x4",
-		ClusterLocation:      "us-central1-a",
-		EnableTASAnnotations: true, // Enabled!
-	}
-
-	mockResponses := map[string][]shell.CommandResult{
-		"kubectl get resourceflavors":               {{ExitCode: 0, Stdout: ""}},
-		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: "found"}},
-		"kubectl get admissioncheck":                {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
-		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "4x4"}},
-		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json":                                {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
-		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json":                             {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 8, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
-	}
-
-	mockExec := NewMockExecutor(mockResponses)
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.projectID = "mock-project"
-	orc.clusterDesc.NodePools = []gkeJobNodePool{
-		{
-			Name: "tpu-pool",
-			Config: gkeNodePoolConfig{
-				MachineType: "ct6e-standard-8t",
-				Labels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "4x4",
-				},
-			},
-		},
-	}
-
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-
-	// Crucial check: The CLI resolved it as dynamic slicing because it's a 2x4 subset of 4x4
+	// Crucial check: The CLI resolved it as dynamic slicing because it's a 4x4x4 subset of 8x8x8
 	if !isDynamicSlicing {
 		t.Fatalf("Expected resolveHardwareRequirements to flag isDynamicSlicing as true")
 	}
@@ -1976,15 +1980,15 @@ func TestGenerateGKEManifest_DynamicSlicingActive_V6e(t *testing.T) {
 
 	// Because dynamic slicing is true:
 	// 1. NodeSelector MUST NOT include the topology strictly (Fix A)
-	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x4") {
+	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 4x4x4") {
 		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
 	}
 
 	// 2. Kueue TAS annotations MUST be injected (Fix B)
-	if !strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology: cloud.google.com/gke-tpu-slice-2x4-id") {
+	if !strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology: cloud.google.com/gke-tpu-partition-4x4x4-id") {
 		t.Errorf("Expected manifest to contain kueue TAS annotation, but it was missing or incorrect\nManifest: %s", manifest)
 	}
-	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-slice-topology: 2x4") {
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-slice-topology: 4x4x4") {
 		t.Errorf("Expected manifest to contain gke-tpu-slice-topology annotation, but it was missing\nManifest: %s", manifest)
 	}
 }

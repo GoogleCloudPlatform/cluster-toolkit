@@ -59,57 +59,37 @@ func TestGetAffinity(t *testing.T) {
 
 func TestGetTopologyAnnotation(t *testing.T) {
 	tests := []struct {
-		name        string
-		topology    string
-		machineType string
-		numSlices   int
-		wantKey     string
-		wantVal     string
+		name      string
+		topology  string
+		numSlices int
+		wantKey   string
+		wantVal   string
 	}{
 		{
-			name:        "single slice - tpu7x",
-			topology:    "2x2x1",
-			machineType: "tpu7x-standard-4t",
-			numSlices:   1,
-			wantKey:     "kueue.x-k8s.io/podset-required-topology",
-			wantVal:     "cloud.google.com/gke-tpu-partition-2x2x1-id",
+			name:      "single slice - tpu7x",
+			topology:  "2x2x1",
+			numSlices: 1,
+			wantKey:   "kueue.x-k8s.io/podset-required-topology",
+			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
 		},
 		{
-			name:        "multislice - tpu7x",
-			topology:    "2x2x1",
-			machineType: "tpu7x-standard-4t",
-			numSlices:   2,
-			wantKey:     "kueue.x-k8s.io/podset-slice-required-topology",
-			wantVal:     "cloud.google.com/gke-tpu-partition-2x2x1-id",
+			name:      "multislice - tpu7x",
+			topology:  "2x2x1",
+			numSlices: 2,
+			wantKey:   "kueue.x-k8s.io/podset-slice-required-topology",
+			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
 		},
 		{
-			name:        "single slice - v6e",
-			topology:    "2x4",
-			machineType: "ct6e-standard",
-			numSlices:   1,
-			wantKey:     "kueue.x-k8s.io/podset-required-topology",
-			wantVal:     "cloud.google.com/gke-tpu-slice-2x4-id",
-		},
-		{
-			name:        "multislice - v6e",
-			topology:    "2x4",
-			machineType: "ct6e-standard",
-			numSlices:   2,
-			wantKey:     "kueue.x-k8s.io/podset-slice-required-topology",
-			wantVal:     "cloud.google.com/gke-tpu-slice-2x4-id",
-		},
-		{
-			name:        "empty topology",
-			topology:    "",
-			machineType: "ct6e-standard",
-			numSlices:   1,
-			wantKey:     "",
-			wantVal:     "",
+			name:      "empty topology",
+			topology:  "",
+			numSlices: 1,
+			wantKey:   "",
+			wantVal:   "",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetTopologyAnnotation(tt.topology, tt.machineType, tt.numSlices)
+			got := GetTopologyAnnotation(tt.topology, tt.numSlices)
 			if tt.topology == "" {
 				if got != nil {
 					t.Errorf("Expected nil for empty topology, got %v", got)

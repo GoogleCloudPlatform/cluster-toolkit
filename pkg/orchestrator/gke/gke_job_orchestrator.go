@@ -106,10 +106,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if !job.EnableTASAnnotations {
-		isDynamicSlicing = false
-	}
-
 	if err := g.validateJobConflicts(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
 	}
@@ -883,6 +879,9 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 			Topology:        job.Topology,
 		})
 		if err != nil {
+			if isDyn {
+				return "", true, err
+			}
 			logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
 		}
 		return val, isDyn, nil
@@ -1018,6 +1017,9 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDef
 		Topology:        job.Topology,
 	})
 	if err != nil {
+		if active {
+			return "", true, err
+		}
 		logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
 	}
 	if active {
@@ -1853,8 +1855,8 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 	return "", nil
 }
 
-func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType string, numSlices int) string {
-	topologyAnnotation := GetTopologyAnnotation(topology, machineType, numSlices)
+func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, numSlices int) string {
+	topologyAnnotation := GetTopologyAnnotation(topology, numSlices)
 	if len(topologyAnnotation) > 0 {
 		b, err := yaml.Marshal(topologyAnnotation)
 		if err == nil {

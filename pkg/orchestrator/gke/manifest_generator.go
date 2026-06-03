@@ -188,7 +188,7 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 	}
 
 	if isDynamicSlicing {
-		opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices)
+		opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.NumSlices)
 	}
 
 	tolerationsStr, err := g.resolveTolerations(job.MachineType)

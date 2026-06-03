@@ -130,10 +130,14 @@ var allowed2DTopologies = map[int]string{
 }
 
 var valid2DShapes = make(map[string]bool)
+var valid3DShapes = make(map[string]bool)
 
 func init() {
 	for _, v := range allowed2DTopologies {
 		valid2DShapes[v] = true
+	}
+	for _, v := range common3DTopologies {
+		valid3DShapes[v] = true
 	}
 }
 
@@ -399,7 +403,7 @@ func ValidateHardwareRequest(machineType, topology string) error {
 		}
 		return nil
 	} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
-		return validate3DTopology(topology, machineType)
+		return Validate3DTopology(topology, machineType, false)
 	} else {
 		return fmt.Errorf("TPU type %q is recognized but its topology family is unknown; please report a bug to the toolkit maintainers.", machineType)
 	}
@@ -431,14 +435,16 @@ func isValid3DDimension(x int) bool {
 	return x >= 4 && x%4 == 0
 }
 
-func validate3DTopology(topology string, machineType string) error {
-	for _, v := range common3DTopologies {
-		if topology == v {
-			return nil
-		}
+func Validate3DTopology(topology string, machineType string, superSlicingCheck bool) error {
+
+	if !superSlicingCheck && valid3DShapes[topology] {
+		return nil
 	}
 
 	dims := strings.Split(topology, "x")
+	if len(dims) != 3 {
+		return fmt.Errorf("topology format invalid for 3D family: requested %s, expected AxBxC (3 dimensions)", topology)
+	}
 	a, _ := strconv.Atoi(dims[0])
 	b, _ := strconv.Atoi(dims[1])
 	c, _ := strconv.Atoi(dims[2])

@@ -143,7 +143,7 @@ func parseAffinityValues(k string, v string, topology string, isTopologyMerge bo
 	return values, nil
 }
 
-func GetTopologyAnnotation(topology string, machineType string, numSlices int) map[string]string {
+func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
 	if topology == "" {
 		return nil
 	}
@@ -153,10 +153,8 @@ func GetTopologyAnnotation(topology string, machineType string, numSlices int) m
 		annotationKey = "kueue.x-k8s.io/podset-slice-required-topology"
 	}
 
-	partitionValue := fmt.Sprintf("cloud.google.com/gke-tpu-slice-%s-id", topology)
-	if strings.Contains(machineType, "tpu7x") {
-		partitionValue = fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology)
-	}
+	// Dynamic slicing is only active for TPU7x, which uses partition-level requirements.
+	partitionValue := fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology)
 
 	return map[string]string{
 		"cloud.google.com/gke-tpu-slice-topology": topology,

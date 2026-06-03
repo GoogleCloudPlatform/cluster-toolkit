@@ -82,7 +82,6 @@ type JobDefinition struct {
 	UseParallelContainers bool
 	Timeout               string
 	PriorityClassName     string
-	EnableTASAnnotations  bool
 
 	// Pathways-specific fields
 	IsPathwaysJob bool

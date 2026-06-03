@@ -846,27 +846,26 @@ completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 345
 
 This section details how GCluster natively orchestrates advanced GKE hardware features—such as dynamic slice reconfiguration and the Pathways distributed AI framework—to deliver elite resource utilization and simplified scheduling.
 
-### 8.1 Dynamic Slicing
+### 8.1 Dynamic Slicing (TPU7x)
 
-GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically.
+GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In GCluster, dynamic slicing is supported exclusively on TPU v7x (Ironwood) nodes.
 
 #### Capabilities & Scheduling Benefits
 
-* **Elastic Topology Provisioning:** Run workloads requiring smaller topologies than the physical pool on any TPU platform, or stitch multiple physical blocks together into a larger logical slice on TPU v7x (e.g., wiring multiple `4x4x4` blocks together).
+* **Elastic Topology Provisioning:** Stitch multiple physical TPU v7x blocks together into a larger logical slice (e.g., wiring multiple `4x4x4` blocks together).
 * **Latency Optimization:** Kueue's Topology-Aware Scheduling (TAS) guarantees that TPU pods are placed with minimal network hop latency across the physical TPU architecture, ensuring maximum distributed training and inference throughput.
 * **Multi-Slice Synchronization:** For multi-slice jobs (`--num-slices > 1`), GCluster dynamically coordinates slice-level reservations to ensure all slices are acquired concurrently, preventing mismatched scaling or execution hangs.
 
 #### Orchestration & Under-The-Hood Mappings
 
-GCluster automatically translates a high-level TPU request into the specific scheduling annotations required by Kueue and the GKE Slice Controller based on the target compute platform:
+GCluster automatically translates a high-level TPU request into the specific scheduling annotations required by Kueue and the GKE Slice Controller:
 
 * **TPU v7x (Ironwood):** Maps topology to a partition-level requirement (`cloud.google.com/gke-tpu-partition-<topology>-id`) to align with configured physical sub-blocks.
-* **Other TPUs (v6e, v5p, v5e, v4):** Maps topology to a slice-level requirement (`cloud.google.com/gke-tpu-slice-<topology>-id`).
 * **Queue Admission Keys:** Dynamically switches between a single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) annotation key depending on `--num-slices`.
 
 Additionally, GCluster automatically includes standard TPU topology labels (`cloud.google.com/gke-tpu-slice-topology: <topology>`) in the JobSet workload template to guarantee topology-aware scheduling.
 
-This automated TAS annotation injection and nodeSelector decoupling is enabled by default. If you need to fallback to legacy manifest generation (without TAS annotations and with strict topology nodeSelectors), you can set the `--gke-enable-tas=false` flag.
+This automated TAS annotation injection and nodeSelector decoupling is enabled by default for supported TPU v7x configurations.
 
 #### GKE Documentation Reference
 
@@ -998,7 +997,6 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
-| `--gke-enable-tas` | `bool` | Enable Dynamic Slicing & Topology-Aware Scheduling (TAS) coordinate annotation injections in generated manifests. (Default: `true`) |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
