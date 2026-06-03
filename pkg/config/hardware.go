@@ -435,6 +435,9 @@ func isValid3DDimension(x int) bool {
 	return x >= 4 && x%4 == 0
 }
 
+// Validate3DTopology validates the 3D topology dimensions for a given machine type.
+// If superSlicingCheck is true, it skips the common 3D shapes check and strictly validates
+// that each dimension is a multiple of 4 and >= 4.
 func Validate3DTopology(topology string, machineType string, superSlicingCheck bool) error {
 
 	if !superSlicingCheck && valid3DShapes[topology] {

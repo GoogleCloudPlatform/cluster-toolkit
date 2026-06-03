@@ -143,6 +143,8 @@ func parseAffinityValues(k string, v string, topology string, isTopologyMerge bo
 	return values, nil
 }
 
+// GetTopologyAnnotation returns the GKE and Kueue topology annotations for the given topology and slice count.
+// It dynamically selects the appropriate Kueue annotation key based on whether it is a single-slice or multi-slice job.
 func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
 	if topology == "" {
 		return nil

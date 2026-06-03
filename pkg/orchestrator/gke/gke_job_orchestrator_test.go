@@ -1991,4 +1991,9 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-slice-topology: 4x4x4") {
 		t.Errorf("Expected manifest to contain gke-tpu-slice-topology annotation, but it was missing\nManifest: %s", manifest)
 	}
+
+	// 3. Exclusive-topology annotation MUST NOT be set for dynamic slicing
+	if strings.Contains(manifest, "alpha.jobset.sigs.k8s.io/exclusive-topology") {
+		t.Errorf("Expected manifest to NOT contain exclusive-topology annotation for dynamic slicing, but it was found\nManifest: %s", manifest)
+	}
 }

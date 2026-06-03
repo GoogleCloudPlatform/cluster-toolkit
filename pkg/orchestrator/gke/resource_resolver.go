@@ -116,6 +116,10 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, nil
 	}
 
+	if g.dynamicSlicingCache == nil {
+		g.dynamicSlicingCache = make(map[string]bool)
+	}
+
 	cacheKey := opts.ComputeType + ":" + opts.Topology
 	if val, ok := g.dynamicSlicingCache[cacheKey]; ok {
 		return val, nil
@@ -127,7 +131,7 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, err
 	}
 
-	isTPU7x := strings.Contains(requestedMachineName, "tpu7x")
+	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
 	if !isTPU7x || !g.hasKueueTopologies() || !g.hasSliceAdmissionCheck() {
 		g.dynamicSlicingCache[cacheKey] = false
 		return false, nil
@@ -332,7 +336,7 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	job.MachineType = machineName
 	isDynamicSlicing := false
 	if config.IsTPU(machineName) {
-		isTPU7x := strings.Contains(machineName, "tpu7x")
+		isTPU7x := strings.Contains(strings.ToLower(machineName), "tpu7x")
 		if isTPU7x && job.Topology == "" {
 			return JobProfile{}, false, fmt.Errorf("topology must be specified explicitly via --topology flag for TPU 7x machine type %s", machineName)
 		}

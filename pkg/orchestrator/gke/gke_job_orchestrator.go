@@ -1855,8 +1855,15 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 	return "", nil
 }
 
-func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, numSlices int) string {
-	topologyAnnotation := GetTopologyAnnotation(topology, numSlices)
+func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, numSlices int, isDynamicSlicing bool) string {
+	var topologyAnnotation map[string]string
+	if isDynamicSlicing {
+		topologyAnnotation = GetTopologyAnnotation(topology, numSlices)
+	} else if topology != "" {
+		topologyAnnotation = map[string]string{
+			"cloud.google.com/gke-tpu-slice-topology": topology,
+		}
+	}
 	if len(topologyAnnotation) > 0 {
 		b, err := yaml.Marshal(topologyAnnotation)
 		if err == nil {
