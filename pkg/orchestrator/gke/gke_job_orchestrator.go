@@ -1025,6 +1025,9 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDef
 	if active {
 		logging.Info("Dynamic-slicing detected. Skipping strict physical state queries for topology.")
 		if job.Topology != "" {
+			if err := config.Validate3DTopology(job.Topology, job.MachineType, true); err != nil {
+				return "", true, err
+			}
 			logging.Info("Validated provided Topology (Dynamic-Slicing): %s", job.Topology)
 			return job.Topology, true, nil
 		}
