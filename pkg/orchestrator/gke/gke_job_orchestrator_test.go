@@ -1997,3 +1997,74 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 		t.Errorf("Expected manifest to NOT contain exclusive-topology annotation for dynamic slicing, but it was found\nManifest: %s", manifest)
 	}
 }
+
+func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-test",
+		CommandToRun:    "echo hello",
+		NumSlices:       2,
+		ClusterLocation: "us-central1-a",
+		ComputeType:     "tpu7x-standard-4t",
+		Topology:        "4x4x4",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu7x": {{ExitCode: 0, Stdout: "8x8x8"}},
+		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                            {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-pool",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu7x-standard-4t",
+			},
+			PlacementPolicy: &gkePlacementPolicy{
+				AcceleratorTopologyMode: "PROVISION_ONLY",
+			},
+		},
+	}
+
+	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	if !isDynamicSlicing {
+		t.Fatalf("Expected isDynamicSlicing to be true")
+	}
+
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+
+	// 1. Manifest must NOT contain strict NodeSelector topology
+	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 4x4x4") {
+		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
+	}
+
+	// 2. Kueue TAS annotations must be present under pathways worker replicatedJob template annotations
+	expectedSubstrs := []string{
+		"kueue.x-k8s.io/podset-slice-required-topology: cloud.google.com/gke-tpu-partition-4x4x4-id",
+		"cloud.google.com/gke-tpu-slice-topology: 4x4x4",
+	}
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
+		}
+	}
+}
+
