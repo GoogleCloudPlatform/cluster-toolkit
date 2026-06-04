@@ -27,9 +27,10 @@ vars:
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation: # add this
+  static_node_count: # add this
+
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
-  static_node_count: # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-h200-141gb
@@ -170,19 +171,7 @@ deployment_groups:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
       additional_networks:
-        $(concat(
-          [{
-            network=gke-a3-ultra-net-1.network_name,
-            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
       # Cluster versions cannot be updated through the toolkit after creation
@@ -255,19 +244,7 @@ deployment_groups:
         specific_reservations:
         - name: $(vars.reservation)
       additional_networks:
-        $(concat(
-          [{
-            network=gke-a3-ultra-net-1.network_name,
-            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]

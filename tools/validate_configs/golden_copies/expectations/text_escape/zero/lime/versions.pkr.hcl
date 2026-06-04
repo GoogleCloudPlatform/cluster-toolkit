@@ -13,7 +13,7 @@
 #  limitations under the License.
 
 packer {
-  required_version = ">= 1.7.9, < 2.0.0"
+  required_version = ">= 1.15.3, < 2.0.0"
 
   # packer plugin 1.0.16 and above includes HPC VM Image
   required_plugins {

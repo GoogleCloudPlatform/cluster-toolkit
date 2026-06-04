@@ -17,6 +17,9 @@
 blueprint_name: a4xhigh-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   deployment_name: ## Deployment name ##
   project_id: ## Project name ##
   region: ## A4X Reservation Region ##

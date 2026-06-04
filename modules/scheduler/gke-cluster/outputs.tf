@@ -54,7 +54,7 @@ locals {
   allowlist_your_ip_message = var.enable_private_endpoint ? local.private_endpoint_message : local.public_endpoint_message
   kubernetes_service_account_message = local.k8s_service_account_name == null ? "" : trimspace(
     <<-EOT
-      Use the following Kubernetes Service Account in the default namespace to run your workloads:
+      Use the following Kubernetes Service Account in the ${var.namespace} namespace to run your workloads:
         ${local.k8s_service_account_name}
       The GCP Service Account mapped to this Kubernetes Service Account is:
         ${local.sa_email}
@@ -113,7 +113,22 @@ output "enable_slice_controller" {
   value       = var.enable_slice_controller
 }
 
+output "namespace" {
+  description = "The namespace where Workload Identity is configured (created if not 'default')."
+  value       = var.namespace
+}
+
 output "enable_pathways_for_tpus" {
   description = "Indicates whether Pathways for TPUs is enabled."
   value       = var.enable_pathways_for_tpus
+}
+
+output "cluster_endpoint" {
+  description = "The IP address or endpoint of the GKE cluster control plane."
+  value       = google_container_cluster.gke_cluster.endpoint
+}
+
+output "cluster_ca_certificate" {
+  description = "The base64 encoded public certificate authority data for the GKE cluster."
+  value       = google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate
 }

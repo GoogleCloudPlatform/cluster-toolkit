@@ -42,9 +42,3 @@ vars:
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
-
-  # The disk size of system node pool for this deployment. Default value is 100.
-  system_node_pool_disk_size_gb:
-
-  # The disk size of a3 ultra node pool for this deployment. Default value is 100.
-  a3ultra_node_pool_disk_size_gb:

@@ -20,25 +20,93 @@ import (
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/modulewriter"
+	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 
 	billing "cloud.google.com/go/billing/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
-func getBlueprint(args []string) config.Blueprint {
+func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
 	}
-	bp, _, _ := config.NewBlueprint(args[0])
+
+	targetPath := resolveBlueprintPath(args[0])
+
+	bp, _, err := config.NewBlueprint(targetPath)
+	if err != nil {
+		return config.Blueprint{} // Return empty if it fails to parse
+	}
+
+	mergeDeploymentFileVars(cmd, &bp)
+	mergeCLIVars(cmd, &bp)
+
 	return bp
+}
+
+func resolveBlueprintPath(targetPath string) string {
+	// If the argument is a directory, it indicates a deployment folder (e.g., used in 'deploy' or 'destroy').
+	// We read the expanded blueprint from the artifacts directory instead.
+	if info, err := os.Stat(targetPath); err == nil && info.IsDir() {
+		return filepath.Join(modulewriter.ArtifactsDir(targetPath), modulewriter.ExpandedBlueprintName)
+	}
+	return targetPath
+}
+
+func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
+	flag := cmd.Flag("deployment-file")
+	if flag == nil || flag.Value.String() == "" {
+		return
+	}
+
+	ds, _, err := config.NewDeploymentSettings(flag.Value.String())
+	if err != nil {
+		return
+	}
+
+	vars := bp.Vars.Items()
+	maps.Copy(vars, ds.Vars.Items())
+	bp.Vars = config.NewDict(vars)
+}
+
+func mergeCLIVars(cmd *cobra.Command, bp *config.Blueprint) {
+	flag := cmd.Flag("vars")
+	if flag == nil {
+		return
+	}
+
+	varsSlice, err := cmd.Flags().GetStringSlice("vars")
+	if err != nil {
+		return
+	}
+
+	for _, cliVar := range varsSlice {
+		arr := strings.SplitN(cliVar, "=", 2)
+		if len(arr) != 2 {
+			continue
+		}
+
+		key := arr[0]
+		var v config.YamlValue
+		// Use YAML unmarshal to support complex types (lists, maps) passed via CLI.
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err == nil {
+			bp.Vars = bp.Vars.With(key, v.Unwrap())
+		}
+	}
 }
 
 func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]string {
@@ -57,20 +125,6 @@ func getBpModulesList(bp config.Blueprint) []string {
 	modules := make([]string, len(moduleInfos))
 	for i, module := range moduleInfos {
 		modules[i] = string(module.Source)
-	}
-	return modules
-}
-
-func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil
-	}
-	modules := make([]config.Module, 0)
-	for _, m := range config.GetAllBpModules(&bp) {
-		if re.MatchString(m.Source) {
-			modules = append(modules, m)
-		}
 	}
 	return modules
 }
@@ -97,21 +151,104 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
-// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
-	client, err := billing.NewCloudBillingClient(ctx)
+// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
+func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+	if !m.Settings.Has(key) {
+		return ""
+	}
+
+	keyValue := m.Settings.Get(key)
+	// Evaluate the value to resolve expressions like $(vars.key)
+	evaluatedKey, err := bp.Eval(keyValue)
 	if err != nil {
 		return ""
+	}
+
+	// Some module outputs or references carry cty marks, so we unmark them safely before use.
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+		return unmarkedKey.AsString()
+	}
+
+	return ""
+}
+
+// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
+func extractDefaultMachineType(key string, m config.Module) string {
+	if m.Source == "" {
+		return ""
+	}
+
+	kindStr := m.Kind.String()
+	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+
+	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return ""
+	}
+
+	type result struct {
+		mi  modulereader.ModuleInfo
+		err error
+	}
+	resCh := make(chan result, 1)
+
+	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
+	go func() {
+		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
+		resCh <- result{mi: mi, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		if res.err != nil {
+			return ""
+		}
+		for _, input := range res.mi.Inputs {
+			if input.Name == key && input.Default != nil {
+				// Verify the default is a string (protects against complex types)
+				if mType, ok := input.Default.(string); ok {
+					return mType
+				}
+			}
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Timeout reached: gracefully return empty string to prevent blocking
+	}
+
+	return ""
+}
+
+// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+var getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
+	client, err := billing.NewCloudBillingClient(ctx)
+	if err != nil {
+		return "", err
 	}
 	defer client.Close()
 	req := &billingpb.GetProjectBillingInfoRequest{
 		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	info, err := client.GetProjectBillingInfo(ctx, req)
-	if err != nil {
-		return ""
+
+	var info *billingpb.ProjectBillingInfo
+	var apiErr error
+
+	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	for attempt := 1; attempt <= 3; attempt++ {
+		info, apiErr = client.GetProjectBillingInfo(ctx, req)
+		if apiErr == nil {
+			return info.GetBillingAccountName(), nil
+		}
+		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
+		if attempt == 3 || ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
-	return info.GetBillingAccountName()
+	return "", apiErr
 }
 
 // fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
@@ -122,11 +259,24 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	}
 	defer client.Close()
 	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
-	project, err := client.GetProject(ctx, req)
-	if err != nil {
-		return "", err
+
+	var project *resourcemanagerpb.Project
+	var apiErr error
+
+	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	for attempt := 1; attempt <= 3; attempt++ {
+		project, apiErr = client.GetProject(ctx, req)
+		if apiErr == nil {
+			return project.Name, nil
+		}
+		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
+		if attempt == 3 || ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
 	}
-	return project.Name, nil
+
+	return "", apiErr
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.
@@ -227,7 +377,7 @@ func getMacVersion() string {
 	if err != nil {
 		return "Darwin (unknown version)"
 	}
-	return strings.TrimSpace(string(out))
+	return "Darwin " + strings.TrimSpace(string(out))
 }
 
 // getWindowsVersion uses the ver command to get the Windows version.

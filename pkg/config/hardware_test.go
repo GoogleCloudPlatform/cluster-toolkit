@@ -217,33 +217,6 @@ func TestExtractTopologyFromWorkloadPolicy(t *testing.T) {
 
 }
 
-func TestInjectCompactPlacementPolicy(t *testing.T) {
-	mod1 := &Module{
-		Settings: Dict{},
-	}
-	injectCompactPlacementPolicy(mod1, "4x4x4")
-	if !mod1.Settings.Has("placement_policy") {
-		t.Fatal("expected placement_policy to be injected")
-	}
-	pp1 := mod1.Settings.Get("placement_policy").AsValueMap()
-	if pp1["type"].AsString() != "COMPACT" {
-		t.Errorf("expected pp type COMPACT, got %v", pp1["type"])
-	}
-	if pp1["tpu_topology"].AsString() != "4x4x4" {
-		t.Errorf("expected pp topology 4x4x4, got %v", pp1["tpu_topology"])
-	}
-
-	ppOrig := cty.ObjectVal(map[string]cty.Value{"foo": cty.StringVal("bar")})
-	mod2 := &Module{
-		Settings: Dict{}.With("placement_policy", ppOrig),
-	}
-	injectCompactPlacementPolicy(mod2, "2x2x2")
-	pp2 := mod2.Settings.Get("placement_policy").AsValueMap()
-	if pp2["type"].AsString() != "COMPACT" || pp2["tpu_topology"].AsString() != "2x2x2" || pp2["foo"].AsString() != "bar" {
-		t.Errorf("mod2 placement policy incorrect: %v", pp2)
-	}
-}
-
 func TestExpandHardwareSettings(t *testing.T) {
 	bp := Blueprint{}
 
@@ -289,9 +262,7 @@ func TestExpandHardwareSettings(t *testing.T) {
 	if count3 != 16 {
 		t.Errorf("expected static_node_count 16, got %d", count3)
 	}
-	if !mod3.Settings.Has("placement_policy") {
-		t.Errorf("expected placement_policy to be injected for multi-node setups")
-	}
+
 	// Test that it skips non-TPU machine types
 	mod4 := &Module{
 		Settings: Dict{}.
@@ -304,6 +275,21 @@ func TestExpandHardwareSettings(t *testing.T) {
 	}
 	if mod4.Settings.Has("static_node_count") {
 		t.Errorf("expected static_node_count NOT to be set for non-TPU machine type")
+	}
+
+	// Test that it skips Flex Start pools
+	mod5 := &Module{
+		Settings: Dict{}.
+			With("machine_type", cty.StringVal("ct6e-standard-4t")).
+			With("tpu_topology", cty.StringVal("2x2")).
+			With("enable_flex_start", cty.BoolVal(true)),
+	}
+	err = expandHardwareSettings(bp, mod5)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if mod5.Settings.Has("static_node_count") {
+		t.Errorf("expected static_node_count NOT to be set when enable_flex_start is true")
 	}
 }
 
@@ -326,8 +312,8 @@ func TestResolveTopologyForChips(t *testing.T) {
 			name:       "tpu7x 2048 chips",
 			prefix:     "tpu7x",
 			totalChips: 2048,
-			wantShape:  "8x16x16",
-			wantErr:    false,
+			wantShape:  "",
+			wantErr:    true,
 		},
 		{
 			name:       "v6e 1 chip",
@@ -361,7 +347,8 @@ func TestResolveTopologyForChips(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips))
+			resolvedMachineType := ResolveMachineType(tt.prefix)
+			got, err := ResolveTopologyForChips(fmt.Sprintf("%s-%d", tt.prefix, tt.totalChips), resolvedMachineType)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ResolveTopologyForChips() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -463,25 +450,29 @@ func TestGetCandidatesForShorthand(t *testing.T) {
 
 func TestValidateHardwareRequest(t *testing.T) {
 	tests := []struct {
-		name            string
-		machineType     string
-		topology        string
-		placementPolicy string
-		wantErr         bool
+		name        string
+		machineType string
+		topology    string
+		wantErr     bool
 	}{
-		{"Valid TPU v4", "v4-8", "2x2x1", "", false},
-		{"Valid TPU v6e", "v6e-8", "2x2", "", false},
-		{"Invalid TPU v6e shape", "v6e-8", "3x3", "", true},
-		{"Valid TPU v5litepod", "v5litepod-16", "4x4", "", false},
-		{"Invalid TPU v5litepod shape", "v5litepod-16", "3x3", "", true},
-		{"Invalid TPU v4 dimensions", "v4-8", "2x2", "", true}, // Needs 3D
-		{"Invalid TPU v4 shape", "v4-8", "3x3x3", "", true},
-		{"Unknown TPU family fails", "tpu-v7-8", "2x2x2", "", true},
-		{"Non-TPU skips validation", "l4-1", "invalid", "", false},
+		{"Valid TPU v4", "ct4p-hightpu-4t", "2x2x1", false},
+		{"Valid TPU v6e", "v6e-8", "2x2", false},
+		{"Invalid TPU v6e shape", "v6e-8", "3x3", true},
+		{"Valid TPU v5litepod", "v5litepod-16", "4x4", false},
+		{"Invalid TPU v5litepod shape", "v5litepod-16", "3x3", true},
+		{"Invalid TPU v4 dimensions", "ct4p-hightpu-4t", "2x2", true}, // Needs 3D
+		{"Invalid TPU v4 shape", "ct4p-hightpu-4t", "3x3x3", true},
+		{"Unknown TPU family fails", "tpu-v7-8", "2x2x2", true},
+		{"Non-TPU skips validation", "l4-1", "invalid", false},
+		{"Valid non-standard v4 shape", "ct4p-hightpu-4t", "4x4x12", false},
+		{"Valid non-standard v5p shape", "ct5p-hightpu-4t", "4x4x12", false},
+		{"Invalid v5p shape (unsorted)", "ct5p-hightpu-4t", "4x12x4", true},
+		{"Invalid v4 shape (unsorted)", "ct4p-hightpu-4t", "4x12x4", true},
+		{"Topology exceeding max cubes", "ct4p-hightpu-4t", "16x16x32", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateHardwareRequest(tt.machineType, tt.topology, tt.placementPolicy)
+			err := ValidateHardwareRequest(tt.machineType, tt.topology)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateHardwareRequest() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -547,20 +538,28 @@ func TestCheckTopologyContainment(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "V6e invalid subset shape",
+			name:      "V6e invalid subset shape (fits geometrically)",
 			requested: "3x3",
 			container: "4x4",
 			accelType: "v6e",
-			wantFit:   false,
-			wantErr:   true,
+			wantFit:   true,
+			wantErr:   false,
 		},
 		{
-			name:      "V4 invalid subset shape",
+			name:      "V4 invalid subset shape (fits geometrically)",
 			requested: "3x3x3",
 			container: "4x4x4",
 			accelType: "v4",
-			wantFit:   false,
-			wantErr:   true,
+			wantFit:   true,
+			wantErr:   false,
+		},
+		{
+			name:      "V4 valid non-standard subset shape",
+			requested: "4x4x12",
+			container: "4x4x16",
+			accelType: "v4",
+			wantFit:   true,
+			wantErr:   false,
 		},
 	}
 

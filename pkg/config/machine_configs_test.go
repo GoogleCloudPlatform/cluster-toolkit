@@ -118,71 +118,43 @@ func TestExtractProject(t *testing.T) {
 	}
 }
 
-func TestBuildOutputConfigJSON_CPU(t *testing.T) {
+func TestBuildOutputConfigStruct_CPU(t *testing.T) {
 	mt1 := &compute.MachineType{GuestCpus: 4}
-	got1, err := buildOutputConfigJSON("n1-standard-4", mt1)
-	if err != nil {
-		t.Fatalf("buildOutputConfigJSON failed: %v", err)
-	}
-	var out1 outputConfig
-	if err := json.Unmarshal([]byte(got1), &out1); err != nil {
-		t.Fatalf("failed to unmarshal output: %v", err)
-	}
+	out1 := buildOutputConfigStruct("n1-standard-4", mt1)
 	if out1.CPUs["n1-standard-4"].Count != 4 {
 		t.Errorf("expected 4 CPUs, got %v", out1.CPUs["n1-standard-4"].Count)
 	}
 }
 
-func TestBuildOutputConfigJSON_GPU(t *testing.T) {
+func TestBuildOutputConfigStruct_GPU(t *testing.T) {
 	mt2 := &compute.MachineType{
 		GuestCpus: 8,
 		Accelerators: []*compute.MachineTypeAccelerators{
 			{GuestAcceleratorCount: 2, GuestAcceleratorType: "nvidia-tesla-t4"},
 		},
 	}
-	got2, err := buildOutputConfigJSON("n1-standard-8", mt2)
-	if err != nil {
-		t.Fatalf("buildOutputConfigJSON failed: %v", err)
-	}
-	var out2 outputConfig
-	if err := json.Unmarshal([]byte(got2), &out2); err != nil {
-		t.Fatalf("failed to unmarshal output: %v", err)
-	}
+	out2 := buildOutputConfigStruct("n1-standard-8", mt2)
 	if out2.GPUs["n1-standard-8"].Count != 2 || out2.GPUs["n1-standard-8"].Type != "nvidia-tesla-t4" {
 		t.Errorf("expected 2 nvidia-tesla-t4 GPUs, got %+v", out2.GPUs["n1-standard-8"])
 	}
 }
 
-func TestBuildOutputConfigJSON_TPU(t *testing.T) {
+func TestBuildOutputConfigStruct_TPU(t *testing.T) {
 	mt3 := &compute.MachineType{
 		GuestCpus: 8,
 		Accelerators: []*compute.MachineTypeAccelerators{
 			{GuestAcceleratorCount: 4, GuestAcceleratorType: "tpu-v4"},
 		},
 	}
-	got3, err := buildOutputConfigJSON("tpu-v4-8", mt3)
-	if err != nil {
-		t.Fatalf("buildOutputConfigJSON failed: %v", err)
-	}
-	var out3 outputConfig
-	if err := json.Unmarshal([]byte(got3), &out3); err != nil {
-		t.Fatalf("failed to unmarshal output: %v", err)
-	}
+	out3 := buildOutputConfigStruct("tpu-v4-8", mt3)
 	if out3.TPUs["tpu-v4-8"].Count != 4 {
 		t.Errorf("expected 4 TPUs, got %v", out3.TPUs["tpu-v4-8"].Count)
 	}
 }
 
-func TestBuildOutputConfigJSON_TPUFallback(t *testing.T) {
+func TestBuildOutputConfigStruct_TPUFallback(t *testing.T) {
 	mt4 := &compute.MachineType{GuestCpus: 4}
-	got4, err := buildOutputConfigJSON("ct5p-hbm-2t", mt4)
-	if err != nil {
-		t.Fatalf("buildOutputConfigJSON failed: %v", err)
-	}
-	var out4 outputConfig
-	if err := json.Unmarshal([]byte(got4), &out4); err != nil {
-		t.Fatalf("failed to unmarshal output: %v", err)
-	}
+	out4 := buildOutputConfigStruct("ct5p-hbm-2t", mt4)
 	if out4.TPUs["ct5p-hbm-2t"].Count != 2 {
 		t.Errorf("expected 2 TPUs from ct5p-hbm-2t fallback, got %v", out4.TPUs["ct5p-hbm-2t"].Count)
 	}
@@ -214,7 +186,7 @@ func TestGetMachineConfigJSON_EmptyParams(t *testing.T) {
 		t.Fatalf("getMachineConfigJSON failed: %v", err)
 	}
 
-	var out outputConfig
+	var out OutputConfig
 	if err := json.Unmarshal([]byte(got), &out); err != nil {
 		t.Fatalf("failed to unmarshal output: %v", err)
 	}

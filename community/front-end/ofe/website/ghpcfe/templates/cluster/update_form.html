@@ -105,6 +105,21 @@
     </div>
   </div>
 
+  <div class="form-group">
+    {{ form.enable_slurm_auth.errors }}
+    <div class="grid-container">
+      <label class="slider-switch-container">
+        <div class="slider-switch">
+          {{ form.enable_slurm_auth }}
+          <span class="slider"></span>
+        </div>
+      </label>
+      <div class="help-text">
+        {{ form.enable_slurm_auth.help_text }}
+      </div>
+    </div>
+  </div>
+
   {% load form_extras %}
   <div class="table-responsive">
     <table class="table align-middle" id="container_registry_table">

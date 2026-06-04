@@ -20,15 +20,15 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
-
-	"runtime"
 
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
@@ -63,7 +63,6 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_NAME,
 		OS_VERSION,
 		TERRAFORM_VERSION,
-		BILLING_ACCOUNT_ID,
 		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
@@ -102,8 +101,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 							Name: config.GroupName("primary"),
 							Modules: []config.Module{
 								{
-									ID: config.ModuleID("compute_pool"),
-									// Ensure the source matches the machineTypeModulePattern ".*modules.compute.*"
+									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
 										"machine_type": cty.StringVal("c2-standard-8"),
@@ -115,17 +113,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
-				EXIT_CODE:          "0",
-				COMMAND_FLAGS:      "force,project",
-				REGION:             "us-central1",
-				ZONE:               "us-central1-a",
-				MACHINE_TYPE:       "c2-standard-8",
-				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
-				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
-				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
-				BILLING_ACCOUNT_ID: "",
-				INSTALLATION_MODE:  SOURCE,
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "0",
+				COMMAND_FLAGS:     "force,project",
+				REGION:            "us-central1",
+				ZONE:              "us-central1-a",
+				MACHINE_TYPE:      "c2-standard-8",
+				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
+				INSTALLATION_MODE: SOURCE,
 			},
 		},
 		{
@@ -143,17 +140,16 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
-				EXIT_CODE:          "1",
-				COMMAND_FLAGS:      "",
-				REGION:             "",
-				ZONE:               "",
-				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
-				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
-				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
-				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
-				BILLING_ACCOUNT_ID: "",
-				INSTALLATION_MODE:  BINARY,
+				IS_TEST_DATA:      "true",
+				EXIT_CODE:         "1",
+				COMMAND_FLAGS:     "",
+				REGION:            "",
+				ZONE:              "",
+				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
+				INSTALLATION_MODE: BINARY,
 			},
 		},
 	}
@@ -189,6 +185,130 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			for key, expectedVal := range tt.expectedValues {
 				if actualVal, exists := c.metadata[key]; !exists || actualVal != expectedVal {
 					t.Errorf("For key %q, expected value %q, got %q", key, expectedVal, actualVal)
+				}
+			}
+		})
+	}
+}
+
+func TestGetBlueprint(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// 1. Create a dummy base blueprint
+	bpPath := filepath.Join(tmpDir, "blueprint.yaml")
+	bpContent := []byte(`
+blueprint_name: test-blueprint
+vars:
+  project_id: default-project
+  region: us-central1
+`)
+	_ = os.WriteFile(bpPath, bpContent, 0644)
+
+	// 2. Create a dummy deployment file for override testing
+	depFile := filepath.Join(tmpDir, "deployment.yaml")
+	depContent := []byte(`
+vars:
+  project_id: deployment-file-project
+`)
+	_ = os.WriteFile(depFile, depContent, 0644)
+
+	// 3. Create a dummy deployment directory with an artifacts folder
+	deployDir := filepath.Join(tmpDir, "my-deployment")
+	artifactsDir := modulewriter.ArtifactsDir(deployDir)
+	_ = os.MkdirAll(artifactsDir, 0755)
+	expandedBpPath := filepath.Join(artifactsDir, "expanded_blueprint.yaml")
+	expandedBpContent := []byte(`
+blueprint_name: expanded-test-blueprint
+vars:
+  project_id: artifacts-project
+`)
+	_ = os.WriteFile(expandedBpPath, expandedBpContent, 0644)
+
+	tests := []struct {
+		name          string
+		args          []string
+		setupCmd      func() *cobra.Command
+		expectIsEmpty bool
+		expectedName  string
+		expectedVars  map[string]string // Key to expected variable value
+	}{
+		{
+			name:          "No arguments",
+			args:          []string{},
+			setupCmd:      func() *cobra.Command { return &cobra.Command{} },
+			expectIsEmpty: true,
+		},
+		{
+			name:         "Basic blueprint file",
+			args:         []string{bpPath},
+			setupCmd:     func() *cobra.Command { return &cobra.Command{} },
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{"project_id": "default-project"},
+		},
+		{
+			name:         "Deployment directory",
+			args:         []string{deployDir},
+			setupCmd:     func() *cobra.Command { return &cobra.Command{} },
+			expectedName: "expanded-test-blueprint",
+			expectedVars: map[string]string{"project_id": "artifacts-project"},
+		},
+		{
+			name: "With deployment-file override",
+			args: []string{bpPath},
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().String("deployment-file", depFile, "")
+				return cmd
+			},
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{"project_id": "deployment-file-project"},
+		},
+		{
+			name: "With vars flag override",
+			args: []string{bpPath},
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{}
+				cmd.Flags().StringSlice("vars", []string{"project_id=cli-project", "zone=us-east1-a"}, "")
+				return cmd
+			},
+			expectedName: "test-blueprint",
+			expectedVars: map[string]string{
+				"project_id": "cli-project",
+				"zone":       "us-east1-a",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := tc.setupCmd()
+			bp := getBlueprint(cmd, tc.args)
+
+			if tc.expectIsEmpty {
+				// Assert that the returned Blueprint is effectively empty
+				if bp.BlueprintName != "" || len(bp.Groups) > 0 {
+					t.Errorf("Expected an empty blueprint, but got: %+v", bp)
+				}
+			} else {
+				// Assert that the returned Blueprint parsed the correct file
+				if bp.BlueprintName != tc.expectedName {
+					t.Errorf("Expected BlueprintName %q, got %q", tc.expectedName, bp.BlueprintName)
+				}
+
+				// Assert that variables were properly overridden/merged
+				for k, expectedVal := range tc.expectedVars {
+					if !bp.Vars.Has(k) {
+						t.Errorf("Expected variable %q to exist, but it was missing", k)
+						continue
+					}
+
+					// Evaluate the variable to safely extract its string value
+					val := bp.Vars.Get(k)
+					unmarked, _ := val.Unmark()
+					if unmarked.AsString() != expectedVal {
+						t.Errorf("Expected variable %q to be %q, got %q", k, expectedVal, unmarked.AsString())
+					}
 				}
 			}
 		})
@@ -488,120 +608,145 @@ func TestGetKeyFromBlueprint(t *testing.T) {
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {
-		name     string
-		setupBp  func() config.Blueprint
-		expected string
+		name string
+		bp   config.Blueprint
+		want string
 	}{
 		{
-			name: "Single machine type in module",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("compute_pool"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
-									}),
-								},
+			name: "Extracts explicit machine_type",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "c2-standard-8",
+			want: "c2-standard-8",
 		},
 		{
-			name: "Multiple different machine types",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("login_node"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("n2-standard-2"),
-									}),
-								},
-								{
-									ID:     config.ModuleID("lcontroller_node"),
-									Source: "modules/compute/vm-instance",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("n2-standard-2"),
-									}),
-								},
-								{
-									ID:     config.ModuleID("compute_pool"),
-									Source: "modules/compute/gke-node-pool",
-									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
-									}),
-								},
+			name: "Extracts explicit node_type (TPU)",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("tpu_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_type": cty.StringVal("v4-8"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "n2-standard-2,c2-standard-8",
+			want: "v4-8",
 		},
 		{
-			name: "TPU node type module (schedmd-slurm-gcp-v6-nodeset-tpu)",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:     config.ModuleID("tpu_nodeset"),
-									Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu",
-									Settings: config.NewDict(map[string]cty.Value{
-										"node_type": cty.StringVal("v4-8"),
-									}),
-								},
+			name: "Extracts explicit system_node_pool_machine_type (GKE)",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("gke_cluster"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_machine_type": cty.StringVal("e2-standard-16"),
+								}),
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "v4-8",
+			want: "e2-standard-16",
 		},
 		{
-			name: "No machine types in modules",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Groups: []config.Group{
-						{
-							Name: config.GroupName("primary"),
-							Modules: []config.Module{
-								{
-									ID:       config.ModuleID("vpc_network"),
-									Source:   "modules/network/vpc",
-									Settings: config.NewDict(map[string]cty.Value{}),
-								},
+			name: "Extracts default machine_type when omitted from blueprint",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("controller_node"),
+								// The real embedded controller module has a default `machine_type: "c2-standard-4"`
+								Source: "../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller",
+								Kind:   config.TerraformKind,
 							},
 						},
 					},
-				}
+				},
 			},
-			expected: "",
+			want: "c2-standard-4",
+		},
+		{
+			name: "Deduplicates matching machine types across modules",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node3_tpu"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2-standard-8",
+		},
+		{
+			name: "Returns empty string if no types are found",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("vpc"),
+								Source: "../../modules/network/vpc",
+								Kind:   config.TerraformKind,
+								Settings: config.NewDict(map[string]cty.Value{
+									"some_other_setting": cty.StringVal("c2-standard-8"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bp := tt.setupBp()
-
-			actual := getMachineType(bp)
-
-			if actual != tt.expected {
-				t.Errorf("getMachineType() = %q, want %q", actual, tt.expected)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getMachineType(tc.bp)
+			if got != tc.want {
+				t.Errorf("getMachineType() = %q; want %q", got, tc.want)
 			}
 		})
 	}
@@ -872,87 +1017,51 @@ func TestGetIsVmInstance(t *testing.T) {
 	}
 }
 
-// TestGetProjectNumber verifies that the project number is correctly fetched
-// or gracefully fails depending on the blueprint configuration and API response.
+// TestGetProjectNumber verifies that the project number is correctly fetched or gracefully fails depending on the API response.
 func TestGetProjectNumber(t *testing.T) {
 	tests := []struct {
 		name      string
-		blueprint config.Blueprint
+		projectID string
 		clientErr error
 		mockErr   error
 		want      string
 	}{
 		{
-			name: "success_1",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("test-project-1"),
-				}),
-			},
-			want: "1234567890",
+			name:      "success_1",
+			projectID: "test-project-1",
+			want:      "1234567890",
 		},
 		{
-			name: "success_2",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("test-project-2"),
-				}),
-			},
-			want: "9876543210",
+			name:      "success_2",
+			projectID: "test-project-2",
+			want:      "9876543210",
 		},
 		{
-			name: "no_project_id",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{}),
-			},
-			want: "",
+			name:      "no_project_id",
+			projectID: "",
+			want:      "",
 		},
 		{
-			name: "client_creation_error",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("any-project"),
-				}),
-			},
+			name:      "client_creation_error",
+			projectID: "any-project",
 			clientErr: errors.New("failed to create client"),
 			want:      "",
 		},
 		{
-			name: "api_error",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("error-project"),
-				}),
-			},
-			mockErr: errors.New("project not found"),
-			want:    "",
+			name:      "api_error",
+			projectID: "error-project",
+			mockErr:   errors.New("project not found"),
+			want:      "",
 		},
 		{
-			name: "api_returns_empty_name",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal(""),
-				}),
-			},
-			want: "",
+			name:      "api_returns_empty_name",
+			projectID: "empty-name-project",
+			want:      "",
 		},
 		{
-			name: "api_returns_nil_project",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("nil-project"),
-				}),
-			},
-			want: "",
-		},
-		{
-			name: "project_id_not_string_type",
-			blueprint: config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.NumberIntVal(123),
-				}),
-			},
-			want: "",
+			name:      "api_returns_nil_project",
+			projectID: "nil-project",
+			want:      "",
 		},
 	}
 
@@ -977,10 +1086,13 @@ func TestGetProjectNumber(t *testing.T) {
 				if projectID == "test-project-2" {
 					return "projects/9876543210", nil
 				}
+				if projectID == "empty-name-project" || projectID == "nil-project" {
+					return "", nil
+				}
 				return "", errors.New("not found")
 			}
 
-			got := getProjectNumber(tt.blueprint)
+			got := getProjectNumber(tt.projectID)
 			if got != tt.want {
 				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
 			}
@@ -996,55 +1108,46 @@ func TestGetBillingAccountId(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		setupBp            func() config.Blueprint
+		projectID          string
 		mockBillingAccount string
+		mockErr            error
 		expected           string
 	}{
 		{
-			name: "Missing project_id in blueprint",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{}),
-				}
-			},
+			name:               "Missing project_id",
+			projectID:          "",
 			mockBillingAccount: "",
 			expected:           "",
 		},
 		{
-			name: "Project ID present but no billing account returned",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{
-						"project_id": cty.StringVal("test-project-123"),
-					}),
-				}
-			},
+			name:               "Project ID present but no billing account returned",
+			projectID:          "test-project-123",
 			mockBillingAccount: "",
 			expected:           "",
 		},
 		{
-			name: "Project ID present and billing account trimmed",
-			setupBp: func() config.Blueprint {
-				return config.Blueprint{
-					Vars: config.NewDict(map[string]cty.Value{
-						"project_id": cty.StringVal("test-project-123"),
-					}),
-				}
-			},
+			name:               "Project ID present and billing account trimmed",
+			projectID:          "test-project-123",
 			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
 			expected:           "012345-6789AB-CDEF01",
+		},
+		{
+			name:               "Project ID present but API fails",
+			projectID:          "test-project-123",
+			mockBillingAccount: "",
+			mockErr:            errors.New("api error"),
+			expected:           "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock the GCP call for this specific test case
-			getProjectBillingAccount = func(ctx context.Context, projectID string) string {
-				return tt.mockBillingAccount
+			// Mock the GCP call for this specific test case, now returning (string, error)
+			getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
+				return tt.mockBillingAccount, tt.mockErr
 			}
 
-			bp := tt.setupBp()
-			actual := getBillingAccountId(bp)
+			actual := getBillingAccountId(tt.projectID)
 
 			if actual != tt.expected {
 				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)

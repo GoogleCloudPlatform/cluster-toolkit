@@ -15,6 +15,9 @@
 blueprint_name: hpc-build-slurm-image
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: build-slurm-1
   region: us-central1
