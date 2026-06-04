@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -277,6 +278,103 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	}
 
 	return "", apiErr
+}
+
+func evaluateIsGoogler() bool {
+	// Check Application Default Credentials (ADC) for Service Accounts. CI pipelines usually inject credentials via this environment variable.
+	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if adcPath != "" {
+		isInternal, err := checkADCForInternalUser(adcPath)
+		if err == nil && isInternal {
+			return true
+		}
+	}
+
+	// Fall back to reading the gcloud active config file directly.
+	return checkGcloudConfigForInternalUser()
+}
+
+// getGcloudConfigDir resolves the gcloud configuration directory based on environment and OS.
+func getGcloudConfigDir() (string, error) {
+	// Respect the CLOUDSDK_CONFIG environment variable if set
+	if envDir := os.Getenv("CLOUDSDK_CONFIG"); envDir != "" {
+		return envDir, nil
+	}
+
+	// Fall back to OS-specific default paths
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("APPDATA"), "gcloud"), nil
+	}
+
+	return filepath.Join(homeDir, ".config", "gcloud"), nil
+}
+
+func checkGcloudConfigForInternalUser() bool {
+	configDir, err := getGcloudConfigDir()
+	if err != nil {
+		return false
+	}
+
+	// Find the active configuration name
+	activeConfigPath := filepath.Join(configDir, "active_config")
+	activeConfigBytes, err := os.ReadFile(activeConfigPath)
+	if err != nil {
+		return false
+	}
+
+	activeConfig := strings.TrimSpace(string(activeConfigBytes))
+	if activeConfig == "" {
+		return false
+	}
+
+	// Read the active configuration file
+	configFile := filepath.Join(configDir, "configurations", "config_"+activeConfig)
+	configBytes, err := os.ReadFile(configFile)
+	if err != nil {
+		return false
+	}
+
+	// Parse the INI-style file to extract the account under [core]
+	email := extractAccountFromConfig(configBytes)
+	return isInternalEmail(email)
+}
+
+// extractAccountFromConfig parses the INI-style gcloud config bytes to extract the account email.
+func extractAccountFromConfig(configBytes []byte) string {
+	lines := strings.Split(string(configBytes), "\n")
+	inCoreSection := false
+	for _, line := range lines {
+		// Strip inline comments before doing any processing
+		if idx := strings.IndexAny(line, "#;"); idx != -1 {
+			line = line[:idx]
+		}
+
+		// Trim surrounding whitespaces
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inCoreSection = strings.EqualFold(line, "[core]")
+			continue
+		}
+
+		if inCoreSection {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "account" {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.
