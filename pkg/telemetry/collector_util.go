@@ -324,10 +324,16 @@ func extractAccountFromConfig(configBytes []byte) string {
 	lines := strings.Split(string(configBytes), "\n")
 	inCoreSection := false
 	for _, line := range lines {
+		// Strip inline comments before doing any processing
+		if idx := strings.IndexAny(line, "#;"); idx != -1 {
+			line = line[:idx]
+		}
+
+		// Trim surrounding whitespaces
 		line = strings.TrimSpace(line)
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+		// Skip empty lines
+		if line == "" {
 			continue
 		}
 
