@@ -88,30 +88,8 @@ deployment_groups:
       reservation_name: $(vars.reservation_name)
       network_interfaces:
         $(concat(
-          [{
-            network=null,
-            subnetwork=cluster-net-0.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          },
-          {
-            network=null,
-            subnetwork=cluster-rdma-net-0.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
+          cluster-net-0.instance_additional_networks,
+          cluster-rdma-net-0.instance_additional_networks
         ))
 
   - id: wait-for-vms
