@@ -56,6 +56,7 @@ deployment_groups:
         subnet_region: $(vars.region)
         subnet_ip: $(vars.rdma_net_range)
         region: $(vars.region)
+      nic_type: "IRDMA"
 
   - id: homefs
     source: modules/file-system/filestore
