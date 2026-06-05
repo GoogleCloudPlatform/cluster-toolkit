@@ -59,9 +59,8 @@
     - name: Verify Pod Annotations and Sidecar Injection
       delegate_to: localhost
       ansible.builtin.shell: |
-        # Resolve the specific FIO job name using label filters
-        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[?(@.metadata.name=="gcsfuse-fio-job")].metadata.name}' || \
-                   kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[0].metadata.name}')
+        # Resolve the specific FIO job name using pattern filters
+        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^gcsfuse-fio-job' | head -n 1)
 
         # Check if the pod has the gke-gcsfuse/volumes annotation
         kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath="{.items[0].metadata.annotations['gke-gcsfuse/volumes']}" | grep -q "true" && \
@@ -79,8 +78,7 @@
     - name: Wait for GCS Fuse test job to complete
       delegate_to: localhost
       ansible.builtin.shell: |
-        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[?(@.metadata.name=="gcsfuse-fio-job")].metadata.name}' || \
-                   kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[0].metadata.name}')
+        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^gcsfuse-fio-job' | head -n 1)
         kubectl wait --for=condition=complete "job/${JOB_NAME}" --timeout=15m
       args:
         executable: /bin/bash
