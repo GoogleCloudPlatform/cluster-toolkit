@@ -323,7 +323,10 @@ deployment_groups:
       instance_image: $(vars.instance_image)
       network_interfaces:
         $(concat(
-          a4x_net_0.instance_additional_networks,
+          [
+          merge(a4x_net_0.instance_additional_networks[0],
+          { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
+          ],
           a4x_net_1.instance_additional_networks,
           a4x_rdma_net.subnetwork_interfaces
         ))
