@@ -89,6 +89,7 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
 * DWS Flex Start does not work with static nodes. So, `static_node_count` cannot be set.
 * To use DWS Flex Start, `auto_repair` should be set to `false`.
 * Compact placement using custom GCE workload policies (like `HIGH_THROUGHPUT` topology constraints) with DWS Flex Start is currently supported for **A4**, **A3 Ultra**, and **H4D** machine types.
+* TPUs are natively scheduled as compact physical slices via the `tpu_topology` parameter. So, for TPUs (incl. Flex-Start) users must specify `tpu_topology`. This is already supported for Flex-start because it’s mandatory for TPU Slice scheduling.
 
 ## Run a job
 
@@ -116,23 +117,76 @@ Any job applied to this node pool must meet the following requirements:
 2. Submit the sample test job:
 
     ```sh
-    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/test-job.yaml
+    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/dws-flex-start-h4d.yaml
     ```
 
 3. Monitor the scale-up and execution timeline:
-    *Immediately after submitting, the pods will be `Pending` because the H4D node pool is at size `0`:
+    ***Check Pod Status**: Immediately after submitting, the pods will be `Pending` because the H4D node pool is at size `0`:
 
       ```sh
       kubectl get pods -w
       ```
 
-4. Describe one of the pending pods to verify GKE is triggering a scale-up for the H4D partition:
+      Output:
 
-      ```sh
-      kubectl describe pod <pod-name>
+      ```text
+      NAME              READY   STATUS    RESTARTS   AGE
+      h4d-job-1-q2ksv   0/1     Pending   0          10s
+      h4d-job-2-j9wla   0/1     Pending   0          10s
       ```
 
-    You should see events like `TriggeredScaleUp` mentioning the node group scale-up from `0->1` node.
-    After some time, the physical VM will boot and register. The pods will transition to `Running` and then `Completed`.
+    ***Inspect Autoscaler Events**: Describe one of the pending pods or list events to verify GKE is triggering a scale-up for the H4D partition:
+
+      ```sh
+      kubectl describe pod h4d-job-1-q2ksv
+      ```
+
+      Look for the `TriggeredScaleUp` event:
+
+      ```text
+      Events:
+        Type    Reason            Age   From                Message
+        ----    ------            ---   ----                -------
+        Normal  TriggeredScaleUp  15s   cluster-autoscaler  pod triggered scale-up by cluster-autoscaler: group h4d-pool-xxxx
+      ```
+
+    ***Track Node Readiness**: After sometime, the physical VM will boot and register. The pods will transition to `Running` and then `Completed`.
+
+      ```sh
+      kubectl get nodes -w
+      ```
+
+      Output:
+
+      ```text
+      NAME                      STATUS   ROLES    AGE   VERSION
+      gke-h4d-pool-8hwg         Ready    <none>   10s   v1.32.1-gke.1001000
+      ```
+
+    ***Observe Completion**: Once the sleep workload finishes, the pods will move to `Completed`.
+
+      ```sh
+      kubectl get pods
+      ```
+
+      Output:
+
+      ```text
+      NAME              READY   STATUS      RESTARTS   AGE
+      h4d-job-1-q2ksv   0/1     Completed   0          2m
+      h4d-job-2-j9wla   0/1     Completed   0          2m
+      ```
 
 *NOTE:* Since the node pool is configured with default `max_run_duration: 900` (15 minutes), the nodes will be automatically deleted by GKE after running for 15 minutes, or when the jobs complete and GKE Autoscaler scales down the idle nodes.
+
+## Verification via Google Cloud Console
+
+To verify the workload policy configuration using the Google Cloud Console UI:
+
+1. In the Google Cloud Console, navigate to the **Kubernetes Engine > Clusters** page.
+2. Click on the name of your GKE cluster.
+3. Select the **Nodes** tab.
+4. Scroll down to the node pool details and click on the link to the Managed Instance Group (MIG) under the **Instance groups** column.
+5. On the Managed Instance Group page, select the **Details** tab.
+6. Scroll down to locate the **Workload policy** section.
+7. Verify that the attached policy configuration shows the correct type and topology distance.
