@@ -57,7 +57,7 @@ limitations under the License.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_connection_operator_version"></a> [connection\_operator\_version](#input\_connection\_operator\_version) | The chart version for mldiagnostics-connection-operator | `string` | `"0.21.0"` | no |
-| <a name="input_enable_ml_diagnostics"></a> [enable\_ml\_diagnostics](#input\_enable\_ml\_diagnostics) | Indicates whether managed ML Diagnostics is enabled on the GKE cluster. | `bool` | `false` | no |
+| <a name="input_enable_managed_ml_diagnostics"></a> [enable\_managed\_ml\_diagnostics](#input\_enable\_managed\_ml\_diagnostics) | Indicates whether managed ML Diagnostics is enabled on the GKE cluster. | `bool` | `false` | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
 | <a name="input_injection_webhook_version"></a> [injection\_webhook\_version](#input\_injection\_webhook\_version) | The chart version for mldiagnostics-injection-webhook | `string` | `"0.25.0"` | no |
 | <a name="input_k8s_prerequisites_ready"></a> [k8s\_prerequisites\_ready](#input\_k8s\_prerequisites\_ready) | A static flag that signals to downstream modules that upstream dependencies are ready. | `any` | `false` | no |

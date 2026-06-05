@@ -482,7 +482,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           # ... other settings ...
           namespace: $(vars.user_namespace)
           configure_workload_identity_sa: true
-          enable_ml_diagnostics: true
+          enable_managed_ml_diagnostics: true
     ```
 
 4. **Configure Kueue Namespace:** In the `workload-manager-install` module, ensure the Kueue LocalQueue is created in the user namespace by adding `namespace: $(vars.user_namespace)` to the `config_template_vars` for Kueue, if it is not provided, the value will default to ‘default’:
@@ -511,8 +511,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
 
 6. **ML Diagnostics Module (Optional, only for GKE versions < 1.35.0-gke.3065000)**: If you are deploying a GKE cluster with a version that does not support GKE-managed ML Diagnostics, you must add the 'mldiagnostics' module to manually install the injection webhook and connection operator charts.
 
-    > [!NOTE]
-    > Both installation methods cannot be active at the same time. If you add this module, you must set `enable_ml_diagnostics: false` (or omit it) on the `gke-tpu-7x-cluster` module to avoid validation failures.
+> [!IMPORTANT] Do not enable GKE-managed ML Diagnostics (enable_managed_ml_diagnostics: true) if you are manually adding the mldiagnostics module, as this will cause a validation failure.
 
     ```yaml
       - id: gke-ml-diagnostics

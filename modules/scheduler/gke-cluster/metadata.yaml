@@ -28,8 +28,8 @@ ghpc:
 
   - validator: conditional
     inputs:
-      trigger: enable_ml_diagnostics
+      trigger: enable_managed_ml_diagnostics
       trigger_value: true
       dependent: configure_workload_identity_sa
       dependent_value: true
-    error_message: "The variable 'configure_workload_identity_sa' must be set to true when 'enable_ml_diagnostics' is enabled to correctly configure ML Diagnostics."
+    error_message: "The variable 'configure_workload_identity_sa' must be set to true when 'enable_managed_ml_diagnostics' is enabled to correctly configure ML Diagnostics."
