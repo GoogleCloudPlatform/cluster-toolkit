@@ -181,7 +181,7 @@ locals {
       queue_count        = null
       network_ip         = null
       stack_type         = local.output_primary_subnetwork_stack_type
-      access_config      = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }]
+      access_config      = []
       ipv6_access_config = []
       alias_ip_range     = []
     }
