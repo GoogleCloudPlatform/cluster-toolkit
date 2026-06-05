@@ -89,7 +89,10 @@ deployment_groups:
       reservation_name: $(vars.reservation_name)
       network_interfaces:
         $(concat(
-          cluster-net-0.instance_additional_networks,
+          [
+          merge(cluster-net-0.instance_additional_networks[0],
+          {access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
+          ],
           cluster-rdma-net-0.instance_additional_networks
         ))
 
