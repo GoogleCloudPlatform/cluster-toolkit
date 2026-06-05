@@ -27,57 +27,60 @@
   - name: Execute the GCS Fuse test job
     delegate_to: localhost
     ansible.builtin.shell: |
-      array=("{{ workspace }}/{{ deployment_name }}/primary"/my-job*)
+      array=("{{ workspace }}/{{ deployment_name }}/primary"/gcsfuse-fio-job*)
       kubectl create -f "${array[0]}" -v=9
     args:
       executable: /bin/bash
     changed_when: False
 
-  - name: Wait for Pod to be created
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      kubectl get pods -l job-name -o jsonpath='{.items[*].metadata.name}'
-    register: pod_check
-    until: pod_check.stdout | length > 0
-    retries: 12
-    delay: 10
-    changed_when: False
-
-  - name: Verify PVC Storage Classes
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      kubectl get pvc -o jsonpath='{.items[*].spec.storageClassName}' | grep -q "gcsfusecsi-training" && \
-      kubectl get pvc -o jsonpath='{.items[*].spec.storageClassName}' | grep -q "gcsfusecsi-checkpointing"
-    register: pvc_validation
-    until: pvc_validation.rc == 0
-    retries: 5
-    delay: 5
-    changed_when: False
-
-  - name: Verify Pod Annotations and Sidecar Injection
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      # Resolve the job name
-      JOB_NAME=$(kubectl get job -o jsonpath='{.items[0].metadata.name}')
-      # Check if the pod has the gke-gcsfuse/volumes annotation
-      kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath="{.items[0].metadata.annotations['gke-gcsfuse/volumes']}" | grep -q "true" && \
-      # Check if the pod has the gke-gcsfuse/profile-managed label
-      kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath="{.items[0].metadata.labels['gke-gcsfuse/profile-managed']}" | grep -q "true" && \
-      # Check if the gke-gcsfuse-sidecar container is present in the pod spec (either initContainers or containers)
-      (kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath='{.items[0].spec.initContainers[*].name}' | grep -q "gke-gcsfuse-sidecar" || \
-       kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath='{.items[0].spec.containers[*].name}' | grep -q "gke-gcsfuse-sidecar")
-    register: pod_validation
-    until: pod_validation.rc == 0
-    retries: 5
-    delay: 5
-    changed_when: False
-
-  - name: Block to wait for job completion and capture failures
+  - name: Execute checks with error capturing
     block:
+    - name: Wait for Pod to be created
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        kubectl get pods -l job-name -o jsonpath='{.items[*].metadata.name}'
+      register: pod_check
+      until: pod_check.stdout | length > 0
+      retries: 12
+      delay: 10
+      changed_when: False
+
+    - name: Verify PVC Storage Classes
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        kubectl get pvc -o jsonpath='{.items[*].spec.storageClassName}' | grep -q "gcsfusecsi-training" && \
+        kubectl get pvc -o jsonpath='{.items[*].spec.storageClassName}' | grep -q "gcsfusecsi-checkpointing"
+      register: pvc_validation
+      until: pvc_validation.rc == 0
+      retries: 5
+      delay: 5
+      changed_when: False
+
+    - name: Verify Pod Annotations and Sidecar Injection
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        # Resolve the specific FIO job name using label filters
+        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[?(@.metadata.name=="gcsfuse-fio-job")].metadata.name}' || \
+                   kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[0].metadata.name}')
+
+        # Check if the pod has the gke-gcsfuse/volumes annotation
+        kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath="{.items[0].metadata.annotations['gke-gcsfuse/volumes']}" | grep -q "true" && \
+        # Check if the pod has the gke-gcsfuse/profile-managed label
+        kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath="{.items[0].metadata.labels['gke-gcsfuse/profile-managed']}" | grep -q "true" && \
+        # Check if the gke-gcsfuse-sidecar container is present in the pod spec (either initContainers or containers)
+        (kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath='{.items[0].spec.initContainers[*].name}' | grep -q "gke-gcsfuse-sidecar" || \
+         kubectl get pods -l job-name="${JOB_NAME}" -o jsonpath='{.items[0].spec.containers[*].name}' | grep -q "gke-gcsfuse-sidecar")
+      register: pod_validation
+      until: pod_validation.rc == 0
+      retries: 5
+      delay: 5
+      changed_when: False
+
     - name: Wait for GCS Fuse test job to complete
       delegate_to: localhost
       ansible.builtin.shell: |
-        JOB_NAME=$(kubectl get job -o jsonpath='{.items[0].metadata.name}')
+        JOB_NAME=$(kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[?(@.metadata.name=="gcsfuse-fio-job")].metadata.name}' || \
+                   kubectl get job -l ghpc_module=gke-job-template -o jsonpath='{.items[0].metadata.name}')
         kubectl wait --for=condition=complete "job/${JOB_NAME}" --timeout=15m
       args:
         executable: /bin/bash
@@ -86,10 +89,11 @@
       retries: 3
       delay: 10
       changed_when: False
+
     rescue:
-    - name: "FAILURE: Job did not complete. Capturing debug info."
+    - name: "FAILURE: GCS Fuse validation checks failed. Capturing debug info."
       ansible.builtin.debug:
-        msg: "The Job failed to complete within the expected time. See debug output below."
+        msg: "An error occurred during verification checks. See debug output below."
 
     - name: Get all pods status on failure
       delegate_to: localhost
@@ -102,7 +106,7 @@
       ansible.builtin.debug:
         msg: "{{ pods_on_failure.stdout_lines }}"
 
-    - name: Describe the job on failure
+    - name: Describe the jobs on failure
       delegate_to: localhost
       ansible.builtin.shell: |
         kubectl describe job
@@ -150,7 +154,7 @@
 
     - name: Fail the playbook
       ansible.builtin.fail:
-        msg: "GKE Job did not complete successfully."
+        msg: "GKE GCS Fuse validation failed."
 
   always:
   - name: Clean up resources from the cluster
