@@ -374,7 +374,7 @@ The logs will display content from `shared_output.txt`, showing timestamps and h
 
 This blueprint includes support for easy installation and configuration of [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++), a managed service for profiling, logging, and monitoring AI/ML workloads on GKE.
 
-This feature automatically configures the GKE cluster with the necessary settings, labels the designated user namespace, and configures the Workload Identity service accounts required by the ML Diagnostics SDK.
+This feature automatically configures the GKE cluster (Version: 1.35.0-gke.3065000 or higher) with the necessary settings, labels the designated user namespace, and configures the Workload Identity service accounts required by the ML Diagnostics SDK.
 
 #### Enabling ML Diagnostics
 
@@ -410,7 +410,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           # ... other settings ...
           namespace: $(vars.user_namespace)
           configure_workload_identity_sa: true
-          enable_managed_ml_diagnostics: true
+          enable_ml_diagnostics: true
     ```
 
 4. **Configure Kueue Namespace:** In the `workload-manager-install` module, ensure the Kueue LocalQueue is created in the user namespace by adding `namespace: $(vars.user_namespace)` to the `config_template_vars` for Kueue, if it is not provided, the value will default to 'default':
@@ -422,36 +422,6 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
             config_template_vars:
               # ... other vars ...
               namespace: $(vars.user_namespace)
-    ```
-
-5. **Cert-Manager:** In the `workload-manager-install` module, ensure Cert-Manager is set to install, as it's required by the ML Diagnostics webhook:
-
-    ```yaml
-      - id: workload-manager-install
-        source: modules/management/kubectl-apply
-        use: [gke-tpu-v6e-cluster]
-        settings:
-          # ... kueue and other settings ...
-          cert_manager:
-            install: true
-            # version: "v1.17.2" # Optional: specify version
-    ```
-
-6. **ML Diagnostics Module (Optional, only for GKE versions < 1.35.0-gke.3065000)**: If you are deploying a GKE cluster with a version that does not support GKE-managed ML Diagnostics, you must add the 'mldiagnostics' module to manually install the injection webhook and connection operator charts.
-
-> [!IMPORTANT] Do not enable GKE-managed ML Diagnostics (enable_ml_diagnostics: true) if you are manually adding the mldiagnostics module, as this will cause a validation failure.
-
-    ```yaml
-      - id: gke-ml-diagnostics
-        source: modules/management/mldiagnostics
-        use: [gke-tpu-v6e-cluster, workload-manager-install]
-        # Optional: Specify the versions of the injection webhook and connection operator to install.
-        # settings:
-            # injection_webhook_version: "0.25.0" # Optional
-            # connection_operator_version: "0.21.0" # Optional
-          # Optional: Specify the namespace to be configured for running workloads with ML Diagnostics.
-          # If not provided, the value will be taken from gke-tpu-v6e-cluster module
-          # namespace: $(vars.user_namespace)
     ```
 
 After making these changes, run the `gcluster deploy` command to create the GKE cluster with the ML diagnostics configuration.
@@ -488,4 +458,4 @@ After making these changes, run the `gcluster deploy` command to create the GKE 
 
 These steps confirm that the ML Diagnostics components and their dependencies are correctly set up in the cluster.
 
-To test with sample workload, refer to the [ML Diagnostics Test README](../../modules/management/mldiagnostics/sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
+To test with sample workload, refer to the [ML Diagnostics Test README](./ml-diagnostics-sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.

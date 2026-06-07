@@ -177,7 +177,7 @@ deployment_groups:
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
       enable_filestore_csi: true # enable Filestore for the cluster
       configure_workload_identity_sa: true
-      enable_managed_ml_diagnostics: true
+      enable_ml_diagnostics: true
       namespace: $(vars.user_namespace)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
