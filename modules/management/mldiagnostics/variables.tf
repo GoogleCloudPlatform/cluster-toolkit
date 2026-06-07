@@ -47,14 +47,6 @@ variable "namespace" {
   default     = "default"
 }
 
-# Reserved for future work where behavior will be classified based on GKE version.
-# tflint-ignore: terraform_unused_declarations
-variable "gke_version" {
-  description = "The GKE version for the cluster"
-  type        = string
-  default     = null
-}
-
 variable "injection_webhook_version" {
   description = "The chart version for mldiagnostics-injection-webhook"
   type        = string
@@ -72,7 +64,7 @@ resource "terraform_data" "validate_namespace" {
 
   lifecycle {
     precondition {
-      condition     = !var.gke_cluster_exists ? true : contains(data.kubernetes_all_namespaces.all[0].namespaces, var.namespace)
+      condition     = !var.gke_cluster_exists ? true : contains(try(data.kubernetes_all_namespaces.all[0].namespaces, []), var.namespace)
       error_message = "The specified user workload namespace '${var.namespace}' does not exist in the cluster. Please ensure configure_workload_identity_sa is enabled and namespace is set to '${var.namespace}' in the gke-cluster module."
     }
   }
@@ -98,10 +90,26 @@ resource "terraform_data" "validate_cert_manager" {
 
   lifecycle {
     precondition {
-      condition     = !var.gke_cluster_exists ? true : contains(data.kubernetes_all_namespaces.all[0].namespaces, "cert-manager")
+      condition     = !var.gke_cluster_exists ? true : contains(try(data.kubernetes_all_namespaces.all[0].namespaces, []), "cert-manager")
       error_message = "Cert-Manager was not found in the cluster (namespace 'cert-manager' missing). Please ensure Cert-Manager is set to install: true in kubectl-apply module as it is required by the ML Diagnostics webhook."
     }
   }
 
   depends_on = [var.gke_cluster_exists, var.k8s_prerequisites_ready]
+}
+
+variable "enable_managed_ml_diagnostics" {
+  description = "Indicates whether managed ML Diagnostics is enabled on the GKE cluster."
+  type        = bool
+  default     = false
+}
+
+# Validate that both managed and manual methods are not active at the same time
+resource "terraform_data" "validate_prevent_duplicate_install" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_managed_ml_diagnostics
+      error_message = "Cannot use the 'mldiagnostics' module if 'enable_managed_ml_diagnostics' is set to true in the 'gke-cluster' module for GKE-managed ML Diagnostics. Please use only one method."
+    }
+  }
 }

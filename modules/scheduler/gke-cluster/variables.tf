@@ -673,3 +673,9 @@ variable "machine_mappings_json" {
   type        = string
   default     = "{}"
 }
+
+variable "enable_managed_ml_diagnostics" {
+  description = "Enables ML Diagnostics on the GKE cluster."
+  type        = bool
+  default     = false
+}

@@ -121,12 +121,14 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
 | <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 2.36 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_workload_identity"></a> [workload\_identity](#module\_workload\_identity) | terraform-google-modules/kubernetes-engine/google//modules/workload-identity | >= 40.0 |
 
@@ -137,7 +139,9 @@ limitations under the License.
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
+| [kubernetes_labels.workload_namespace_labels](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/labels) | resource |
 | [kubernetes_namespace.user_namespace](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
+| [terraform_data.validate_ml_diagnostics_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
@@ -167,6 +171,7 @@ limitations under the License.
 | <a name="input_enable_inference_gateway"></a> [enable\_inference\_gateway](#input\_enable\_inference\_gateway) | If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs. | `bool` | `false` | no |
 | <a name="input_enable_k8s_beta_apis"></a> [enable\_k8s\_beta\_apis](#input\_enable\_k8s\_beta\_apis) | List of Enabled Kubernetes Beta APIs. | `list(string)` | `null` | no |
 | <a name="input_enable_managed_lustre_csi"></a> [enable\_managed\_lustre\_csi](#input\_enable\_managed\_lustre\_csi) | The status of the Google Compute Engine Managed Lustre Container Storage Interface (CSI) driver addon, which allows the usage of a lustre as volumes. | `bool` | `false` | no |
+| <a name="input_enable_managed_ml_diagnostics"></a> [enable\_managed\_ml\_diagnostics](#input\_enable\_managed\_ml\_diagnostics) | Enables ML Diagnostics on the GKE cluster. | `bool` | `false` | no |
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
 | <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en). If null, will determine state based on if additional\_networks are passed in. | `bool` | `null` | no |
 | <a name="input_enable_node_local_dns_cache"></a> [enable\_node\_local\_dns\_cache](#input\_enable\_node\_local\_dns\_cache) | Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency | `bool` | `false` | no |
@@ -229,6 +234,7 @@ limitations under the License.
 | <a name="output_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#output\_cluster\_ca\_certificate) | The base64 encoded public certificate authority data for the GKE cluster. |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | The IP address or endpoint of the GKE cluster control plane. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_enable_managed_ml_diagnostics"></a> [enable\_managed\_ml\_diagnostics](#output\_enable\_managed\_ml\_diagnostics) | Indicates whether native ML Diagnostics is enabled on the GKE cluster. |
 | <a name="output_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#output\_enable\_pathways\_for\_tpus) | Indicates whether Pathways for TPUs is enabled. |
 | <a name="output_enable_slice_controller"></a> [enable\_slice\_controller](#output\_enable\_slice\_controller) | Indicates whether the GKE Slice Controller is enabled. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. |

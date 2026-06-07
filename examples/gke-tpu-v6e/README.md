@@ -374,12 +374,7 @@ The logs will display content from `shared_output.txt`, showing timestamps and h
 
 This blueprint includes support for easy installation and configuration of [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++), a managed service for profiling, logging, and monitoring AI/ML workloads on GKE.
 
-This feature automates the setup of necessary components, including:
-
-* **ML Diagnostics Injection Webhook:** Injects required metadata into workload pods to enable the ML Diagnostics SDK.
-* **ML Diagnostics Connection Operator:** Enables on-demand profiling for ML workloads.
-* **Namespace Configuration:** Labels the designated user namespace to automatically enable diagnostics for any resources created within it.
-* **Prerequisite Validation:** Checks for essential configurations like Cert-Manager and Workload Identity.
+This feature automatically configures the GKE cluster with the necessary settings, labels the designated user namespace, and configures the Workload Identity service accounts required by the ML Diagnostics SDK.
 
 #### Enabling ML Diagnostics
 
@@ -405,7 +400,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           - hypercomputecluster.editor
     ```
 
-3. **Configure Workload Identity Namespace:** Ensure the `gke-tpu-v6e-cluster` module is configured to create the Workload Identity resources in the user namespace.
+3. **Configure GKE-CLUSTER:** Ensure the `gke-tpu-v6e-cluster` module is configured to enable ML diagnostics and create the Workload Identity resources in the user namespace.
 
     ```yaml
       - id: gke-tpu-v6e-cluster
@@ -415,6 +410,7 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           # ... other settings ...
           namespace: $(vars.user_namespace)
           configure_workload_identity_sa: true
+          enable_managed_ml_diagnostics: true
     ```
 
 4. **Configure Kueue Namespace:** In the `workload-manager-install` module, ensure the Kueue LocalQueue is created in the user namespace by adding `namespace: $(vars.user_namespace)` to the `config_template_vars` for Kueue, if it is not provided, the value will default to 'default':
@@ -441,7 +437,9 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
             # version: "v1.17.2" # Optional: specify version
     ```
 
-6. **ML Diagnostics Module:** Ensure `gke-ml-diagnostics` module is present in the blueprint to install ML Diagnostics charts and configurations to user namespace.
+6. **ML Diagnostics Module (Optional, only for GKE versions < 1.35.0-gke.3065000)**: If you are deploying a GKE cluster with a version that does not support GKE-managed ML Diagnostics, you must add the 'mldiagnostics' module to manually install the injection webhook and connection operator charts.
+
+> [!IMPORTANT] Do not enable GKE-managed ML Diagnostics (enable_ml_diagnostics: true) if you are manually adding the mldiagnostics module, as this will cause a validation failure.
 
     ```yaml
       - id: gke-ml-diagnostics
@@ -456,8 +454,6 @@ To enable Google Cloud ML Diagnostics, perform the following steps **before** de
           # namespace: $(vars.user_namespace)
     ```
 
-In `gke-ml-diagnostics`, cert-manager and workload identity will be validated as they are created in other modules.
-
 After making these changes, run the `gcluster deploy` command to create the GKE cluster with the ML diagnostics configuration.
 
 #### Testing ML Diagnostics Cluster Configuration
@@ -470,27 +466,13 @@ After making these changes, run the `gcluster deploy` command to create the GKE 
 
     Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
 
-2. Verify helm charts and their versions installed in cert-manager and gke-mldiagnostics namespaces.
-
-    ```sh
-    helm ls -n cert-manager
-    helm ls -n gke-mldiagnostics
-    ```
-
-3. Verify pods and services in cert-manager and gke-mldiagnostics namespaces are running.
-
-    ```sh
-    kubectl get all -n cert-manager
-    kubectl get all -n gke-mldiagnostics
-    ```
-
-4. Verify user namespace is created and labeled with "managed-mldiagnostics-gke: true".
+2. Verify user namespace is created and labeled with "managed-mldiagnostics-gke: true".
 
     ```sh
     kubectl describe ns <user_namespace>
     ```
 
-5. Verify kubernetes service account in user namespace.
+3. Verify kubernetes service account in user namespace.
 
     ```sh
     kubectl get serviceaccount -n <user_namespace>
@@ -498,7 +480,7 @@ After making these changes, run the `gcluster deploy` command to create the GKE 
     # Check for workload identity annotations
     ```
 
-6. Verify Kueue LocalQueue in the user namespace.
+4. Verify Kueue LocalQueue in the user namespace.
 
     ```sh
     kubectl get localqueues -n <user_namespace>
