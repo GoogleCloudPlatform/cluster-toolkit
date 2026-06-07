@@ -30,7 +30,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
-    family  = "hpc-rocky-linux-8"
+    family  = "hpc-rocky-linux-9"
   }
 
   validation {
