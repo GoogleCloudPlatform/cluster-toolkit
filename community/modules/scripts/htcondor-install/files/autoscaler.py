@@ -222,11 +222,12 @@ class AutoScaler:
             exit()
         last_negotiation_cycle_time = negotiator_ad[0].get(LAST_CYCLE_ATTRIBUTE)
         if not last_negotiation_cycle_time:
-            print(f"The negotiator has not yet started a match cycle. Exiting auto-scaling.")
-            exit()
+            print("The negotiator has not yet started a match cycle. Counting all idle jobs.")
+            idle_job_query = classad.ExprTree("JobStatus == 1")
+        else:
+            print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
+            idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
 
-        print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
-        idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
         idle_job_ads = schedd.query(constraint=idle_job_query.and_(spot_query),
                                     projection=job_attributes)
 
