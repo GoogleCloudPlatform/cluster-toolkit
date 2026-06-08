@@ -53,11 +53,8 @@ deployment_groups:
           set -e -o pipefail
           # Slurm build will install and set python3.12 as the default python3
           dnf install -y python3.12 python3.12-pip
-          alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-          alternatives --set python3 /usr/bin/python3.12
-          python3 -m pip install pip --upgrade
-          python3 -m pip install ansible==8.7.0
-          python3 -m pip install selinux
+          python3.12 -m pip install pip --upgrade
+          python3.12 -m pip install ansible==8.7.0
           export PATH=/usr/local/bin:$PATH
           ansible --version
           n=0
