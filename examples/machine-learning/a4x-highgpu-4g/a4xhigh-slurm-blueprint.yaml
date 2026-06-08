@@ -619,18 +619,7 @@ deployment_groups:
         ThreadsPerCore: 1
       additional_networks:
         $(concat(
-          [{
-            network=null,
-            subnetwork=a4x-slurm-net-1.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip="",
-            stack_type=null,
-            access_config=[],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+          a4x-slurm-net-1.instance_additional_networks,
           a4x-slurm-rdma-net.subnetwork_interfaces
         ))
 
