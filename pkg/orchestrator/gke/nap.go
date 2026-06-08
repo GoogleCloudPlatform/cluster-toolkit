@@ -118,14 +118,58 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 		return nil // Validated: GKE NAP can dynamically autoprovision this machine type
 	}
 
-	var configuredLimits []string
-	for k, v := range g.napLimits {
-		if v > 0 {
-			configuredLimits = append(configuredLimits, k)
+	// Fallback: Check if there is a matching static node pool that satisfies the requested consumption model.
+	matchedNodePoolFound := false
+	for _, np := range g.clusterDesc.NodePools {
+		if strings.EqualFold(np.Config.MachineType, job.MachineType) {
+			matchedNodePoolFound = true
+
+			// Validate Spot alignment
+			if job.GKENAPProvisioning == "spot" {
+				if np.Config.Labels["cloud.google.com/gke-provisioning"] == "spot" {
+					return nil // Valid static node pool path exists
+				}
+			}
+
+			// Validate On-Demand alignment
+			if job.GKENAPProvisioning == "on-demand" {
+				if val := np.Config.Labels["cloud.google.com/gke-provisioning"]; val == "standard" || val == "" {
+					return nil // Valid static node pool path exists
+				}
+			}
+
+			// Validate Reservation alignment
+			if job.GKENAPProvisioning == "reservation" {
+				// Node pools targeted to reservations typically contain a matching label
+				shortResName := extractShortReservationName(job.GKENAPReservation)
+				lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
+				if lblVal != "" && extractShortReservationName(lblVal) == shortResName {
+					return nil // Valid static node pool path exists
+				}
+			}
 		}
 	}
-	sort.Strings(configuredLimits)
-	return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits. Configured limits on cluster: %s", job.ComputeType, strings.Join(configuredLimits, ", "))
+
+	if !matchedNodePoolFound {
+		var configuredLimits []string
+		for k, v := range g.napLimits {
+			if v > 0 {
+				configuredLimits = append(configuredLimits, k)
+			}
+		}
+		sort.Strings(configuredLimits)
+		return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits, and no matching static node pools exist. Configured limits on cluster: %s", job.ComputeType, strings.Join(configuredLimits, ", "))
+	}
+
+	// Print dynamic console warnings/errors for misalignment
+	switch job.GKENAPProvisioning {
+	case "spot":
+		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=spot' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand.\nRemediation: Please re-submit your job without the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of Spot resources", job.ComputeType)
+	case "reservation":
+		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=reservation' with reservation name %q for compute type %q, but no static node pools matching this hardware are configured to consume this reservation", job.GKENAPReservation, job.ComputeType)
+	default:
+		return fmt.Errorf("workload submission rejected. No active node pools found matching your consumption model constraints")
+	}
 }
 
 func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
