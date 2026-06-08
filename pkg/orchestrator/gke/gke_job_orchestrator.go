@@ -405,7 +405,9 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		g.napLimits[rl.ResourceType] = rl.Maximum
 	}
 
-	for resName, maxVal := range g.napLimits {
+	for _, rl := range clusterDesc.Autoscaling.ResourceLimits {
+		resName := rl.ResourceType
+		maxVal := rl.Maximum
 		// Map generic keys for backwards compatibility and generic resource lookups
 		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
 			if maxVal > g.napLimits["nvidia.com/gpu"] {

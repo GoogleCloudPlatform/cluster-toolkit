@@ -34,10 +34,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) b
 
 	if config.IsTPU(resolvedType) {
 		key := getTPULimitKey(resolvedType)
-		if key != "google.com/tpu" {
-			return g.napLimits[key] > 0
-		}
-		return g.napLimits["google.com/tpu"] > 0
+		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0
 	}
 
 	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
@@ -46,10 +43,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) b
 	}
 	if len(cap.Accelerators) > 0 {
 		key := getGPULimitKey(resolvedType, cap.Accelerators[0].Type)
-		if key != "nvidia.com/gpu" {
-			return g.napLimits[key] > 0
-		}
-		return g.napLimits["nvidia.com/gpu"] > 0
+		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0
 	}
 
 	return g.napLimits["cpu"] > 0

@@ -707,6 +707,18 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 			wantErr:     true,
 			expectedErr: "configured exclusively as Standard/On-Demand",
 		},
+		{
+			name:       "NAP Cluster - Machine type covered by generic TPU limit fallback",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"google.com/tpu": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
