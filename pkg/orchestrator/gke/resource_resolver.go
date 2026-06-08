@@ -22,8 +22,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"strconv"
 	"strings"
-
-	k8syaml "sigs.k8s.io/yaml"
 )
 
 type MachineTypeCap struct {
@@ -300,8 +298,11 @@ func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions
 	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
-	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to resolve machine type %s: %w", machineName, err)
+	if err != nil || count == 0 {
+		if err != nil {
+			return "", "", "", "", fmt.Errorf("failed to resolve machine type %s: %w", machineName, err)
+		}
+		return "", "", "", "", fmt.Errorf("failed to determine capacity for machine type %s", machineName)
 	}
 
 	if count > 0 {
@@ -431,6 +432,11 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
+	// 6. Validate consumption model constraints for static clusters
+	if err := g.validateConsumptionForStaticCluster(job); err != nil {
+		return JobProfile{}, isDynamicSlicing, err
+	}
+
 	return JobProfile{
 		IsCPUMachine:  isCPUMachine,
 		CapacityCount: capacity,
@@ -513,18 +519,6 @@ func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) err
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, error) {
-	tolerations := GetTolerations(acceleratorType)
-	if len(tolerations) == 0 {
-		return "", nil
-	}
-	b, err := k8syaml.Marshal(tolerations)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
-	}
-	return g.indentYaml(string(b), 16), nil
-}
-
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
 	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
 	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
@@ -559,3 +553,4 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 
 	return profile, nil
 }
+

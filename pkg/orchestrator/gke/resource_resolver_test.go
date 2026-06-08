@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"strings"
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
@@ -498,6 +499,130 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 				got2, err2 := orc.verifyStaticSlicingActive(job)
 				if err2 != nil || got2 != tt.wantActive {
 					t.Errorf("cache hit failed: got %v, err %v", got2, err2)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateConsumptionForStaticCluster(t *testing.T) {
+	tests := []struct {
+		name         string
+		napEnabled   bool
+		napLimits    map[string]int64
+		nodePools    []gkeJobNodePool
+		job          orchestrator.JobDefinition
+		wantErr      bool
+		expectedErr  string
+	}{
+		{
+			name:       "Static Cluster - No flags set",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Static Cluster - Empty string consumption model",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Static Cluster - Consumption model flag set to spot",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"spot\", --gke-nap-reservation=\"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "Static Cluster - Reservation name flag set",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+				GKENAPReservation:  "my-res",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"on-demand\", --gke-nap-reservation=\"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "NAP Cluster - Machine type in NAP limits",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t", // TPU
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, but matches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "spot",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "standard",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(nil)
+			orc.napEnabled = tt.napEnabled
+			orc.napLimits = tt.napLimits
+			orc.clusterDesc.NodePools = tt.nodePools
+
+			err := orc.validateConsumptionForStaticCluster(&tt.job)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.expectedErr) {
+					t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
 				}
 			}
 		})

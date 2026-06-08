@@ -298,6 +298,35 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
 
+### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
+
+> [!NOTE]
+> ### GKE Node Auto-Provisioning (NAP) Only
+> The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
+
+Use `--gke-nap-provisioning` to specify standard `on-demand` compute, highly economical `spot` VMs, or target a specific GCE `reservation` via the `--gke-nap-reservation` flag:
+
+* **Example: Spot VMs**
+
+  ```bash
+  ./gcluster job submit \
+    --name my-spot-job \
+    --command "python app.py" \
+    --compute-type v6e-4 \
+    --gke-nap-provisioning spot
+  ```
+
+* **Example: GCE Reservations**
+
+  ```bash
+  ./gcluster job submit \
+    --name my-reservation-job \
+    --command "python app.py" \
+    --compute-type v6e-4 \
+    --gke-nap-provisioning reservation \
+    --gke-nap-reservation my-tpu-reservation
+  ```
+
 ### 6.3 Job Retention (TTL)
 
 By default, finished jobs are kept for 1 hour. You can change this using `--gke-ttl-after-finished` and pass flexible durations.

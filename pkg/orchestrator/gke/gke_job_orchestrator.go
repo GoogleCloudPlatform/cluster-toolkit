@@ -399,6 +399,20 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	g.clusterZones = clusterDesc.Locations
 	g.clusterDesc = clusterDesc
 
+	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
+	g.napLimits = make(map[string]int64)
+	for _, rl := range clusterDesc.Autoscaling.ResourceLimits {
+		resName := rl.ResourceType
+		g.napLimits[resName] = rl.Maximum
+
+		// Map generic keys for backwards compatibility and generic resource lookups
+		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
+			g.napLimits["nvidia.com/gpu"] = rl.Maximum
+		} else if strings.HasPrefix(resName, "tpu") {
+			g.napLimits["google.com/tpu"] = rl.Maximum
+		}
+	}
+
 	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
 	if err != nil {
 		return err
@@ -497,6 +511,38 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		fc.TPUs += tpus
 		fc.NodeLabels = nodeLabels
 		flavors[flavor] = fc
+	}
+
+	if g.napEnabled {
+		for resName, maxLimit := range g.napLimits {
+			if maxLimit <= 0 {
+				continue
+			}
+
+			// If it's a TPU limit
+			if strings.HasPrefix(resName, "tpu-") {
+				flavorName := "flavor-" + resName
+				if _, ok := flavors[flavorName]; !ok {
+					flavors[flavorName] = FlavorCapacity{
+						NodeLabels: map[string]string{
+							"cloud.google.com/gke-tpu-accelerator": resName,
+						},
+					}
+				}
+			}
+
+			// If it's a GPU limit (starts with nvidia-)
+			if strings.HasPrefix(resName, "nvidia-") {
+				flavorName := "flavor-" + resName
+				if _, ok := flavors[flavorName]; !ok {
+					flavors[flavorName] = FlavorCapacity{
+						NodeLabels: map[string]string{
+							"cloud.google.com/gke-accelerator": resName,
+						},
+					}
+				}
+			}
+		}
 	}
 
 	capacity := ClusterCapacity{
@@ -1818,6 +1864,17 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	if nodeSelector == nil {
 		nodeSelector = make(map[string]string)
 	}
+
+	// Inject unified consumption options
+	switch job.GKENAPProvisioning {
+	case "spot":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "spot"
+	case "on-demand":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
+	case "reservation":
+		nodeSelector["cloud.google.com/reservation-name"] = job.GKENAPReservation
+	}
+
 	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch machine capabilities: %w", err)
