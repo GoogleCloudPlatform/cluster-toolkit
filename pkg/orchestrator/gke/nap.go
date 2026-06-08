@@ -138,8 +138,13 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		Effect:   corev1.TaintEffectNoSchedule,
 	})
 
+	shortResName := extractShortReservationName(reservationName)
 	for _, np := range g.clusterDesc.NodePools {
-		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.Labels["cloud.google.com/reservation-name"] == reservationName {
+		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
+		if lblVal == "" {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && extractShortReservationName(lblVal) == shortResName {
 			for _, t := range np.Config.Taints {
 				// Avoid duplicating the reservation-name toleration if it's already in np.Config.Taints
 				if t.Key == "cloud.google.com/reservation-name" {

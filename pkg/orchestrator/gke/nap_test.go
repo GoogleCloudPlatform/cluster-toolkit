@@ -15,7 +15,7 @@
 package gke
 
 import (
-	"slices"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -120,6 +120,36 @@ func TestResolveReservationTolerations(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "Reservation with matching node pool using full URI",
+			machineType:     "a3-highgpu-8g",
+			reservationName: "projects/my-project/reservations/my-res-4",
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "a3-highgpu-8g",
+						Labels: map[string]string{
+							"cloud.google.com/reservation-name": "my-res-4",
+						},
+						Taints: []gkeTaint{
+							{
+								Key:    "cloud.google.com/reservation-name",
+								Value:  "my-res-4",
+								Effect: "NoSchedule",
+							},
+						},
+					},
+				},
+			},
+			wantTolerations: []corev1.Toleration{
+				{
+					Key:      "cloud.google.com/reservation-name",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "my-res-4",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,8 +187,9 @@ func TestResolveTolerations(t *testing.T) {
 			acceleratorType:  "v5p-8",
 			consumptionModel: "spot",
 			wantContains: []string{
-				"google.com/tpu",
-				"cloud.google.com/gke-provisioning: spot",
+				"key: google.com/tpu",
+				"key: cloud.google.com/gke-provisioning",
+				"value: spot",
 			},
 		},
 		{
@@ -167,8 +198,9 @@ func TestResolveTolerations(t *testing.T) {
 			consumptionModel: "reservation",
 			reservationName:  "my-res",
 			wantContains: []string{
-				"google.com/tpu",
-				"cloud.google.com/reservation-name: my-res",
+				"key: google.com/tpu",
+				"key: cloud.google.com/reservation-name",
+				"value: my-res",
 			},
 		},
 		{
@@ -176,7 +208,8 @@ func TestResolveTolerations(t *testing.T) {
 			acceleratorType:  "nvidia-l4",
 			consumptionModel: "spot",
 			wantContains: []string{
-				"cloud.google.com/gke-provisioning: spot",
+				"key: cloud.google.com/gke-provisioning",
+				"value: spot",
 			},
 		},
 	}
@@ -193,9 +226,7 @@ func TestResolveTolerations(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			for _, sub := range tt.wantContains {
-				if !slices.ContainsFunc(tt.wantContains, func(s string) bool {
-					return true // simple check for demonstration/assertions
-				}) {
+				if !strings.Contains(got, sub) {
 					t.Errorf("expected output to contain %q, got %q", sub, got)
 				}
 			}
@@ -220,9 +251,7 @@ func TestResolveTolerationsDoesNotMutateSharedArray(t *testing.T) {
 	}
 
 	// The second result should ONLY have TPU toleration, NOT spot
-	if slices.ContainsFunc([]string{got2}, func(s string) bool {
-		return slices.Contains([]string{got2}, "spot")
-	}) {
+	if strings.Contains(got2, "spot") {
 		t.Errorf("second call unexpectedly contains 'spot'. got1: %q, got2: %q", got1, got2)
 	}
 }

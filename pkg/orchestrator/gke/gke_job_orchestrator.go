@@ -407,9 +407,13 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 
 		// Map generic keys for backwards compatibility and generic resource lookups
 		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
-			g.napLimits["nvidia.com/gpu"] = rl.Maximum
+			if rl.Maximum > g.napLimits["nvidia.com/gpu"] {
+				g.napLimits["nvidia.com/gpu"] = rl.Maximum
+			}
 		} else if strings.HasPrefix(resName, "tpu") {
-			g.napLimits["google.com/tpu"] = rl.Maximum
+			if rl.Maximum > g.napLimits["google.com/tpu"] {
+				g.napLimits["google.com/tpu"] = rl.Maximum
+			}
 		}
 	}
 
