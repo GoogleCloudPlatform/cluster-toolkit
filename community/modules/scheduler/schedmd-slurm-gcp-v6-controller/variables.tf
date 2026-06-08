@@ -87,6 +87,28 @@ variable "bucket_dir" {
 # CONTROLLER: CLOUD # See variables_controller_instance.tf for the controller instance variables.
 #####################
 
+variable "enable_backup_controller" {
+  description = "Enables a secondary backup controller for High Availability."
+  type        = bool
+  default     = false
+  validation {
+    condition     = var.enable_backup_controller == false || (length(var.network_storage) > 0 && var.controller_state_disk == null)
+    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null and network_storage must be provided (non-empty) to share state."
+  }
+}
+
+variable "backup_machine_type" {
+  description = "Machine type for the backup controller. If null, uses the same as the primary controller."
+  type        = string
+  default     = null
+}
+
+variable "backup_zone" {
+  description = "Zone for the backup controller. If null, it will be placed in the same region, potentially different zone."
+  type        = string
+  default     = null
+}
+
 #########
 # LOGIN #
 #########
