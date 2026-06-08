@@ -60,7 +60,11 @@ deployment_groups:
           python3 -m pip install selinux
           export PATH=/usr/local/bin:$PATH
           ansible --version
-          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          n=0
+          until [ "$n" -ge 3 ] || ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents; do
+            n=$((n+1))
+            sleep 5
+          done
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
