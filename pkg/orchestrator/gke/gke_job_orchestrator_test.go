@@ -2135,3 +2135,54 @@ func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 		t.Errorf("Expected manifest to contain gke-tpu-slice-topology annotation, but it was missing\nManifest: %s", manifest)
 	}
 }
+
+func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
+	setupMockMachineConfig(t)
+	
+	// Mock JSON with specific limit (nvidia-l4: 16) and generic limit (nvidia.com/gpu: 4).
+	// The order doesn't matter now since we compute generic limits in a second pass.
+	mockDescribeOutput := `{
+		"locations": ["us-central1-a"],
+		"nodePools": [],
+		"autoscaling": {
+			"enableNodeAutoprovisioning": true,
+			"resourceLimits": [
+				{
+					"resourceType": "nvidia-l4",
+					"maximum": "16"
+				},
+				{
+					"resourceType": "nvidia.com/gpu",
+					"maximum": "4"
+				}
+			]
+		}
+	}`
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{
+				ExitCode: 0,
+				Stdout:   mockDescribeOutput,
+			},
+		},
+	}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	job := &orchestrator.JobDefinition{
+		ProjectID:       "my-project",
+		ClusterName:     "my-cluster",
+		ClusterLocation: "us-central1-a",
+	}
+
+	err := orc.populateClusterMetadata(job)
+	if err != nil {
+		t.Fatalf("populateClusterMetadata failed: %v", err)
+	}
+
+	// The generic limit "nvidia.com/gpu" must be the MAXIMUM of specific limits (16), NOT overwritten by the lower generic limit (4)
+	expectedGPULimit := int64(16)
+	if limit := orc.napLimits["nvidia.com/gpu"]; limit != expectedGPULimit {
+		t.Errorf("expected napLimits[nvidia.com/gpu] to be %d, got %d", expectedGPULimit, limit)
+	}
+}

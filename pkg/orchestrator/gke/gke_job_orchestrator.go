@@ -402,17 +402,18 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
 	g.napLimits = make(map[string]int64)
 	for _, rl := range clusterDesc.Autoscaling.ResourceLimits {
-		resName := rl.ResourceType
-		g.napLimits[resName] = rl.Maximum
+		g.napLimits[rl.ResourceType] = rl.Maximum
+	}
 
+	for resName, maxVal := range g.napLimits {
 		// Map generic keys for backwards compatibility and generic resource lookups
 		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
-			if rl.Maximum > g.napLimits["nvidia.com/gpu"] {
-				g.napLimits["nvidia.com/gpu"] = rl.Maximum
+			if maxVal > g.napLimits["nvidia.com/gpu"] {
+				g.napLimits["nvidia.com/gpu"] = maxVal
 			}
 		} else if strings.HasPrefix(resName, "tpu") {
-			if rl.Maximum > g.napLimits["google.com/tpu"] {
-				g.napLimits["google.com/tpu"] = rl.Maximum
+			if maxVal > g.napLimits["google.com/tpu"] {
+				g.napLimits["google.com/tpu"] = maxVal
 			}
 		}
 	}
