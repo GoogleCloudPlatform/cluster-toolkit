@@ -130,9 +130,21 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 
 func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
 	var tolerations []corev1.Toleration
+	// Always add the standard GKE reservation toleration to support NAP where the node pool may not exist yet
+	tolerations = append(tolerations, corev1.Toleration{
+		Key:      "cloud.google.com/reservation-name",
+		Operator: corev1.TolerationOpEqual,
+		Value:    extractShortReservationName(reservationName),
+		Effect:   corev1.TaintEffectNoSchedule,
+	})
+
 	for _, np := range g.clusterDesc.NodePools {
 		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.Labels["cloud.google.com/reservation-name"] == reservationName {
 			for _, t := range np.Config.Taints {
+				// Avoid duplicating the reservation-name toleration if it's already in np.Config.Taints
+				if t.Key == "cloud.google.com/reservation-name" {
+					continue
+				}
 				tolerations = append(tolerations, corev1.Toleration{
 					Key:      t.Key,
 					Value:    t.Value,
@@ -146,7 +158,8 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 }
 
 func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string) (string, error) {
-	tolerations := GetTolerations(acceleratorType)
+	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
+	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
 
 	if consumptionModel == "spot" {
 		tolerations = append(tolerations, corev1.Toleration{
