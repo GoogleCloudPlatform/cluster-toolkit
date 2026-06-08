@@ -505,6 +505,107 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 	}
 }
 
+func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name             string
+		napEnabled       bool
+		scheduler        string
+		topology         string
+		computeType      string
+		machineType      string
+		dynamicSlicing   bool
+		mockResponses    map[string][]shell.CommandResult
+		wantErr          bool
+		expectedErrMatch string
+	}{
+		{
+			name:        "NAP Cluster - Standard TPU allowed",
+			napEnabled:  true,
+			computeType: "v6e-8",
+			wantErr:     false,
+		},
+		{
+			name:           "NAP Cluster - TPU Dynamic Slicing disallowed",
+			napEnabled:     true,
+			computeType:    "tpu7x-128",
+			machineType:    "tpu7x-standard-4t",
+			topology:       "4x4x8",
+			dynamicSlicing: true,
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "4x4x8\n"}},
+			},
+			wantErr:          true,
+			expectedErrMatch: "TPU Dynamic Slicing is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:             "NAP Cluster - DWS Flex Scheduler disallowed",
+			napEnabled:       true,
+			computeType:      "v6e-8",
+			scheduler:        "gke.io/tpu-provisioning-request",
+			wantErr:          true,
+			expectedErrMatch: "TPU ProvisioningRequest (DWS Flex) is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockResponses := tt.mockResponses
+			if mockResponses == nil {
+				mockResponses = make(map[string][]shell.CommandResult)
+			}
+			// Add default mocks for topology discovery if not provided
+			if _, ok := mockResponses["kubectl get resourceflavors"]; !ok {
+				mockResponses["kubectl get resourceflavors"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+			}
+			if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
+				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "4x8\n"}}
+			}
+
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.napEnabled = tt.napEnabled
+			orc.projectID = "mock-project"
+
+			if tt.dynamicSlicing {
+				orc.dynamicSlicingCache = map[string]bool{
+					tt.machineType: true,
+					tt.computeType: true,
+				}
+			}
+
+			// Populate a node pool so the ambiguous shorthands 'v6e' and 'tpu7x' can be resolved
+			orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
+				Config: gkeNodePoolConfig{MachineType: "ct6e-standard-8t"},
+			})
+			orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
+				Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"},
+			})
+
+			job := &orchestrator.JobDefinition{
+				ComputeType:  tt.computeType,
+				MachineType:  tt.machineType,
+				Topology:     tt.topology,
+				GKEScheduler: tt.scheduler,
+			}
+
+			_, _, _, err := orc.resolveHardwareRequirements(job)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.expectedErrMatch) {
+					t.Errorf("expected error to contain %q, got: %v", tt.expectedErrMatch, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateConsumptionForStaticCluster(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -516,12 +617,13 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 		expectedErr string
 	}{
 		{
-			name:       "Static Cluster - No flags set",
+			name:       "Static Cluster - Explicit on-demand flag fails",
 			napEnabled: false,
 			job: orchestrator.JobDefinition{
 				GKENAPProvisioning: "on-demand",
 			},
-			wantErr: false,
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"on-demand\", --gke-nap-reservation=\"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
 		},
 		{
 			name:       "Static Cluster - Empty string consumption model",
@@ -577,10 +679,12 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				},
 			},
 			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
 				MachineType:        "n2-standard-4",
 				GKENAPProvisioning: "spot",
 			},
-			wantErr: false,
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
 		},
 		{
 			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
@@ -597,11 +701,12 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				},
 			},
 			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
 				MachineType:        "n2-standard-4",
 				GKENAPProvisioning: "spot",
 			},
 			wantErr:     true,
-			expectedErr: "but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand",
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
 		},
 	}
 

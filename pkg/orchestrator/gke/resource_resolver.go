@@ -424,6 +424,14 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		if err != nil {
 			return JobProfile{}, false, false, err
 		}
+		if g.napEnabled {
+			if isDynamicSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled")
+			}
+			if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
+				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled")
+			}
+		}
 	}
 
 	// Determine if CPU machine
@@ -434,7 +442,7 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 
 	// 6. Validate consumption model constraints for static clusters
 	if err := g.validateConsumptionForStaticCluster(job); err != nil {
-		return JobProfile{}, isDynamicSlicing, err
+		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
 	return JobProfile{

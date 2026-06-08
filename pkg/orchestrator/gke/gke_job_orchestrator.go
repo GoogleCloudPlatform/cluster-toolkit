@@ -1872,7 +1872,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	case "on-demand":
 		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
 	case "reservation":
-		nodeSelector["cloud.google.com/reservation-name"] = job.GKENAPReservation
+		nodeSelector["cloud.google.com/reservation-name"] = extractShortReservationName(job.GKENAPReservation)
 	}
 
 	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)

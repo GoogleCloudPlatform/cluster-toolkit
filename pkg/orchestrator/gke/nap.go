@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -97,58 +98,34 @@ func getGPULimitKey(machineType string, accelLabel string) string {
 	return "nvidia.com/gpu"
 }
 
-func matchesProvisioningModel(np gkeJobNodePool, provisioning string, reservationName string) bool {
-	labels := np.Config.Labels
-	switch provisioning {
-	case "spot":
-		return labels["cloud.google.com/gke-provisioning"] == "spot"
-	case "reservation":
-		return labels["cloud.google.com/reservation-name"] == reservationName
-	case "on-demand", "":
-		val := labels["cloud.google.com/gke-provisioning"]
-		return val == "standard" || val == ""
-	}
-	return false
-}
-
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
+	hasNAPFlags := job.GKENAPProvisioning != "" || job.GKENAPReservation != ""
+
 	if !g.napEnabled {
-		if (job.GKENAPProvisioning != "" && job.GKENAPProvisioning != "on-demand") || job.GKENAPReservation != "" {
+		if hasNAPFlags {
 			return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning=%q, --gke-nap-reservation=%q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
 		}
 		return nil
 	}
 
+	// GKE NAP is enabled. If no GKE NAP flags were requested, scheduling validation is bypassed (let GKE handle it).
+	if !hasNAPFlags {
+		return nil
+	}
+
+	// NAP flags were requested. Validate strictly against GKE NAP limits.
 	if g.isNAPEnabledForMachineType(job.MachineType, job.ClusterLocation) {
-		return nil // Skip check; GKE NAP can dynamically autoprovision this machine type
+		return nil // Validated: GKE NAP can dynamically autoprovision this machine type
 	}
 
-	matchedNodePoolFound := false
-	for _, np := range g.clusterDesc.NodePools {
-		if strings.EqualFold(np.Config.MachineType, job.MachineType) {
-			matchedNodePoolFound = true
-			if matchesProvisioningModel(np, job.GKENAPProvisioning, job.GKENAPReservation) {
-				return nil // Valid static node pool path exists
-			}
+	var configuredLimits []string
+	for k, v := range g.napLimits {
+		if v > 0 {
+			configuredLimits = append(configuredLimits, k)
 		}
 	}
-
-	if !matchedNodePoolFound {
-		if g.napEnabled {
-			return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits, and no matching static node pools exist", job.ComputeType)
-		}
-		return fmt.Errorf("no active node pools in cluster match requested compute-type %q", job.ComputeType)
-	}
-
-	// Print dynamic console warnings
-	switch job.GKENAPProvisioning {
-	case "spot":
-		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=spot' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand.\nRemediation: Please re-submit your job without the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of Spot resources", job.ComputeType)
-	case "reservation":
-		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=reservation' with reservation name %q for compute type %q, but no static node pools matching this hardware are configured to consume this reservation", job.GKENAPReservation, job.ComputeType)
-	default:
-		return fmt.Errorf("workload submission rejected. No active node pools found matching your consumption model constraints")
-	}
+	sort.Strings(configuredLimits)
+	return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits. Configured limits on cluster: %s", job.ComputeType, strings.Join(configuredLimits, ", "))
 }
 
 func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
@@ -190,4 +167,12 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
 	}
 	return g.indentYaml(string(b), 16), nil
+}
+
+func extractShortReservationName(resName string) string {
+	if strings.Contains(resName, "/") {
+		parts := strings.Split(resName, "/")
+		return parts[len(parts)-1]
+	}
+	return resName
 }

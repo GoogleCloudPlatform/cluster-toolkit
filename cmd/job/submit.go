@@ -95,13 +95,15 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		}
 
 		gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
-		validModels := []string{"on-demand", "spot", "reservation"}
-		if !slices.Contains(validModels, gkeNapProvisioning) {
-			return fmt.Errorf("invalid --gke-nap-provisioning %q. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
-		}
+		if gkeNapProvisioning != "" {
+			validModels := []string{"on-demand", "spot", "reservation"}
+			if !slices.Contains(validModels, gkeNapProvisioning) {
+				return fmt.Errorf("invalid --gke-nap-provisioning %q. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+			}
 
-		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
-			return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+			if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
+				return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+			}
 		}
 		if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
 			return fmt.Errorf("--gke-nap-reservation is only valid when --gke-nap-provisioning=reservation")
@@ -150,7 +152,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
-	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "on-demand", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
+	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
