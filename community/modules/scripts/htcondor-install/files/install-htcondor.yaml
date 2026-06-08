@@ -61,16 +61,9 @@
   - name: Ensure token directory
     ansible.builtin.file:
       path: /etc/condor/tokens.d
-      mode: 0755
+      mode: 0700
       owner: root
       group: root
-  - name: Open HTCondor port in firewall (if firewalld is running)
-    failed_when: false
-    ansible.builtin.shell: |
-      if systemctl is-active --quiet firewalld; then
-        firewall-cmd --permanent --add-port=9618/tcp
-        firewall-cmd --reload
-      fi
   - name: Install Docker and configure HTCondor to use it
     when: enable_docker | bool  # allows string to be passed at CLI
     block:
