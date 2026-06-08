@@ -25,28 +25,31 @@ import (
 	k8syaml "sigs.k8s.io/yaml"
 )
 
-func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) bool {
+func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (bool, error) {
 	if !g.napEnabled {
-		return false
+		return false, nil
 	}
 
 	resolvedType := config.ResolveMachineType(machineType)
 
 	if config.IsTPU(resolvedType) {
 		key := getTPULimitKey(resolvedType)
-		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0
+		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0, nil
 	}
 
 	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
 	if err != nil {
-		return false
+		return false, err
 	}
 	if len(cap.Accelerators) > 0 {
-		key := getGPULimitKey(resolvedType, cap.Accelerators[0].Type)
-		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0
+		key, err := getGPULimitKey(resolvedType, cap.Accelerators[0].Type)
+		if err != nil {
+			return false, err
+		}
+		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0, nil
 	}
 
-	return g.napLimits["cpu"] > 0
+	return g.napLimits["cpu"] > 0, nil
 }
 
 func getTPULimitKey(machineType string) string {
@@ -66,30 +69,34 @@ func getTPULimitKey(machineType string) string {
 	return "google.com/tpu"
 }
 
-func getGPULimitKey(machineType string, accelLabel string) string {
+func getGPULimitKey(machineType string, accelLabel string) (string, error) {
 	m := strings.ToLower(machineType)
-	if strings.Contains(m, "g2-standard") || strings.Contains(accelLabel, "l4") {
-		return "nvidia-l4"
+	accel := strings.ToLower(accelLabel)
+	if strings.Contains(m, "g2-standard") || strings.Contains(accel, "l4") {
+		return "nvidia-l4", nil
 	}
 	if strings.Contains(m, "a3-highgpu") {
-		return "nvidia-h100-80gb"
+		return "nvidia-h100-80gb", nil
 	}
 	if strings.Contains(m, "a3-megagpu") {
-		return "nvidia-h100-mega-80gb"
+		return "nvidia-h100-mega-80gb", nil
 	}
 	if strings.Contains(m, "a3-ultragpu") {
-		return "nvidia-h200-141gb"
+		return "nvidia-h200-141gb", nil
 	}
 	if strings.Contains(m, "a4-highgpu") {
-		return "nvidia-b200"
+		return "nvidia-b200", nil
 	}
 	if strings.Contains(m, "a4x-highgpu") {
-		return "nvidia-gb200"
+		return "nvidia-gb200", nil
 	}
-	if strings.Contains(m, "a2-high") || strings.Contains(m, "a2-mega") || strings.Contains(m, "a2-ultra") || strings.Contains(accelLabel, "a100") {
-		return "nvidia-tesla-a100"
+	if strings.Contains(m, "a2-high") || strings.Contains(m, "a2-mega") || strings.Contains(m, "a2-ultra") || strings.Contains(accel, "a100") {
+		return "nvidia-tesla-a100", nil
 	}
-	return "nvidia.com/gpu"
+	if accel != "" {
+		return "", fmt.Errorf("unknown accelerator label: %q", accelLabel)
+	}
+	return "nvidia.com/gpu", nil
 }
 
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
@@ -108,7 +115,11 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 	}
 
 	// NAP flags were requested. Validate strictly against GKE NAP limits.
-	if g.isNAPEnabledForMachineType(job.MachineType, job.ClusterLocation) {
+	isNAP, err := g.isNAPEnabledForMachineType(job.MachineType, job.ClusterLocation)
+	if err != nil {
+		return err
+	}
+	if isNAP {
 		return nil // Validated: GKE NAP can dynamically autoprovision this machine type
 	}
 

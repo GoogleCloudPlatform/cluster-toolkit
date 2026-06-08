@@ -719,6 +719,17 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:       "NAP Cluster - Machine type with unknown GPU accelerator fails fast",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			job: orchestrator.JobDefinition{
+				MachineType:        "my-unknown-gpu-machine",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
+		},
 	}
 
 	for _, tt := range tests {
@@ -727,6 +738,25 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 			orc.napEnabled = tt.napEnabled
 			orc.napLimits = tt.napLimits
 			orc.clusterDesc.NodePools = tt.nodePools
+			orc.machineCapCache = map[string]MachineTypeCap{
+				"n2-standard-4:": {
+					GuestCpus: 4,
+					MemoryMb:  16000,
+				},
+				"my-unknown-gpu-machine:": {
+					GuestCpus: 8,
+					MemoryMb:  32000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "unknown-gpu",
+						},
+					},
+				},
+			}
 
 			err := orc.validateConsumptionForStaticCluster(&tt.job)
 			if tt.wantErr {
