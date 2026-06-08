@@ -127,7 +127,7 @@ deployment_groups:
           merge(a3ultra-net-0.instance_additional_networks[0],
           { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
           ],
-          a3ultra-net-1.instance_additional_networks,,
+          a3ultra-net-1.instance_additional_networks,
           a3ultra-rdma-net.subnetwork_interfaces,
         ))
 
