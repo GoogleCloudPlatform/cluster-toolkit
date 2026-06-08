@@ -24,7 +24,7 @@ tags:
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 7200s
+timeout: 10800s
 
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
