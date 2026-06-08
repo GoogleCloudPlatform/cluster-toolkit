@@ -304,28 +304,26 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 > ### GKE Node Auto-Provisioning (NAP) Only
 > The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
 
-Use `--gke-nap-provisioning` to specify standard `on-demand` compute, highly economical `spot` VMs, or target a specific GCE `reservation` via the `--gke-nap-reservation` flag:
+Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:
 
-* **Example: Spot VMs**
+```bash
+./gcluster job submit \
+  --name my-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
 
-  ```bash
-  ./gcluster job submit \
-    --name my-spot-job \
-    --command "python app.py" \
-    --compute-type v6e-4 \
-    --gke-nap-provisioning spot
-  ```
+Use the `--gke-nap-provisioning reservation` option and target a GCE reservation via the `--gke-nap-reservation` flag:
 
-* **Example: GCE Reservations**
-
-  ```bash
-  ./gcluster job submit \
-    --name my-reservation-job \
-    --command "python app.py" \
-    --compute-type v6e-4 \
-    --gke-nap-provisioning reservation \
-    --gke-nap-reservation my-tpu-reservation
-  ```
+```bash
+./gcluster job submit \
+  --name my-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
+```
 
 ### 6.3 Job Retention (TTL)
 

@@ -553,4 +553,3 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 
 	return profile, nil
 }
-

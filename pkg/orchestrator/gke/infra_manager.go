@@ -312,73 +312,76 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	return nil
 }
 
-func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
-	// Pass 1: Determine all covered resources for main and pathways
-	mainCoveredResourcesMap := make(map[string]bool)
-	pathwaysCoveredResourcesMap := make(map[string]bool)
+func (g *GKEOrchestrator) calculateCoveredResources() (map[string]bool, map[string]bool) {
+	mainMap := make(map[string]bool)
+	pathwaysMap := make(map[string]bool)
 
 	for fname, fc := range g.capacity.Flavors {
 		isPathways := (fname == "pathways-flavor")
 		if isPathways {
 			if fc.CPUs > 0 || (g.napEnabled && g.napLimits["cpu"] > 0) {
-				pathwaysCoveredResourcesMap["cpu"] = true
+				pathwaysMap["cpu"] = true
 			}
 			if fc.MemoryGi > 0 || (g.napEnabled && g.napLimits["memory"] > 0) {
-				pathwaysCoveredResourcesMap["memory"] = true
+				pathwaysMap["memory"] = true
 			}
 		} else {
 			if fc.CPUs > 0 || (g.napEnabled && g.napLimits["cpu"] > 0) {
-				mainCoveredResourcesMap["cpu"] = true
+				mainMap["cpu"] = true
 			}
 			if fc.MemoryGi > 0 || (g.napEnabled && g.napLimits["memory"] > 0) {
-				mainCoveredResourcesMap["memory"] = true
+				mainMap["memory"] = true
 			}
 			if fc.GPUs > 0 || (g.napEnabled && g.napLimits["nvidia.com/gpu"] > 0 && strings.Contains(strings.ToLower(fname), "nvidia")) {
-				mainCoveredResourcesMap["nvidia.com/gpu"] = true
+				mainMap["nvidia.com/gpu"] = true
 			}
 			if fc.TPUs > 0 || (g.napEnabled && g.napLimits["google.com/tpu"] > 0 && strings.Contains(strings.ToLower(fname), "tpu")) {
-				mainCoveredResourcesMap["google.com/tpu"] = true
+				mainMap["google.com/tpu"] = true
 			}
 		}
 	}
+	return mainMap, pathwaysMap
+}
 
-	// Helper to resolve nominal quotas under NAP vs Static
-	getQuota := func(resName string, fc FlavorCapacity, fname string) interface{} {
-		if g.napEnabled {
-			if limit, ok := g.napLimits[resName]; ok {
-				// Only apply TPU/GPU limit to matching flavors
-				if resName == "google.com/tpu" && !strings.Contains(strings.ToLower(fname), "tpu") {
-					return 0
-				}
-				if resName == "nvidia.com/gpu" && !strings.Contains(strings.ToLower(fname), "nvidia") {
-					return 0
-				}
-				if resName == "memory" {
-					return fmt.Sprintf("%dGi", limit/1024) // limit is in MB in GKE describe
-				}
-				return limit
+func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fname string) interface{} {
+	if g.napEnabled {
+		if limit, ok := g.napLimits[resName]; ok {
+			// Only apply TPU/GPU limit to matching flavors
+			if resName == "google.com/tpu" && !strings.Contains(strings.ToLower(fname), "tpu") {
+				return 0
 			}
+			if resName == "nvidia.com/gpu" && !strings.Contains(strings.ToLower(fname), "nvidia") {
+				return 0
+			}
+			if resName == "memory" {
+				return fmt.Sprintf("%dGi", limit/1024) // limit is in MB in GKE describe
+			}
+			return limit
 		}
+	}
 
-		// Static cluster or unconfigured limit fallback
-		switch resName {
-		case "cpu":
-			return fc.CPUs
-		case "memory":
-			return fmt.Sprintf("%dGi", fc.MemoryGi)
-		case "nvidia.com/gpu":
-			if strings.Contains(strings.ToLower(fname), "nvidia") {
-				return fc.GPUs
-			}
-			return 0
-		case "google.com/tpu":
-			if strings.Contains(strings.ToLower(fname), "tpu") {
-				return fc.TPUs
-			}
-			return 0
+	// Static cluster or unconfigured limit fallback
+	switch resName {
+	case "cpu":
+		return fc.CPUs
+	case "memory":
+		return fmt.Sprintf("%dGi", fc.MemoryGi)
+	case "nvidia.com/gpu":
+		if strings.Contains(strings.ToLower(fname), "nvidia") {
+			return fc.GPUs
+		}
+		return 0
+	case "google.com/tpu":
+		if strings.Contains(strings.ToLower(fname), "tpu") {
+			return fc.TPUs
 		}
 		return 0
 	}
+	return 0
+}
+
+func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
+	mainCoveredResourcesMap, pathwaysCoveredResourcesMap := g.calculateCoveredResources()
 
 	// Pass 2: Build flavor lists with matched resources
 	var mainFlavors []map[string]interface{}
@@ -388,20 +391,16 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 		isPathways := (fname == "pathways-flavor")
 		var resources []map[string]interface{}
 
+		coveredMap := mainCoveredResourcesMap
 		if isPathways {
-			for res := range pathwaysCoveredResourcesMap {
-				resources = append(resources, map[string]interface{}{
-					"name":         res,
-					"nominalQuota": getQuota(res, fc, fname),
-				})
-			}
-		} else {
-			for res := range mainCoveredResourcesMap {
-				resources = append(resources, map[string]interface{}{
-					"name":         res,
-					"nominalQuota": getQuota(res, fc, fname),
-				})
-			}
+			coveredMap = pathwaysCoveredResourcesMap
+		}
+
+		for res := range coveredMap {
+			resources = append(resources, map[string]interface{}{
+				"name":         res,
+				"nominalQuota": g.getNominalQuota(res, fc, fname),
+			})
 		}
 
 		if len(resources) > 0 {

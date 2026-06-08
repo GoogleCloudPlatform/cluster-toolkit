@@ -20,8 +20,8 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"strings"
 
-	k8syaml "sigs.k8s.io/yaml"
 	corev1 "k8s.io/api/core/v1"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) bool {
@@ -94,6 +94,20 @@ func getGPULimitKey(machineType string, accelLabel string) string {
 	return "nvidia.com/gpu"
 }
 
+func matchesProvisioningModel(np gkeJobNodePool, provisioning string, reservationName string) bool {
+	labels := np.Config.Labels
+	switch provisioning {
+	case "spot":
+		return labels["cloud.google.com/gke-provisioning"] == "spot"
+	case "reservation":
+		return labels["cloud.google.com/reservation-name"] == reservationName
+	case "on-demand", "":
+		val := labels["cloud.google.com/gke-provisioning"]
+		return val == "standard" || val == ""
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
 	if !g.napEnabled {
 		if (job.GKENAPProvisioning != "" && job.GKENAPProvisioning != "on-demand") || job.GKENAPReservation != "" {
@@ -110,27 +124,8 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 	for _, np := range g.clusterDesc.NodePools {
 		if strings.EqualFold(np.Config.MachineType, job.MachineType) {
 			matchedNodePoolFound = true
-
-			// Validate Spot alignment
-			if job.GKENAPProvisioning == "spot" {
-				if np.Config.Labels["cloud.google.com/gke-provisioning"] == "spot" {
-					return nil // Valid static node pool path exists
-				}
-			}
-
-			// Validate On-Demand alignment
-			if job.GKENAPProvisioning == "on-demand" {
-				if val := np.Config.Labels["cloud.google.com/gke-provisioning"]; val == "standard" || val == "" {
-					return nil // Valid static node pool path exists
-				}
-			}
-
-			// Validate Reservation alignment
-			if job.GKENAPProvisioning == "reservation" {
-				// Node pools targeted to reservations typically contain a matching label
-				if np.Config.Labels["cloud.google.com/reservation-name"] == job.GKENAPReservation {
-					return nil // Valid static node pool path exists
-				}
+			if matchesProvisioningModel(np, job.GKENAPProvisioning, job.GKENAPReservation) {
+				return nil // Valid static node pool path exists
 			}
 		}
 	}
@@ -172,7 +167,7 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 
 func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string) (string, error) {
 	tolerations := GetTolerations(acceleratorType)
-	
+
 	if consumptionModel == "spot" {
 		tolerations = append(tolerations, corev1.Toleration{
 			Key:      "cloud.google.com/gke-provisioning",
@@ -193,4 +188,3 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 	}
 	return g.indentYaml(string(b), 16), nil
 }
-

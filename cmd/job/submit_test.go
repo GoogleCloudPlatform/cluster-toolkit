@@ -601,4 +601,3 @@ func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
 		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
 	}
 }
-

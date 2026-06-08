@@ -507,13 +507,13 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 
 func TestValidateConsumptionForStaticCluster(t *testing.T) {
 	tests := []struct {
-		name         string
-		napEnabled   bool
-		napLimits    map[string]int64
-		nodePools    []gkeJobNodePool
-		job          orchestrator.JobDefinition
-		wantErr      bool
-		expectedErr  string
+		name        string
+		napEnabled  bool
+		napLimits   map[string]int64
+		nodePools   []gkeJobNodePool
+		job         orchestrator.JobDefinition
+		wantErr     bool
+		expectedErr string
 	}{
 		{
 			name:       "Static Cluster - No flags set",
