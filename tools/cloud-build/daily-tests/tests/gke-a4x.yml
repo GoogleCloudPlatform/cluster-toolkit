@@ -39,5 +39,6 @@ custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gcsfuse-mounts.yml
+- test-validation/test-gke-job.yml
 - test-validation/test-gke-a4x.yml
 - test-validation/test-gke-a4x-kueue-config.yml

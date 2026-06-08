@@ -40,6 +40,7 @@ custom_vars:
   enable_spot: true
 post_deploy_tests:
 - test-validation/test-gcsfuse-mounts.yml
+- test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-ultra.yml
 - test-validation/test-gke-kueue-config.yml
 - test-validation/test-chs.yml
