@@ -62,7 +62,7 @@ deployment_groups:
           ansible --version
           n=0
           until [ "$n" -ge 3 ] || ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents; do
-            n=$((n+1))
+            ((n=n+1))
             sleep 5
           done
       - type: data
