@@ -49,8 +49,8 @@ func TestPatchPath(t *testing.T) {
 	if !strings.Contains(newPath, expectedPackerPath) {
 		t.Errorf("Expected PATH to contain %s, got %s", expectedPackerPath, newPath)
 	}
-	if !strings.HasPrefix(newPath, oldPath) {
-		t.Errorf("Expected new PATH to start with old PATH")
+	if !strings.HasSuffix(newPath, oldPath) {
+		t.Errorf("Expected new PATH to end with old PATH")
 	}
 }
 
@@ -129,6 +129,7 @@ func TestEnsureDependencies_Exists(t *testing.T) {
 	tempDir := t.TempDir()
 
 	tf, _ := os.Create(filepath.Join(tempDir, "terraform"))
+	_, _ = tf.WriteString("#!/bin/sh\necho '{\"terraform_version\": \"1.12.2\"}'\n")
 	_ = tf.Chmod(0755)
 	tf.Close()
 
@@ -154,5 +155,67 @@ func TestEnsureDependencies_Missing(t *testing.T) {
 	err := EnsureDependencies(DownloadDecisionNo)
 	if err == nil {
 		t.Fatalf("expected error when dependencies are missing and decision is No")
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		v1, v2  string
+		want    int
+		wantErr bool
+	}{
+		{"1.12.2", "1.12.2", 0, false},
+		{"1.12.3", "1.12.2", 1, false},
+		{"1.13.0", "1.12.2", 1, false},
+		{"1.12.1", "1.12.2", -1, false},
+		{"1.11.0", "1.12.2", -1, false},
+		{"v1.12.2", "1.12.2", 0, false},
+		{"1.12.2-beta1", "1.12.2", 0, false},
+		{"invalid", "1.12.2", 0, true},
+	}
+
+	for _, tt := range tests {
+		got, err := compareVersions(tt.v1, tt.v2)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("compareVersions(%q, %q) error = %v, wantErr %v", tt.v1, tt.v2, err, tt.wantErr)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.v1, tt.v2, got, tt.want)
+		}
+	}
+}
+
+func TestEnsureBinary_TerraformNewerVersion(t *testing.T) {
+	tempDir := t.TempDir()
+	tf, _ := os.Create(filepath.Join(tempDir, "terraform"))
+	_, _ = tf.WriteString("#!/bin/sh\necho '{\"terraform_version\": \"1.13.0\"}'\n")
+	_ = tf.Chmod(0755)
+	tf.Close()
+
+	oldPath := os.Getenv("PATH")
+	defer os.Setenv("PATH", oldPath)
+	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+
+	err := ensureBinary("terraform", "1.12.2", DownloadDecisionNo)
+	if err != nil {
+		t.Fatalf("expected no error for newer version, got %v", err)
+	}
+}
+
+func TestEnsureBinary_TerraformOlderVersion(t *testing.T) {
+	tempDir := t.TempDir()
+	tf, _ := os.Create(filepath.Join(tempDir, "terraform"))
+	_, _ = tf.WriteString("#!/bin/sh\necho '{\"terraform_version\": \"1.11.0\"}'\n")
+	_ = tf.Chmod(0755)
+	tf.Close()
+
+	oldPath := os.Getenv("PATH")
+	defer os.Setenv("PATH", oldPath)
+	os.Setenv("PATH", tempDir+string(os.PathListSeparator)+oldPath)
+
+	err := ensureBinary("terraform", "1.12.2", DownloadDecisionNo)
+	if err == nil {
+		t.Fatalf("expected error for older version with DownloadDecisionNo")
 	}
 }

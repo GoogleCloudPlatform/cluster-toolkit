@@ -35,5 +35,5 @@ terraform {
   provider_meta "google-beta" {
     module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.92.0"
   }
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }

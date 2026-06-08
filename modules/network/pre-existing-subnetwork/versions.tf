@@ -25,5 +25,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:pre-existing-subnetwork/v1.92.0"
   }
 
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }
