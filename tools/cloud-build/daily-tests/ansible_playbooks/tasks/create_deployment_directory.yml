@@ -33,7 +33,7 @@
 - name: Get gcluster bundle or build
   ansible.builtin.shell: |
     set -e
-    if [ "{{ test_prefix | default('') }}" == "daily-" ] && [ "{{ build_gcluster_from_source | default(false) | bool | lower }}" == "false" ]; then
+    if [ "{{ test_prefix | default('') }}" = "daily-" ] && [ "{{ build_gcluster_from_source | default(false) | bool | lower }}" = "false" ]; then
         gsutil cp gs://{{ gcluster_gcs_path | default('') }}/latest/gcluster-bundle.zip .
         unzip -o gcluster-bundle.zip > /dev/null && unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
         # Grant execution permissions to the binary
