@@ -40,7 +40,10 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) b
 	}
 
 	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
-	if err == nil && len(cap.Accelerators) > 0 {
+	if err != nil {
+		return false
+	}
+	if len(cap.Accelerators) > 0 {
 		key := getGPULimitKey(resolvedType, cap.Accelerators[0].Type)
 		if key != "nvidia.com/gpu" {
 			return g.napLimits[key] > 0

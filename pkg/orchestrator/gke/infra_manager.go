@@ -345,9 +345,16 @@ func (g *GKEOrchestrator) calculateCoveredResources() (map[string]bool, map[stri
 
 func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fname string) interface{} {
 	if g.napEnabled {
-		if limit, ok := g.napLimits[resName]; ok {
+		lookupKey := resName
+		if resName == "nvidia.com/gpu" || resName == "google.com/tpu" {
+			specificKey := strings.TrimPrefix(fname, "flavor-")
+			if _, ok := g.napLimits[specificKey]; ok {
+				lookupKey = specificKey
+			}
+		}
+		if limit, ok := g.napLimits[lookupKey]; ok {
 			// Only apply TPU/GPU limit to matching flavors
-			if resName == "google.com/tpu" && !strings.Contains(strings.ToLower(fname), "tpu") {
+			if resName == "google.com/tpu" && !(strings.Contains(strings.ToLower(fname), "tpu") || strings.Contains(strings.ToLower(fname), "ct")) {
 				return 0
 			}
 			if resName == "nvidia.com/gpu" && !strings.Contains(strings.ToLower(fname), "nvidia") {
@@ -372,7 +379,7 @@ func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fna
 		}
 		return 0
 	case "google.com/tpu":
-		if strings.Contains(strings.ToLower(fname), "tpu") {
+		if strings.Contains(strings.ToLower(fname), "tpu") || strings.Contains(strings.ToLower(fname), "ct") {
 			return fc.TPUs
 		}
 		return 0
