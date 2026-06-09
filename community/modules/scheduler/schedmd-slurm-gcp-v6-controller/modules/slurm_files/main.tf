@@ -199,6 +199,7 @@ locals {
   slurm_gcp_devel_compute_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_compute_zip)
 
   controller_files = [
+    "requirements.txt",
     "tools/gpu-test",
     "tools/task-epilog",
     "tools/task-prolog",

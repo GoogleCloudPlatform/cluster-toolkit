@@ -48,3 +48,8 @@ output "config" {
     error_message = "All nodeset names must be unique among all nodeset types."
   }
 }
+
+output "controller_devel_zip" {
+  value       = data.archive_file.slurm_gcp_devel_controller_zip.output_path
+  description = "Path to the generated controller devel zip, it holds the resume/suspend scripts."
+}
