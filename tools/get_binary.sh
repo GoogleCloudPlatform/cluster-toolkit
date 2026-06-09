@@ -16,12 +16,11 @@
 set -x -e
 
 TEST_PREFIX=${1:-""}
-BUILD_FROM_SOURCE=${2:-false}
+BUILD_FROM_SOURCE=${2:-"false"}
 
 if [ "${TEST_PREFIX}" == "daily-" ] && [ "${BUILD_FROM_SOURCE}" != "true" ]; then
 	if [ -z "${GCLUSTER_GCS_PATH}" ]; then
-		echo "ERROR: GCLUSTER_GCS_PATH is empty or not set!"
-		echo "Did you forget to add the 'availableSecrets' block to the Cloud Build YAML?"
+		echo "Error: GCLUSTER_GCS_PATH environment variable is not set." >&2
 		exit 1
 	fi
 	gsutil cp "gs://${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip" .
