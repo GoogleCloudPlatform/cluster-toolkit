@@ -59,23 +59,50 @@ func TestGetAffinity(t *testing.T) {
 
 func TestGetTopologyAnnotation(t *testing.T) {
 	tests := []struct {
-		topology string
-		want     string
+		name      string
+		topology  string
+		numSlices int
+		wantKey   string
+		wantVal   string
 	}{
-		{"2x2x1", "2x2x1"},
-		{"", ""},
+		{
+			name:      "single slice - tpu7x",
+			topology:  "2x2x1",
+			numSlices: 1,
+			wantKey:   "kueue.x-k8s.io/podset-required-topology",
+			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
+		},
+		{
+			name:      "multislice - tpu7x",
+			topology:  "2x2x1",
+			numSlices: 2,
+			wantKey:   "kueue.x-k8s.io/podset-slice-required-topology",
+			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
+		},
+		{
+			name:      "empty topology",
+			topology:  "",
+			numSlices: 1,
+			wantKey:   "",
+			wantVal:   "",
+		},
 	}
 	for _, tt := range tests {
-		got := GetTopologyAnnotation(tt.topology)
-		if tt.want == "" {
-			if got != nil {
-				t.Errorf("Expected nil for empty topology, got %v", got)
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetTopologyAnnotation(tt.topology, tt.numSlices)
+			if tt.topology == "" {
+				if got != nil {
+					t.Errorf("Expected nil for empty topology, got %v", got)
+				}
+				return
 			}
-		} else {
-			if got["cloud.google.com/gke-tpu-slice-topology"] != tt.want {
-				t.Errorf("Expected %s, got %v", tt.want, got)
+			if got["cloud.google.com/gke-tpu-slice-topology"] != tt.topology {
+				t.Errorf("Expected topology %s, got %v", tt.topology, got["cloud.google.com/gke-tpu-slice-topology"])
 			}
-		}
+			if got[tt.wantKey] != tt.wantVal {
+				t.Errorf("Expected %s = %s, got %v", tt.wantKey, tt.wantVal, got[tt.wantKey])
+			}
+		})
 	}
 }
 

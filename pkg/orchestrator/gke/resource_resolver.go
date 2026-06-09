@@ -116,21 +116,13 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, nil
 	}
 
-	if val, ok := g.dynamicSlicingCache[opts.ComputeType]; ok {
+	if g.dynamicSlicingCache == nil {
+		g.dynamicSlicingCache = make(map[string]bool)
+	}
+
+	cacheKey := opts.ComputeType + ":" + opts.Topology
+	if val, ok := g.dynamicSlicingCache[cacheKey]; ok {
 		return val, nil
-	}
-
-	// Check for topologies.kueue.x-k8s.io CRD
-	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
-	if cResult.ExitCode != 0 {
-		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
-		g.dynamicSlicingCache[opts.ComputeType] = false
-		return false, nil
-	}
-
-	if !g.hasSliceAdmissionCheck() {
-		g.dynamicSlicingCache[opts.ComputeType] = false
-		return false, nil
 	}
 
 	// Check discovered node pools for dynamic-slicing
@@ -138,19 +130,50 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	if err != nil {
 		return false, err
 	}
+
+	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
+	if !isTPU7x || !g.hasKueueTopologies() || !g.hasSliceAdmissionCheck() {
+		g.dynamicSlicingCache[cacheKey] = false
+		return false, nil
+	}
+
+	active, err := g.checkNodePoolsDynamicSlicing(requestedMachineName, opts, isTPU7x)
+	if err != nil {
+		return active, err
+	}
+	g.dynamicSlicingCache[cacheKey] = active
+	return active, nil
+}
+
+func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName string, opts ManifestOptions, isTPU7x bool) (bool, error) {
 	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == requestedMachineName {
-			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
-				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
-				g.dynamicSlicingCache[opts.ComputeType] = true
-				return true, nil
+		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) {
+			continue
+		}
+
+		isProvisionOnly := isTPU7x && np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY"
+
+		if isProvisionOnly {
+			if err := validateTPU7xTopology(opts.Topology, requestedMachineName); err != nil {
+				return true, err
 			}
+			logging.Info("Dynamic-slicing PROVISION_ONLY mode validated for TPU7x node pool %s with topology %s.", np.Name, opts.Topology)
+			return true, nil
 		}
 	}
 
-	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
-	g.dynamicSlicingCache[opts.ComputeType] = false
+	logging.Info("Node pool does not have dynamic topology subset requirement. Dynamic-slicing not active.")
 	return false, nil
+}
+
+func validateTPU7xTopology(topology string, machineType string) error {
+	if topology == "" {
+		return fmt.Errorf("topology must be specified explicitly via --topology flag for TPU 7x dynamic slicing")
+	}
+	if !config.TopologyRegex.MatchString(topology) {
+		return fmt.Errorf("invalid topology format %s", topology)
+	}
+	return config.Validate3DTopology(topology, machineType, true)
 }
 
 func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
@@ -181,6 +204,30 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 
 	logging.Info("No AdmissionCheck with controller 'accelerator.gke.io/slice' found. Dynamic-slicing not active.")
 	return false
+}
+
+func (g *GKEOrchestrator) hasKueueTopologies() bool {
+	tResult := g.executor.ExecuteCommand("kubectl", "get", "topologies.kueue.x-k8s.io", "-o", "json")
+	if tResult.ExitCode != 0 {
+		logging.Warn("Failed to query Kueue topologies. Assuming dynamic-slicing not active.")
+		return false
+	}
+
+	var tList struct {
+		Items []interface{} `json:"items"`
+	}
+
+	if err := json.Unmarshal([]byte(tResult.Stdout), &tList); err != nil {
+		logging.Warn("Failed to parse Kueue topologies JSON: %v. Assuming dynamic-slicing not active.", err)
+		return false
+	}
+
+	if len(tList.Items) == 0 {
+		logging.Info("No Kueue topology resources found. Dynamic-slicing not active.")
+		return false
+	}
+
+	return true
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
@@ -289,6 +336,11 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	job.MachineType = machineName
 	isDynamicSlicing := false
 	if config.IsTPU(machineName) {
+		isTPU7x := strings.Contains(strings.ToLower(machineName), "tpu7x")
+		if isTPU7x && job.Topology == "" {
+			return JobProfile{}, false, fmt.Errorf("topology must be specified explicitly via --topology flag for TPU 7x machine type %s", machineName)
+		}
+
 		// Validate topology shape before resolving/discovering
 		if job.Topology != "" {
 			if err := config.ValidateHardwareRequest(job.MachineType, job.Topology); err != nil {
@@ -296,8 +348,8 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 			}
 		}
 
-		// 3. Resolve Topology
-		topology, isDynamicSlicing, err := g.resolveTopology(job)
+		var topology string
+		topology, isDynamicSlicing, err = g.resolveTopology(job)
 		if err != nil {
 			return JobProfile{}, isDynamicSlicing, err
 		}
