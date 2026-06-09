@@ -434,11 +434,11 @@ func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
 	for _, rl := range autoscaling.ResourceLimits {
 		resName := rl.ResourceType
 		maxVal := rl.Maximum
-		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
+		if resName == "gpu" || strings.Contains(resName, "nvidia") {
 			if maxVal > limits["nvidia.com/gpu"] {
 				limits["nvidia.com/gpu"] = maxVal
 			}
-		} else if strings.HasPrefix(resName, "tpu") {
+		} else if strings.Contains(resName, "tpu") {
 			if maxVal > limits["google.com/tpu"] {
 				limits["google.com/tpu"] = maxVal
 			}
@@ -531,7 +531,7 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 			}
 
 			// If it's a TPU limit
-			if strings.HasPrefix(resName, "tpu-") {
+			if strings.Contains(resName, "tpu") {
 				flavorName := "flavor-" + resName
 				if _, ok := flavors[flavorName]; !ok {
 					flavors[flavorName] = FlavorCapacity{
@@ -542,8 +542,8 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 				}
 			}
 
-			// If it's a GPU limit (starts with nvidia-)
-			if strings.HasPrefix(resName, "nvidia-") {
+			// If it's a GPU limit (contains nvidia)
+			if strings.Contains(resName, "nvidia") {
 				flavorName := "flavor-" + resName
 				if _, ok := flavors[flavorName]; !ok {
 					flavors[flavorName] = FlavorCapacity{

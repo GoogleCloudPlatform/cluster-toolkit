@@ -140,6 +140,8 @@ func getSubmissionRejectError(job *orchestrator.JobDefinition) error {
 	switch job.GKENAPProvisioning {
 	case "spot":
 		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=spot' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand.\nRemediation: Please re-submit your job without the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of Spot resources", job.ComputeType)
+	case "on-demand":
+		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=on-demand' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Spot.\nRemediation: Please re-submit your job with the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of On-Demand resources", job.ComputeType)
 	case "reservation":
 		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=reservation' with reservation name %q for compute type %q, but no static node pools matching this hardware are configured to consume this reservation", job.GKENAPReservation, job.ComputeType)
 	default:
@@ -195,6 +197,10 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		Effect:   corev1.TaintEffectNoSchedule,
 	})
 
+	seenTaints := map[string]bool{
+		"cloud.google.com/reservation-name": true,
+	}
+
 	shortResName := extractShortReservationName(reservationName)
 	for _, np := range g.clusterDesc.NodePools {
 		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
@@ -203,10 +209,11 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		}
 		if strings.EqualFold(np.Config.MachineType, machineType) && extractShortReservationName(lblVal) == shortResName {
 			for _, t := range np.Config.Taints {
-				// Avoid duplicating the reservation-name toleration if it's already in np.Config.Taints
-				if t.Key == "cloud.google.com/reservation-name" {
+				// Avoid duplicate tolerations
+				if seenTaints[t.Key] {
 					continue
 				}
+				seenTaints[t.Key] = true
 				tolerations = append(tolerations, corev1.Toleration{
 					Key:      t.Key,
 					Value:    t.Value,
