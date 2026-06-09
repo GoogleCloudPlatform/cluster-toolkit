@@ -425,7 +425,14 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	var mainFlavors []map[string]interface{}
 	var pathwaysFlavors []map[string]interface{}
 
-	for fname, fc := range g.capacity.Flavors {
+	var fnames []string
+	for fname := range g.capacity.Flavors {
+		fnames = append(fnames, fname)
+	}
+	sort.Strings(fnames)
+
+	for _, fname := range fnames {
+		fc := g.capacity.Flavors[fname]
 		isPathways := (fname == "pathways-flavor")
 		var resources []map[string]interface{}
 

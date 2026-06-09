@@ -2138,7 +2138,7 @@ func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 
 func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 	setupMockMachineConfig(t)
-	
+
 	// Mock JSON with specific limit (nvidia-l4: 16) and generic limit (nvidia.com/gpu: 4).
 	// The order doesn't matter now since we compute generic limits in a second pass.
 	mockDescribeOutput := `{
