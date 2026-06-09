@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -22,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 
+	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
 	"k8s.io/client-go/dynamic"
 )
@@ -175,6 +177,24 @@ type ManifestOptions struct {
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool
+	AdditionalManifests           []string
+}
+
+// StorageManager handles parsing and validation of storage mounts.
+type StorageManager struct {
+	orchestrator    *GKEOrchestrator
+	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
+	filestoreClient filestoreClient
+	instancesCache  []*filestorepb.Instance
+}
+
+// MountInfo represents parsed volume mount options
+type MountInfo struct {
+	Name      string
+	Source    string
+	MountPath string
+	Type      string
+	ReadOnly  bool
 }
 
 type FlavorCapacity struct {

@@ -301,10 +301,10 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
-		Volumes: []orchestrator.VolumeDefinition{
-			{Name: "vol-0", Source: "gs://my-bucket", MountPath: "/data", Type: "gcsfuse"},
-			{Name: "vol-1", Source: "/host/path", MountPath: "/host", Type: "hostPath"},
-			{Name: "vol-2", Source: "my-pvc", MountPath: "/pvc", Type: "pvc"},
+		RawMounts: []string{
+			"gs://my-bucket:/data",
+			"/host/path:/host",
+			"my-pvc:/pvc",
 		},
 	}
 
