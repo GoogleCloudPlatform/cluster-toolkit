@@ -48,3 +48,8 @@ output "config" {
     error_message = "All nodeset names must be unique among all nodeset types."
   }
 }
+
+output "compute_devel_zip" {
+  value       = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  description = "Path to the generated compute devel zip (slurm-gcp-devel.zip)."
+}
