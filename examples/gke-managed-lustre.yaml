@@ -35,6 +35,7 @@ vars:
   size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+  kms_key: null
 
 deployment_groups:
 - group: primary
@@ -86,6 +87,7 @@ deployment_groups:
       remote_mount: lustrefs
       size_gib: $(vars.size_gib)
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+      kms_key: $(vars.kms_key)
 
   - id: node_pool_service_account
     source: modules/project/service-account

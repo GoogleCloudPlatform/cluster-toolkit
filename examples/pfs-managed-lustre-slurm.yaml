@@ -34,6 +34,7 @@ vars:
   lustre_size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+  kms_key: null
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -58,6 +59,7 @@ deployment_groups:
       remote_mount: lustrefs
       size_gib: $(vars.lustre_size_gib)
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+      kms_key: $(vars.kms_key)
 
 - group: slurm-cluster
   modules:
