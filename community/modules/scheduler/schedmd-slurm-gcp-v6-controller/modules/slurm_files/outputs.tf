@@ -53,3 +53,8 @@ output "scripts_dir" {
   value       = local.scripts_dir
   description = "The scripts dir location."
 }
+
+output "compute_devel_zip" {
+  value       = data.archive_file.slurm_gcp_devel_compute_zip.output_path
+  description = "Path to the generated compute devel zip (slurm-gcp-devel.zip)."
+}
