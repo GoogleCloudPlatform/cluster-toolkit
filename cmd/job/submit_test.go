@@ -248,7 +248,7 @@ func resetSubmitCmdFlags() {
 	priorityClassName = "medium"
 	isPathwaysJob = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
-	gkeNapProvisioning = "on-demand"
+	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 }
 
