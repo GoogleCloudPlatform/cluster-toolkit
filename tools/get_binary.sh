@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -x -e
+set -x -e -o pipefail
 
 TEST_PREFIX=${1:-""}
 BUILD_FROM_SOURCE=${2:-"false"}
