@@ -38,7 +38,7 @@ steps:
   - -c
   - |
     set -x -e
-    cd /workspace && make
+    cd /workspace && bash tools/get_binary.sh "" "true"
     export BUILD_ID="${BUILD_ID}"
     BLUEPRINT="tools/python-integration-tests/blueprints/slurm-simple.yaml"
     bash tools/add_ttl_label.sh $${BLUEPRINT}

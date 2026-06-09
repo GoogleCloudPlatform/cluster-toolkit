@@ -56,7 +56,7 @@ steps:
       exit 1
     fi
     set -x
-    cd /workspace && make
+    cd /workspace && bash tools/get_binary.sh "" "true"
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/tools/cloud-build/daily-tests/blueprints/a3ultra-custom-image-blueprint.yaml"
