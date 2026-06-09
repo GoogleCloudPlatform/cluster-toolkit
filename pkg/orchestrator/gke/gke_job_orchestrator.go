@@ -400,25 +400,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	g.clusterDesc = clusterDesc
 
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
-	g.napLimits = make(map[string]int64)
-	for _, rl := range clusterDesc.Autoscaling.ResourceLimits {
-		g.napLimits[rl.ResourceType] = rl.Maximum
-	}
-
-	for _, rl := range clusterDesc.Autoscaling.ResourceLimits {
-		resName := rl.ResourceType
-		maxVal := rl.Maximum
-		// Map generic keys for backwards compatibility and generic resource lookups
-		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
-			if maxVal > g.napLimits["nvidia.com/gpu"] {
-				g.napLimits["nvidia.com/gpu"] = maxVal
-			}
-		} else if strings.HasPrefix(resName, "tpu") {
-			if maxVal > g.napLimits["google.com/tpu"] {
-				g.napLimits["google.com/tpu"] = maxVal
-			}
-		}
-	}
+	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
 
 	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
 	if err != nil {
@@ -441,6 +423,28 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	}
 
 	return nil
+}
+
+func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
+	limits := make(map[string]int64)
+	for _, rl := range autoscaling.ResourceLimits {
+		limits[rl.ResourceType] = rl.Maximum
+	}
+
+	for _, rl := range autoscaling.ResourceLimits {
+		resName := rl.ResourceType
+		maxVal := rl.Maximum
+		if resName == "gpu" || strings.HasPrefix(resName, "nvidia") {
+			if maxVal > limits["nvidia.com/gpu"] {
+				limits["nvidia.com/gpu"] = maxVal
+			}
+		} else if strings.HasPrefix(resName, "tpu") {
+			if maxVal > limits["google.com/tpu"] {
+				limits["google.com/tpu"] = maxVal
+			}
+		}
+	}
+	return limits
 }
 
 func (g *GKEOrchestrator) autoDetectCPUNodePool() string {

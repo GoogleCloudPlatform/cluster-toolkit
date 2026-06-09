@@ -418,7 +418,6 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		return JobProfile{}, false, false, err
 	}
 	job.MachineType = machineName
-
 	if config.IsTPU(machineName) {
 		isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
 		if err != nil {
@@ -433,14 +432,11 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 			}
 		}
 	}
-
-	// Determine if CPU machine
 	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
 	if err != nil {
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
-	// 6. Validate consumption model constraints for static clusters
 	if err := g.validateConsumptionForStaticCluster(job); err != nil {
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
