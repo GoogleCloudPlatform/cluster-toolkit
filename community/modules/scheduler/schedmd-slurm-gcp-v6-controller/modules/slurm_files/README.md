@@ -123,6 +123,7 @@ No modules.
 | ---- | ----------- |
 | <a name="output_bucket_dir"></a> [bucket\_dir](#output\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
+| <a name="output_compute_devel_zip"></a> [compute\_devel\_zip](#output\_compute\_devel\_zip) | Path to the generated compute devel zip (slurm-gcp-devel.zip). |
 | <a name="output_config"></a> [config](#output\_config) | Cluster configuration. |
 | <a name="output_scripts_dir"></a> [scripts\_dir](#output\_scripts\_dir) | The scripts dir location. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | GCS Bucket URI of Slurm cluster file storage. |

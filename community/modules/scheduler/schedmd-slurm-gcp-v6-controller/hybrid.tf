@@ -24,6 +24,7 @@ set -e
 
 OUT_DIR=${local.output_dir}
 SCRIPTS_DIR=${module.slurm_files.scripts_dir}
+DEVEL_ZIP=${module.slurm_files.compute_devel_zip}
 export SLURM_CONFIG_YAML=$OUT_DIR/config.yaml
 cd $OUT_DIR
 echo "Installing dependencies"
@@ -32,7 +33,7 @@ echo "Generating config files"
 python3 $SCRIPTS_DIR/setup.py --hybrid --bucket ${module.slurm_files.slurm_bucket_path}
 echo "Extracting scripts"
 mkdir -p scripts
-unzip -o slurm-gcp-devel.zip -d scripts > /dev/null
+unzip -o "$DEVEL_ZIP" -d scripts > /dev/null
 #fix the timestamps
 find scripts -exec touch {} +
 mv config.yaml .config.hash scripts/
