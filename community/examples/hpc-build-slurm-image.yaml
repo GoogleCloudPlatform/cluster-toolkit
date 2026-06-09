@@ -71,7 +71,8 @@ deployment_groups:
             "nvidia_version": "latest",
             "install_ompi": true,
             "install_lustre": false,
-            "install_gcsfuse": true
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops"
           }
       - type: shell
         destination: install_slurm.sh
