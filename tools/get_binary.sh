@@ -19,8 +19,14 @@ TEST_PREFIX=${1:-""}
 BUILD_FROM_SOURCE=${2:-false}
 
 if [ "${TEST_PREFIX}" == "daily-" ] && [ "${BUILD_FROM_SOURCE}" != "true" ]; then
+	if [ -z "${GCLUSTER_GCS_PATH}" ]; then
+		echo "ERROR: GCLUSTER_GCS_PATH is empty or not set!"
+		echo "Did you forget to add the 'availableSecrets' block to the Cloud Build YAML?"
+		exit 1
+	fi
 	gsutil cp "gs://${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip" .
-	unzip -o gcluster-bundle.zip >/dev/null && unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
+	unzip -o gcluster-bundle.zip >/dev/null
+	unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
 	# Grant execution permissions to the binary
 	chmod +x gcluster
 else
