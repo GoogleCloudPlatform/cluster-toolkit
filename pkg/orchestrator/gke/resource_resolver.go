@@ -459,13 +459,13 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
 	}
-	return g.indentYaml(string(b), 16), nil
+	return indentYaml(string(b), 16), nil
 }
 
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
 	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
 	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
-		opts.SchedulingGates = g.indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
+		opts.SchedulingGates = indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
 		opts.SchedulerName = ""
 	}
 

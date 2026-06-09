@@ -157,10 +157,28 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 *This creates a JobSet with 2 replicas, each having 4 pods, totaling 8 nodes.*
 
-### 4.4 Example: Submit Job with Persistent Storage (Mounting Bucket)
+### 4.4 Example: Submit Job with Persistent Storage
 
-You can mount Cloud Storage buckets or host paths using the `--mount` flag. By default, mounts are read-only. You can specify read-write mode by appending `:rw` to the mount string:
+You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
+Mounts must use the format: `--mount "<src>:<dest>[:<mode>]"`
+* `mode` is optional and defaults to `ro` (read-only). To allow writes, append `:rw`.
+
+**Supported volume sources (`<src>`):**
+* **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
+* **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
+* **Existing PVC**: `<pvc-name>` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace)
+* **Host Path**: `/host/path/on/node` (mounts a directory directly from the host node)
+
+> [!NOTE]
+> ### Shared VPC / Cross-Project / Cross-Region Filestore
+>
+> * **Cross-Project**: For Shared VPC or cross-project setups where the Filestore instance resides in a different project than your GKE cluster, you **must use the IP address** instead of the instance name. `gcluster` will automatically fall back to using the IP directly with a default capacity of `1Ti` (1024 GiB) if the API lookup fails or returns no matches.
+> * **Cross-Region**: Mounting cross-region Filestores is supported as long as your VPC network has global routing enabled to allow cross-region NFS traffic. If instances with the same name exist in multiple regions, use the IP address to ensure the correct one is mounted.
+
+**Examples:**
+
+Mounting a GCS bucket (read-write):
 ```bash
 ./gcluster job submit \
   --name my-storage-job \
@@ -169,6 +187,17 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag. By d
   --base-image python:3.9-slim \
   --build-context job_details \
   --mount "gs://<YOUR_BUCKET_NAME>:/data:rw"
+```
+
+Mounting an existing PVC named `lustre-pvc` (read-only):
+```bash
+./gcluster job submit \
+  --name my-lustre-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --mount "lustre-pvc:/data"
 ```
 
 ## 5. Verify the Job
@@ -947,7 +976,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
-| `--mount` | `stringArray` | Mount storage volumes or buckets using the `<src>:<dest>[:<mode>]` format. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>:<dest>[:<mode>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |

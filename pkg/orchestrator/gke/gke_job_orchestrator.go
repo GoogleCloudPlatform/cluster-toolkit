@@ -80,6 +80,11 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	logging.Info("Starting gcluster job submit workflow...")
 
+	sm := &StorageManager{orchestrator: g}
+	if err := sm.ValidateMounts(job.RawMounts); err != nil {
+		return err
+	}
+
 	startTime := time.Now()
 	var success bool
 	defer func() {
@@ -348,7 +353,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", fmt.Errorf("failed to execute pathways jobset template: %w", err)
 	}
 
-	return buf.String(), nil
+	return g.assembleManifest(buf.String(), opts.AdditionalManifests), nil
 }
 
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
@@ -1268,18 +1273,6 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	}
 }
 
-func (g *GKEOrchestrator) indentYaml(s string, indent int) string {
-	lines := strings.Split(s, "\n")
-	padding := strings.Repeat(" ", indent)
-	var result []string
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			result = append(result, padding+line)
-		}
-	}
-	return strings.Join(result, "\n")
-}
-
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
 	if _, exists := config.AcceleratorShorthandMap[job.MachineType]; exists {
 		return false, 0, nil
@@ -1320,57 +1313,6 @@ func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition)
 		}
 	}
 	return false, 0, nil
-}
-
-func (g *GKEOrchestrator) addVolumeOptions(opts *ManifestOptions, vols []orchestrator.VolumeDefinition) {
-	if len(vols) == 0 {
-		return
-	}
-
-	var volSpecs []map[string]interface{}
-	var mountSpecs []map[string]interface{}
-	gcsFuseEnabled := false
-
-	for _, v := range vols {
-		mountSpecs = append(mountSpecs, map[string]interface{}{
-			"name":      v.Name,
-			"mountPath": v.MountPath,
-		})
-
-		volSpec := map[string]interface{}{
-			"name": v.Name,
-		}
-
-		switch v.Type {
-		case "gcsfuse":
-			gcsFuseEnabled = true
-			volSpec["csi"] = map[string]interface{}{
-				"driver":   "gcsfuse.csi.storage.gke.io",
-				"readOnly": v.ReadOnly,
-				"volumeAttributes": map[string]interface{}{
-					"bucketName": strings.TrimPrefix(v.Source, "gs://"),
-				},
-			}
-		case "hostPath":
-			volSpec["hostPath"] = map[string]interface{}{
-				"path": v.Source,
-			}
-		case "pvc":
-			volSpec["persistentVolumeClaim"] = map[string]interface{}{
-				"claimName": v.Source,
-			}
-		}
-		volSpecs = append(volSpecs, volSpec)
-	}
-
-	opts.GCSFuseEnabled = gcsFuseEnabled
-
-	if b, err := yaml.Marshal(mountSpecs); err == nil {
-		opts.VolumeMountsYAML = g.indentYaml(string(b), 16)
-	}
-	if b, err := yaml.Marshal(volSpecs); err == nil {
-		opts.VolumesYAML = g.indentYaml(string(b), 14)
-	}
 }
 
 func parseJobStatus(obj map[string]interface{}) (statusStr, completionTime string) {
@@ -1838,7 +1780,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal nodeSelector: %w", err)
 		}
-		return g.indentYaml(string(b), 16), nil
+		return indentYaml(string(b), 16), nil
 	}
 	return "", nil
 }
@@ -1853,7 +1795,7 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal affinity: %w", err)
 		}
-		return g.indentYaml(string(b), 16), nil
+		return indentYaml(string(b), 16), nil
 	}
 	return "", nil
 }
@@ -1870,7 +1812,7 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, numSlices int
 	if len(topologyAnnotation) > 0 {
 		b, err := yaml.Marshal(topologyAnnotation)
 		if err == nil {
-			return g.indentYaml(string(b), 16)
+			return indentYaml(string(b), 16)
 		}
 	}
 	return ""
