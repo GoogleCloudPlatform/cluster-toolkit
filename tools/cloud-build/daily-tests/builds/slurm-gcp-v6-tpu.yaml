@@ -58,6 +58,14 @@ steps:
     fi
     set -x
     cd /workspace
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/community/examples/hpc-slurm6-tpu.yaml"
@@ -66,7 +74,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
-      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="region=$${REGION} zone=$${ZONE}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-tpu.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']

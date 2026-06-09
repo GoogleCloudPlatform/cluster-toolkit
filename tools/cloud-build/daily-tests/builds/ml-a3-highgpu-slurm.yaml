@@ -47,6 +47,14 @@ steps:
   - |
     set -x -e
     cd /workspace
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     REGION=us-west1
@@ -58,7 +66,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
-      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}"\
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
       --extra-vars="region=$${REGION} zone=$${ZONE} "\
       --extra-vars="tcpx_kernel_login=$${TCPX_KERNEL_LOGIN} tcpx_kernel_password=$${TCPX_KERNEL_PASSWORD} keyserver_ubuntu_key=$${KEYSERVER_UBUNTU_KEY} "\
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm.yml"

@@ -30,26 +30,6 @@
     deployment_vars_str: "--vars \"\\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\"\" --vars \"\\\"') }}\\\"\""
   when: cli_deployment_vars is defined and cli_deployment_vars is mapping
 
-- name: Get gcluster bundle or build
-  ansible.builtin.shell: |
-    set -e
-    if [ "{{ test_prefix | default('') }}" == "daily-" ] && [ "{{ build_gcluster_from_source | default(false) | bool | lower }}" == "false" ]; then
-        gsutil cp gs://{{ gcluster_gcs_path | default('') }}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip > /dev/null && unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
-  args:
-    chdir: "{{ workspace }}"
-  register: bundle_output
-
-- name: Print build or extraction output
-  ansible.builtin.debug:
-    msg: "{{ bundle_output.stdout }}"
-  when: bundle_output.stdout is defined
-
 - name: Create Blueprint
   ansible.builtin.command: |
       ./gcluster create -l ERROR "{{ blueprint_yaml }}" \

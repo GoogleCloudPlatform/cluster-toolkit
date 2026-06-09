@@ -55,6 +55,14 @@ steps:
   - |
     set -x -e
     cd /workspace
+    if [ "${_TEST_PREFIX}" == "daily-" ]; then
+        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
+        unzip -o gcluster-bundle.zip
+        # Grant execution permissions to the binary
+        chmod +x gcluster
+    else
+        make
+    fi
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/batch-mpi.yaml
@@ -71,5 +79,5 @@ steps:
     echo '      timeout: 10800'                                   >> $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} test_prefix=${_TEST_PREFIX} gcluster_gcs_path=$${GCLUSTER_GCS_PATH}" \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
