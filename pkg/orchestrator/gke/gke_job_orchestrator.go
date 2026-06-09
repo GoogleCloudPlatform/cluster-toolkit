@@ -936,6 +936,7 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 			ClusterName:     job.ClusterName,
 			ClusterLocation: job.ClusterLocation,
 			ComputeType:     job.ComputeType,
+			MachineType:     job.MachineType,
 			Topology:        job.Topology,
 		})
 		if err != nil {
@@ -1074,6 +1075,7 @@ func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDef
 		ClusterName:     job.ClusterName,
 		ClusterLocation: job.ClusterLocation,
 		ComputeType:     job.ComputeType,
+		MachineType:     job.MachineType,
 		Topology:        job.Topology,
 	})
 	if err != nil {

@@ -569,8 +569,10 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 
 			if tt.dynamicSlicing {
 				orc.dynamicSlicingCache = map[string]bool{
-					tt.machineType: true,
-					tt.computeType: true,
+					tt.machineType:                     true,
+					tt.computeType:                     true,
+					tt.computeType + ":" + tt.topology: true,
+					tt.machineType + ":" + tt.topology: true,
 				}
 			}
 

@@ -124,9 +124,13 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	}
 
 	// Check discovered node pools for dynamic-slicing
-	requestedMachineName, err := g.resolveMachineName(opts.ComputeType)
-	if err != nil {
-		return false, err
+	requestedMachineName := opts.MachineType
+	if requestedMachineName == "" {
+		var err error
+		requestedMachineName, err = g.resolveMachineName(opts.ComputeType)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
