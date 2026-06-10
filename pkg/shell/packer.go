@@ -60,8 +60,8 @@ func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error 
 		if !printToScreen {
 			// If we weren't printing in real-time, dump the captured
 			// output now to help with debugging the failure.
-			io.Copy(os.Stdout, &outBuf)
-			io.Copy(os.Stderr, &errBuf)
+			_, _ = io.Copy(os.Stdout, &outBuf)
+			_, _ = io.Copy(os.Stderr, &errBuf)
 		}
 		return err
 	}
