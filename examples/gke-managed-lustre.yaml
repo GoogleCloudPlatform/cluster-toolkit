@@ -35,7 +35,7 @@ vars:
   size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
-  kms_key: null
+  kms_key: ""
 
 deployment_groups:
 - group: primary

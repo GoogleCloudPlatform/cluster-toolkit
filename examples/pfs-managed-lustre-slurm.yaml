@@ -34,7 +34,7 @@ vars:
   lustre_size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
-  kms_key: null
+  kms_key: ""
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

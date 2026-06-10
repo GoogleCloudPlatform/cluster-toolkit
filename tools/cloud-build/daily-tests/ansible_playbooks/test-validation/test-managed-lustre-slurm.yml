@@ -56,9 +56,9 @@
     state: absent
 
 - name: Verify Lustre instance is encrypted with the expected KMS key
-  ansible.builtin.shell: >
+  ansible.builtin.command: >
     gcloud lustre instances describe {{ cli_deployment_vars.lustre_instance_id }}
-    --location={{ zone }} --project={{ project }}
+    --location={{ zone }} --project={{ custom_vars.project }}
     --format='value(kmsKey)'
   delegate_to: localhost
   register: lustre_kms_key

@@ -36,6 +36,7 @@ post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-managed-lustre-slurm.yml
 custom_vars:
+  project: "{{ project }}"
   output_dir: /lustre/test
   num_slurm_nodes: 1
   mounts:
