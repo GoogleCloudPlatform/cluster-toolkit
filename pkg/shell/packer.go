@@ -22,7 +22,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sync"
 )
 
 // ConfigurePacker errors if packer is not in the user PATH
@@ -41,53 +40,28 @@ func ConfigurePacker() error {
 func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error {
 	cmd := exec.Command("packer", args...)
 	cmd.Dir = workingDir
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
 
-	if err := cmd.Start(); err != nil {
-		return err
-	}
+	// Create buffers to capture output
+	var outBuf bytes.Buffer
+	var errBuf bytes.Buffer
 
-	// capture stdout/stderr; print to screen in real-time or upon error
-	var wg sync.WaitGroup
-	var outBuf io.Writer
-	var errBuf io.Writer
-
+	// Assign writers directly. This lets os/exec manage the streams internally
+	// and avoids manual WaitGroup management which can lead to deadlocks.
 	if printToScreen {
-		outBuf = newTimestampWriter(os.Stdout)
-		errBuf = newTimestampWriter(os.Stderr)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	} else {
-		outBuf = bytes.NewBuffer([]byte{})
-		errBuf = bytes.NewBuffer([]byte{})
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		io.Copy(outBuf, stdout)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		io.Copy(errBuf, stderr)
-	}()
-	wg.Wait()
 
-	if err := cmd.Wait(); err != nil {
+	// Run() starts the command and waits for it to finish.
+	if err := cmd.Run(); err != nil {
 		if !printToScreen {
-			if out, ok := outBuf.(*bytes.Buffer); ok {
-				// Explicitly ignore the error to satisfy the linter
-				_, _ = io.Copy(os.Stdout, out)
-			}
-			if errB, ok := errBuf.(*bytes.Buffer); ok {
-				// Explicitly ignore the error to satisfy the linter
-				_, _ = io.Copy(os.Stderr, errB)
-			}
+			// If we weren't printing in real-time, dump the captured
+			// output now to help with debugging the failure.
+			io.Copy(os.Stdout, &outBuf)
+			io.Copy(os.Stderr, &errBuf)
 		}
 		return err
 	}
