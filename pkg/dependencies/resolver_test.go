@@ -170,7 +170,7 @@ func TestCompareVersions(t *testing.T) {
 		{"1.12.1", "1.12.2", -1, false},
 		{"1.11.0", "1.12.2", -1, false},
 		{"v1.12.2", "1.12.2", 0, false},
-		{"1.12.2-beta1", "1.12.2", 0, false},
+		{"1.12.2-beta1", "1.12.2", -1, false},
 		{"invalid", "1.12.2", 0, true},
 	}
 
