@@ -244,7 +244,7 @@ def setup_key(lkp: util.Lookup, is_primary: bool = True) -> None:
             if shared_key.exists():
                 log.info(f"Restoring {file_name} from {shared_key}")
                 shutil.copyfile(shared_key, dst)
-            elif lkp.cfg.controller_state_disk.device_name:
+            elif lkp.cfg.controller_state_disk and lkp.cfg.controller_state_disk.device_name:
                  # For zonal state disk (files might be directly there if mounted at slurmdirs.state)
                  # But if slurmdirs.state IS shared_dir, we already checked shared_key.exists()
                  # If controller_state_disk is used, slurmdirs.state IS the persistence.
@@ -481,7 +481,7 @@ def setup_controller(is_primary: bool):
 
     # Primary-specific state disk mounting
     if is_primary:
-        if lkp.cfg.controller_state_disk.device_name != None:
+        if lkp.cfg.controller_state_disk and lkp.cfg.controller_state_disk.device_name:
             mount_save_state_disk()
 
     setup_jwt_key()
