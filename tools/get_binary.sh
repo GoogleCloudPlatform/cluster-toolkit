@@ -25,7 +25,7 @@ if [ "${TEST_PREFIX}" == "daily-" ] && [ "${BUILD_FROM_SOURCE}" != "true" ]; the
 	fi
 	gsutil cp "gs://${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip" .
 	unzip -o gcluster-bundle.zip >/dev/null
-	unzip -l gcluster-bundle.zip | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
+	unzip -l gcluster-bundle.zip | grep '.' | tail -n 1 | awk '{print "Extracted " $2 " " $3 " (Total size: " $1 " bytes)."}'
 	# Grant execution permissions to the binary
 	chmod +x gcluster
 else
