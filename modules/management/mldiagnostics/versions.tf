@@ -34,5 +34,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:mldiagnostics/v1.84.0"
   }
 
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }
