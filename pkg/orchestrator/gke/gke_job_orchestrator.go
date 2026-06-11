@@ -646,8 +646,10 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 			}
 		}
 
-		if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
-			logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
+		if job.IsPathwaysJob {
+			if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
+				logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
+			}
 		}
 	}
 
