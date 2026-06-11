@@ -544,8 +544,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+)?(/reservationSubBlocks/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_ID]', [...] are optional parts."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+(/reservationSubBlocks/[a-z0-9-]+)?)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]', [...] are optional parts."
   }
 }
 
