@@ -78,6 +78,7 @@ type GKEOrchestrator struct {
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
 	dynamicSlicingCache         map[string]bool
+	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
 }
 
@@ -168,6 +169,7 @@ type ManifestOptions struct {
 	VolumeMountsYAML              string
 	GCSFuseEnabled                bool
 	IsDynamicSlicing              bool
+	IsStaticSlicing               bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool
