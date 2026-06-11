@@ -119,8 +119,8 @@ variable "static_ips" {
   description = "List of static IPs for VM instances."
   default     = []
   validation {
-    condition     = length(var.static_ips) <= 1
-    error_message = "The Slurm modules supports 0 or 1 static IPs on controller instance."
+    condition     = length(var.static_ips) <= 2
+    error_message = "The Slurm module supports 0, 1, or 2 static IPs on controller instances."
   }
 }
 
@@ -424,4 +424,38 @@ variable "resource_manager_tags" {
     condition     = alltrue([for value in keys(var.resource_manager_tags) : can(regex("tagKeys/[0-9]+", value))])
     error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
   }
+}
+
+variable "munge_mount" {
+  description = <<-EOD
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
+}
+
+variable "slurm_key_mount" {
+  description = <<-EOD
+  Remote mount for compute and login nodes to acquire the slurm.key.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = null
 }
