@@ -387,6 +387,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 def install_slurmdbd_conf(lkp: util.Lookup) -> None:
     """install slurmdbd.conf"""
     conf_options = {
+        "control_host": lkp.control_host,
         "dbd_host_str": f"DbdHost={lkp.control_host}",
         "slurmlog": dirs.log,
         "state_save": slurmdirs.state,
