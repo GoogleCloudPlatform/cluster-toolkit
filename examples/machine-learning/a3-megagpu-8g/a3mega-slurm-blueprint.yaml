@@ -172,28 +172,50 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-      - type: shell
-        destination: install-cuda-toolkit.sh
-        content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          TEMP_DEB=$(mktemp)
-          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O "$TEMP_DEB"
-          dpkg -i "$TEMP_DEB"
-          rm -f "$TEMP_DEB"
-          apt update -y
-          apt install -y \
-              cuda-toolkit-13-0 \
-              nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda13 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
 
-          # 2. Hold ALL components
-          apt-mark hold \
-              datacenter-gpu-manager-4-cuda13 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
+      - type: ansible-local
+        destination: install_cuda_and_dcgm.yml
+        content: |
+          ---
+          - name: Install and Configure CUDA 13 / DCGM
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
+              nvidia_packages:
+                - cuda-toolkit-13-0
+                - nvidia-container-toolkit
+                - datacenter-gpu-manager-4-cuda13
+                - datacenter-gpu-manager-4-dev
+                - datacenter-gpu-manager-4-core
+            tasks:
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: "{{ cuda_repo_url }}"
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install NVIDIA packages
+                ansible.builtin.apt:
+                  name: "{{ nvidia_packages }}"
+                  state: present
+                  allow_downgrade: yes
+
+              - name: Hold DCGM packages
+                ansible.builtin.command:
+                  argv:
+                    - apt-mark
+                    - hold
+                    - "{{ item }}"
+                loop:
+                  - datacenter-gpu-manager-4-cuda13
+                  - datacenter-gpu-manager-4-dev
+                  - datacenter-gpu-manager-4-core
+
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
