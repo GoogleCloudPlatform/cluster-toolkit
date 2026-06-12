@@ -181,13 +181,13 @@ deployment_groups:
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O "$TEMP_DEB"
           dpkg -i "$TEMP_DEB"
           rm -f "$TEMP_DEB"
-           apt update -y
-           apt install -y \
-               cuda-toolkit-13-0 \
-               nvidia-container-toolkit \
-               datacenter-gpu-manager-4-cuda13 \
-               datacenter-gpu-manager-4-dev \
-               datacenter-gpu-manager-4-core
+          apt update -y
+          apt install -y \
+              cuda-toolkit-13-0 \
+              nvidia-container-toolkit \
+              datacenter-gpu-manager-4-cuda13 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
 
           # 2. Hold ALL components
           apt-mark hold \
