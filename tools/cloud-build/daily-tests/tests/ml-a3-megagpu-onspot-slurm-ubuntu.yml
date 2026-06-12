@@ -58,5 +58,5 @@ cli_deployment_vars:
   enable_ops_agent: "true"
   enable_nvidia_dcgm: "true"
   enable_nvidia_persistenced: true
-  final_image_family: "{{ deployment_name}}-u22"
+  final_image_family: "{{ deployment_name}}-u24"
   a3mega_enable_spot_vm: true
