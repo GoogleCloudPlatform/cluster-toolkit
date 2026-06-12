@@ -17,10 +17,15 @@
 
 from typing import List, Optional, Dict, Any
 import argparse
+import random
+import time
+import subprocess
+import datetime
 from datetime import timedelta
 import shlex
 import json
 import logging
+import error_handler
 import os
 import yaml
 import collections
@@ -159,7 +164,7 @@ def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed one week")
     return max_duration
 
-def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
+def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int], is_job_request: bool):
     """Call regionInstances.bulkInsert to create instances"""
     assert 0 < len(nodes) <= BULK_INSERT_LIMIT
 
@@ -181,9 +186,14 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         ),
     )
 
-    if placement_group and excl_job_id is not None:
-        pass # do not set minCount to force "all or nothing" behavior
+    if is_job_request:
+        # By omitting minCount, GCP will default minCount to equal count.
+        # This guarantees ATOMIC PROVISIONING. If GCP cannot provide all N nodes, it fails instantly
+        # rather than partially provisioning M nodes which waste budget while waiting for the rest.
+        pass
     else:
+        # Static pools and non-job allocations don't require all nodes to boot simultaneously.
+        # minCount=1 allows partial fulfillment so available static nodes can still service smaller jobs.
         body["minCount"] = 1
 
     zone_allow = nodeset.zone_policy_allow or []
@@ -221,6 +231,7 @@ class BulkChunk:
     chunk_idx: int
     excl_job_id: Optional[int]
     placement_group: Optional[str] = None
+    is_job_request: bool = False
 
     @property
     def name(self):
@@ -240,21 +251,25 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     non_excl = nodes_set.copy()
     groups : Dict[Optional[int], List[PlacementAndNodes]] = {} # excl_job_id|none -> PlacementAndNodes
 
-    # expand all exclusive job nodelists
+    # expand all job nodelists (both exclusive and non-exclusive)
     for job in resume_data.jobs:
-        if not lkp.cfg.partitions[job.partition].enable_job_exclusive: 
+        # Intersect the job's allocated nodes with the nodes currently being resumed.
+        # This fixes a bug where partially provisioned nodes in previous resume calls were improperly included
+        # in the new bulkInsert, causing duplicate provisioning and blocking minCount atomic requests.
+        job_nodes_in_resume = set(job.nodes_alloc) & non_excl
+        if not job_nodes_in_resume:
             continue
 
         groups[job.job_id] = []
-        # placement group assignment is based on all allocated nodes, ...
+        # placement group assignment requires full job.nodes_alloc to be accurate
         for pn in create_placements(job.nodes_alloc, job.job_id, lkp):
             groups[job.job_id].append(
                 PlacementAndNodes(
                     placement=pn.placement,
-                    #... but we only want to handle nodes in nodes_resume in this run.
-                    nodes = sorted(set(pn.nodes) & nodes_set)
+                    # safely intersect with job_nodes_in_resume to prevent duplicate overlapping node requests
+                    nodes = sorted(set(pn.nodes) & job_nodes_in_resume)
                 ))
-        non_excl.difference_update(job.nodes_alloc)
+        non_excl.difference_update(job_nodes_in_resume)
 
     groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
 
@@ -280,7 +295,8 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
             prefix=lkp.node_prefix(nodes_chunk[0]), # <cluster_name>-<nodeset_name>
             excl_job_id = job_id,
             placement_group=pn.placement,
-            chunk_idx=i)
+            chunk_idx=i,
+            is_job_request=(job_id is not None))
 
         for job_id, placements in groups.items()
         for pn in placements if pn.nodes
@@ -331,7 +347,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             flex_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(
-                chunk.nodes, chunk.placement_group, chunk.excl_job_id
+                chunk.nodes, chunk.placement_group, chunk.excl_job_id, chunk.is_job_request
             )
 
     for chunk in flex_chunks:
@@ -353,7 +369,9 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         failed_reqs = [str(e) for e in failed.items()]
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
-            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data) # type: ignore
+            reason = exc._get_reason() if hasattr(exc, "_get_reason") else str(exc) # type: ignore
+            action, admin_comment = error_handler.classify_gcp_error(reason, reason)
+            handle_resume_failure(grouped_nodes[ident].nodes, f"GCP Error: {reason}", resume_data, action, admin_comment)
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -449,7 +467,8 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
             for err in failed_ops[0]["error"]["errors"]
         )
         if code != "RESOURCE_ALREADY_EXISTS":
-            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
+            action, admin_comment = error_handler.classify_gcp_error(code, msg)
+            handle_resume_failure(failed_nodes, f"GCP Error: {msg}", resume_data, action, admin_comment)
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
@@ -470,6 +489,52 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
     nodelist = util.to_hostlist(nodes)
     log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
     run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+
+
+def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[ResumeData], action: error_handler.Action, admin_comment: str) -> None:
+    """Handle resume failures via node and job management based on error action."""
+    nodes_set = set(nodes)
+    jobs = resume_data.jobs if resume_data else []
+    
+    admin_reason_quoted = shlex.quote(admin_comment)
+    fallback_reason_quoted = shlex.quote(reason)
+
+    nodelist = util.to_hostlist(nodes)
+    if action == error_handler.Action.REQUEUE:
+        log.error(f"Resetting nodes {nodelist} to power_down. Reason: {reason}")
+        # 1. Force DOWN to instantly strip the POWERING_UP (#) flag and bypass ResumeTimeout
+        run(f"{lookup().scontrol} update nodename={nodelist} state=down reason='Force clear booting state'", check=False)
+        # 2. Return to power_down so Slurm transitions it safely to idle~
+        run(f"{lookup().scontrol} update nodename={nodelist} state=power_down", check=False)
+    else:
+        log.error(f"Marking nodes {nodelist} as DOWN. Reason: {reason}")
+        run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={fallback_reason_quoted}", check=False)
+
+    for job in jobs:
+        if not (set(job.nodes_alloc) & nodes_set):
+            continue
+            
+        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment={admin_reason_quoted}", check=False)
+
+        if action == error_handler.Action.REQUEUE:
+            # To prevent the requeued job from immediately retrying and hammering
+            # the GCP API during a stockout, we calculate a randomized backoff (e.g. 3-5 mins) and
+            # explicitly delay the job's next evaluation via the StartTime parameter.
+            delay_seconds = random.randint(180, 300)
+            backoff_time = (datetime.datetime.now() + datetime.timedelta(seconds=delay_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+            log.info(f"Setting job {job.job_id} backoff: {delay_seconds}s (until {backoff_time})")
+            
+            # Wait up to 10 seconds for Slurm to natively requeue the job to PENDING
+            for _ in range(10):
+                try:
+                    res = subprocess.run([lookup().scontrol, "show", "job", str(job.job_id)], capture_output=True, text=True)
+                    if "JobState=PENDING" in res.stdout:
+                        break
+                except Exception:
+                    pass
+                time.sleep(1)
+            
+            run(f"{lookup().scontrol} update JobId={job.job_id} StartTime={backoff_time}", check=False)
     
     
 
