@@ -101,7 +101,7 @@ deployment_groups:
         content: |
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
-          Pin-Priority: 1001
+          Pin-Priority: 100
 
       # The following holds NVIDIA software that was already installed on the
       # accelerator base image to be the same driver version. This reduces the
@@ -302,6 +302,8 @@ deployment_groups:
           - name: Install patched DMABUF import helper
             hosts: all
             become: true
+            vars:
+              dmabuf_version: "1.1"
             tasks:
             - name: Setup apt-transport-artifact-registry repository
               ansible.builtin.apt_repository:
@@ -323,69 +325,70 @@ deployment_groups:
                 state: present
                 filename: gpudirect-tcpxo
 
-            - name: Create temp directory for dmabuf package
-              ansible.builtin.tempfile:
-                state: directory
-                suffix: dmabuf
-              register: tempdir
-
-            - name: Download dmabuf-import-helper package
+            - name: Check if dmabuf-import-helper DKMS module is already installed
               ansible.builtin.command:
-                cmd: apt-get download dmabuf-import-helper
-                chdir: "{{ tempdir.path }}"
-              register: download_res
-              changed_when: download_res.rc == 0
-
-            - name: Extract dmabuf-import-helper deb package
-              ansible.builtin.shell:
-                cmd: dpkg-deb -x *.deb .
-                chdir: "{{ tempdir.path }}"
-              register: extract_res
-              changed_when: extract_res.rc == 0
-
-            - name: Clean existing dmabuf source in /usr/src
-              ansible.builtin.file:
-                path: /usr/src/dmabuf-import-helper-1.1
-                state: absent
-
-            - name: Move dmabuf-import-helper source to /usr/src
-              ansible.builtin.command:
-                cmd: mv "{{ tempdir.path }}/usr/src/dmabuf-import-helper-1.1" /usr/src/
-              register: move_res
-              changed_when: move_res.rc == 0
-
-            - name: Patch import-helper.c for kernel 6.17 compatibility
-              ansible.builtin.replace:
-                path: /usr/src/dmabuf-import-helper-1.1/import-helper.c
-                regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
-                replace: 'MODULE_IMPORT_NS("DMA_BUF")'
-
-            - name: Check if dmabuf-import-helper DKMS module is already added
-              ansible.builtin.command:
-                cmd: dkms status -m dmabuf-import-helper -v 1.1
+                cmd: dkms status -m dmabuf-import-helper -v {{ dmabuf_version }}
               register: dkms_status
               failed_when: false
               changed_when: false
 
-            - name: Add dmabuf-import-helper to DKMS
-              ansible.builtin.command:
-                cmd: dkms add -m dmabuf-import-helper -v 1.1
-              when: "'added' not in dkms_status.stdout and 'installed' not in dkms_status.stdout"
+            - name: Install and patch dmabuf-import-helper
+              block:
+                - name: Create temp directory for dmabuf package
+                  ansible.builtin.tempfile:
+                    state: directory
+                    suffix: dmabuf
+                  register: tempdir
 
-            - name: Build dmabuf-import-helper via DKMS
-              ansible.builtin.command:
-                cmd: dkms build -m dmabuf-import-helper -v 1.1
+                - name: Download dmabuf-import-helper package
+                  ansible.builtin.command:
+                    cmd: apt-get download dmabuf-import-helper
+                    chdir: "{{ tempdir.path }}"
+                  register: download_res
+                  changed_when: download_res.rc == 0
+
+                - name: Extract dmabuf-import-helper deb package
+                  ansible.builtin.shell:
+                    cmd: dpkg-deb -x *.deb .
+                    chdir: "{{ tempdir.path }}"
+                  register: extract_res
+                  changed_when: extract_res.rc == 0
+
+                - name: Clean existing dmabuf source in /usr/src
+                  ansible.builtin.file:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}
+                    state: absent
+
+                - name: Move dmabuf-import-helper source to /usr/src
+                  ansible.builtin.command:
+                    cmd: mv "{{ tempdir.path }}/usr/src/dmabuf-import-helper-{{ dmabuf_version }}" /usr/src/
+                  register: move_res
+                  changed_when: move_res.rc == 0
+
+                - name: Patch import-helper.c for kernel 6.17 compatibility
+                  ansible.builtin.replace:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}/import-helper.c
+                    regexp: 'MODULE_IMPORT_NS\\(DMA_BUF\\)'
+                    replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+
+                - name: Add dmabuf-import-helper to DKMS
+                  ansible.builtin.command:
+                    cmd: dkms add -m dmabuf-import-helper -v {{ dmabuf_version }}
+                  when: "'added' not in dkms_status.stdout"
+
+                - name: Build dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms build -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Install dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms install -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Clean up temp directory
+                  ansible.builtin.file:
+                    path: "{{ tempdir.path }}"
+                    state: absent
               when: "'installed' not in dkms_status.stdout"
-
-            - name: Install dmabuf-import-helper via DKMS
-              ansible.builtin.command:
-                cmd: dkms install -m dmabuf-import-helper -v 1.1
-              when: "'installed' not in dkms_status.stdout"
-
-            - name: Clean up temp directory
-              ansible.builtin.file:
-                path: "{{ tempdir.path }}"
-                state: absent
 
       - type: ansible-local
         destination: aperture_devices.yml
