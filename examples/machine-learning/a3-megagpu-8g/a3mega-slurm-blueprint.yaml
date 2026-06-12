@@ -368,7 +368,7 @@ deployment_groups:
                 - name: Patch import-helper.c for kernel 6.17 compatibility
                   ansible.builtin.replace:
                     path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}/import-helper.c
-                    regexp: 'MODULE_IMPORT_NS\\(DMA_BUF\\)'
+                    regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
                     replace: 'MODULE_IMPORT_NS("DMA_BUF")'
 
                 - name: Add dmabuf-import-helper to DKMS
