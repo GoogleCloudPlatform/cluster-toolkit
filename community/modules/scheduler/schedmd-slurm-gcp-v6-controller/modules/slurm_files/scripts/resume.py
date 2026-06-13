@@ -19,9 +19,7 @@ from typing import List, Optional, Dict, Any
 import argparse
 import random
 import time
-import subprocess
-import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 import shlex
 import json
 import logging
@@ -510,6 +508,7 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
         log.error(f"Marking nodes {nodelist} as DOWN. Reason: {reason}")
         run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={fallback_reason_quoted}", check=False)
 
+    jobs_to_requeue = []
     for job in jobs:
         if not (set(job.nodes_alloc) & nodes_set):
             continue
@@ -517,26 +516,33 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
         run(f"{lookup().scontrol} update jobid={job.job_id} admincomment={admin_reason_quoted}", check=False)
 
         if action == error_handler.Action.REQUEUE:
+            jobs_to_requeue.append(job)
+
+    if jobs_to_requeue:
+        # Wait up to 10 seconds for all jobs to natively requeue to PENDING
+        pending_jobs = set()
+        for _ in range(10):
+            for job in jobs_to_requeue:
+                if job.job_id in pending_jobs:
+                    continue
+                try:
+                    res = run(f"{lookup().scontrol} show job {job.job_id}", check=False)
+                    if res and "JobState=PENDING" in res.stdout:
+                        pending_jobs.add(job.job_id)
+                except Exception:
+                    pass
+            if len(pending_jobs) == len(jobs_to_requeue):
+                break
+            time.sleep(1)
+
+        for job in jobs_to_requeue:
             # To prevent the requeued job from immediately retrying and hammering
             # the GCP API during a stockout, we calculate a randomized backoff (e.g. 3-5 mins) and
             # explicitly delay the job's next evaluation via the StartTime parameter.
             delay_seconds = random.randint(180, 300)
-            backoff_time = (datetime.datetime.now() + datetime.timedelta(seconds=delay_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+            backoff_time = (datetime.now() + timedelta(seconds=delay_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
             log.info(f"Setting job {job.job_id} backoff: {delay_seconds}s (until {backoff_time})")
-            
-            # Wait up to 10 seconds for Slurm to natively requeue the job to PENDING
-            for _ in range(10):
-                try:
-                    res = subprocess.run([lookup().scontrol, "show", "job", str(job.job_id)], capture_output=True, text=True)
-                    if "JobState=PENDING" in res.stdout:
-                        break
-                except Exception:
-                    pass
-                time.sleep(1)
-            
             run(f"{lookup().scontrol} update JobId={job.job_id} StartTime={backoff_time}", check=False)
-    
-    
 
 
 def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str], is_flex: bool = False):
