@@ -53,10 +53,10 @@ window.onload=function(event) {
     <p>
       <b>Status:</b>
       {% if "c" in object.cloud_state or "d" in object.cloud_state %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
       {% endif %}
       {% if object.cloud_state == "m" %}
-          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
       {% endif %}
       {{ object.get_cloud_state_display }}
     </p>

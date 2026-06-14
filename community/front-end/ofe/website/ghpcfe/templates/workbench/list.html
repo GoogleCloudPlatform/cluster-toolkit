@@ -53,19 +53,19 @@
           <td>{{ workbench.cloud_zone }}</td>
           <td>
             {% if workbench.status == "c" or workbench.status == "i" or workbench.status == "t" %}
-            <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+            <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
             {% endif %}
             {% if workbench.status == "r" %}
-            <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+            <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
             {% endif %}
             {% if workbench.status == "n" %}
-            <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+            <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="Configured">
             {% endif %}
             {% if workbench.status == "d" %}
-            <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+            <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="Deleted">
             {% endif %}
             {% if workbench.status == "s" %}
-            <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
+            <img src="/static/img/status-paused.png" style="width:32px;height:32px;" alt="Paused">
             {% endif %}
             {{ workbench.get_status_display }}
           </td>

@@ -49,16 +49,16 @@
         <td>{{ vpc.cloud_id }}</td>
         <td>
           {% if "c" in vpc.cloud_state == "c" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
           {% endif %}
           {% if "i" in vpc.cloud_state or vpc.cloud_state == "m" %}
-          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
           {% endif %}
           {% if "n" in vpc.cloud_state %}
-          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="Configured">
           {% endif %}
           {% if "d" in vpc.cloud_state %}
-          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="Deleted">
           {% endif %}
           {{ vpc.get_cloud_state_display }}
         </td>

@@ -25,7 +25,7 @@
 
       <b>Status:</b>
       {% if workbench.status == "c" or workbench.status == "i" or workbench.status  == "t"  %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
       {% endif %}
       {{ object.get_status_display }}
     </p>
