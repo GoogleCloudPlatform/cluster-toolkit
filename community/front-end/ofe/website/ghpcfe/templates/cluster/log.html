@@ -57,7 +57,7 @@ window.onload=function(event) {
   <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
   <p><b>Status:</b>
     {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t" %}
-        <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
+        <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
     {% endif %}
     {{ object.get_status_display }}
   </p>

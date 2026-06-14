@@ -90,13 +90,13 @@
                 {% for build in image.builds %}
                     <div id="build-status-{{ build.build_id }}">
                         {% if build.status == "n" %}
-                            <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="Configured">
+                            <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
                         {% elif build.status == "i" %}
-                            <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
+                            <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
                         {% elif build.status == "s" %}
-                            <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
+                            <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
                         {% elif build.status == "f" %}
-                            <img src="/static/img/status-error.png" style="width:30px;height:20px;" alt="Error">
+                            <img src="/static/img/status-error.png" style="width:30px;height:20px;" alt="">
                         {% endif %}
                         {{ build.status|friendly_build_status }} ({{ build.build_id|slice:":8" }})
                     </div>

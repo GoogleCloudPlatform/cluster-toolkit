@@ -92,13 +92,13 @@
                 <td>{{ registry.get_repo_mode_display }}</td>
                 <td>
                     {% if registry.status == "i" %}
-                    <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
+                    <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
                     {% elif registry.status == "r" %}
-                    <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
+                    <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
                     {% elif registry.status == "n" %}
-                    <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="Configured">
+                    <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
                     {% elif registry.status == "d" %}
-                    <img src="/static/img/status-deleted.png" style="width:30px;height:32px;" alt="Deleted">
+                    <img src="/static/img/status-deleted.png" style="width:30px;height:32px;" alt="">
                     {% endif %}
                     {{ registry.get_status_display }}
                 </td>

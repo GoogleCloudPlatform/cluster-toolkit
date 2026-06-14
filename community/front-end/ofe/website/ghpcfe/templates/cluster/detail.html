@@ -76,7 +76,7 @@
 <p id="status-p">
   <b>Status:</b>
   {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" or cluster.status == "n" %}
-  <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
+  <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
   <script>
     setInterval(function () {
       $.ajax({
@@ -103,7 +103,7 @@
   {% endif %}
 
   {% if object.status == "r" %}
-  <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
+  <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
   {% endif %}
   {{ object.get_status_display }}
   {% if object.grafana_dashboard_url %}

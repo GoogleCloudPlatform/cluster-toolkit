@@ -54,19 +54,19 @@
         <td>{{ application.installed_architecture }}</td>        
         <td>
           {% if application.status == "p" or application.status == "q" or application.status == "i" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="Loading">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if application.status == "n" %}
-          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="Configured">
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
           {% endif %}
           {% if application.status == "r" %}
-          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="Ready">
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if application.status == "e" %}
-          <img src="/static/img/status-error.png" style="width:32px;height:20px;" alt="Error">
+          <img src="/static/img/status-error.png" style="width:32px;height:20px;" alt="">
           {% endif %}
           {% if application.status == "x" %}
-          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="Deleted">
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="">
           {% endif %}
           {% for key, value in status_messages.items %}
             {% if application.status == key %}
