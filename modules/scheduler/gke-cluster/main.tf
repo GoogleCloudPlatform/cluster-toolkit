@@ -401,7 +401,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "managed_machine_learning_diagnostics_config" {
-    for_each = var.enable_managed_ml_diagnostics ? [1] : []
+    for_each = var.enable_ml_diagnostics ? [1] : []
     content {
       enabled = true
     }
@@ -575,7 +575,7 @@ resource "kubernetes_namespace" "user_namespace" {
 }
 
 resource "kubernetes_labels" "workload_namespace_labels" {
-  count       = var.enable_managed_ml_diagnostics ? 1 : 0
+  count       = var.enable_ml_diagnostics ? 1 : 0
   api_version = "v1"
   kind        = "Namespace"
 
@@ -668,8 +668,8 @@ module "kubectl_apply" {
 resource "terraform_data" "validate_ml_diagnostics_version" {
   lifecycle {
     precondition {
-      condition     = !var.enable_managed_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
-      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version', or use the 'mldiagnostics' module instead."
+      condition     = !var.enable_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
 }
