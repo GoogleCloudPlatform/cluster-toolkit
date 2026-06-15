@@ -165,34 +165,34 @@ modules. For support with the underlying modules, see the instructions in the
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.11 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 5.11 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_accelerator_topology"></a> [accelerator\_topology](#input\_accelerator\_topology) | Specifies the shape of the Accelerator (GPU/TPU) slice. | `string` | `null` | no |
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | Configurations of additional disks to be included on the partition nodes. | <pre>list(object({<br/>    disk_name                           = optional(string)<br/>    device_name                         = optional(string)<br/>    disk_size_gb                        = optional(number)<br/>    disk_type                           = optional(string)<br/>    disk_labels                         = optional(map(string))<br/>    auto_delete                         = optional(bool)<br/>    boot                                = optional(bool)<br/>    disk_resource_manager_tags          = optional(map(string))<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>  }))</pre> | `[]` | no |
@@ -242,7 +242,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/>- RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/><br/>Must be a "SPECIFIC" reservation<br/>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/>- SUBBLOCK\_ID (Optional): The identifier for a specific reservation subblock within a block.<br/><br/>Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults. | `string` | `""` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the compute instances. | `string` | `null` | no |
@@ -259,6 +259,6 @@ modules. For support with the underlying modules, see the instructions in the
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_nodeset"></a> [nodeset](#output\_nodeset) | Details of the nodeset. Typically used as input to `schedmd-slurm-gcp-v6-partition`. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

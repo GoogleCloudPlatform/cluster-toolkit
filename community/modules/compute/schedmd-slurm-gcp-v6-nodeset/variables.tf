@@ -528,14 +528,15 @@ variable "reservation_name" {
 
     Formats:
     - Local Reservation: For reservations in the same project as the cluster (var.project_id), the name is sufficient:
-      RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+      RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]
     - Shared Reservation: For reservations shared from a different project, the full resource path is required:
-      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+      projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]
 
     Where:
     - HOST_PROJECT_ID: Project ID where the shared reservation was created.
     - RESERVATION_NAME: The name assigned to the specific reservation.
     - BLOCK_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+    - SUBBLOCK_ID (Optional): The identifier for a specific reservation subblock within a block.
 
     Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
   EOD
