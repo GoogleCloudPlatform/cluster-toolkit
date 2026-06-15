@@ -23,4 +23,4 @@
 
 python3 -m venv env
 source env/bin/activate
-pip3 install --pre torch torchvision torchaudio
+pip3 install --require-hashes -r requirements.txt
