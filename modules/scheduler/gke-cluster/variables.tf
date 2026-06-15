@@ -679,3 +679,21 @@ variable "enable_ml_diagnostics" {
   type        = bool
   default     = false
 }
+
+variable "network_policy" {
+  description = "Configuration for the network policy addon. Enabling network policy for clusters with GKE Dataplane V2 (ADVANCED_DATAPATH) is not supported; GKE Dataplane V2 automatically manages network policy enforcement."
+  type = object({
+    enabled  = bool
+    provider = optional(string, "PROVIDER_UNSPECIFIED")
+  })
+  default = {
+    enabled  = false
+    provider = "PROVIDER_UNSPECIFIED"
+  }
+}
+
+variable "enable_fqdn_network_policy" {
+  description = "Enable FQDN Network Policy on the cluster. This feature requires GKE Dataplane V2 to be enabled."
+  type        = bool
+  default     = false
+}
