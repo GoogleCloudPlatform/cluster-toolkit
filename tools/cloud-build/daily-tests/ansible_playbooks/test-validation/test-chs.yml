@@ -85,23 +85,27 @@
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
         set -e -u
-        chs configure bucket --name chs-results
+        chs configure storage gcs chs-results
       async: 120
       poll: 10
       changed_when: false
 
-    - name: "Run CHS standard suite"
+    - name: "Run CHS suites"
       ansible.builtin.shell: |
         set -e -u
-        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite standard
-      register: chs_run
+        chs run --scheduler {{ scheduler }} --machine-type {{ instance_type }} --suite {{ item }}
+      loop: "{{ chs_suites | default(['standard']) }}"
+      register: chs_runs
       async: 3000
       poll: 10
       changed_when: false
 
     - name: CHS run output
       ansible.builtin.debug:
-        var: chs_run.stdout_lines
+        msg: "{{ item.stdout }}"
+      loop: "{{ chs_runs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
   rescue:
   - name: CHS Test Failure

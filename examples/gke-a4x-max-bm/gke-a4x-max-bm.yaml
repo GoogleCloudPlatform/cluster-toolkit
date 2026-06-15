@@ -38,18 +38,17 @@ vars:
   # The number of nodes to be created
   static_node_count:
 
-  system_node_pool_disk_size_gb: 200
-  a4x_max_node_pool_disk_size_gb: 100
-  k8s_service_account_name: workload-identity-k8s-sa
-
   # The name of the compute engine reservation of A4X-Max nodes in the form of
   # <project>/<reservation-name>
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
+
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
   system_nodepool_machine_type: e2-standard-16
-
+  system_node_pool_disk_size_gb: 200
+  a4x_max_node_pool_disk_size_gb: 100
+  k8s_service_account_name: workload-identity-k8s-sa
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   asapd_lite_installer_path: $(ghpc_stage("./asapd-lite-installer.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -106,6 +105,7 @@ deployment_groups:
     settings:
       network_name: $(vars.deployment_name)-net-1
       ips_per_nat: 6
+      nic_type: "IDPF"
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -255,18 +255,7 @@ deployment_groups:
           hugepage_size_2m: 4096
       additional_networks:
         $(concat(
-          [{
-            network = gke-a4x-max-net-1.network_name,
-            subnetwork = gke-a4x-max-net-1.subnetwork_name,
-            subnetwork_project = vars.project_id,
-            nic_type = "IDPF",
-            queue_count = null,
-            network_ip = null,
-            stack_type = null,
-            access_config = [],
-            ipv6_access_config = [],
-            alias_ip_range = []
-          }],
+          gke-a4x-max-net-1.instance_additional_networks,
           gke-a4x-max-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]

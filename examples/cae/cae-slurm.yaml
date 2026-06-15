@@ -28,6 +28,9 @@
 #
 blueprint_name: cae-slurm-v6
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id: ## Set GCP Project ID Here ##
   deployment_name: cae-slurm-v6
   # check here for other regions with H3 deployments: https://cloud.google.com/compute/docs/regions-zones

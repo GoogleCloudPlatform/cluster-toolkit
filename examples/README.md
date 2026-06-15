@@ -17,8 +17,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
@@ -221,6 +221,16 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
+### [hpc-slurm-ha.yaml] ![community-badge]
+
+Creates a highly available (HA) Slurm cluster. This setup includes a primary controller
+and a backup controller to ensure control plane resilience. If the primary controller
+instance fails, the Slurm services can be failed over to the backup controller, minimizing
+downtime. This blueprint configures the necessary shared storage and network settings to
+support the HA configuration.
+
+[hpc-slurm-ha.yaml]: ./hpc-slurm-ha.yaml
+
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 
 This advanced blueprint creates a cluster with Slurm with several performance
@@ -304,35 +314,6 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
-
-### [hpc-slurm-static.yaml] ![core-badge]
-
-This example demonstrates how to create a partition with static compute nodes.
-See [Best practices for static compute nodes] for instructions on setting up a
-reservation and compact placement policy.
-
-Before deploying this example the following fields must be populated in the bluerpint:
-
-```yaml
-  project_id: ## Set GCP Project ID Here ##
-  static_reservation_name:  ## Set your reservation name here ##
-  static_reservation_machine_type: ## Machine must match reservation above ##
-  static_node_count: ## Must be <= number of reserved machines ##
-```
-
-For more resources on static compute nodes see the following cloud docs pages:
-
-* [About [Slurm] node types](https://cloud.google.com/cluster-toolkit/docs/slurm/node-types)
-* [Best practices for static compute nodes]
-* [Reconfigure a running cluster](https://cloud.google.com/cluster-toolkit/docs/slurm/reconfigure-cluster)
-* [Manage static compute nodes](https://cloud.google.com/cluster-toolkit/docs/slurm/manage-static-nodes)
-
-For a similar, more advanced, example which demonstrates static node
-functionality with GPUs, see the
-[ML Slurm A3 example](./machine-learning/README.md).
-
-[Best practices for static compute nodes]: https://cloud.google.com/cluster-toolkit/docs/slurm/static-nodes-best-practices
-[hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
@@ -604,6 +585,11 @@ The blueprint contains the following:
 * A builder `vm-instance` which performs the Spack install and then shuts down.
 * A `batch-job-template` that builds a Batch job to execute the WRF job.
 * A `batch-login` VM that can be used to test and submit the Batch job.
+
+> **_NOTE:_** **Multi-Node Architecture:** This blueprint provisions a single login node and a multi-node compute cluster (defaulting to 2 compute nodes).
+>
+> * **Login Node:** A single VM instance used to install software, stage data, and submit jobs.
+> * **Compute Nodes:** Dynamically provisioned when the job is submitted, based on the `batch-job` module settings.
 
 **Usage instructions:**
 
@@ -892,7 +878,7 @@ For this example the following is needed in the selected region:
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
-of an existing image, `hpc-rocky-linux-8` in the case of this example.
+of an existing image, `hpc-rocky-linux-9` in the case of this example.
 
 The blueprint contains 3 groups:
 

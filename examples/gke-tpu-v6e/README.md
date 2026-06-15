@@ -189,6 +189,16 @@ The [tpu-multislice.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit
 
     This should display `Global device count: 32` at the end of the logs which is the number of TPU chips across all of the nodes in a multi-host TPU slice.
 
+## Configuring ML Diagnostics
+
+This blueprint supports [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++). This managed service simplifies the observability of AI/ML workloads on GKE by providing integrated profiling, automated log analysis, and topology-aware monitoring directly within the Google Cloud Console.
+
+This feature is enabled by default and requires GKE version 1.35.0-gke.3065000 or higher. It can be configured using the `enable_ml_diagnostics` setting in the `gke-tpu-v6e-cluster` module. When enabled, the cluster is automatically configured with the necessary ML Diagnostics components, the designated user namespace is labeled, and the Workload Identity service accounts required by the ML Diagnostics SDK are provisioned.
+
+To leverage ML Diagnostics in your own workloads, you need to integrate the ML Diagnostics SDK within your job scripts. For detailed instructions on SDK integration and viewing your profiling data, please refer to the [Google Cloud ML Diagnostics documentation](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/sdk).
+
+To test ML Diagnostics with a sample workload, refer to the [ML Diagnostics Sample Workload Test README](./ml-diagnostics-sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
+
 ## Clean up
 
 To avoid recurring charges for the resources used on this page, clean up the resources provisioned by Cluster Toolkit, including the VPC networks and GKE cluster:

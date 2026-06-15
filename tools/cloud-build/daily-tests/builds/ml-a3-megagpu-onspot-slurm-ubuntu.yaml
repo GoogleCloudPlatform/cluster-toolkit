@@ -17,7 +17,8 @@ tags:
 - m.custom-image
 - m.startup-script
 - slurm6
-- m.filestore
+- m.managed-lustre
+- m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
@@ -62,14 +63,7 @@ steps:
     fi
     set -x
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml"
@@ -82,6 +76,7 @@ steps:
       ENABLE_SPOT="false"
       sed -i '/instance_labels:/,+1d' "$${SLURM_VARS_FILE}"
       sed -i '/enable_spot: true/d' "$${SLURM_VARS_FILE}"
+      sed -i '/a3mega_enable_spot_vm: true/d' "$${SLURM_VARS_FILE}"
     else
       echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
     fi

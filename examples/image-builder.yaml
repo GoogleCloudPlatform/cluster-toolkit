@@ -20,6 +20,9 @@
 blueprint_name: image-builder-v6
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: image-builder-v6-001
   region: us-central1
@@ -46,6 +49,7 @@ deployment_groups:
         destination: generate_hello.sh
         content: |
           #!/bin/sh
+          hostname \$(hostname -s)
           echo "Hello World" > /usr/local/hello.txt
 
 - group: packer
@@ -59,7 +63,9 @@ deployment_groups:
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-6-12-hpc-rocky-linux-8
+      # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+      # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+      source_image_family: slurm-gcp-6-12-hpc-rocky-linux-9
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)

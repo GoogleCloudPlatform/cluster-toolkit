@@ -34,7 +34,7 @@ output "slurm_bucket_path" {
 
 output "slurm_bucket_name" {
   description = "GCS Bucket name of Slurm cluster file storage."
-  value       = module.bucket[0].name
+  value       = module.slurm_files.bucket_name
 }
 
 output "slurm_bucket" {
@@ -47,10 +47,15 @@ output "slurm_bucket_dir" {
   value       = module.slurm_files.bucket_dir
 }
 
+output "munge_deprecation_warning" {
+  description = "Deprecation warning for legacy MUNGE authentication."
+  value       = var.enable_slurm_auth ? null : "WARNING: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please plan to migrate to Slurm Native Authentication by setting enable_slurm_auth: true. See docs/slurm-native-auth-migration-guide.md for the destroy-and-recreate migration steps."
+}
 
 output "instructions" {
   description = "Post deployment instructions."
   value       = <<-EOT
+    ${var.enable_slurm_auth ? "" : "DEPRECATION NOTICE: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please migrate to Slurm Native Authentication by setting enable_slurm_auth: true.\n"}
     To SSH to the controller (may need to add '--tunnel-through-iap'):
       gcloud compute ssh ${google_compute_instance_from_template.controller.self_link}
     

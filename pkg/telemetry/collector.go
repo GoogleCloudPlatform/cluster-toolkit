@@ -15,12 +15,9 @@
 package telemetry
 
 import (
-	"bytes"
 	"context"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -28,14 +25,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zclconf/go-cty/cty"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 var (
-	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
+	machineTypeSettings = []string{
+		"machine_type",                  // Usual setting for specifying machine type.
+		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
+		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -47,7 +46,7 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 		eventCmd:         cmd,
 		eventArgs:        args,
 		eventStartTime:   time.Now(),
-		blueprint:        getBlueprint(args),
+		blueprint:        getBlueprint(cmd, args),
 		installationMode: installationMode,
 		metadata:         make(map[string]string),
 	}
@@ -73,7 +72,6 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
-	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
@@ -84,14 +82,16 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	project_id := getKeyFromBlueprint("project_id", c.blueprint)
+
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
 		EventType:        "gclusterCLI",
 		EventName:        getCommandName(c.eventCmd),
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:    getProjectNumber(c.blueprint),
+		ProjectNumber:    getProjectNumber(project_id),
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
+		BillingAccountId: getBillingAccountId(project_id),
 		ReleaseVersion:   getReleaseVersion(),
 		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
@@ -193,13 +193,12 @@ func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
 }
 
-func getProjectNumber(bp config.Blueprint) string {
-	projectID := getKeyFromBlueprint("project_id", bp)
+func getProjectNumber(projectID string) string {
 	if projectID == "" {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
 	defer cancel()
 
 	projectName, err := fetchProjectName(ctx, projectID)
@@ -213,32 +212,32 @@ func getProjectNumber(bp config.Blueprint) string {
 func getMachineType(bp config.Blueprint) string {
 	var machineTypes []string
 	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
-	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 
-	evalAndAdd := func(key string, m config.Module) {
-		if m.Settings.Has(key) {
-			keyValue := m.Settings.Get(key)
-			// Evaluate the value to resolve expressions like $(vars.key)
-			evaluatedKey, err := bp.Eval(keyValue)
-			if err != nil {
-				return
+	for _, m := range config.GetAllBpModules(&bp) {
+		var mType string
+		// 1. Try explicit settings first
+		for _, key := range machineTypeSettings {
+			if t := extractExplicitMachineType(bp, key, m); t != "" {
+				mType = t
+				break
 			}
-			// Some module outputs or references carry cty marks, so we unmark them safely before use.
-			unmarkedKey, _ := evaluatedKey.Unmark()
-			if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-				mType := unmarkedKey.AsString()
-				if !seen[mType] {
-					machineTypes = append(machineTypes, mType)
-					seen[mType] = true
+		}
+		// 2. If no explicit setting, try defaults
+		if mType == "" {
+			for _, key := range machineTypeSettings {
+				if t := extractDefaultMachineType(key, m); t != "" {
+					mType = t
+					break
 				}
 			}
 		}
+
+		if mType != "" && !seen[mType] {
+			machineTypes = append(machineTypes, mType)
+			seen[mType] = true
+		}
 	}
 
-	for _, m := range modules {
-		evalAndAdd("machine_type", m)
-		evalAndAdd("node_type", m) // For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
-	}
 	return strings.Join(machineTypes, ",")
 }
 
@@ -306,46 +305,35 @@ func getTerraformVersion() string {
 	return version
 }
 
-func getBillingAccountId(bp config.Blueprint) string {
-	projectID := getKeyFromBlueprint("project_id", bp)
-	if projectID != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		billingAccount := getProjectBillingAccount(ctx, projectID)
-		if billingAccount != "" {
-			return strings.TrimPrefix(billingAccount, "billingAccounts/")
-		}
+func getBillingAccountId(projectID string) string {
+	if projectID == "" {
+		return ""
 	}
-	return ""
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	defer cancel()
+
+	billingAccount, err := getProjectBillingAccount(ctx, projectID)
+	if err != nil || billingAccount == "" {
+		return ""
+	}
+	return strings.TrimPrefix(billingAccount, "billingAccounts/")
 }
 
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
 func getIsGoogler() bool {
-	// Check Application Default Credentials (ADC) for Service Accounts.
-	// CI pipelines usually inject credentials via this environment variable.
-	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if adcPath != "" {
-		isInternal, err := checkADCForInternalUser(adcPath)
-		if err == nil && isInternal {
-			return true
-		}
+	// Check if the value is already cached in the local config file
+	if cached := config.GetIsGoogler(); cached != nil {
+		return *cached
 	}
 
-	// Fall back to checking the active gcloud authenticated account.
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/account")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
+	// Evaluate if the user is internal
+	isInternal := evaluateIsGoogler()
 
-	if err := cmd.Run(); err == nil && stdout.Len() > 0 {
-		email := strings.TrimSpace(stdout.String())
-		if isInternalEmail(email) {
-			return true
-		}
-	}
-	return false
+	// Cache the evaluated result in the local config for future commands
+	_ = config.SetIsGoogler(isInternal)
+
+	return isInternal
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.

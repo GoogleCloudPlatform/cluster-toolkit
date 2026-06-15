@@ -32,11 +32,15 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.13"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = ">= 2.10.0"
+    }
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.90.0"
+    module_name = "blueprints/terraform/hpc-toolkit:kubectl-apply/v1.93.0"
   }
 
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }

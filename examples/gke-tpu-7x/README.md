@@ -206,6 +206,16 @@ The `gke-tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workloa
 
    If successful, this should display `Global device count: 8` near the end of the logs. [`jax.device_count()`](https://cloud.google.com/tpu/docs/jax-pods) reports the number of devices your workload is actively using. It actually counts the TensorCores, GKE allocates by Chip. For more details refer to the [Appendix](#how-to-calculate-the-expected-device-count-after-running-the-gke-tpu-7x-jobyaml)
 
+## Configuring ML Diagnostics
+
+This blueprint supports [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++). This managed service simplifies the observability of AI/ML workloads on GKE by providing integrated profiling, automated log analysis, and topology-aware monitoring directly within the Google Cloud Console.
+
+This feature is enabled by default and requires GKE version 1.35.0-gke.3065000 or higher. It can be configured using the `enable_ml_diagnostics` setting in the `gke-tpu-7x-cluster` module. When enabled, the cluster is automatically configured with the necessary ML Diagnostics components, the designated user namespace is labeled, and the Workload Identity service accounts required by the ML Diagnostics SDK are provisioned.
+
+To leverage ML Diagnostics in your own workloads, you need to integrate the ML Diagnostics SDK within your job scripts. For detailed instructions on SDK integration and viewing your profiling data, please refer to the [Google Cloud ML Diagnostics documentation](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/sdk).
+
+To test ML Diagnostics with a sample workload, refer to the [ML Diagnostics Sample Workload Test README](../gke-tpu-v6e/ml-diagnostics-sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
+
 ## Clean up
 
 To avoid recurring charges for the resources used, clean up the resources provisioned by Cluster Toolkit:

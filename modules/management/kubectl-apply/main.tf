@@ -19,20 +19,34 @@ locals {
   cluster_name     = local.cluster_id_parts[5]
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-  kueue_config_content = join("\n---\n", compact([
-    try(var.kueue.enable_pathways_for_tpus, false) ? templatefile("${path.module}/kueue/pathways.yaml.tftpl", {
-      pathways_nodepool_name = "cpu-np"
-      pathways_cpu_quota     = 480
-      pathways_memory_quota  = "2000G"
-    }) : "",
-    var.kueue.config_path != null && var.kueue.config_path != "" ? (
-      endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
-      templatefile(var.kueue.config_path, var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}) :
-      file(var.kueue.config_path)
-    ) : ""
-  ]))
-  configure_kueue = local.install_kueue && (try(var.kueue.config_path, "") != "" || try(var.kueue.enable_pathways_for_tpus, false))
+  enable_pathways  = var.enable_pathways_for_tpus || var.kueue.enable_pathways_for_tpus
 
+  kueue_default_config_template = local.enable_pathways ? "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl" : ""
+
+  kueue_config_template_vars = merge(
+    {
+      pathways_cpu_quota    = 480
+      pathways_memory_quota = "2000G"
+      tpu_quota             = "999999" # Default high value if not set
+    },
+    var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
+  )
+
+  kueue_default_config_content = local.kueue_default_config_template != "" ? (
+    endswith(local.kueue_default_config_template, ".tftpl") ?
+    templatefile(local.kueue_default_config_template, local.kueue_config_template_vars) :
+    file(local.kueue_default_config_template)
+  ) : ""
+
+  kueue_user_config_content = var.kueue.config_path != "" && var.kueue.config_path != null ? (
+    endswith(var.kueue.config_path, ".tftpl") || (var.kueue.config_template_vars != null && length(var.kueue.config_template_vars) > 0) ?
+    templatefile(var.kueue.config_path, local.kueue_config_template_vars) :
+    file(var.kueue.config_path)
+  ) : ""
+
+  kueue_config_content = local.kueue_user_config_content != "" ? local.kueue_user_config_content : local.kueue_default_config_content
+
+  configure_kueue       = local.install_kueue && local.kueue_config_content != ""
   webhook_wait_duration = "60s"
 
   asapd_lite_config_content = (
@@ -53,9 +67,9 @@ locals {
     for name, cqs in local.merged_cluster_queues : {
       apiVersion = cqs[0].apiVersion
       kind       = cqs[0].kind
-      metadata   = cqs[0].metadata
+      metadata   = merge([for cq in cqs : cq.metadata if try(cq.metadata, null) != null]...)
       spec = merge(
-        try(cqs[0].spec, {}),
+        merge([for cq in cqs : cq.spec if try(cq.spec, null) != null]...),
         {
           resourceGroups = flatten([for cq in cqs : try(cq.spec.resourceGroups, [])])
         }
@@ -133,6 +147,7 @@ locals {
   })
 
   install_kueue             = try(var.kueue.install, false)
+  install_cert_manager      = try(var.cert_manager.install, false)
   install_jobset            = try(var.jobset.install, false)
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
@@ -269,6 +284,21 @@ module "install_jobset" {
     }) : ""
   ])
   depends_on = [var.gke_cluster_exists, module.configure_kueue]
+}
+
+module "install_cert_manager" {
+  source           = "./helm_install"
+  count            = local.install_cert_manager ? 1 : 0
+  wait_for_jobs    = true
+  timeout          = 1200
+  release_name     = "cert-manager"
+  chart_repository = "https://charts.jetstack.io"
+  chart_name       = "cert-manager"
+  chart_version    = var.cert_manager.version
+  namespace        = "cert-manager"
+  create_namespace = true
+  set_values       = [{ name = "installCRDs", value = "true", type = "auto" }]
+  depends_on       = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
 }
 
 module "install_nvidia_dra_driver" {
@@ -430,4 +460,20 @@ module "install_asapd_lite" {
       manifests = length(trimspace(local.asapd_lite_config_content)) > 0 ? [local.asapd_lite_config_content] : []
     })
   ]
+}
+
+resource "kubernetes_annotations" "sa_patch" {
+  for_each    = var.service_account_annotations
+  depends_on  = [var.gke_cluster_exists]
+  api_version = "v1"
+  kind        = "ServiceAccount"
+
+  metadata {
+    name      = each.key
+    namespace = each.value.namespace
+  }
+
+  annotations = {
+    "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
+  }
 }

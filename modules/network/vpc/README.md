@@ -163,7 +163,7 @@ limitations under the License.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
 
@@ -215,6 +215,7 @@ limitations under the License.
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-net") | `string` | `null` | no |
 | <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | A full or partial URL of the network profile to apply to this network.<br/>This field can be set only at resource creation time. For example, the<br/>following are valid URLs:<br/>- https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}<br/>- projects/{projectId}/global/networkProfiles/{network\_profile\_name}}<br/>When using a Mellanox network profile (contains 'roce'), if firewall\_rules is specified or enable\_internal\_traffic is true, an error will be thrown | `string` | `null` | no |
 | <a name="input_network_routing_mode"></a> [network\_routing\_mode](#input\_network\_routing\_mode) | The network routing mode (default "GLOBAL") | `string` | `"GLOBAL"` | no |
+| <a name="input_nic_type"></a> [nic\_type](#input\_nic\_type) | The NIC type to use for GKE additional networks output | `string` | `"GVNIC"` | no |
 | <a name="input_primary_subnetwork"></a> [primary\_subnetwork](#input\_primary\_subnetwork) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `map(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
@@ -232,6 +233,7 @@ limitations under the License.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_instance_additional_networks"></a> [instance\_additional\_networks](#output\_instance\_additional\_networks) | Network interface details compatible with gke-node-pool additional\_networks |
 | <a name="output_nat_ips"></a> [nat\_ips](#output\_nat\_ips) | External IPs of the Cloud NAT from which outbound internet traffic will arrive (empty list if no NAT is used) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | ID of the new VPC network |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |

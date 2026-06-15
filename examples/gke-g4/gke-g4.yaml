@@ -42,6 +42,7 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
+  version_prefix: "1.35."
 
 deployment_groups:
 - group: primary
@@ -126,25 +127,11 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-g4-net-1.network_name,
-            subnetwork=gke-g4-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-g4-net-1.instance_additional_networks)
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.35.3-gke.1522000"
-      release_channel: RAPID
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
         start_time: "2025-12-01T00:00:00Z"
@@ -166,21 +153,7 @@ deployment_groups:
         count: $(vars.num_gpus)
         gpu_driver_installation_config:
           gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-g4-net-1.network_name,
-            subnetwork=gke-g4-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-g4-net-1.instance_additional_networks)
     outputs: [instructions]
 
   # Install Kueue and Jobset

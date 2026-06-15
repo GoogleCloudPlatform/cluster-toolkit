@@ -17,6 +17,9 @@
 blueprint_name: ml-slurm-v6
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set project id here
   deployment_name: ml-example-v6
   region: asia-southeast1

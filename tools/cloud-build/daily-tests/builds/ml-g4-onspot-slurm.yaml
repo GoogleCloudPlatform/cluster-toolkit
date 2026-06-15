@@ -59,14 +59,7 @@ steps:
     fi
     set -x
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/examples/ml-slurm-g4.yaml"
@@ -77,6 +70,7 @@ steps:
       ENABLE_SPOT="false"
       sed -i '/instance_labels:/,+1d' "$${SLURM_VARS_FILE}"
       sed -i '/enable_spot: true/d' "$${SLURM_VARS_FILE}"
+      sed -i '/g4_enable_spot_vm: true/d' "$${SLURM_VARS_FILE}"
     else
       echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
     fi

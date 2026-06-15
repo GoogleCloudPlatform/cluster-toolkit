@@ -32,7 +32,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.27.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.34.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
@@ -181,6 +181,9 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 		}
 	}
 
+	if err := ExpandClusterAutoscaling(bp, m); err != nil {
+		return err
+	}
 	return validateModuleInputs(mp, *m, bp)
 }
 

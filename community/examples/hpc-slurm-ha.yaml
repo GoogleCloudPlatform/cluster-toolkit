@@ -1,0 +1,200 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpcslurmha
+
+vars:
+  project_id: # Set Project ID
+  deployment_name: hpcslurmha
+  region: us-central1
+  zone: us-central1-a
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: # Set Bucket Name Here
+
+deployment_groups:
+- group: primary
+  modules:
+  # Service Accounts
+  - id: controller_sa
+    source: modules/project/service-account
+    kind: terraform
+    settings:
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: controller-sa
+      description: Controller Service Account
+      display_name: Controller SA
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - storage.objectViewer
+      - logging.logWriter
+      - monitoring.metricWriter
+
+  - id: login_sa
+    source: modules/project/service-account
+    kind: terraform
+    settings:
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: login-sa
+      description: Login Node Service Account
+      display_name: Login SA
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: compute_sa
+    source: modules/project/service-account
+    kind: terraform
+    settings:
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      name: compute-sa
+      description: Compute Node Service Account
+      display_name: Compute SA
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  # Network
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-primary-subnet
+        subnet_region: $(vars.region)
+        subnet_ip: 10.80.0.0/24
+
+  # Filestore (Shared /home)
+  - id: home_fs
+    source: modules/file-system/filestore
+    settings:
+      network_id: $(network.network_id)
+      size_gb: 1024
+      zone: $(vars.zone)
+
+  # Debug Logic (Define Login Node properties, does not create VM directly)
+  - id: debug_nodes
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    settings:
+      name_prefix: debug
+      num_instances: 1
+      machine_type: n1-standard-2
+      service_account_email: $(login_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      enable_oslogin: true
+      subnetwork_self_link: $(network.subnetwork_self_link)
+      enable_login_public_ips: false # NO EXTERNAL IP
+
+  # Nodeset (Compute)
+  - id: compute_nodes
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    settings:
+      name: a2-nodes
+      node_count_dynamic_max: 4
+      node_count_static: 0
+      machine_type: n1-standard-2
+      service_account_email: $(compute_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      enable_oslogin: true
+      subnetwork_self_link: $(network.subnetwork_self_link)
+      enable_placement: false
+      network_storage:
+      - server_ip: $(home_fs.network_storage.server_ip)
+        remote_mount: $(home_fs.network_storage.remote_mount)
+        local_mount: /home
+        fs_type: nfs
+        mount_options: _netdev,hard,intr
+
+  # Partition
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodes]
+    settings:
+      partition_name: debug
+      is_default: true
+
+  # Filestore (Dedicated State for Controller)
+  - id: controller_fs
+    source: modules/file-system/filestore
+    settings:
+      network_id: $(network.network_id)
+      size_gb: 1024
+      zone: $(vars.zone)
+
+  # Cloud SQL (External DB)
+  - id: slurm_db
+    source: community/modules/database/slurm-cloudsql-federation
+    settings:
+      deployment_name: $(vars.deployment_name)
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      tier: db-f1-micro
+      sql_instance_name: $(vars.deployment_name)-db
+      network_id: $(network.network_id)
+      use_psc_connection: true
+      subnetwork_self_link: $(network.subnetwork_self_link)
+
+  # Controller (Custom HA Module)
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [debug_partition]
+    settings:
+      enable_backup_controller: true
+      slurm_cluster_name: hpcslurmha
+      backup_zone: us-central1-f
+      # Disable PD state disk, rely on /var/spool/slurm filestore share
+      controller_state_disk: null
+      cloudsql:
+        server_ip: $(slurm_db.cloudsql.server_ip)
+        user: $(slurm_db.cloudsql.user)
+        password: $(slurm_db.cloudsql.password)
+        db_name: $(slurm_db.cloudsql.db_name)
+      enable_controller_public_ips: false # NO EXTERNAL IP
+      machine_type: n1-standard-2
+      zone: $(vars.zone)
+      service_account_email: $(controller_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      enable_oslogin: true
+      subnetwork_self_link: $(network.subnetwork_self_link)
+      login_nodes: $(debug_nodes.login_nodes)
+      network_storage:
+      - server_ip: $(home_fs.network_storage.server_ip)
+        remote_mount: $(home_fs.network_storage.remote_mount)
+        local_mount: /home
+        fs_type: nfs
+        mount_options: _netdev,hard,intr
+      - server_ip: $(controller_fs.network_storage.server_ip)
+        remote_mount: $(controller_fs.network_storage.remote_mount)
+        local_mount: /var/spool/slurm
+        fs_type: nfs
+        mount_options: _netdev,hard,intr
+      login_network_storage:
+      - server_ip: $(home_fs.network_storage.server_ip)
+        remote_mount: $(home_fs.network_storage.remote_mount)
+        local_mount: /home
+        fs_type: nfs
+        mount_options: _netdev,hard,intr
+      static_ips:
+      - "10.80.0.10"
+      - "10.80.0.11"

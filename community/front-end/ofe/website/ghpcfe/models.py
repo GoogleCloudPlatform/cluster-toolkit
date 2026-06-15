@@ -816,6 +816,12 @@ class Cluster(CloudResource):
             "Enable containers for this cluster? Artifact Registry can be configured to store your containers."
         ),        
     )
+    enable_slurm_auth = models.BooleanField(
+        default=False,
+        help_text=(
+            "Enable Slurm native authentication instead of MUNGE."
+        ),
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)

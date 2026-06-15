@@ -46,23 +46,43 @@ locals {
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 
-  default_monitoring_component = [
-    "SYSTEM_COMPONENTS",
-    "POD",
-    "DAEMONSET",
-    "DEPLOYMENT",
-    "STATEFULSET",
-    "STORAGE",
-    "HPA",
-    "CADVISOR",
-    "KUBELET",
-    "JOBSET"
-  ]
+
 
   default_logging_component = [
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
   ]
+}
+
+# GKE Node Auto-Provisioning (NAP) locals
+locals {
+  autoscaling_enabled = var.cluster_autoscaling != null
+  autoscaling_config = local.autoscaling_enabled ? var.cluster_autoscaling : {
+    limits                        = []
+    service_account_email         = ""
+    oauth_scopes                  = []
+    autoprovisioning_disk_size_gb = null
+    autoprovisioning_disk_type    = null
+    autoprovisioning_auto_upgrade = null
+    autoprovisioning_auto_repair  = null
+    autoprovisioning_cpu_max      = null
+    autoprovisioning_memory_max   = null
+  }
+
+  has_autoscaling_limits = local.autoscaling_enabled && length(local.autoscaling_config.limits) > 0
+  nap_service_account    = local.autoscaling_enabled ? (local.autoscaling_config.service_account_email != "" ? local.autoscaling_config.service_account_email : local.sa_email) : null
+
+  # These maximum values represent massive upper bounds for the GKE Node Auto-Provisioning 
+  # and Cluster Autoscaler to allow essentially unlimited CPU and memory scaling for the cluster.
+  nap_cpu_max    = local.autoscaling_enabled ? local.autoscaling_config.autoprovisioning_cpu_max : null
+  nap_memory_max = local.autoscaling_enabled ? local.autoscaling_config.autoprovisioning_memory_max : null
+
+  user_provided_resource_types = local.has_autoscaling_limits ? [for limit in local.autoscaling_config.limits : limit.autoprovisioning_resource_type] : []
+
+  add_default_cpu    = local.autoscaling_enabled && !contains(local.user_provided_resource_types, "cpu")
+  add_default_memory = local.autoscaling_enabled && !contains(local.user_provided_resource_types, "memory")
+
+  machine_mappings = jsondecode(var.machine_mappings_json)
 }
 
 data "google_project" "project" {
@@ -76,7 +96,13 @@ data "google_container_engine_versions" "version_prefix_filter" {
 }
 
 locals {
-  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  latest_master_version  = data.google_container_engine_versions.version_prefix_filter.latest_master_version
+  latest_channel_version = lookup(data.google_container_engine_versions.version_prefix_filter.release_channel_latest_version, var.release_channel, local.latest_master_version)
+  master_version = var.min_master_version != null ? var.min_master_version : (
+    var.release_channel != "UNSPECIFIED" ? local.latest_channel_version : local.latest_master_version
+  )
+
+  mldiagnostics_minimum_version = "1.35.0-gke.3065000"
 }
 
 
@@ -84,6 +110,12 @@ module "slice_controller_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
   minimum_version = "1.35.0-gke.274500"
+}
+
+module "mldiagnostics_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = local.mldiagnostics_minimum_version
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -134,12 +166,50 @@ resource "google_container_cluster" "gke_cluster" {
 
   enable_shielded_nodes = var.enable_shielded_nodes
 
-  cluster_autoscaling {
-    # Controls auto provisioning of node-pools
-    enabled = false
+  dynamic "cluster_autoscaling" {
+    for_each = local.autoscaling_enabled ? [1] : []
+    content {
+      enabled = true
 
-    # Controls autoscaling algorithm of node-pools
-    autoscaling_profile = var.autoscaling_profile
+      # Controls autoscaling algorithm of node-pools
+      autoscaling_profile = var.autoscaling_profile
+
+      dynamic "resource_limits" {
+        for_each = concat(
+          local.add_default_cpu ? [{ type = "cpu", min = 1, max = local.nap_cpu_max }] : [],
+          local.add_default_memory ? [{ type = "memory", min = 1, max = local.nap_memory_max }] : [],
+          local.has_autoscaling_limits ? [
+            for limit in local.autoscaling_config.limits : {
+              type = lookup(
+                local.machine_mappings.machine_family_to_label_map,
+                length(split("-", limit.autoprovisioning_resource_type)) > 1 ? join("-", slice(split("-", limit.autoprovisioning_resource_type), 0, length(split("-", limit.autoprovisioning_resource_type)) - 1)) : limit.autoprovisioning_resource_type,
+                limit.autoprovisioning_resource_type
+              )
+              min = 0
+              max = limit.autoprovisioning_max_count
+            }
+          ] : []
+        )
+        content {
+          resource_type = resource_limits.value.type
+          minimum       = resource_limits.value.min
+          maximum       = resource_limits.value.max
+        }
+      }
+
+      auto_provisioning_defaults {
+        service_account = local.nap_service_account
+        oauth_scopes    = local.autoscaling_config.oauth_scopes
+
+        management {
+          auto_upgrade = local.autoscaling_config.autoprovisioning_auto_upgrade
+          auto_repair  = local.autoscaling_config.autoprovisioning_auto_repair
+        }
+
+        disk_size = local.autoscaling_config.autoprovisioning_disk_size_gb
+        disk_type = local.autoscaling_config.autoprovisioning_disk_type
+      }
+    }
   }
 
   datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
@@ -173,6 +243,10 @@ resource "google_container_cluster" "gke_cluster" {
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
+  vertical_pod_autoscaling {
+    enabled = var.enable_vertical_pod_autoscaling
   }
 
   dynamic "gateway_api_config" {
@@ -313,7 +387,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   monitoring_config {
-    enable_components = var.enable_dcgm_monitoring ? concat(local.default_monitoring_component, ["DCGM"]) : local.default_monitoring_component
+    enable_components = var.enable_dcgm_monitoring ? distinct(concat(var.monitoring_components, ["DCGM"])) : var.monitoring_components
     managed_prometheus {
       enabled = true
       auto_monitoring_config {
@@ -324,6 +398,13 @@ resource "google_container_cluster" "gke_cluster" {
 
   logging_config {
     enable_components = local.default_logging_component
+  }
+
+  dynamic "managed_machine_learning_diagnostics_config" {
+    for_each = var.enable_ml_diagnostics ? [1] : []
+    content {
+      enabled = true
+    }
   }
 }
 
@@ -481,12 +562,35 @@ resource "google_container_node_pool" "cpu_np" {
   }
 }
 
-data "google_client_config" "default" {}
+resource "kubernetes_namespace" "user_namespace" {
+  count = var.namespace != "default" ? 1 : 0
 
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
+  metadata {
+    name = var.namespace
+  }
+
+  depends_on = [
+    google_container_cluster.gke_cluster
+  ]
+}
+
+resource "kubernetes_labels" "workload_namespace_labels" {
+  count       = var.enable_ml_diagnostics ? 1 : 0
+  api_version = "v1"
+  kind        = "Namespace"
+
+  metadata {
+    name = var.namespace
+  }
+
+  labels = {
+    "managed-mldiagnostics-gke" = "true"
+  }
+
+  depends_on = [
+    google_container_cluster.gke_cluster,
+    kubernetes_namespace.user_namespace
+  ]
 }
 
 module "workload_identity" {
@@ -496,13 +600,19 @@ module "workload_identity" {
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
+  namespace           = var.namespace
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
+
+  providers = {
+    kubernetes = kubernetes
+  }
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_project.project,
-    google_container_cluster.gke_cluster
+    google_container_cluster.gke_cluster,
+    kubernetes_namespace.user_namespace
   ]
 }
 
@@ -553,4 +663,13 @@ module "kubectl_apply" {
       }
     ] : []
   )
+}
+
+resource "terraform_data" "validate_ml_diagnostics_version" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
+    }
+  }
 }
