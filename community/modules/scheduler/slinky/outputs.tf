@@ -58,6 +58,9 @@ output "instructions" {
       srun hostname
   EOT
   depends_on = [
-    helm_release.slurm
+    helm_release.cert_manager,
+    helm_release.slurm_operator,
+    helm_release.slurm,
+    helm_release.prometheus
   ]
 }
