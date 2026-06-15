@@ -17,7 +17,6 @@ tags:
 - m.custom-image
 - m.cloud-storage-bucket
 - m.pre-existing-network-storage
-- m.filestore
 - m.gpu-rdma-vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
@@ -80,6 +79,20 @@ steps:
       echo "INFO: Using $${SLURM_VARS_FILE} as it is for SPOT provisioning."
     fi
 
+    sed -i '/- id: private_service_access/,/use: \[a4high-slurm-net-0\]/d' $${BLUEPRINT}
+    sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
+ 
+    # Remove module references and flip flags
+    sed -i '/- homefs/d' $${BLUEPRINT}
+    sed -i '/install_managed_lustre/s/true/false/' $${BLUEPRINT}
+
+    # Remove orphaned variables to pass validation
+    sed -i '/lustre_instance_id:/d' $${BLUEPRINT}
+    sed -i '/lustre_size_gib:/d' $${BLUEPRINT}
+    sed -i '/per_unit_storage_throughput:/d' $${BLUEPRINT}
+
+
+    
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
