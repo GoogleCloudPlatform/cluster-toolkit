@@ -15,13 +15,26 @@
 package config
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
+
+//go:embed machine_mappings.json
+var MachineMappingsJSON []byte
+
+type MachineMappings struct {
+	MachineFamilyToLabelMap map[string]string `json:"machine_family_to_label_map"`
+	AcceleratorShorthandMap map[string]string `json:"accelerator_shorthand_map"`
+}
+
+var parsedMappings MachineMappings
 
 const defaultAcceleratorsPerVM = 4
 
@@ -138,6 +151,9 @@ func init() {
 	}
 	for _, v := range common3DTopologies {
 		valid3DShapes[v] = true
+	}
+	if err := json.Unmarshal(MachineMappingsJSON, &parsedMappings); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal machine_mappings.json: %v", err))
 	}
 }
 
@@ -537,4 +553,61 @@ func Is3DTorusTPU(machineType string) bool {
 		}
 	}
 	return false
+}
+
+// GetTPULimitKey resolves a machine type to its corresponding TPU limit key.
+func GetTPULimitKey(machineType string) string {
+	m := strings.ToLower(machineType)
+
+	var keys []string
+	for k := range parsedMappings.MachineFamilyToLabelMap {
+		if strings.Contains(k, "ct") || strings.Contains(k, "v") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+
+	for _, k := range keys {
+		if strings.Contains(m, k) {
+			return parsedMappings.MachineFamilyToLabelMap[k]
+		}
+	}
+	return "google.com/tpu"
+}
+
+// GetGPULimitKey resolves a machine type and accelerator label to its corresponding GPU limit key.
+func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
+	m := strings.ToLower(machineType)
+	accel := strings.ToLower(accelLabel)
+
+	var keys []string
+	for k := range parsedMappings.MachineFamilyToLabelMap {
+		if !strings.Contains(k, "ct") && !strings.Contains(k, "v") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+
+	for _, k := range keys {
+		if strings.Contains(m, k) {
+			return parsedMappings.MachineFamilyToLabelMap[k], nil
+		}
+	}
+
+	if strings.Contains(accel, "l4") {
+		return "nvidia-l4", nil
+	}
+	if strings.Contains(accel, "a100") {
+		return "nvidia-tesla-a100", nil
+	}
+
+	if accel != "" {
+		return "", fmt.Errorf("unknown accelerator label: %q", accelLabel)
+	}
+
+	return "nvidia.com/gpu", nil
 }

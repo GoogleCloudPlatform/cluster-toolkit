@@ -94,19 +94,8 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
-		if gkeNapProvisioning != "" {
-			validModels := []string{"on-demand", "spot", "reservation"}
-			if !slices.Contains(validModels, gkeNapProvisioning) {
-				return fmt.Errorf("invalid --gke-nap-provisioning %q. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
-			}
-
-			if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
-				return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
-			}
-		}
-		if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
-			return fmt.Errorf("--gke-nap-reservation is only valid when --gke-nap-provisioning=reservation")
+		if err := validateGKENAPFlags(); err != nil {
+			return err
 		}
 
 		priorityClassName = strings.ToLower(priorityClassName)
@@ -378,6 +367,24 @@ func validateBuildContext() error {
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
+	}
+	return nil
+}
+
+func validateGKENAPFlags() error {
+	gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
+	if gkeNapProvisioning != "" {
+		validModels := []string{"on-demand", "spot", "reservation"}
+		if !slices.Contains(validModels, gkeNapProvisioning) {
+			return fmt.Errorf("invalid --gke-nap-provisioning %q. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+		}
+
+		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
+			return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+		}
+	}
+	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
+		return fmt.Errorf("--gke-nap-reservation is only valid when --gke-nap-provisioning=reservation")
 	}
 	return nil
 }

@@ -255,3 +255,44 @@ func TestResolveTolerationsDoesNotMutateSharedArray(t *testing.T) {
 		t.Errorf("second call unexpectedly contains 'spot'. got1: %q, got2: %q", got1, got2)
 	}
 }
+
+func TestExtractShortReservationName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "my-res",
+			want:  "my-res",
+		},
+		{
+			input: "projects/my-project/reservations/my-res",
+			want:  "my-res",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "my-res",
+		},
+		{
+			input: "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "my-res",
+		},
+		{
+			input: "nvidia-gb300-1elqwl23xva0f/reservationBlocks/nvidia-gb300-1elqwl23xva0f-block-0001/reservationSubBlocks/nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
+			want:  "nvidia-gb300-1elqwl23xva0f",
+		},
+		{
+			input: "folders/my-folder/my-res",
+			want:  "my-res",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractShortReservationName(tt.input)
+			if got != tt.want {
+				t.Errorf("extractShortReservationName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

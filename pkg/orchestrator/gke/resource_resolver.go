@@ -302,11 +302,8 @@ func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions
 	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
-	if err != nil || count == 0 {
-		if err != nil {
-			return "", "", "", "", fmt.Errorf("failed to resolve machine type %s: %w", machineName, err)
-		}
-		return "", "", "", "", fmt.Errorf("failed to determine capacity for machine type %s", machineName)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to resolve machine type %s: %w", machineName, err)
 	}
 
 	if count > 0 {

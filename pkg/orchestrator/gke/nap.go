@@ -33,7 +33,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	resolvedType := config.ResolveMachineType(machineType)
 
 	if config.IsTPU(resolvedType) {
-		key := getTPULimitKey(resolvedType)
+		key := config.GetTPULimitKey(resolvedType)
 		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0, nil
 	}
 
@@ -42,7 +42,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 		return false, err
 	}
 	if len(cap.Accelerators) > 0 {
-		key, err := getGPULimitKey(resolvedType, cap.Accelerators[0].Type)
+		key, err := config.GetGPULimitKey(resolvedType, cap.Accelerators[0].Type)
 		if err != nil {
 			return false, err
 		}
@@ -50,72 +50,6 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	}
 
 	return g.napLimits["cpu"] > 0, nil
-}
-
-func getTPULimitKey(machineType string) string {
-	m := strings.ToLower(machineType)
-	if strings.Contains(m, "v6e") || strings.Contains(m, "ct6e") {
-		return "tpu-v6e-slice"
-	}
-	if strings.Contains(m, "v5litepod") || strings.Contains(m, "v5e") || strings.Contains(m, "ct5lp") {
-		return "tpu-v5e-slice"
-	}
-	if strings.Contains(m, "v5p") || strings.Contains(m, "ct5p") {
-		return "tpu-v5p-slice"
-	}
-	if strings.Contains(m, "v4") || strings.Contains(m, "ct4p") {
-		return "tpu-v4-podslice"
-	}
-	return "google.com/tpu"
-}
-
-func getGPULimitKey(machineType string, accelLabel string) (string, error) {
-	m := strings.ToLower(machineType)
-	accel := strings.ToLower(accelLabel)
-	if strings.Contains(m, "g2-standard") || strings.Contains(accel, "l4") {
-		return "nvidia-l4", nil
-	}
-	if strings.Contains(m, "a3-highgpu") {
-		return "nvidia-h100-80gb", nil
-	}
-	if strings.Contains(m, "a3-megagpu") {
-		return "nvidia-h100-mega-80gb", nil
-	}
-	if strings.Contains(m, "a3-ultragpu") {
-		return "nvidia-h200-141gb", nil
-	}
-	if strings.Contains(m, "a4-highgpu") {
-		return "nvidia-b200", nil
-	}
-	if strings.Contains(m, "a4x-highgpu") {
-		return "nvidia-gb200", nil
-	}
-	if strings.Contains(m, "a2-high") || strings.Contains(m, "a2-mega") || strings.Contains(m, "a2-ultra") || strings.Contains(accel, "a100") {
-		return "nvidia-tesla-a100", nil
-	}
-	if accel != "" {
-		return "", fmt.Errorf("unknown accelerator label: %q", accelLabel)
-	}
-	return "nvidia.com/gpu", nil
-}
-
-func matchStaticNodePool(np gkeJobNodePool, job *orchestrator.JobDefinition) bool {
-	if !strings.EqualFold(np.Config.MachineType, job.MachineType) {
-		return false
-	}
-	switch job.GKENAPProvisioning {
-	case "spot":
-		return np.Config.Labels["cloud.google.com/gke-provisioning"] == "spot"
-	case "on-demand":
-		val := np.Config.Labels["cloud.google.com/gke-provisioning"]
-		return val == "standard" || val == ""
-	case "reservation":
-		shortResName := extractShortReservationName(job.GKENAPReservation)
-		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
-		return lblVal != "" && extractShortReservationName(lblVal) == shortResName
-	default:
-		return false
-	}
 }
 
 func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
@@ -133,20 +67,7 @@ func (g *GKEOrchestrator) getConfiguredLimitsError(computeType string) error {
 		}
 	}
 	sort.Strings(configuredLimits)
-	return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits, and no matching static node pools exist. Configured limits on cluster: %s", computeType, strings.Join(configuredLimits, ", "))
-}
-
-func getSubmissionRejectError(job *orchestrator.JobDefinition) error {
-	switch job.GKENAPProvisioning {
-	case "spot":
-		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=spot' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Standard/On-Demand.\nRemediation: Please re-submit your job without the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of Spot resources", job.ComputeType)
-	case "on-demand":
-		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=on-demand' option for compute type %q, but the cluster's static node pools for this hardware are configured exclusively as Spot.\nRemediation: Please re-submit your job with the '--gke-nap-provisioning=spot' setting, or enable Node Auto-Provisioning (NAP) limits for this hardware on your cluster to allow dynamic scale-up of On-Demand resources", job.ComputeType)
-	case "reservation":
-		return fmt.Errorf("workload submission rejected. You requested the '--gke-nap-provisioning=reservation' with reservation name %q for compute type %q, but no static node pools matching this hardware are configured to consume this reservation", job.GKENAPReservation, job.ComputeType)
-	default:
-		return fmt.Errorf("workload submission rejected. No active node pools found matching your consumption model constraints")
-	}
+	return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits. Configured limits on cluster: %s", computeType, strings.Join(configuredLimits, ", "))
 }
 
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
@@ -165,26 +86,11 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 	if err != nil {
 		return err
 	}
-	if isNAP {
-		return nil // Validated: GKE NAP can dynamically autoprovision this machine type
-	}
-
-	// Fallback: Check if there is a matching static node pool that satisfies the requested consumption model.
-	matchedNodePoolFound := false
-	for _, np := range g.clusterDesc.NodePools {
-		if strings.EqualFold(np.Config.MachineType, job.MachineType) {
-			matchedNodePoolFound = true
-			if matchStaticNodePool(np, job) {
-				return nil // Valid static node pool path exists
-			}
-		}
-	}
-
-	if !matchedNodePoolFound {
+	if !isNAP {
 		return g.getConfiguredLimitsError(job.ComputeType)
 	}
 
-	return getSubmissionRejectError(job)
+	return nil
 }
 
 func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
@@ -251,10 +157,34 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 	return g.indentYaml(string(b), 16), nil
 }
 
+// extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
+// It handles standard URIs, simple names, and paths containing reservationBlocks/reservationSubBlocks.
+// E.g.,
+// - "my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
+// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
 func extractShortReservationName(resName string) string {
-	if strings.Contains(resName, "/") {
-		parts := strings.Split(resName, "/")
-		return parts[len(parts)-1]
+	if !strings.Contains(resName, "/") {
+		return resName
 	}
-	return resName
+
+	parts := strings.Split(resName, "/")
+
+	// Case 1: Full GCP URI containing ".../reservations/RESERVATION_NAME/..."
+	for i, part := range parts {
+		if part == "reservations" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+
+	// Case 2: Path containing ".../reservationBlocks/..." but not "reservations" prefix
+	for i, part := range parts {
+		if part == "reservationBlocks" && i > 0 {
+			return parts[i-1]
+		}
+	}
+
+	// Fallback: Return the last segment
+	return parts[len(parts)-1]
 }

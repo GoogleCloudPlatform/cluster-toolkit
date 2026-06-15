@@ -685,7 +685,8 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				MachineType:        "n2-standard-4",
 				GKENAPProvisioning: "spot",
 			},
-			wantErr: false,
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
 		},
 		{
 			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
@@ -707,7 +708,7 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				GKENAPProvisioning: "spot",
 			},
 			wantErr:     true,
-			expectedErr: "configured exclusively as Standard/On-Demand",
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
 		},
 		{
 			name:       "NAP Cluster - Machine type covered by generic TPU limit fallback",
