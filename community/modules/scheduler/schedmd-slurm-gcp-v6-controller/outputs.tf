@@ -19,7 +19,7 @@ output "slurm_cluster_name" {
 
 output "slurm_controller_instance" {
   description = "Compute instance of controller node"
-  value       = var.enable_backup_controller ? null : google_compute_instance_from_template.controller[0]
+  value       = one(google_compute_instance_from_template.controller)
 }
 
 output "slurm_login_instances" {
@@ -57,7 +57,7 @@ output "instructions" {
   value       = <<-EOT
     ${var.enable_slurm_auth ? "" : "DEPRECATION NOTICE: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please migrate to Slurm Native Authentication by setting enable_slurm_auth: true.\n"}
     To SSH to the controller (may need to add '--tunnel-through-iap'):
-      gcloud compute ssh ${var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : google_compute_instance_from_template.controller[0].self_link}
+      gcloud compute ssh ${var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : one(google_compute_instance_from_template.controller[*].self_link)}
     
     If you are using cloud ops agent with this deployment,
     you can use the following command to see the logs for the entire cluster or any particular VM host:
