@@ -214,7 +214,7 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    var.kueue.controller_cpu != null || var.kueue.controller_memory != null || var.kueue.controller_replicas != null || local.enable_slicing ? yamlencode({
+    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
       controllerManager = merge(
         local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
         local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
@@ -281,7 +281,7 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slicing ? yamlencode({
+    local.jobset_controller_cpu != null || local.jobset_controller_memory != null ? yamlencode({
       controller = {
         resources = {
           requests = merge(
