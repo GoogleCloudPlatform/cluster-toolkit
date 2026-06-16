@@ -17,7 +17,7 @@ set -ex
 REQ_PYTHON3_VERSION=9
 
 # Path to hashed requirements file
-REQ_FILE="install_ansible_requirements.txt"
+REQ_FILE="$(dirname "$0")/install_ansible_requirements.txt"
 
 apt_wait() {
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
@@ -198,8 +198,8 @@ main() {
 
 	ansible_version=""
 
-	if command -v ansible-playbook 1>/dev/null; then
-		ansible_version=$(ansible-playbook --version 2>/dev/null | sed -nr 's/^ansible-playbook.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
+	if [ -f "${venv_path}/bin/ansible-playbook" ]; then
+		ansible_version=$("${venv_path}/bin/ansible-playbook" --version 2>/dev/null | sed -nr 's/^ansible-playbook.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
 		echo "Installed ansible version: ${ansible_version}"
 	fi
 

@@ -109,7 +109,7 @@ install_sqlite
 
 python3.12 -m ensurepip --upgrade
 
-pip3.12 install --require-hashes -r requirements.txt
+pip3.12 install --require-hashes -r "$(dirname "$0")/requirements.txt"
 
 # Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
