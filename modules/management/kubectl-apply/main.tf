@@ -494,7 +494,12 @@ module "install_slice_controller" {
 
   values_yaml = [
     yamlencode({
-      manifests = [file("${path.module}/kueue/slice-controller.yaml")]
+      manifests = [templatefile("${path.module}/kueue/slice-controller.yaml.tftpl", {
+        cpu_request    = var.kueue.slice_controller_cpu_request
+        memory_request = var.kueue.slice_controller_memory_request
+        cpu_limit      = var.kueue.slice_controller_cpu_limit
+        memory_limit   = var.kueue.slice_controller_memory_limit
+      })]
     })
   ]
 

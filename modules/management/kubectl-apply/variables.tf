@@ -155,6 +155,10 @@ variable "kueue" {
     controller_cpu                  = optional(string, null)
     controller_memory               = optional(string, null)
     controller_replicas             = optional(number, null)
+    slice_controller_cpu_request    = optional(string, "8000m")
+    slice_controller_memory_request = optional(string, "16Gi")
+    slice_controller_cpu_limit      = optional(string, "12000m")
+    slice_controller_memory_limit   = optional(string, "32Gi")
   })
   default = {}
 }

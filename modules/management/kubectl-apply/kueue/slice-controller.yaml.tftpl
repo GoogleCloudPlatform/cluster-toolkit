@@ -371,11 +371,11 @@ spec:
           periodSeconds: 10
         resources:
           limits:
-            cpu: 12000m
-            memory: 32Gi
+            cpu: ${cpu_limit}
+            memory: ${memory_limit}
           requests:
-            cpu: 8000m
-            memory: 16Gi
+            cpu: ${cpu_request}
+            memory: ${memory_request}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
