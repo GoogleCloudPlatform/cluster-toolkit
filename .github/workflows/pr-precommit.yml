@@ -32,7 +32,7 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -41,22 +41,22 @@ jobs:
         dotnet: true
         haskell: true
         large-packages: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         # internal Python tests require Python 3.12
         python-version: '3.12'
         check-latest: true
         cache: 'pip'
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.25'
         check-latest: true
-    - uses: hashicorp/setup-terraform@v3
+    - uses: hashicorp/setup-terraform@v4
       with:
         terraform_version: "1.12.2"
         terraform_wrapper: false
     - run: make install-dev-deps
-    - uses: terraform-linters/setup-tflint@v4
+    - uses: terraform-linters/setup-tflint@v6
       with:
         tflint_version: v0.49.0
     - run: tflint --init
@@ -69,7 +69,7 @@ jobs:
   pre-commit-highest-dependencies:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -78,23 +78,23 @@ jobs:
         dotnet: true
         haskell: true
         large-packages: true
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         # the slurm-files Python requirements.txt requires updating
         # to enable 3.12+ compatibility
         python-version: '3.11'
         check-latest: true
         cache: 'pip'
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v6
       with:
-        go-version: '1.24'
+        go-version: '1.25'
         check-latest: true
-    - uses: hashicorp/setup-terraform@v3
+    - uses: hashicorp/setup-terraform@v4
       with:
         terraform_version: "1.12.2"
         terraform_wrapper: false
     - run: make install-dev-deps
-    - uses: terraform-linters/setup-tflint@v4
+    - uses: terraform-linters/setup-tflint@v6
       with:
         tflint_version: v0.49.0
     - run: tflint --init
