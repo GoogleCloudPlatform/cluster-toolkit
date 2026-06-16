@@ -71,6 +71,10 @@ resource "terraform_data" "kueue_validations" {
       condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
       error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
     }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
+      error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
   }
 }
 

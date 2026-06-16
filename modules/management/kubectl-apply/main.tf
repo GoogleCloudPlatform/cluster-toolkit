@@ -510,5 +510,5 @@ module "install_slice_controller" {
     })
   ]
 
-  depends_on = [var.gke_cluster_exists, module.configure_kueue]
+  depends_on = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
 }
