@@ -1265,6 +1265,7 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 	}
 
 	versions := make([]string, 0)
+	err := ""
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		// 1. Check for min_master_version safely
 		if version := getEvaluatedString("min_master_version", m, bp); version != "" {
@@ -1275,7 +1276,10 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 		// 2. Check for version_prefix safely
 		if versionPrefix := getEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
 			if releaseChannel := getEvaluatedString("release_channel", m, bp); releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
-				latestVersion, _ := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
+				latestVersion, e := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
+				if e != nil {
+					err = err + e.Error()
+				}
 				if latestVersion != "" {
 					versions = append(versions, latestVersion)
 				} else {
@@ -1286,8 +1290,10 @@ func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
 			}
 		}
 	})
-
-	return versions, nil
+	if err == "" {
+		return versions, nil
+	}
+	return versions, fmt.Errorf("%s", err)
 }
 
 // Allow overriding the fetch function for testing ResolveGKEVersions
