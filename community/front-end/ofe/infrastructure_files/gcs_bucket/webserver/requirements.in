@@ -4,3 +4,4 @@ google-cloud-pubsub
 pyyaml
 addict
 httplib2
+cryptography==48.0.1
