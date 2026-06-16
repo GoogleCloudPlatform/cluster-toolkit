@@ -67,13 +67,20 @@ resource "google_lustre_instance" "lustre_instance" {
 
   filesystem                  = var.remote_mount
   capacity_gib                = var.size_gib
-  per_unit_storage_throughput = var.per_unit_storage_throughput
+  per_unit_storage_throughput = var.enable_dynamic_tier ? 0 : var.per_unit_storage_throughput
 
   labels  = local.labels
   network = var.network_id
 
   gke_support_enabled = var.gke_support_enabled
   kms_key             = var.kms_key == "" ? null : var.kms_key
+
+  dynamic "dynamic_tier_options" {
+    for_each = var.enable_dynamic_tier ? [1] : []
+    content {
+      mode = "DEFAULT_CACHE"
+    }
+  }
 
   timeouts {
     create = "1h"

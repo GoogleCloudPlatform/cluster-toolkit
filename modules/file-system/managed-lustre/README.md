@@ -151,6 +151,65 @@ to 6988.
 > 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
 > compatibility must be built into the Slurm image.
 
+### Example - Dynamic Tier
+
+To deploy a Managed Lustre instance with Dynamic Tier enabled, you must use a **pre-existing VPC**. This is because the `DynamicTierCapacity` quota is scoped to a specific VPC network name, and you must request this quota before running the deployment.
+
+For the Dynamic Tier, the minimum capacity is currently **472,000 GiB**.
+
+```yaml
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: <existing_network_name>
+      subnetwork_name: <existing_subnetwork_name>
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 22
+
+  - id: lustre
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 472000 # Minimum size for Dynamic Tier
+      enable_dynamic_tier: true
+```
+
+> [!NOTE]
+> If your pre-existing VPC already has Private Service Access (PSA) configured, you can omit the `private-service-access` module from the blueprint and instead define the peering connection name manually in the `lustre` module settings:
+>
+> ```yaml
+>       private_vpc_connection_peering: <peering_connection_name> # e.g. "servicenetworking.googleapis.com"
+> ```
+
+<p>
+
+> [!IMPORTANT]
+> **Dynamic Tier Prerequisites & Constraints:**
+>
+> 1. **VPC-Scoped Quota:** The Dynamic Tier requires requesting `DynamicTierCapacity` quota (which defaults to 0). This quota is scoped to a specific project, zone, and VPC name. Because of this, dynamically created VPCs are not recommended as you cannot request quota before the VPC is created.
+>    * Refer to the official guide on how to [Request Additional Storage Capacity Quota](https://cloud.google.com/managed-lustre/docs/quotas#request_additional_storage_capacity_quota).
+>    * You can request a quota increase using the following `gcloud` command:
+>
+>      ```bash
+>      gcloud beta quotas preferences create \
+>          --service=lustre.googleapis.com \
+>          --project=YOUR_PROJECT_ID \
+>          --quota-id=DynamicTierCapacity \
+>          --preferred-value=PREFERRED_VALUE_IN_GIB \
+>          --dimensions=zone=ZONE,network_name=VPC_NETWORK_NAME \
+>          --justification="Requesting Dynamic Tier capacity for Cluster Toolkit deployment"
+>      ```
+>
+> 2. **Minimum Size:** The current minimum capacity is **472,000 GiB** (and must be in multiples of 472,000 GiB).
+> 3. **IP Address Changes in GKE:** Managed Lustre assigns IP addresses dynamically. If the Lustre instance is recreated (e.g. due to size updates), it will get a new IP address. Since Kubernetes `PersistentVolume` (PV) specs are immutable, you must manually delete the old PV and PVC resources in GKE before redeploying.
+
 ### Example - CMEK
 
 To create a Managed Lustre instance with a Customer-Managed Encryption Key (CMEK), use the `kms_key` option.
@@ -269,14 +328,14 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.27.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.27.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.27.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.27.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -298,6 +357,7 @@ No modules.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the Lustre instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
+| <a name="input_enable_dynamic_tier"></a> [enable\_dynamic\_tier](#input\_enable\_dynamic\_tier) | Set to true to enable Dynamic Tier for the Lustre instance. | `bool` | `false` | no |
 | <a name="input_gke_support_enabled"></a> [gke\_support\_enabled](#input\_gke\_support\_enabled) | Set to true to create Managed Lustre instance with GKE compatibility.<br/>Note: This does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | `bool` | `false` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to managed lustre. Data will<br/>be imported to the local\_mount directory. Changing this value will not<br/>trigger a redeployment, to prevent data deletion. | `string` | `null` | no |
 | <a name="input_kms_key"></a> [kms\_key](#input\_kms\_key) | The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project\_id>/locations/<location>/keyRings/<key\_ring>/cryptoKeys/<key\_name> | `string` | `null` | no |
