@@ -101,7 +101,7 @@ locals {
     for index, manifest in local.enabled_manifests : index => manifest
     if try(manifest.source, null) != null &&
     !contains(keys(local.url_manifests), index) &&
-    (endswith(manifest.source, "/") || (!try(fileexists(manifest.source), true) && can(fileset(manifest.source, "*"))))
+    (endswith(manifest.source, "/") || (!fileexists(manifest.source) && can(fileset(manifest.source, "*"))))
   }
 
   # Pre-calculate normalized names for each manifest
@@ -109,7 +109,7 @@ locals {
     for index, manifest in local.enabled_manifests : index =>
     trim(replace(lower(
       (try(manifest.name, null) != null ? manifest.name :
-        "${substr((try(manifest.source, "") != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
+        "${substr((manifest.source != null && manifest.source != "") ? replace(basename(manifest.source), "/(\\.(tftpl|yaml|yml))+$/", "") : "${var.module_id}-raw", 0, 30)}-${substr(sha1(jsonencode(manifest)), 0, 7)}"
       )
     ), "/[^a-z0-9-]+/", "-"), "-")
   }
