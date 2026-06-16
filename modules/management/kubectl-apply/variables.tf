@@ -67,6 +67,10 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
     }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
+      error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
   }
 }
 
