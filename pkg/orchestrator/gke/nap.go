@@ -121,10 +121,21 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 					continue
 				}
 				seenTaints[t.Key] = true
+				var effect corev1.TaintEffect
+				switch strings.ToUpper(t.Effect) {
+				case "NO_SCHEDULE":
+					effect = corev1.TaintEffectNoSchedule
+				case "PREFER_NO_SCHEDULE":
+					effect = corev1.TaintEffectPreferNoSchedule
+				case "NO_EXECUTE":
+					effect = corev1.TaintEffectNoExecute
+				default:
+					effect = corev1.TaintEffect(t.Effect)
+				}
 				tolerations = append(tolerations, corev1.Toleration{
 					Key:      t.Key,
 					Value:    t.Value,
-					Effect:   corev1.TaintEffect(t.Effect),
+					Effect:   effect,
 					Operator: corev1.TolerationOpEqual,
 				})
 			}

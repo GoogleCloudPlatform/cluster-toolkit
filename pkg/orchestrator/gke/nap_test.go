@@ -180,6 +180,58 @@ func TestResolveReservationTolerations(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "Reservation with matching node pool, converts GKE NO_SCHEDULE taint to Kubernetes NoSchedule",
+			machineType:     "a3-highgpu-8g",
+			reservationName: "my-res-6",
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "a3-highgpu-8g",
+						Labels: map[string]string{
+							"cloud.google.com/reservation-name": "my-res-6",
+						},
+						Taints: []gkeTaint{
+							{
+								Key:    "cloud.google.com/reservation-name",
+								Value:  "my-res-6",
+								Effect: "NO_SCHEDULE",
+							},
+							{
+								Key:    "custom-taint-prefer",
+								Value:  "prefer-val",
+								Effect: "PREFER_NO_SCHEDULE",
+							},
+							{
+								Key:    "custom-taint-execute",
+								Value:  "execute-val",
+								Effect: "NO_EXECUTE",
+							},
+						},
+					},
+				},
+			},
+			wantTolerations: []corev1.Toleration{
+				{
+					Key:      "cloud.google.com/reservation-name",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "my-res-6",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+				{
+					Key:      "custom-taint-prefer",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "prefer-val",
+					Effect:   corev1.TaintEffectPreferNoSchedule,
+				},
+				{
+					Key:      "custom-taint-execute",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "execute-val",
+					Effect:   corev1.TaintEffectNoExecute,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
