@@ -135,3 +135,9 @@ variable "kms_key" {
   type        = string
   default     = null
 }
+
+variable "enable_dynamic_tier" {
+  description = "Set to true to enable Dynamic Tier for the Lustre instance."
+  type        = bool
+  default     = false
+}
