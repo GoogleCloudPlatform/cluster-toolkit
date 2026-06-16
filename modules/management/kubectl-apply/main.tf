@@ -159,6 +159,13 @@ locals {
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
   install_asapd_lite        = try(var.asapd_lite.install, false)
+
+  jobset_controller_cpu    = try(var.jobset.controller_cpu, null) != null ? var.jobset.controller_cpu : (local.enable_slicing ? "4" : null)
+  jobset_controller_memory = try(var.jobset.controller_memory, null) != null ? var.jobset.controller_memory : (local.enable_slicing ? "16Gi" : null)
+
+  kueue_controller_cpu      = try(var.kueue.controller_cpu, null) != null ? var.kueue.controller_cpu : (local.enable_slicing ? "16" : null)
+  kueue_controller_memory   = try(var.kueue.controller_memory, null) != null ? var.kueue.controller_memory : (local.enable_slicing ? "64Gi" : null)
+  kueue_controller_replicas = try(var.kueue.controller_replicas, null) != null ? var.kueue.controller_replicas : (local.enable_slicing ? 3 : null)
 }
 
 data "http" "manifest_from_url" {
@@ -207,19 +214,19 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    var.kueue.controller_cpu != null || var.kueue.controller_memory != null || var.kueue.controller_replicas != null ? yamlencode({
+    var.kueue.controller_cpu != null || var.kueue.controller_memory != null || var.kueue.controller_replicas != null || local.enable_slicing ? yamlencode({
       controllerManager = merge(
-        var.kueue.controller_replicas != null ? { replicas = var.kueue.controller_replicas } : {},
-        var.kueue.controller_cpu != null || var.kueue.controller_memory != null ? {
+        local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
+        local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
           manager = {
             resources = {
               requests = merge(
-                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
-                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
               )
               limits = merge(
-                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
-                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
               )
             }
           }
@@ -274,16 +281,16 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_cpu != null || var.jobset.controller_memory != null ? yamlencode({
+    var.jobset.controller_cpu != null || var.jobset.controller_memory != null || local.enable_slicing ? yamlencode({
       controller = {
         resources = {
           requests = merge(
-            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
-            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+            local.jobset_controller_cpu != null ? { cpu = local.jobset_controller_cpu } : {},
+            local.jobset_controller_memory != null ? { memory = local.jobset_controller_memory } : {}
           )
           limits = merge(
-            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
-            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+            local.jobset_controller_cpu != null ? { cpu = local.jobset_controller_cpu } : {},
+            local.jobset_controller_memory != null ? { memory = local.jobset_controller_memory } : {}
           )
         }
       }
