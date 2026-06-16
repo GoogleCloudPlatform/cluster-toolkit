@@ -22,7 +22,7 @@ locals {
   input_reservation_projects = [for r in try(var.reservation_affinity.specific_reservations, []) : coalesce(r.project, var.project_id)]
   # We, also, remember the suffix "/reservationBlocks/exr-one-block-1" for use elsewhere afterwards
   input_reservation_suffixes = [for r in try(var.reservation_affinity.specific_reservations, []) : substr(r.name, length(split("/", r.name)[0]), -1)]
-  # Adding this variable to by-pass the machine-type validation for TPUs
+  # Adding this variable to bypass the machine-type validation for TPUs
   is_tpu = var.placement_policy.tpu_topology != null
 }
 
