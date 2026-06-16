@@ -63,6 +63,11 @@ locals {
     scopes = var.service_account_scopes
   }
 
+  ghpc_startup_script = var.startup_script != null ? [{
+    filename = "ghpc_login_startup.sh"
+    content  = var.startup_script
+  }] : []
+
   # lower, replace `_` with `-`, and remove any non-alphanumeric characters
   group_name = replace(
     replace(
@@ -113,6 +118,8 @@ locals {
 
     static_ips     = var.static_ips
     bandwidth_tier = var.bandwidth_tier
+
+    startup_script = local.ghpc_startup_script
 
     subnetwork = var.subnetwork_self_link
     tags       = var.tags

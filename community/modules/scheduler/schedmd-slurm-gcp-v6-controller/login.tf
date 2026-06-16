@@ -37,7 +37,7 @@ module "login" {
 
   login_nodes = each.value
 
-  startup_scripts         = local.login_startup_scripts
+  startup_scripts         = concat(local.login_startup_scripts, each.value.startup_script)
   startup_scripts_timeout = var.login_startup_scripts_timeout
 
   network_storage = var.login_network_storage
