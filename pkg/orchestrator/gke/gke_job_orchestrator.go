@@ -534,10 +534,14 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 			if strings.Contains(resName, "tpu") {
 				flavorName := "flavor-" + resName
 				if _, ok := flavors[flavorName]; !ok {
-					flavors[flavorName] = FlavorCapacity{
-						NodeLabels: map[string]string{
+					var nodeLabels map[string]string
+					if resName != "google.com/tpu" {
+						nodeLabels = map[string]string{
 							"cloud.google.com/gke-tpu-accelerator": resName,
-						},
+						}
+					}
+					flavors[flavorName] = FlavorCapacity{
+						NodeLabels: nodeLabels,
 					}
 				}
 			}
@@ -546,10 +550,14 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 			if strings.Contains(resName, "nvidia") {
 				flavorName := "flavor-" + resName
 				if _, ok := flavors[flavorName]; !ok {
-					flavors[flavorName] = FlavorCapacity{
-						NodeLabels: map[string]string{
+					var nodeLabels map[string]string
+					if resName != "nvidia.com/gpu" {
+						nodeLabels = map[string]string{
 							"cloud.google.com/gke-accelerator": resName,
-						},
+						}
+					}
+					flavors[flavorName] = FlavorCapacity{
+						NodeLabels: nodeLabels,
 					}
 				}
 			}

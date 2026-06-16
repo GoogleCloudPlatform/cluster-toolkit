@@ -145,6 +145,9 @@ var allowed2DTopologies = map[int]string{
 var valid2DShapes = make(map[string]bool)
 var valid3DShapes = make(map[string]bool)
 
+var sortedTPUMachineFamilies []string
+var sortedGPUMachineFamilies []string
+
 func init() {
 	for _, v := range allowed2DTopologies {
 		valid2DShapes[v] = true
@@ -155,7 +158,22 @@ func init() {
 	if err := json.Unmarshal(MachineMappingsJSON, &parsedMappings); err != nil {
 		panic(fmt.Sprintf("failed to unmarshal machine_mappings.json: %v", err))
 	}
+
+	for k := range parsedMappings.MachineFamilyToLabelMap {
+		if IsTPU(k) {
+			sortedTPUMachineFamilies = append(sortedTPUMachineFamilies, k)
+		} else {
+			sortedGPUMachineFamilies = append(sortedGPUMachineFamilies, k)
+		}
+	}
+	sort.Slice(sortedTPUMachineFamilies, func(i, j int) bool {
+		return len(sortedTPUMachineFamilies[i]) > len(sortedTPUMachineFamilies[j])
+	})
+	sort.Slice(sortedGPUMachineFamilies, func(i, j int) bool {
+		return len(sortedGPUMachineFamilies[i]) > len(sortedGPUMachineFamilies[j])
+	})
 }
+
 
 func evalString(bp Blueprint, val cty.Value) (string, bool) {
 	ev, err := bp.Eval(val)
@@ -559,17 +577,7 @@ func Is3DTorusTPU(machineType string) bool {
 func GetTPULimitKey(machineType string) string {
 	m := strings.ToLower(machineType)
 
-	var keys []string
-	for k := range parsedMappings.MachineFamilyToLabelMap {
-		if strings.Contains(k, "ct") || strings.Contains(k, "v") {
-			keys = append(keys, k)
-		}
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return len(keys[i]) > len(keys[j])
-	})
-
-	for _, k := range keys {
+	for _, k := range sortedTPUMachineFamilies {
 		if strings.Contains(m, k) {
 			return parsedMappings.MachineFamilyToLabelMap[k]
 		}
@@ -582,27 +590,41 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	m := strings.ToLower(machineType)
 	accel := strings.ToLower(accelLabel)
 
-	var keys []string
-	for k := range parsedMappings.MachineFamilyToLabelMap {
-		if !strings.Contains(k, "ct") && !strings.Contains(k, "v") {
-			keys = append(keys, k)
+	// Reject TPU machine types statically
+	if IsTPU(machineType) {
+		return "", fmt.Errorf("machine type %q is a TPU machine type, not a GPU machine type", machineType)
+	}
+
+	// Reject known CPU-only machine families
+	cpuFamilies := []string{"n1-", "n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m1-", "m2-", "m3-", "e2-", "t2a-", "t2d-", "h3-"}
+	for _, family := range cpuFamilies {
+		if strings.HasPrefix(m, family) {
+			return "", fmt.Errorf("machine type %q is a CPU-only machine type", machineType)
 		}
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		return len(keys[i]) > len(keys[j])
-	})
 
-	for _, k := range keys {
+	// Resolve by machine type family
+	for _, k := range sortedGPUMachineFamilies {
 		if strings.Contains(m, k) {
 			return parsedMappings.MachineFamilyToLabelMap[k], nil
 		}
 	}
 
+	// Fallback based on accelerator label
 	if strings.Contains(accel, "l4") {
 		return "nvidia-l4", nil
 	}
 	if strings.Contains(accel, "a100") {
 		return "nvidia-tesla-a100", nil
+	}
+	if strings.Contains(accel, "h100") {
+		return "nvidia-h100-80gb", nil
+	}
+	if strings.Contains(accel, "h200") {
+		return "nvidia-h200-141gb", nil
+	}
+	if strings.Contains(accel, "b200") {
+		return "nvidia-b200", nil
 	}
 
 	if accel != "" {
