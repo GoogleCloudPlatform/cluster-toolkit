@@ -269,6 +269,10 @@ resource "google_compute_region_instance_group_manager" "controller_regional_mig
     ignore_changes = [
       target_size,
     ]
+    precondition {
+      condition     = var.controller_ha_type != "regional" || var.zone != local.backup_zone
+      error_message = "For a regional controller HA deployment, 'zone' and 'backup_zone' must be different."
+    }
   }
 }
 

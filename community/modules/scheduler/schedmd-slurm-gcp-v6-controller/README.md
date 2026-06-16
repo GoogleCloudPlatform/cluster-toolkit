@@ -88,6 +88,7 @@ To enable High Availability:
    Filestore, NFS) that is mounted on both controllers at `/var/spool/slurm`.
 4. Configure the Managed Instance Group distribution type using `controller_ha_type`
    (set to either `"zonal"` or `"regional"`, defaults to `"zonal"`).
+5. Provide at least two static IP addresses in `static_ips` (one for the primary controller and one for the backup controller).
 
 > **CRITICAL**: The `StateSaveLocation` MUST be a shared network filesystem
 > (like Filestore or NFS) that supports simultaneous read/write access from both
@@ -107,6 +108,9 @@ To enable High Availability:
     enable_backup_controller: true
     controller_ha_type: regional
     controller_state_disk: null
+    static_ips:
+    - 10.80.0.10
+    - 10.80.0.11
     network_storage:
     - server_ip: $(controller_fs.network_storage.server_ip)
       remote_mount: $(controller_fs.network_storage.remote_mount)

@@ -725,19 +725,34 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
         log.warning("/etc/hosts does not exist, skipping population")
         return
 
-    hosts_content = hosts_path.read_text()
-    new_entries = []
+    try:
+        lines = hosts_path.read_text().splitlines()
+    except Exception as e:
+        log.error(f"Failed to read /etc/hosts: {e}")
+        return
 
-    if primary_ip and primary_name and primary_ip not in hosts_content:
+    names_to_remove = {name for name in (primary_name, backup_name) if name}
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            new_lines.append(line)
+            continue
+        parts = stripped.split()
+        if len(parts) > 1 and any(name in parts[1:] for name in names_to_remove):
+            continue
+        new_lines.append(line)
+
+    new_entries = []
+    if primary_ip and primary_name:
         new_entries.append(f"{primary_ip} {primary_name}")
-    if backup_ip and backup_name and backup_ip not in hosts_content:
+    if backup_ip and backup_name:
         new_entries.append(f"{backup_ip} {backup_name}")
 
     if new_entries:
         try:
-            with open(hosts_path, "a") as f:
-                f.write("\n# Added by Slurm HA Setup\n" + "\n".join(new_entries) + "\n")
-            log.info(f"Added controller hosts mapping to /etc/hosts: {new_entries}")
+            hosts_path.write_text("\n".join(new_lines) + "\n\n# Added by Slurm HA Setup\n" + "\n".join(new_entries) + "\n")
+            log.info(f"Updated /etc/hosts with current controller mappings: {new_entries}")
         except Exception as e:
             log.error(f"Failed to write to /etc/hosts: {e}")
 
@@ -770,10 +785,11 @@ def main():
             role = "backup_controller"
         elif ha_role == "dynamic":
             hostname = socket.gethostname()
-            if hostname.endswith("-0"):
-                log.info(f"Dynamic HA: Hostname '{hostname}' ends with '-0'. Assuming Primary role.")
+            short_hostname = hostname.split(".")[0]
+            if short_hostname.endswith("-0"):
+                log.info(f"Dynamic HA: Hostname '{short_hostname}' ends with '-0'. Assuming Primary role.")
             else:
-                log.info(f"Dynamic HA: Hostname '{hostname}' does not end with '-0'. Assuming Standby Backup role.")
+                log.info(f"Dynamic HA: Hostname '{short_hostname}' does not end with '-0'. Assuming Standby Backup role.")
                 role = "backup_controller"
     except Exception as e:
         log.warning(f"Failed to read slurm_ha_role metadata: {e}")
