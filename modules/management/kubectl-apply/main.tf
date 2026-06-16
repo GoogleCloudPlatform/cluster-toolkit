@@ -483,3 +483,22 @@ resource "kubernetes_annotations" "sa_patch" {
     "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
   }
 }
+
+module "install_slice_controller" {
+  source           = "./helm_install"
+  count            = local.enable_slicing ? 1 : 0
+  release_name     = "slice-controller"
+  chart_name       = "${path.module}/raw-config-chart"
+  chart_version    = "0.1.0"
+  namespace        = "slice-controller-system"
+  create_namespace = true
+  wait             = true
+
+  values_yaml = [
+    yamlencode({
+      manifests = [file("${path.module}/kueue/slice-controller.yaml")]
+    })
+  ]
+
+  depends_on = [var.gke_cluster_exists, module.configure_kueue]
+}
