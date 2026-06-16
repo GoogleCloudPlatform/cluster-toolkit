@@ -150,6 +150,36 @@ func TestResolveReservationTolerations(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "Reservation with matching node pool, case-insensitive reservation name",
+			machineType:     "a3-highgpu-8g",
+			reservationName: "My-ReS-5",
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "a3-highgpu-8g",
+						Labels: map[string]string{
+							"cloud.google.com/reservation-name": "my-res-5",
+						},
+						Taints: []gkeTaint{
+							{
+								Key:    "cloud.google.com/reservation-name",
+								Value:  "my-res-5",
+								Effect: "NoSchedule",
+							},
+						},
+					},
+				},
+			},
+			wantTolerations: []corev1.Toleration{
+				{
+					Key:      "cloud.google.com/reservation-name",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "my-res-5",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

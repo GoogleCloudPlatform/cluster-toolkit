@@ -113,7 +113,8 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		if lblVal == "" {
 			continue
 		}
-		if strings.EqualFold(np.Config.MachineType, machineType) && extractShortReservationName(lblVal) == shortResName {
+		if strings.EqualFold(np.Config.MachineType, machineType) && strings.EqualFold(extractShortReservationName(lblVal), shortResName) {
+			tolerations[0].Value = extractShortReservationName(lblVal)
 			for _, t := range np.Config.Taints {
 				// Avoid duplicate tolerations
 				if seenTaints[t.Key] {
