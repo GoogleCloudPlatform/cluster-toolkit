@@ -25,6 +25,7 @@ import time
 import yaml
 from pathlib import Path
 import functools
+import socket
 
 import util
 from util import (
@@ -492,6 +493,19 @@ def setup_controller(is_primary: bool):
     if not lkp.cfg.cloudsql_secret:
         configure_mysql(lkp)
 
+    if not is_primary:
+        db_sentinel = Path(slurmdirs.state / "db_initialized")
+        timeout = 300
+        snooze = 10
+        retries = int(timeout / snooze)
+        log.info("Waiting for database initialization to complete on primary...")
+        for _ in range(retries):
+            if db_sentinel.exists():
+                break
+            time.sleep(snooze)
+        if not db_sentinel.exists():
+            log.warning("Timed out waiting for database initialization sentinel on primary. Proceeding anyway.")
+
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
 
@@ -514,6 +528,14 @@ def setup_controller(is_primary: bool):
     if clustername_file.exists():
         log.info(f"Removing {clustername_file} to prevent cluster ID mismatch")
         clustername_file.unlink()
+
+    if is_primary:
+        db_sentinel = Path(slurmdirs.state / "db_initialized")
+        try:
+            db_sentinel.touch()
+            util.chown_slurm(db_sentinel)
+        except Exception as e:
+            log.warning(f"Failed to create database initialization sentinel: {e}")
 
     run("systemctl enable slurmctld", timeout=30)
     run("systemctl restart slurmctld", timeout=30)
@@ -690,6 +712,36 @@ def setup_cloud_ops() -> None:
             raise
 
 
+def populate_etc_hosts(lkp: util.Lookup) -> None:
+    """Populate static IP mappings for controllers in /etc/hosts to bypass DNS propagation latency."""
+    log.info("Populating /etc/hosts with controller IP mappings")
+    primary_name = lkp.cfg.get("slurm_control_host")
+    primary_ip = lkp.cfg.get("slurm_control_addr")
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    backup_ip = lkp.cfg.get("slurm_backup_controller_ip")
+
+    hosts_path = Path("/etc/hosts")
+    if not hosts_path.exists():
+        log.warning("/etc/hosts does not exist, skipping population")
+        return
+
+    hosts_content = hosts_path.read_text()
+    new_entries = []
+
+    if primary_ip and primary_name and primary_ip not in hosts_content:
+        new_entries.append(f"{primary_ip} {primary_name}")
+    if backup_ip and backup_name and backup_ip not in hosts_content:
+        new_entries.append(f"{backup_ip} {backup_name}")
+
+    if new_entries:
+        try:
+            with open(hosts_path, "a") as f:
+                f.write("\n# Added by Slurm HA Setup\n" + "\n".join(new_entries) + "\n")
+            log.info(f"Added controller hosts mapping to /etc/hosts: {new_entries}")
+        except Exception as e:
+            log.error(f"Failed to write to /etc/hosts: {e}")
+
+
 def main():
     start_motd()
 
@@ -706,6 +758,8 @@ def main():
             log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
         time.sleep(sleep_seconds)
     log.info("Config fetched")
+    lkp = lookup()
+    populate_etc_hosts(lkp)
     setup_cloud_ops()
     configure_dirs()
     # call the setup function for the instance type
@@ -714,8 +768,15 @@ def main():
         ha_role = util.instance_metadata("attributes/slurm_ha_role", silent=True)
         if ha_role == "backup":
             role = "backup_controller"
-    except:
-        pass
+        elif ha_role == "dynamic":
+            hostname = socket.gethostname()
+            if hostname.endswith("-0"):
+                log.info(f"Dynamic HA: Hostname '{hostname}' ends with '-0'. Assuming Primary role.")
+            else:
+                log.info(f"Dynamic HA: Hostname '{hostname}' does not end with '-0'. Assuming Standby Backup role.")
+                role = "backup_controller"
+    except Exception as e:
+        log.warning(f"Failed to read slurm_ha_role metadata: {e}")
 
     {
         "controller": lambda: setup_controller(is_primary=True),

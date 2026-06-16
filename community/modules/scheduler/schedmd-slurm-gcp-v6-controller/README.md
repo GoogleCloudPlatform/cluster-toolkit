@@ -61,7 +61,10 @@ The following are examples of updates that can be made to a running cluster:
 
 The `schedmd-slurm-gcp-v6-controller` module supports High Availability (HA) for
 the Slurm controller. This feature deploys a secondary "Backup" controller that
-allows the cluster to continue operating if the primary controller fails.
+allows the cluster to continue operating if the primary controller fails. The module
+manages these controllers using a Google Compute Managed Instance Group (MIG).
+By default, the MIG is **zonal** but can be configured as **regional** to increase
+fault tolerance across multiple zones.
 
 ### Architecture
 
@@ -83,6 +86,8 @@ To enable High Availability:
    disk.
 3. Ensure `StateSaveLocation` points to a shared network mount (e.g.,
    Filestore, NFS) that is mounted on both controllers at `/var/spool/slurm`.
+4. Configure the Managed Instance Group distribution type using `controller_ha_type`
+   (set to either `"zonal"` or `"regional"`, defaults to `"zonal"`).
 
 > **CRITICAL**: The `StateSaveLocation` MUST be a shared network filesystem
 > (like Filestore or NFS) that supports simultaneous read/write access from both
@@ -100,7 +105,7 @@ To enable High Availability:
   - homefs
   settings:
     enable_backup_controller: true
-    backup_machine_type: c2-standard-8
+    controller_ha_type: regional
     controller_state_disk: null
     network_storage:
     - server_ip: $(controller_fs.network_storage.server_ip)
@@ -343,7 +348,6 @@ limitations under the License.
 | <a name="module_login"></a> [login](#module\_login) | ../../internal/slurm-gcp/login | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
-| <a name="module_slurm_backup_controller_template"></a> [slurm\_backup\_controller\_template](#module\_slurm\_backup\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
 | <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp/instance_template | n/a |
@@ -353,9 +357,13 @@ limitations under the License.
 
 | Name | Type |
 | ---- | ---- |
-| [google-beta_google_compute_instance_from_template.backup_controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
 | [google-beta_google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
+| [google_compute_address.controller_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
+| [google_compute_instance_group_manager.controller_zonal_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_group_manager) | resource |
+| [google_compute_per_instance_config.controller_zonal_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_per_instance_config) | resource |
+| [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
+| [google_compute_region_per_instance_config.controller_regional_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_per_instance_config) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.cloudsql_secret_accessor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.cloudsql_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
@@ -372,7 +380,6 @@ limitations under the License.
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for the controller, if any. | <pre>list(object({<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })), [])<br/>    alias_ip_range = optional(list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    })), [])<br/>    ipv6_access_config = optional(list(object({<br/>      network_tier = string<br/>    })), [])<br/>    network            = optional(string)<br/>    network_ip         = optional(string, "")<br/>    nic_type           = optional(string)<br/>    queue_count        = optional(number)<br/>    stack_type         = optional(string)<br/>    subnetwork         = optional(string)<br/>    subnetwork_project = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_advanced_machine_features"></a> [advanced\_machine\_features](#input\_advanced\_machine\_features) | See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features | <pre>object({<br/>    enable_nested_virtualization = optional(bool)<br/>    threads_per_core             = optional(number)<br/>    turbo_mode                   = optional(string)<br/>    visible_core_count           = optional(number)<br/>    performance_monitoring_unit  = optional(string)<br/>    enable_uefi_networking       = optional(bool)<br/>  })</pre> | <pre>{<br/>  "threads_per_core": 1<br/>}</pre> | no |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
-| <a name="input_backup_machine_type"></a> [backup\_machine\_type](#input\_backup\_machine\_type) | Machine type for the backup controller. If null, uses the same as the primary controller. | `string` | `null` | no |
 | <a name="input_backup_zone"></a> [backup\_zone](#input\_backup\_zone) | Zone for the backup controller. If null, it will be placed in the same region, potentially different zone. | `string` | `null` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Configures the network interface card and the maximum egress bandwidth for VMs.<br/>  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.<br/>  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.<br/>  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).<br/>  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.<br/>  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.<br/>  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"platform_default"` | no |
 | <a name="input_bucket_dir"></a> [bucket\_dir](#input\_bucket\_dir) | Bucket directory for cluster files to be put into. If not specified, then one will be chosen based on slurm\_cluster\_name. | `string` | `null` | no |
@@ -383,6 +390,7 @@ limitations under the License.
 | <a name="input_cloudsql"></a> [cloudsql](#input\_cloudsql) | Use this database instead of the one on the controller.<br/>  server\_ip : Address of the database server.<br/>  user      : The user to access the database as.<br/>  password  : The password, given the user, to access the given database. (sensitive)<br/>  db\_name   : The database to access.<br/>  user\_managed\_replication : The list of location and (optional) kms\_key\_name for secret | <pre>object({<br/>    server_ip = string<br/>    user      = string<br/>    password  = string # sensitive<br/>    db_name   = string<br/>    user_managed_replication = optional(list(object({<br/>      location     = string<br/>      kms_key_name = optional(string)<br/>    })), [])<br/>  })</pre> | `null` | no |
 | <a name="input_compute_startup_script"></a> [compute\_startup\_script](#input\_compute\_startup\_script) | DEPRECATED: `compute_startup_script` has been deprecated.<br/>Use `startup_script` of nodeset module instead. | `any` | `null` | no |
 | <a name="input_compute_startup_scripts_timeout"></a> [compute\_startup\_scripts\_timeout](#input\_compute\_startup\_scripts\_timeout) | The timeout (seconds) applied to each startup script in compute nodes. If<br/>any script exceeds this timeout, then the instance setup process is considered<br/>failed and handled accordingly.<br/><br/>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
+| <a name="input_controller_ha_type"></a> [controller\_ha\_type](#input\_controller\_ha\_type) | Type of Managed Instance Group for controllers: 'zonal' or 'regional'. | `string` | `"zonal"` | no |
 | <a name="input_controller_network_attachment"></a> [controller\_network\_attachment](#input\_controller\_network\_attachment) | SelfLink for NetworkAttachment to be attached to the controller, if any. | `string` | `null` | no |
 | <a name="input_controller_project_id"></a> [controller\_project\_id](#input\_controller\_project\_id) | Optionally. Provision controller and config bucket in the different project | `string` | `null` | no |
 | <a name="input_controller_startup_script"></a> [controller\_startup\_script](#input\_controller\_startup\_script) | Startup script used by the controller VM. | `string` | `"# no-op"` | no |
