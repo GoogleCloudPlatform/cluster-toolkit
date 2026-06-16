@@ -92,8 +92,8 @@ variable "enable_backup_controller" {
   type        = bool
   default     = false
   validation {
-    condition     = var.enable_backup_controller == false || (anytrue([for s in var.network_storage : s.local_mount == "/var/spool/slurm"]) && var.controller_state_disk == null && length(var.static_ips) >= 2)
-    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null, network_storage must contain a shared mount for '/var/spool/slurm' to sync state, and at least 2 static_ips must be provided."
+    condition     = var.enable_backup_controller == false || (anytrue([for s in var.network_storage : s.local_mount == "/var/spool/slurm"]) && var.controller_state_disk == null && length(var.static_ips) >= 2 && var.cloudsql != null)
+    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null, network_storage must contain a shared mount for '/var/spool/slurm' to sync state, at least 2 static_ips must be provided, and an external database (cloudsql) must be configured."
   }
 }
 

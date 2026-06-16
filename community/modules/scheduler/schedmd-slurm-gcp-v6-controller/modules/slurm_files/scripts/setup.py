@@ -735,11 +735,16 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
     new_lines = []
     for line in lines:
         stripped = line.strip()
+        if stripped == "# Added by Slurm HA Setup":
+            continue
         if not stripped or stripped.startswith("#"):
             new_lines.append(line)
             continue
         parts = stripped.split()
-        if len(parts) > 1 and any(name in parts[1:] for name in names_to_remove):
+        if len(parts) > 1 and any(
+            any(p == name or p.startswith(f"{name}.") for p in parts[1:])
+            for name in names_to_remove
+        ):
             continue
         new_lines.append(line)
 

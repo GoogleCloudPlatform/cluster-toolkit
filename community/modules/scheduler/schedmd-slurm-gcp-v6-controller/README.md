@@ -89,6 +89,7 @@ To enable High Availability:
 4. Configure the Managed Instance Group distribution type using `controller_ha_type`
    (set to either `"zonal"` or `"regional"`, defaults to `"zonal"`).
 5. Provide at least two static IP addresses in `static_ips` (one for the primary controller and one for the backup controller).
+6. Configure an external database (`cloudsql`) to manage Slurm accounting and state across the controllers.
 
 > **CRITICAL**: The `StateSaveLocation` MUST be a shared network filesystem
 > (like Filestore or NFS) that supports simultaneous read/write access from both
@@ -111,6 +112,11 @@ To enable High Availability:
     static_ips:
     - 10.80.0.10
     - 10.80.0.11
+    cloudsql:
+      server_ip: $(slurm_db.cloudsql.server_ip)
+      user: $(slurm_db.cloudsql.user)
+      password: $(slurm_db.cloudsql.password)
+      db_name: $(slurm_db.cloudsql.db_name)
     network_storage:
     - server_ip: $(controller_fs.network_storage.server_ip)
       remote_mount: $(controller_fs.network_storage.remote_mount)
