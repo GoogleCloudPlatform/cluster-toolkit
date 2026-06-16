@@ -204,6 +204,10 @@ variable "login_nodes" {
     termination_action                  = optional(string)
     disk_encryption_key                 = optional(string)
     disk_encryption_key_service_account = optional(string)
+    startup_script = optional(list(object({
+      filename = string
+      content  = string
+    })), [])
   }))
   default = []
   validation {

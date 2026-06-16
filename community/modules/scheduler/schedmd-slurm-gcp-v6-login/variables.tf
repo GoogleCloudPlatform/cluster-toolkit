@@ -430,3 +430,9 @@ variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
 }
+
+variable "startup_script" {
+  description = "Startup script used by the login VMs."
+  type        = string
+  default     = "# no-op"
+}
