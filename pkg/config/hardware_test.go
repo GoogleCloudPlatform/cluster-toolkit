@@ -746,6 +746,13 @@ func TestGetGPULimitKey(t *testing.T) {
 			wantErr:     true,
 		},
 		{
+			name:        "allow CPU n2-standard-4 with accelerator",
+			machineType: "n2-standard-4",
+			accelLabel:  "nvidia-l4",
+			wantKey:     "nvidia-l4",
+			wantErr:     false,
+		},
+		{
 			name:        "unknown accelerator label",
 			machineType: "custom-machine",
 			accelLabel:  "unknown-gpu",

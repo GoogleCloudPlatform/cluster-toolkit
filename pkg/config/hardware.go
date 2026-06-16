@@ -595,10 +595,12 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 		return "", fmt.Errorf("machine type %q is a TPU machine type, not a GPU machine type", machineType)
 	}
 
-	// Reject known CPU-only machine families
-	for _, family := range parsedMappings.CPUMachineFamilies {
-		if strings.HasPrefix(m, family) {
-			return "", fmt.Errorf("machine type %q is a CPU-only machine type", machineType)
+	// Reject known CPU-only machine families if no accelerator is attached
+	if accel == "" {
+		for _, family := range parsedMappings.CPUMachineFamilies {
+			if strings.HasPrefix(m, family) {
+				return "", fmt.Errorf("machine type %q is a CPU-only machine type", machineType)
+			}
 		}
 	}
 
