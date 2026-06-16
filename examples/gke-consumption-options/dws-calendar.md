@@ -6,7 +6,7 @@ With Calendar mode, you will be able to request GPU capacity in fixed duration c
 
 ## Create an A3 Ultra cluster
 
-The [gke-a3-ultragpu](./examples/gke-a3-ultragpu) example can be used to create an A3 Ultra cluster using a DWS Calendar reservation. The `reservation` variable under `vars` in the [-deployment.yaml](examples/gke-a3-ultragpu/gke-a3-ultragpu-deployment.yaml) should be updated to the DWS Calendar reservation name.
+The [gke-a3-ultragpu](../gke-a3-ultragpu) example can be used to create an A3 Ultra cluster using a DWS Calendar reservation. The `reservation` variable under `vars` in the [-deployment.yaml](../gke-a3-ultragpu/gke-a3-ultragpu-deployment.yaml) should be updated to the DWS Calendar reservation name.
 
 Refer to [Create an AI-optimized GKE cluster with default configuration](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for instructions on creating the GKE-A3U cluster.
 
