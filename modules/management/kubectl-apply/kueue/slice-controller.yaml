@@ -13,6 +13,15 @@
 # limitations under the License.
 
 apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: slice-controller
+    control-plane: controller-manager
+  name: slice-controller-system
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:

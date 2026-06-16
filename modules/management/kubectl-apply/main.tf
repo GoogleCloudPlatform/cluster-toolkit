@@ -485,14 +485,12 @@ resource "kubernetes_annotations" "sa_patch" {
 }
 
 module "install_slice_controller" {
-  source           = "./helm_install"
-  count            = local.enable_slicing ? 1 : 0
-  release_name     = "slice-controller"
-  chart_name       = "${path.module}/raw-config-chart"
-  chart_version    = "0.1.0"
-  namespace        = "slice-controller-system"
-  create_namespace = true
-  wait             = true
+  source        = "./helm_install"
+  count         = local.enable_slicing ? 1 : 0
+  release_name  = "slice-controller"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  wait          = true
 
   values_yaml = [
     yamlencode({
