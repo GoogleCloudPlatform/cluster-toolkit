@@ -303,7 +303,7 @@ func TestResolveTolerations(t *testing.T) {
 					NodePools: tt.nodePools,
 				},
 			}
-			got, err := g.resolveTolerations(tt.acceleratorType, tt.consumptionModel, tt.reservationName)
+			got, err := g.resolveTolerations(tt.acceleratorType, tt.consumptionModel, tt.reservationName, 16)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -321,13 +321,13 @@ func TestResolveTolerationsDoesNotMutateSharedArray(t *testing.T) {
 	g := &GKEOrchestrator{}
 
 	// Call resolveTolerations for a TPU with Spot (which appends "spot")
-	got1, err := g.resolveTolerations("v5p-8", "spot", "")
+	got1, err := g.resolveTolerations("v5p-8", "spot", "", 16)
 	if err != nil {
 		t.Fatalf("unexpected error on first call: %v", err)
 	}
 
 	// Call resolveTolerations for a TPU with standard consumption model (no Spot/Reservation)
-	got2, err := g.resolveTolerations("v5p-8", "", "")
+	got2, err := g.resolveTolerations("v5p-8", "", "", 16)
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
 	}

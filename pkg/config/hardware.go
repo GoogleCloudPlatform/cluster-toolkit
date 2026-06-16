@@ -32,6 +32,7 @@ var MachineMappingsJSON []byte
 type MachineMappings struct {
 	MachineFamilyToLabelMap map[string]string `json:"machine_family_to_label_map"`
 	AcceleratorShorthandMap map[string]string `json:"accelerator_shorthand_map"`
+	CPUMachineFamilies      []string          `json:"cpu_machine_families"`
 }
 
 var parsedMappings MachineMappings
@@ -595,8 +596,7 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	}
 
 	// Reject known CPU-only machine families
-	cpuFamilies := []string{"n1-", "n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m1-", "m2-", "m3-", "e2-", "t2a-", "t2d-", "h3-"}
-	for _, family := range cpuFamilies {
+	for _, family := range parsedMappings.CPUMachineFamilies {
 		if strings.HasPrefix(m, family) {
 			return "", fmt.Errorf("machine type %q is a CPU-only machine type", machineType)
 		}

@@ -60,5 +60,21 @@
     "v6e-1": "ct6e-standard-1t",
     "v6e-4": "ct6e-standard-4t",
     "v6e-8": "ct6e-standard-8t"
-  }
+  },
+  "cpu_machine_families": [
+    "n1-",
+    "n2-",
+    "n2d-",
+    "c2-",
+    "c2d-",
+    "c3-",
+    "c3d-",
+    "m1-",
+    "m2-",
+    "m3-",
+    "e2-",
+    "t2a-",
+    "t2d-",
+    "h3-"
+  ]
 }

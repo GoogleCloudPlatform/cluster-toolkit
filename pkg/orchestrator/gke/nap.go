@@ -144,7 +144,7 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 	return tolerations
 }
 
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string) (string, error) {
+func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
 	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
 	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
 
@@ -166,7 +166,7 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
 	}
-	return g.indentYaml(string(b), 16), nil
+	return g.indentYaml(string(b), indent), nil
 }
 
 // extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
