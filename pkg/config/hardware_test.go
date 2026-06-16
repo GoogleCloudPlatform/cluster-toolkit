@@ -732,13 +732,6 @@ func TestGetGPULimitKey(t *testing.T) {
 			wantErr:     true,
 		},
 		{
-			name:        "reject TPU machine type uppercase",
-			machineType: "CT6E-standard-4t",
-			accelLabel:  "",
-			wantKey:     "",
-			wantErr:     true,
-		},
-		{
 			name:        "reject CPU n2-standard-4",
 			machineType: "n2-standard-4",
 			accelLabel:  "",

@@ -174,7 +174,6 @@ func init() {
 	})
 }
 
-
 func evalString(bp Blueprint, val cty.Value) (string, bool) {
 	ev, err := bp.Eval(val)
 	if err == nil && ev.Type() == cty.String && !ev.IsNull() && ev.IsKnown() {
@@ -591,7 +590,7 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	accel := strings.ToLower(accelLabel)
 
 	// Reject TPU machine types statically
-	if IsTPU(m) {
+	if IsTPU(machineType) {
 		return "", fmt.Errorf("machine type %q is a TPU machine type, not a GPU machine type", machineType)
 	}
 

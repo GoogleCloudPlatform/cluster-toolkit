@@ -355,10 +355,8 @@ func (g *GKEOrchestrator) calculateCoveredResources() (map[string]bool, map[stri
 
 func isTPUFlavor(fname string) bool {
 	lower := strings.ToLower(fname)
-	machineType := strings.TrimPrefix(lower, "flavor-")
-	return strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")
+	return strings.Contains(lower, "tpu") || strings.Contains(lower, "ct")
 }
-
 
 func isGPUFlavor(fname string) bool {
 	return strings.Contains(strings.ToLower(fname), "nvidia")

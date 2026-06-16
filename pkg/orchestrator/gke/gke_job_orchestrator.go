@@ -524,42 +524,7 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		flavors[flavor] = fc
 	}
 
-	if g.napEnabled {
-		for resName, maxLimit := range g.napLimits {
-			if maxLimit <= 0 {
-				continue
-			}
-
-			// Skip generic resource names as they cannot be used as Kubernetes resource names (no slashes allowed)
-			if resName == "google.com/tpu" || resName == "nvidia.com/gpu" {
-				continue
-			}
-
-			// If it's a TPU limit
-			if strings.Contains(resName, "tpu") {
-				flavorName := "flavor-" + resName
-				if _, ok := flavors[flavorName]; !ok {
-					flavors[flavorName] = FlavorCapacity{
-						NodeLabels: map[string]string{
-							"cloud.google.com/gke-tpu-accelerator": resName,
-						},
-					}
-				}
-			}
-
-			// If it's a GPU limit (contains nvidia)
-			if strings.Contains(resName, "nvidia") {
-				flavorName := "flavor-" + resName
-				if _, ok := flavors[flavorName]; !ok {
-					flavors[flavorName] = FlavorCapacity{
-						NodeLabels: map[string]string{
-							"cloud.google.com/gke-accelerator": resName,
-						},
-					}
-				}
-			}
-		}
-	}
+	g.populateNAPFlavors(flavors)
 
 	capacity := ClusterCapacity{
 		CPUs:     totalCPUs,
@@ -569,6 +534,46 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		Flavors:  flavors,
 	}
 	return capacity, nodePoolSAs, nil
+}
+
+func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) {
+	if !g.napEnabled {
+		return
+	}
+
+	for resName, maxLimit := range g.napLimits {
+		if maxLimit <= 0 {
+			continue
+		}
+
+		// Map generic limits to valid Kubernetes resource flavor names (avoiding slashes)
+		// and omit NodeLabels for them to prevent scheduling conflicts.
+		var flavorName string
+		var nodeLabels map[string]string
+
+		if resName == "google.com/tpu" {
+			flavorName = "flavor-tpu-generic"
+		} else if resName == "nvidia.com/gpu" {
+			flavorName = "flavor-nvidia-generic"
+		} else {
+			flavorName = "flavor-" + resName
+			if strings.Contains(resName, "tpu") {
+				nodeLabels = map[string]string{
+					"cloud.google.com/gke-tpu-accelerator": resName,
+				}
+			} else if strings.Contains(resName, "nvidia") {
+				nodeLabels = map[string]string{
+					"cloud.google.com/gke-accelerator": resName,
+				}
+			}
+		}
+
+		if _, ok := flavors[flavorName]; !ok {
+			flavors[flavorName] = FlavorCapacity{
+				NodeLabels: nodeLabels,
+			}
+		}
+	}
 }
 
 func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
