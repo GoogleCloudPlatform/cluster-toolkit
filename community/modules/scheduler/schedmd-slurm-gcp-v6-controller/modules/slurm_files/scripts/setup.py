@@ -798,6 +798,14 @@ def main():
                 role = "backup_controller"
     except Exception as e:
         log.warning(f"Failed to read slurm_ha_role metadata: {e}")
+        if lkp.cfg.get("slurm_backup_controller_name"):
+            hostname = socket.gethostname()
+            short_hostname = hostname.split(".")[0]
+            if short_hostname.endswith("-0"):
+                log.info(f"Dynamic HA (Fallback): Hostname '{short_hostname}' ends with '-0'. Assuming Primary role.")
+            else:
+                log.info(f"Dynamic HA (Fallback): Hostname '{short_hostname}' does not end with '-0'. Assuming Standby Backup role.")
+                role = "backup_controller"
 
     {
         "controller": lambda: setup_controller(is_primary=True),
