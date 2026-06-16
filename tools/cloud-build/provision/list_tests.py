@@ -50,7 +50,7 @@ ORDER_SEED = b"What a wonderful phrase"
 
 
  # Test that shouldn't be scheduled too close to each other
-TEMPORAL_CONSTAINTS = [
+TEMPORAL_CONSTRAINTS = [
     # (set_of_tests, min_distance)
     ((
         "ml-a4-highgpu-onspot-slurm",
@@ -98,7 +98,7 @@ def schedule_evenly(builds: list[str], start: int, end: int) -> dict[str, int]:
 
 
 def check_resource_constraints(schedule: dict[str, int]) -> bool:
-    for tests, min_distance in TEMPORAL_CONSTAINTS:
+    for tests, min_distance in TEMPORAL_CONSTRAINTS:
         for a, b  in itertools.combinations(tests, 2):
             if abs(schedule[a] - schedule[b]) < min_distance:
                 return False
