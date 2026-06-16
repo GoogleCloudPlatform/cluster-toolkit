@@ -388,7 +388,7 @@ func TestRenderClusterQueue_NAP(t *testing.T) {
 		napEnabled: true,
 		napLimits: map[string]int64{
 			"cpu":            1000,
-			"memory":         4000 * 1024, // limit is in MB in napLimits (4000 GB)
+			"memory":         4000, // limit is in GB in napLimits
 			"nvidia.com/gpu": 80,
 		},
 		capacity: ClusterCapacity{
@@ -415,7 +415,7 @@ func TestRenderClusterQueue_NAP(t *testing.T) {
 	if !strings.Contains(output, "nominalQuota: 1000") { // CPU limit from napLimits
 		t.Errorf("expected nominalQuota: 1000 for CPU, got %s", output)
 	}
-	if !strings.Contains(output, "nominalQuota: 4000Gi") { // Memory limit from napLimits (4000 * 1024 / 1024)
+	if !strings.Contains(output, "nominalQuota: 4000Gi") { // Memory limit from napLimits
 		t.Errorf("expected nominalQuota: 4000Gi for Memory, got %s", output)
 	}
 	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
