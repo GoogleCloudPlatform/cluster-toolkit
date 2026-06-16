@@ -77,7 +77,7 @@ spec:
               args:
               - --server_port=29000
               - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
               {{- if gt .Pathways.ElasticSlices 0}}
               - --num_elastic_slices={{.Pathways.ElasticSlices}}
               {{- end}}
@@ -105,10 +105,10 @@ spec:
               - containerPort: 29002
               args:
               - --server_port=29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
               - --node_type=resource_manager
               - --instance_count={{.NumSlices}}
-              - --instance_type={{.PathwaysInstanceType}}
+              - --instance_type="{{.PathwaysInstanceType}}"
               {{- range .ServerArgsList }}
               - {{.}}
               {{- end }}
@@ -246,7 +246,7 @@ spec:
               args:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
-                - --gcs_scratch_location={{.Pathways.GCSLocation}}
+                - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
                 {{- range .WorkerArgsList }}
                 - {{.}}
                 {{- end }}

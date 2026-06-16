@@ -475,7 +475,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"name: pathways-test",
 		"replicas: 2",
 		"image: proxy:latest",
-		"--gcs_scratch_location=gs://my-bucket",
+		`--gcs_scratch_location="gs://my-bucket"`,
 		"cloud.google.com/gke-nodepool: pathways-np",
 		"completionMode: Indexed",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname",
