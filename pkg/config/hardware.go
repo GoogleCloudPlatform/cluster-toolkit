@@ -625,6 +625,12 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	if strings.Contains(accel, "b200") {
 		return "nvidia-b200", nil
 	}
+	if strings.Contains(accel, "t4") {
+		return "nvidia-tesla-t4", nil
+	}
+	if strings.Contains(accel, "v100") {
+		return "nvidia-tesla-v100", nil
+	}
 
 	if accel != "" {
 		return "", fmt.Errorf("unknown accelerator label: %q", accelLabel)

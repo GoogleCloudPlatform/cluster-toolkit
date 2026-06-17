@@ -774,6 +774,20 @@ func TestGetGPULimitKey(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			name:        "t4 fallback",
+			machineType: "custom-g1",
+			accelLabel:  "nvidia-tesla-t4",
+			wantKey:     "nvidia-tesla-t4",
+			wantErr:     false,
+		},
+		{
+			name:        "v100 fallback",
+			machineType: "custom-v100",
+			accelLabel:  "nvidia-tesla-v100",
+			wantKey:     "nvidia-tesla-v100",
+			wantErr:     false,
+		},
+		{
 			name:        "unknown accelerator label",
 			machineType: "custom-machine",
 			accelLabel:  "unknown-gpu",
