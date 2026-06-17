@@ -610,26 +610,8 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	}
 
 	// Fallback based on accelerator label
-	if strings.Contains(accel, "l4") {
-		return "nvidia-l4", nil
-	}
-	if strings.Contains(accel, "a100") {
-		return "nvidia-tesla-a100", nil
-	}
-	if strings.Contains(accel, "h100") {
-		return "nvidia-h100-80gb", nil
-	}
-	if strings.Contains(accel, "h200") {
-		return "nvidia-h200-141gb", nil
-	}
-	if strings.Contains(accel, "b200") {
-		return "nvidia-b200", nil
-	}
-	if strings.Contains(accel, "t4") {
-		return "nvidia-tesla-t4", nil
-	}
-	if strings.Contains(accel, "v100") {
-		return "nvidia-tesla-v100", nil
+	if key, ok := resolveGPULabelFallback(accel); ok {
+		return key, nil
 	}
 
 	if accel != "" {
@@ -637,4 +619,29 @@ func GetGPULimitKey(machineType string, accelLabel string) (string, error) {
 	}
 
 	return "nvidia.com/gpu", nil
+}
+
+func resolveGPULabelFallback(accel string) (string, bool) {
+	if strings.Contains(accel, "l4") {
+		return "nvidia-l4", true
+	}
+	if strings.Contains(accel, "a100") {
+		return "nvidia-tesla-a100", true
+	}
+	if strings.Contains(accel, "h100") {
+		return "nvidia-h100-80gb", true
+	}
+	if strings.Contains(accel, "h200") {
+		return "nvidia-h200-141gb", true
+	}
+	if strings.Contains(accel, "b200") {
+		return "nvidia-b200", true
+	}
+	if strings.Contains(accel, "t4") {
+		return "nvidia-tesla-t4", true
+	}
+	if strings.Contains(accel, "v100") {
+		return "nvidia-tesla-v100", true
+	}
+	return "", false
 }
