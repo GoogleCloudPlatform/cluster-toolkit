@@ -109,7 +109,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 	return g.indentYaml(resourcesStr, indent), nil
 }
 
-func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool) (ManifestOptions, error) {
+func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (ManifestOptions, error) {
 	originalAccelType := job.ComputeType
 
 	schedOpts := SchedulingOptions{
@@ -118,6 +118,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Topology:           job.Topology,
 		Scheduler:          job.GKEScheduler,
 		IsDynamicSlicing:   isDynamicSlicing,
+		IsStaticSlicing:    isStaticSlicing,
 	}
 
 	parts := strings.Split(originalAccelType, "-")
@@ -126,6 +127,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 
 	opts := ManifestOptions{
 		IsDynamicSlicing:              isDynamicSlicing,
+		IsStaticSlicing:               isStaticSlicing,
 		WorkloadName:                  job.WorkloadName,
 		FullImageName:                 fullImageName,
 		CommandToRun:                  job.CommandToRun,
@@ -149,7 +151,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Verbose:                       job.Verbose,
 	}
 
-	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, profile.IsCPUMachine); err != nil {
+	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {
 		return ManifestOptions{}, err
 	}
 
@@ -163,8 +165,8 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	return opts, nil
 }
 
-func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing, isCPUMachine bool) error {
-	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isDynamicSlicing, isCPUMachine)
+func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isStaticSlicing bool, isCPUMachine bool) error {
+	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isCPUMachine)
 	if err != nil {
 		return err
 	}
@@ -187,7 +189,8 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 		opts.ImagePullSecrets = g.indentYaml(imagePullSecretsStr, 16)
 	}
 
-	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.NumSlices, isDynamicSlicing)
+	isSubSlicing := isDynamicSlicing || isStaticSlicing
+	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices, job.NodesPerSlice, isSubSlicing)
 
 	tolerationsStr, err := g.resolveTolerations(job.MachineType)
 	if err != nil {

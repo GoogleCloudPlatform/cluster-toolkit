@@ -358,7 +358,7 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				ComputeType: tt.acceleratorType,
 			}
 
-			_, _, err := orc.resolveHardwareRequirements(job)
+			_, _, _, err := orc.resolveHardwareRequirements(job)
 
 			if tt.wantErr {
 				if err == nil {
@@ -373,6 +373,131 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				}
 				if tt.wantTopology != "" && job.Topology != tt.wantTopology {
 					t.Errorf("Expected job.Topology %q, got %q", tt.wantTopology, job.Topology)
+				}
+			}
+		})
+	}
+}
+
+func TestVerifyStaticSlicingActive(t *testing.T) {
+	tests := []struct {
+		name           string
+		machineType    string
+		requestedTopo  string
+		mockResponses  map[string][]shell.CommandResult
+		wantActive     bool
+		wantErr        bool
+		verifyCacheHit bool
+	}{
+		{
+			name:          "Non-TPU machine type",
+			machineType:   "n2-standard-8",
+			requestedTopo: "2x2",
+			wantActive:    false,
+		},
+		{
+			name:          "TPU v4 (3D Torus) bypasses static sub-slicing",
+			machineType:   "ct4p-hightpu-4t",
+			requestedTopo: "2x2x1",
+			wantActive:    false,
+		},
+		{
+			name:          "TPU v5p (3D Torus) bypasses static sub-slicing",
+			machineType:   "ct5p-hightpu-4t",
+			requestedTopo: "2x2x2",
+			wantActive:    false,
+		},
+		{
+			name:          "No Kueue topologies configured",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 1, Stderr: "NotFound"},
+				},
+			},
+			wantActive: false,
+		},
+		{
+			name:          "Empty topologies configured",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[]}`},
+				},
+			},
+			wantActive: false,
+		},
+		{
+			name:          "Static sub-slicing active (requested shape fits physical)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive:     true,
+			verifyCacheHit: true,
+		},
+		{
+			name:          "Full-slice topology matches physical (Still TAS active)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "4x4",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive: true,
+		},
+		{
+			name:          "Requested shape too large for physical",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "8x8",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tt.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+
+			job := &orchestrator.JobDefinition{
+				MachineType: tt.machineType,
+				Topology:    tt.requestedTopo,
+			}
+
+			got, err := orc.verifyStaticSlicingActive(job)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("verifyStaticSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantActive {
+				t.Errorf("verifyStaticSlicingActive() = %v, want %v", got, tt.wantActive)
+			}
+
+			if tt.verifyCacheHit && err == nil && got == tt.wantActive {
+				// Clear mock executor to ensure subsequent call is satisfied entirely from cache
+				orc.executor = NewMockExecutor(nil)
+				got2, err2 := orc.verifyStaticSlicingActive(job)
+				if err2 != nil || got2 != tt.wantActive {
+					t.Errorf("cache hit failed: got %v, err %v", got2, err2)
 				}
 			}
 		})
