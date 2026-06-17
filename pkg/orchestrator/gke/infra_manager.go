@@ -385,7 +385,7 @@ func (g *GKEOrchestrator) getNAPNominalQuota(resName string, fname string) (inte
 		return 0, true
 	}
 	if resName == "memory" {
-		return fmt.Sprintf("%dGi", limit), true // limit is in GB in GKE describe
+		return fmt.Sprintf("%dG", limit), true // limit is in GB in GKE describe
 	}
 	return limit, true
 }
