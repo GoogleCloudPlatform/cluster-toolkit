@@ -134,11 +134,11 @@ func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
 		return nil // no op
 	}
 	be := config.TerraformBackend{Type: "gcs"}
-	for _, config := range s {
-		arr := strings.SplitN(config, "=", 2)
+	for _, cfg := range s {
+		arr := strings.SplitN(cfg, "=", 2)
 
 		if len(arr) != 2 {
-			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", config)
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cfg)
 		}
 
 		key, value := arr[0], arr[1]
