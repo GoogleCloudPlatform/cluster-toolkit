@@ -1,7 +1,7 @@
-google-api-python-client
-google-cloud-secret-manager
-google-cloud-pubsub
-pyyaml
-addict
-httplib2
+google-api-python-client==2.196.0
+google-cloud-secret-manager==2.28.0
+google-cloud-pubsub==2.38.0 
+pyyaml==6.0.3
+addict==2.4.0
+httplib2==0.31.2
 cryptography==48.0.1
