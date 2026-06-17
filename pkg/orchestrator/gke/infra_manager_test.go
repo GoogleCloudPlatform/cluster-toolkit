@@ -415,8 +415,8 @@ func TestRenderClusterQueue_NAP(t *testing.T) {
 	if !strings.Contains(output, "nominalQuota: 1000") { // CPU limit from napLimits
 		t.Errorf("expected nominalQuota: 1000 for CPU, got %s", output)
 	}
-	if !strings.Contains(output, "nominalQuota: 4000G") { // Memory limit from napLimits
-		t.Errorf("expected nominalQuota: 4000G for Memory, got %s", output)
+	if !strings.Contains(output, "nominalQuota: 4000Gi") { // Memory limit from napLimits
+		t.Errorf("expected nominalQuota: 4000Gi for Memory, got %s", output)
 	}
 	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
 		t.Errorf("expected nominalQuota: 80 for GPU, got %s", output)
