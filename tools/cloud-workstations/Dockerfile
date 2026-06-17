@@ -87,13 +87,14 @@ RUN chmod a+rx $START_DIR/$HPC_WORK_FILE
 COPY $CW_DIR/$CODE_REQS $HPC_CONFIG_DIR/$CODE_REQS
 RUN chmod a+r $HPC_CONFIG_DIR/$CODE_REQS
 
+COPY tools/cloud-workstations/base-tooling-requirements.txt base-tooling-requirements.txt
 COPY tools/cloud-build/requirements.txt cloud_build_requirements.txt
 COPY docs/hybrid-slurm-cluster/requirements.txt slurm_requirements.txt
+COPY tools/cloud-workstations/requirements.txt slurm_gcp_requirements.txt
 
 # --- Install Python Dependencies ---
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/refs/heads/master/scripts/requirements.txt && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
-
+RUN pip install --require-hashes --no-cache-dir -r base-tooling-requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_gcp_requirements.txt && \
     rm -rf ~/.cache/pip/*
