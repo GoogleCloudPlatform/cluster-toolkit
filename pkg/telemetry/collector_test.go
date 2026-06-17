@@ -283,7 +283,7 @@ vars:
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := tc.setupCmd()
-			bp := GetBlueprint(cmd, tc.args)
+			bp := getBlueprint(cmd, tc.args)
 
 			if tc.expectIsEmpty {
 				// Assert that the returned Blueprint is effectively empty
