@@ -390,22 +390,16 @@ func (g *GKEOrchestrator) getNAPNominalQuota(resName string, fname string) (inte
 	return limit, true
 }
 
-func getStaticNominalQuota(resName string, fc FlavorCapacity, fname string) interface{} {
+func getStaticNominalQuota(resName string, fc FlavorCapacity) interface{} {
 	switch resName {
 	case "cpu":
 		return fc.CPUs
 	case "memory":
 		return fmt.Sprintf("%dGi", fc.MemoryGi)
 	case "nvidia.com/gpu":
-		if isGPUFlavor(fname) {
-			return fc.GPUs
-		}
-		return 0
+		return fc.GPUs
 	case "google.com/tpu":
-		if isTPUFlavor(fname) {
-			return fc.TPUs
-		}
-		return 0
+		return fc.TPUs
 	default:
 		return 0
 	}
@@ -415,7 +409,7 @@ func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fna
 	if val, ok := g.getNAPNominalQuota(resName, fname); ok {
 		return val
 	}
-	return getStaticNominalQuota(resName, fc, fname)
+	return getStaticNominalQuota(resName, fc)
 }
 
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
