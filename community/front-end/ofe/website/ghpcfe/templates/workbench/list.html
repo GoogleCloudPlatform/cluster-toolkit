@@ -145,6 +145,7 @@ function filterTable() {
 }
 function setupFilter() {
     var toggle = document.getElementById("id_show_destroyed");
+    if (!toggle) return;
     toggle_cookie = ($.cookie("workbench_list_show_destroyed") != "false");
     if ( toggle_cookie ) {
         toggle.checked = true;
