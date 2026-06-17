@@ -903,22 +903,6 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 	return "", fmt.Errorf("multiple LocalQueues found (%v). Please specify which one to use using --queue flag", queues)
 }
 
-func (g *GKEOrchestrator) queryMachineType() (string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={.items[*].metadata.labels.node\\.kubernetes\\.io/instance-type}")
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to query Nodes for machine type: %s", res.Stderr)
-	}
-	output := strings.TrimSpace(res.Stdout)
-	if output == "" {
-		return "", nil
-	}
-
-	fields := strings.Fields(output)
-	if len(fields) > 0 {
-		return fields[0], nil
-	}
-	return "", nil
-}
 
 func (g *GKEOrchestrator) queryAllMachineTypes() ([]string, error) {
 	var unique []string
@@ -1376,23 +1360,6 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition)
 	return true, g.getEffectiveCPUs(job.MachineType, cap.GuestCpus), nil
 }
 
-func (g *GKEOrchestrator) getCPUsFromClusterDesc(job orchestrator.JobDefinition) (bool, int, error) {
-	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == job.MachineType {
-			cap, err := g.FetchMachineCapabilities(np.Config.MachineType, job.ClusterLocation)
-			if err != nil {
-				return false, 0, fmt.Errorf("failed to fetch machine capabilities for %s: %w", np.Config.MachineType, err)
-			}
-			guestCpus := cap.GuestCpus
-			if np.Config.AdvancedMachineFeatures.ThreadsPerCore == "1" && !strings.HasPrefix(np.Config.MachineType, "t2a") {
-				guestCpus = guestCpus / 2
-			}
-			logging.Info("Dynamically determined %s is a CPU-only machine from cluster desc, capacity: %d", job.MachineType, guestCpus)
-			return true, guestCpus, nil
-		}
-	}
-	return false, 0, nil
-}
 
 func (g *GKEOrchestrator) addVolumeOptions(opts *ManifestOptions, vols []orchestrator.VolumeDefinition) {
 	if len(vols) == 0 {
@@ -1504,16 +1471,6 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 	}
 }
 
-func (g *GKEOrchestrator) getCurrentNamespace() (string, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
-	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-	ns, _, err := kubeConfig.Namespace()
-	if err != nil || ns == "" {
-		return "default", nil
-	}
-	return ns, nil
-}
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
 	gvrWl := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
