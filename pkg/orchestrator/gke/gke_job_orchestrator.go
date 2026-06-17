@@ -524,7 +524,9 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		flavors[flavor] = fc
 	}
 
-	g.populateNAPFlavors(flavors)
+	if err := g.populateNAPFlavors(flavors); err != nil {
+		return ClusterCapacity{}, nil, fmt.Errorf("failed to populate GKE Node Auto-Provisioning (NAP) flavors: %w", err)
+	}
 
 	capacity := ClusterCapacity{
 		CPUs:     totalCPUs,
@@ -536,37 +538,40 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	return capacity, nodePoolSAs, nil
 }
 
-func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) {
+func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) error {
 	if !g.napEnabled {
-		return
+		return nil
 	}
 
 	for resName, maxLimit := range g.napLimits {
 		if maxLimit <= 0 {
 			continue
 		}
+		// Skip standard CPU and memory resources as they are not distinct accelerator flavors
+		if resName == "cpu" || resName == "memory" {
+			continue
+		}
 
-		// Map generic limits to valid Kubernetes resource flavor names (avoiding slashes)
-		// and omit NodeLabels for them to prevent scheduling conflicts.
 		var flavorName string
 		var nodeLabels map[string]string
 
-		switch resName {
-		case "google.com/tpu":
+		switch {
+		case resName == "google.com/tpu":
 			flavorName = "flavor-tpu-generic"
-		case "nvidia.com/gpu":
+		case resName == "nvidia.com/gpu":
 			flavorName = "flavor-nvidia-generic"
-		default:
+		case strings.HasPrefix(resName, "nvidia-"):
 			flavorName = "flavor-" + resName
-			if strings.Contains(resName, "tpu") {
-				nodeLabels = map[string]string{
-					"cloud.google.com/gke-tpu-accelerator": resName,
-				}
-			} else if strings.Contains(resName, "nvidia") {
-				nodeLabels = map[string]string{
-					"cloud.google.com/gke-accelerator": resName,
-				}
+			nodeLabels = map[string]string{
+				"cloud.google.com/gke-accelerator": resName,
 			}
+		case strings.HasPrefix(resName, "tpu-"):
+			flavorName = "flavor-" + resName
+			nodeLabels = map[string]string{
+				"cloud.google.com/gke-tpu-accelerator": resName,
+			}
+		default:
+			return fmt.Errorf("unknown accelerator label %q", resName)
 		}
 
 		if _, ok := flavors[flavorName]; !ok {
@@ -575,6 +580,7 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 			}
 		}
 	}
+	return nil
 }
 
 func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {

@@ -2186,3 +2186,76 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 		t.Errorf("expected napLimits[nvidia.com/gpu] to be %d, got %d", expectedGPULimit, limit)
 	}
 }
+
+func TestPopulateNAPFlavors(t *testing.T) {
+	tests := []struct {
+		name        string
+		napLimits   map[string]int64
+		wantFlavors map[string]FlavorCapacity
+		wantErr     bool
+	}{
+		{
+			name: "Skip cpu and memory, populate generic tpu and model specific gpu",
+			napLimits: map[string]int64{
+				"cpu":            100,
+				"memory":         1024,
+				"google.com/tpu": 4,
+				"nvidia-l4":      8,
+			},
+			wantFlavors: map[string]FlavorCapacity{
+				"flavor-tpu-generic": {
+					NodeLabels: nil,
+				},
+				"flavor-nvidia-l4": {
+					NodeLabels: map[string]string{
+						"cloud.google.com/gke-accelerator": "nvidia-l4",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Unknown accelerator label returns error",
+			napLimits: map[string]int64{
+				"unknown-gpu": 2,
+			},
+			wantFlavors: nil,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				napEnabled: true,
+				napLimits:  tt.napLimits,
+			}
+			flavors := make(map[string]FlavorCapacity)
+			err := orc.populateNAPFlavors(flavors)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("populateNAPFlavors() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if len(flavors) != len(tt.wantFlavors) {
+				t.Errorf("expected %d flavors, got %d", len(tt.wantFlavors), len(flavors))
+			}
+			for fName, expectedCapacity := range tt.wantFlavors {
+				gotCapacity, ok := flavors[fName]
+				if !ok {
+					t.Errorf("missing expected flavor %s", fName)
+					continue
+				}
+				if len(gotCapacity.NodeLabels) != len(expectedCapacity.NodeLabels) {
+					t.Errorf("expected %d node labels, got %d", len(expectedCapacity.NodeLabels), len(gotCapacity.NodeLabels))
+				}
+				for k, v := range expectedCapacity.NodeLabels {
+					if gotCapacity.NodeLabels[k] != v {
+						t.Errorf("expected label %s=%s, got %s", k, v, gotCapacity.NodeLabels[k])
+					}
+				}
+			}
+		})
+	}
+}
