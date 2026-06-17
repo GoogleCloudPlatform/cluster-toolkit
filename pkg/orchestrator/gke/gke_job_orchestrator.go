@@ -903,7 +903,6 @@ func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, 
 	return "", fmt.Errorf("multiple LocalQueues found (%v). Please specify which one to use using --queue flag", queues)
 }
 
-
 func (g *GKEOrchestrator) queryAllMachineTypes() ([]string, error) {
 	var unique []string
 	uniqueMap := make(map[string]bool)
@@ -1360,7 +1359,6 @@ func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition)
 	return true, g.getEffectiveCPUs(job.MachineType, cap.GuestCpus), nil
 }
 
-
 func (g *GKEOrchestrator) addVolumeOptions(opts *ManifestOptions, vols []orchestrator.VolumeDefinition) {
 	if len(vols) == 0 {
 		return
@@ -1470,7 +1468,6 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 		}
 	}
 }
-
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {
 	gvrWl := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
