@@ -367,6 +367,14 @@ func TestExtractShortReservationName(t *testing.T) {
 			input: "folders/my-folder/my-res",
 			want:  "my-res",
 		},
+		{
+			input: "my-res/",
+			want:  "my-res",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/",
+			want:  "my-res",
+		},
 	}
 
 	for _, tt := range tests {

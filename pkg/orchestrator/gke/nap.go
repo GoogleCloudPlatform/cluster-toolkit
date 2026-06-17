@@ -178,6 +178,7 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 // - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
 // - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
 func extractShortReservationName(resName string) string {
+	resName = strings.TrimSuffix(resName, "/")
 	if !strings.Contains(resName, "/") {
 		return resName
 	}
