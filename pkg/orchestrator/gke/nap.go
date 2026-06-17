@@ -148,14 +148,15 @@ func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumption
 	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
 	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
 
-	if consumptionModel == "spot" {
+	switch consumptionModel {
+	case "spot":
 		tolerations = append(tolerations, corev1.Toleration{
 			Key:      "cloud.google.com/gke-provisioning",
 			Operator: corev1.TolerationOpEqual,
 			Value:    "spot",
 			Effect:   corev1.TaintEffectNoSchedule,
 		})
-	} else if consumptionModel == "reservation" {
+	case "reservation":
 		tolerations = append(tolerations, g.resolveReservationTolerations(acceleratorType, reservationName)...)
 	}
 

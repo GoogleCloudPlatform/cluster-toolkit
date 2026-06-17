@@ -551,11 +551,12 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 		var flavorName string
 		var nodeLabels map[string]string
 
-		if resName == "google.com/tpu" {
+		switch resName {
+		case "google.com/tpu":
 			flavorName = "flavor-tpu-generic"
-		} else if resName == "nvidia.com/gpu" {
+		case "nvidia.com/gpu":
 			flavorName = "flavor-nvidia-generic"
-		} else {
+		default:
 			flavorName = "flavor-" + resName
 			if strings.Contains(resName, "tpu") {
 				nodeLabels = map[string]string{
@@ -1979,7 +1980,7 @@ func (d *DefaultKubeClient) ListJobSets(labelSelector string) ([]orchestrator.Jo
 	for _, item := range list.Items {
 		name := item.GetName()
 		creationParams := item.GetCreationTimestamp()
-		creationTime := creationParams.Time.Format(time.RFC3339)
+		creationTime := creationParams.Format(time.RFC3339)
 
 		statusStr, completionTime := parseJobStatus(item.Object)
 
