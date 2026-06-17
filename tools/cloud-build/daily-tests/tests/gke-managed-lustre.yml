@@ -35,3 +35,4 @@ cli_deployment_vars:
   size_gib: "{{ size_gib }}"
   per_unit_storage_throughput: "{{ per_unit_storage_throughput }}"
   gcp_public_cidrs_access_enabled: true
+  kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"

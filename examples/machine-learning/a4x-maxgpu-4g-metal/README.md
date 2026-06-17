@@ -26,7 +26,7 @@ This blueprint installs and configures several key software components. While th
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
 * **Slurm:** Git ref `6.12.1` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
-* **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4`
+* **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8`
 
 *Note: Some package managers might install minor updates to these components based on repository availability at build time.*
 

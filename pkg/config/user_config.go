@@ -21,31 +21,44 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sync"
 )
 
-// UserConfig holds the in-memory state of the user's telemetry preferences
+const configFileName = "telemetry_config.json"
+
+// UserConfig holds the in-memory state of the user information and telemetry preferences.
 type UserConfig struct {
 	UserID           string `json:"user_id"`
 	TelemetryEnabled bool   `json:"telemetry_enabled"`
+	IsGoogler        *bool  `json:"is_googler,omitempty"`
 }
 
 // globalUserConfig is the package-level variable holding the state during execution
-var globalUserConfig UserConfig
+var (
+	globalUserConfig UserConfig
+	mu               sync.RWMutex
+)
 
 // InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
 func InitUserConfig() error {
 	// Set the defaults
+	mu.Lock()
 	globalUserConfig = UserConfig{
 		UserID:           generateUniqueID(),
 		TelemetryEnabled: true, // Default telemetry state
 	}
+	mu.Unlock()
 
-	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+	configFile := filepath.Join(getLocalDirPath(false), configFileName)
 
 	// Try to read from the local config file
 	if data, err := os.ReadFile(configFile); err == nil {
 		// If the file exists and is valid, overwrite the defaults
-		if err := json.Unmarshal(data, &globalUserConfig); err == nil {
+		mu.Lock()
+		err := json.Unmarshal(data, &globalUserConfig)
+		mu.Unlock()
+
+		if err == nil {
 			return nil
 		}
 	}
@@ -74,11 +87,35 @@ func SetTelemetry(telemetry bool) error {
 	return nil
 }
 
+// GetIsGoogler returns the cached IsGoogler value if it exists, otherwise nil. This refers to whether the user is internal to Google or not.
+func GetIsGoogler() *bool {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return globalUserConfig.IsGoogler
+}
+
+// SetIsGoogler sets the IsGoogler status and persists it to disk.
+func SetIsGoogler(isGoogler bool) error {
+	mu.Lock()
+	globalUserConfig.IsGoogler = &isGoogler
+	mu.Unlock()
+
+	err := SaveToFile()
+	if err != nil {
+		return fmt.Errorf("failed to save state to file: %v", err)
+	}
+	return nil
+}
+
 // SaveToFile saves the in-memory state back to a local JSON file
 func SaveToFile() error {
-	configFile := filepath.Join(getLocalDirPath(false), "telemetry_config.json")
+	configFile := filepath.Join(getLocalDirPath(false), configFileName)
 
-	data, err := json.MarshalIndent(globalUserConfig, "", "  ")
+	mu.RLock()
+	data, err := json.MarshalIndent(globalUserConfig, "", " ")
+	mu.RUnlock()
+
 	if err != nil {
 		return fmt.Errorf("failed to marshal user config: %v", err)
 	}

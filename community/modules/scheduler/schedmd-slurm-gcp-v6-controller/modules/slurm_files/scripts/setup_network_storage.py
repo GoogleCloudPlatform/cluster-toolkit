@@ -184,6 +184,26 @@ def mount_fstab(mounts: list[NSMount], log):
                 raise e
 
 
+def wait_for_file(file_path: Path, timeout: int = 300):
+    """Wait for a file to exist and be non-empty at the given path."""
+    log.info(f"Waiting up to {timeout}s for file to exist and be ready: {file_path}")
+
+    for retry, wait in enumerate(util.backoff_delay(1.0, timeout), 1):
+        try:
+            if file_path.exists() and file_path.stat().st_size > 0:
+                with open(file_path, 'rb') as f:
+                    f.read(1)
+                log.info(f"File found and verified: {file_path}")
+                return
+        except OSError as e:
+            log.warning(f"File {file_path} exists but is not ready (try {retry}): {e}")
+
+        if wait > 0:
+            time.sleep(wait)
+
+    raise TimeoutError(f"Timeout waiting for file to be ready: {file_path}")
+
+
 def munge_mount_handler():
     if lookup().is_controller:
         return
@@ -223,8 +243,10 @@ def munge_mount_handler():
         raise err
 
     munge_key = Path(dirs.munge / "munge.key")
+    src_key = Path(mnt.local_mount / "munge.key")
+    wait_for_file(src_key)
     log.info(f"Copy munge.key from: {mnt.local_mount}")
-    shutil.copy2(Path(mnt.local_mount / "munge.key"), munge_key)
+    shutil.copy2(src_key, munge_key)
 
     log.info("Restrict permissions of munge.key")
     shutil.chown(munge_key, user="munge", group="munge")
@@ -275,8 +297,10 @@ def slurm_key_mount_handler():
 
     file_name = "slurm.key"
     dst = Path(util.slurmdirs.etc / file_name)
+    src_key = mnt.local_mount / file_name
+    wait_for_file(src_key)
     log.info(f"Copy slurm.key from: {mnt.local_mount}")
-    shutil.copy2(mnt.local_mount / file_name, dst)
+    shutil.copy2(src_key, dst)
 
     log.info("Restrict permissions of slurm.key")
     util.chown_slurm(dst, mode=0o400)

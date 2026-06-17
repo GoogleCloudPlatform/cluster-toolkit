@@ -38,7 +38,7 @@ steps:
   - -c
   - |
     set -x -e
-    cd /workspace && make
+    cd /workspace && bash tools/get_binary.sh "" "true"
     export BUILD_ID="${BUILD_ID}"
 
     BP_BEFORE="tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"

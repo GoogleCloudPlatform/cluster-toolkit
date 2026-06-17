@@ -322,6 +322,11 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			acceleratorType: "tpu7x-32",
 			wantErr:         true,
 		},
+		{
+			name:            "TPU7x full machine type fails with empty topology",
+			acceleratorType: "tpu7x-standard-4t",
+			wantErr:         true,
+		},
 	}
 
 	for _, tt := range tests {

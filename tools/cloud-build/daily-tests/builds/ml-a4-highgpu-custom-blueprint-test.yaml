@@ -56,7 +56,7 @@ steps:
       exit 1
     fi
     set -x
-    cd /workspace && make
+    cd /workspace && bash tools/get_binary.sh "" "true"
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"
     BLUEPRINT="/workspace/tools/cloud-build/daily-tests/blueprints/a4high-custom-image-blueprint.yaml"
@@ -70,6 +70,7 @@ steps:
       ENABLE_SPOT="false"
       sed -i '/instance_labels:/,+1d' "$${VARS_FILE}"
       sed -i '/enable_spot: true/d' "$${VARS_FILE}"
+      sed -i '/a4h_enable_spot_vm: true/d' "$${VARS_FILE}"
     else
       echo "INFO: Using $${VARS_FILE} as it is for SPOT provisioning."
     fi
@@ -82,9 +83,11 @@ steps:
       --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
       --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
       --extra-vars="@$${VARS_FILE}"
-  secretEnv: ['CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY']
 availableSecrets:
   secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
+    env: 'GCLUSTER_GCS_PATH'
   - versionName: projects/${PROJECT_ID}/secrets/custom-image-project/versions/latest
     env: 'CUSTOM_IMAGE_PROJECT'
   - versionName: projects/${PROJECT_ID}/secrets/custom-image-family/versions/latest
