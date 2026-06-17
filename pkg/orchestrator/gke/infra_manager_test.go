@@ -510,3 +510,47 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
 	}
 }
+
+func TestValidatePriorityClass_Empty(t *testing.T) {
+	orc := &GKEOrchestrator{}
+	err := orc.validatePriorityClass("")
+	if err != nil {
+		t.Fatalf("expected no error for empty priority, got %v", err)
+	}
+}
+
+func TestValidatePriorityClass_Exists(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low medium high"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+	err := orc.validatePriorityClass("medium")
+	if err != nil {
+		t.Fatalf("expected no error for existing priority, got %v", err)
+	}
+}
+
+func TestValidatePriorityClass_NotExist(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low high"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+	err := orc.validatePriorityClass("medium")
+	if err == nil {
+		t.Fatal("expected error for non-existing priority, got nil")
+	}
+	expected := `priority class "medium" does not exist in the cluster`
+	if !strings.Contains(err.Error(), expected) {
+		t.Errorf("expected error to contain %q, got %v", expected, err)
+	}
+}

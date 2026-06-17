@@ -1033,7 +1033,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
-| `--priority` | `string` | Priority class or level assigned to the job queue (e.g., `low`, `medium`, `high`). If empty, the cluster's default priority class will be used. |
+| `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |

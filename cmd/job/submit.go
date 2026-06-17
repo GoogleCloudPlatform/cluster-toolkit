@@ -85,7 +85,7 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(workloadName) > 28 {
-			return fmt.Errorf("workload name %q cannot exceed 28 characters (got %d)", workloadName, len(workloadName))
+			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
 		}
 
 		if err := validateImageFlags(); err != nil {
@@ -105,10 +105,6 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		}
 
 		priorityClassName = strings.ToLower(priorityClassName)
-		if priorityClassName != "" && !slices.Contains(orchestrator.ValidPriorityClasses, priorityClassName) {
-			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: %s",
-				priorityClassName, strings.Join(orchestrator.ValidPriorityClasses, ", "))
-		}
 
 		return nil
 	},
@@ -145,7 +141,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
-	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. If empty, the cluster's default priority class will be used.")
+	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")

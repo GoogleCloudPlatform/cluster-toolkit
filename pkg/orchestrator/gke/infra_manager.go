@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,8 +41,8 @@ import (
 var templatesFS embed.FS
 
 // defaultKueueVersion is the fallback version of Kueue to install.
-// ATTENTION: If you update this version, please also update the corresponding
-// default version in modules/management/kubectl-apply/variables.tf.
+// ATTENTION: For cluster creation the corresponding default version
+// is in modules/management/kubectl-apply/variables.tf.
 const defaultKueueVersion = "v0.15.2"
 const defaultJobSetVersion = "v0.10.1"
 
@@ -225,13 +226,20 @@ func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
 	return version, nil
 }
 
-func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
+func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
 	res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
-		return false, fmt.Errorf("failed to list priority classes: %s", res.Stderr)
+		return nil, fmt.Errorf("failed to list priority classes: %s", res.Stderr)
+	}
+	return strings.Fields(res.Stdout), nil
+}
+
+func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		return false, err
 	}
 
-	existing := strings.Fields(res.Stdout)
 	for _, name := range existing {
 		if strings.HasPrefix(name, "system-") || strings.HasPrefix(name, "gke-") {
 			continue
@@ -964,6 +972,7 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 		g.checkClusterConnectivity,
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
 		func() error { return g.ensurePriorityClassesInstalled() },
+		func() error { return g.validatePriorityClass(job.PriorityClassName) },
 		g.checkAndInstallJobSetCRD,
 	}
 
@@ -1004,23 +1013,34 @@ func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 	checks := []struct {
 		verb     string
 		resource string
-		group    string
 	}{
-		{"create", "namespaces", ""},
-		{"create", "customresourcedefinitions", "apiextensions.k8s.io"},
-		{"create", "clusterroles", "rbac.authorization.k8s.io"},
-		{"create", "clusterrolebindings", "rbac.authorization.k8s.io"},
+		{"create", "namespaces"},
+		{"create", "customresourcedefinitions.apiextensions.k8s.io"},
+		{"create", "clusterroles.rbac.authorization.k8s.io"},
+		{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
 	}
 
 	for _, c := range checks {
-		args := []string{"auth", "can-i", c.verb, c.resource}
-		if c.group != "" {
-			args = append(args, "--group="+c.group)
-		}
-		res := g.executor.ExecuteCommand("kubectl", args...)
+		res := g.executor.ExecuteCommand("kubectl", "auth", "can-i", c.verb, c.resource)
 		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
 			return fmt.Errorf("unable to re-install kueue to version %s, this could be a permission issue. Please contact your cluster administrator for updating KUEUE settings", version)
 		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error {
+	if requestedPriority == "" {
+		return nil
+	}
+
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		return err
+	}
+
+	if !slices.Contains(existing, requestedPriority) {
+		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requestedPriority, existing)
 	}
 	return nil
 }
