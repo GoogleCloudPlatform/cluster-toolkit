@@ -37,8 +37,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
-	"google.golang.org/api/container/v1"
-	"google.golang.org/api/option"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -1240,98 +1238,6 @@ func worker(version string, jobs <-chan string, results chan<- string, wg *sync.
 	}
 }
 
-const gkeClusterModule = "modules/scheduler/gke-cluster"
-
-func hasGKECluster(bp *Blueprint) bool {
-	hasGKE := false
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		if strings.Contains(m.Source, gkeClusterModule) {
-			hasGKE = true
-		}
-	})
-	return hasGKE
-}
-
-// ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
-func ResolveGKEVersions(bp *Blueprint) ([]string, error) {
-	if !hasGKECluster(bp) {
-		return []string{}, nil
-	}
-
-	projectID := GetKeyFromBlueprint("project_id", *bp)
-	region := GetKeyFromBlueprint("region", *bp)
-	if projectID == "" || region == "" {
-		return []string{}, fmt.Errorf("project_id and region must be defined in vars")
-	}
-
-	versions := make([]string, 0)
-	err := ""
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		// 1. Check for min_master_version safely
-		if version := getEvaluatedString("min_master_version", m, bp); version != "" {
-			versions = append(versions, version)
-			return // Proceed to the next module
-		}
-
-		// 2. Check for version_prefix safely
-		if versionPrefix := getEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
-			if releaseChannel := getEvaluatedString("release_channel", m, bp); releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
-				latestVersion, e := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
-				if e != nil {
-					err = err + e.Error()
-				}
-				if latestVersion != "" {
-					versions = append(versions, latestVersion)
-				} else {
-					// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
-					// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
-					versions = append(versions, versionPrefix)
-				}
-			}
-		}
-	})
-	if err == "" {
-		return versions, nil
-	}
-	return versions, fmt.Errorf("%s", err)
-}
-
-// Allow overriding the fetch function for testing ResolveGKEVersions
-var fetchGKEVersionFunc = func(projectID, region, prefix, releaseChannel string) (string, error) {
-	// Call the real function with default options
-	return fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel)
-}
-
-// fetchLatestGKEVersionForPrefix calls the GKE API to get the version a new cluster would use.
-func fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel string, opts ...option.ClientOption) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	service, err := container.NewService(ctx, opts...)
-	if err != nil {
-		return "", fmt.Errorf("failed to create container service client: %w", err)
-	}
-
-	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
-	serverConfig, err := service.Projects.Locations.GetServerConfig(parent).Context(ctx).Do()
-	if err != nil {
-		return "", fmt.Errorf("failed to get server config: %w", err)
-	}
-
-	var latestVersion = ""
-	for _, channel := range serverConfig.Channels {
-		if channel.Channel == releaseChannel {
-			// Find the latest valid version in the channel that matches the prefix. This is the version with which the cluster would get created.
-			for _, version := range channel.ValidVersions {
-				if strings.HasPrefix(version, prefix) && version > latestVersion {
-					latestVersion = version
-				}
-			}
-		}
-	}
-	return latestVersion, nil
-}
-
 func GetKeyFromBlueprint(key string, bp Blueprint) string {
 	val, err := bp.Eval(GlobalRef(key).AsValue())
 	if err == nil {
@@ -1343,8 +1249,8 @@ func GetKeyFromBlueprint(key string, bp Blueprint) string {
 	return ""
 }
 
-// getEvaluatedString safely gets and evaluates a setting from a module within a blueprint.
-func getEvaluatedString(key string, m *Module, bp *Blueprint) string {
+// GetEvaluatedString safely gets and evaluates a setting from a module within a blueprint.
+func GetEvaluatedString(key string, m *Module, bp *Blueprint) string {
 	val := m.Settings.Get(key)
 	if val.IsNull() {
 		return ""

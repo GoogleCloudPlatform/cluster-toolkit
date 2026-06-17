@@ -77,7 +77,6 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplDir := doCreate(cmd, args[0])
-	validators.PerformGkeVulnerabilitiesCheck(cmd, args)
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
@@ -87,6 +86,8 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 func doCreate(cmd *cobra.Command, path string) string {
 	bp, ctx := expandOrDie(cmd, path)
+	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
+	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)

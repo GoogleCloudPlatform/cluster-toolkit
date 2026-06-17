@@ -15,16 +15,19 @@
 package validators
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
-	"hpc-toolkit/pkg/telemetry"
-	"strings"
 
-	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
+	"google.golang.org/api/container/v1"
+	"google.golang.org/api/option"
 )
 
 //go:embed security-advisories.json
@@ -43,14 +46,10 @@ type VulnerabilityDB struct {
 	Advisories []Advisory `json:"advisories"`
 }
 
-// PerformGkeVersionSecurityChecks
-func PerformGkeVulnerabilitiesCheck(cmd *cobra.Command, args []string) {
-	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
-
-	// 3. evaluate security vulnerabilities BEFORE Terraform starts
+// PerformGkeVulnerabilitiesCheck checks the GKE version of the cluster against known vulnerabilities.
+func PerformGkeVulnerabilitiesCheck(skipSecurity bool, blueprint *config.Blueprint) {
 	if !skipSecurity {
-		blueprint := telemetry.GetBlueprint(cmd, args)
-		gkeVersions, err := config.ResolveGKEVersions(&blueprint)
+		gkeVersions, err := ResolveGKEVersions(blueprint)
 		if err != nil {
 			logging.Info("Error resolving GKE version from blueprint: %v", err)
 		}
@@ -99,9 +98,9 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 			switch adv.Status {
 			case "PENDING":
 				warnings = append(warnings, fmt.Sprintf(
-					"SECURITY WARNING: Your deployment might be vulnerable to %s (%s). "+
+					"SECURITY WARNING: Your GKE version %s might be vulnerable to %s (%s). "+
 						"Patches are currently PENDING in upstream GKE. See: %s",
-					adv.CVE, adv.Name, adv.Link))
+					gkeVersion, adv.CVE, adv.Name, adv.Link))
 			case "PATCHED":
 				if patchedVersion, exists := adv.PatchedVersions[minorVersion]; exists {
 					// Normalize patched version format
@@ -119,5 +118,132 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 		}
 	}
 
-	return warnings
+	uniqueWarnings := make([]string, 0, len(warnings))
+	seen := make(map[string]bool)
+	for _, w := range warnings {
+		if !seen[w] {
+			seen[w] = true
+			uniqueWarnings = append(uniqueWarnings, w)
+		}
+	}
+
+	return uniqueWarnings
+}
+
+const gkeClusterModule = "modules/scheduler/gke-cluster"
+
+func hasGKECluster(bp *config.Blueprint) bool {
+	hasGKE := false
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		if strings.Contains(m.Source, gkeClusterModule) {
+			hasGKE = true
+		}
+	})
+	return hasGKE
+}
+
+// ResolveGKEVersions determines the exact GKE versions for all GKE clusters and returns a list of resolved GKE versions used.
+func ResolveGKEVersions(bp *config.Blueprint) ([]string, error) {
+	if !hasGKECluster(bp) {
+		return []string{}, nil
+	}
+
+	projectID := config.GetKeyFromBlueprint("project_id", *bp)
+	region := config.GetKeyFromBlueprint("region", *bp)
+	if projectID == "" || region == "" {
+		return []string{}, fmt.Errorf("project_id and region must be defined in vars")
+	}
+
+	versions := make([]string, 0)
+	var errs []string
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		// 1. Check for min_master_version safely
+		if version := config.GetEvaluatedString("min_master_version", m, bp); version != "" {
+			versions = append(versions, version)
+			return // Proceed to the next module
+		}
+
+		// 2. Check for version_prefix safely
+		if versionPrefix := config.GetEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
+			releaseChannel := config.GetEvaluatedString("release_channel", m, bp)
+			latestVersion, e := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
+			if e != nil {
+				errs = append(errs, e.Error())
+			}
+			if latestVersion != "" {
+				versions = append(versions, latestVersion)
+			} else {
+				// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
+				// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
+				versions = append(versions, versionPrefix)
+			}
+		}
+	})
+	if len(errs) == 0 {
+		return versions, nil
+	}
+	return versions, fmt.Errorf("%s", strings.Join(errs, "; "))
+}
+
+// Allow overriding the fetch function for testing ResolveGKEVersions
+var fetchGKEVersionFunc = func(projectID, region, prefix, releaseChannel string) (string, error) {
+	// Call the real function with default options
+	return fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel)
+}
+
+// Helper to format version for semver comparison
+func normalizeVersion(v string) string {
+	if !strings.HasPrefix(v, "v") {
+		return "v" + v
+	}
+	return v
+}
+
+// Helper to find the highest version matching a prefix in a list
+func getHighestMatchingVersion(versions []string, prefix string) string {
+	var latest string
+	for _, version := range versions {
+		if !strings.HasPrefix(version, prefix) {
+			continue
+		}
+		if latest == "" {
+			latest = version
+			continue
+		}
+		if semver.Compare(normalizeVersion(version), normalizeVersion(latest)) > 0 {
+			latest = version
+		}
+	}
+	return latest
+}
+
+// fetchLatestGKEVersionForPrefix calls the GKE API to get the version a new cluster would use.
+func fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel string, opts ...option.ClientOption) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	service, err := container.NewService(ctx, opts...)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container service client: %w", err)
+	}
+
+	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, region)
+	serverConfig, err := service.Projects.Locations.GetServerConfig(parent).Context(ctx).Do()
+	if err != nil {
+		return "", fmt.Errorf("failed to get server config: %w", err)
+	}
+
+	var candidates []string
+	if releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
+		for _, channel := range serverConfig.Channels {
+			if channel.Channel == releaseChannel {
+				candidates = channel.ValidVersions
+				break
+			}
+		}
+	} else {
+		candidates = serverConfig.ValidMasterVersions
+	}
+
+	return getHighestMatchingVersion(candidates, prefix), nil
 }
