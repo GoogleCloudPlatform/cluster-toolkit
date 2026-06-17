@@ -42,7 +42,7 @@ var templatesFS embed.FS
 // defaultKueueVersion is the fallback version of Kueue to install.
 // ATTENTION: If you update this version, please also update the corresponding
 // default version in modules/management/kubectl-apply/variables.tf.
-const defaultKueueVersion = "v0.17.1"
+const defaultKueueVersion = "v0.15.2"
 const defaultJobSetVersion = "v0.10.1"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
@@ -93,9 +93,12 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	}
 
 	if needReinstall {
-		isDynamicSlicing, _ := g.checkDynamicSlicingViaGKE(clusterName, clusterLocation)
-		if isDynamicSlicing {
+		if g.checkDynamicSlicingViaGKE() {
 			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Dynamic-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+		}
+
+		if err := g.checkKueueInstallPermissions(version); err != nil {
+			return err
 		}
 
 		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
@@ -108,18 +111,17 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 }
 
 func (g *GKEOrchestrator) ensurePriorityClassesInstalled() error {
-	priorityClassesInstalled, err := g.arePriorityClassesInstalled()
+	hasUserClasses, err := g.hasUserPriorityClasses()
 	if err != nil {
 		return err
 	}
 
-	if !priorityClassesInstalled {
-		logging.Info("Required PriorityClasses not found. Installing them...")
-		return g.installPriorityClasses()
+	if hasUserClasses {
+		return nil // Skip installation entirely
 	}
 
-	logging.Info("The required PriorityClasses are already installed.")
-	return nil
+	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+	return g.installPriorityClasses()
 }
 
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
@@ -223,17 +225,21 @@ func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
 	return version, nil
 }
 
-func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
-	args := []string{"get", "priorityclass"}
-	args = append(args, orchestrator.ValidPriorityClasses...)
-	args = append(args, "-o", "name")
-
-	res := g.executor.ExecuteCommand("kubectl", args...)
+func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
-		logging.Info("One or more PriorityClasses not found.")
-		return false, nil
+		return false, fmt.Errorf("failed to list priority classes: %s", res.Stderr)
 	}
-	return true, nil
+
+	existing := strings.Fields(res.Stdout)
+	for _, name := range existing {
+		if strings.HasPrefix(name, "system-") || strings.HasPrefix(name, "gke-") {
+			continue
+		}
+		logging.Info("Pre-existing PriorityClass '%s' found. Skipping default PriorityClass installation.", name)
+		return true, nil
+	}
+	return false, nil
 }
 
 func (g *GKEOrchestrator) installKueue(version string) error {
@@ -278,8 +284,14 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
 	logging.Info("Installing Kueue resources (ClusterQueue, LocalQueue)...")
 
-	if err := g.installPriorityClasses(); err != nil {
+	hasUserClasses, err := g.hasUserPriorityClasses()
+	if err != nil {
 		return err
+	}
+	if !hasUserClasses {
+		if err := g.installPriorityClasses(); err != nil {
+			return err
+		}
 	}
 
 	// Install ClusterQueue
@@ -610,7 +622,11 @@ func parseVersion(v string) (int, int, int) {
 		minor, _ = strconv.Atoi(parts[1])
 	}
 	if len(parts) > 2 {
-		patch, _ = strconv.Atoi(parts[2])
+		patchStr := parts[2]
+		// Strip pre-release and build metadata
+		patchStr = strings.Split(patchStr, "-")[0]
+		patchStr = strings.Split(patchStr, "+")[0]
+		patch, _ = strconv.Atoi(patchStr)
 	}
 	return major, minor, patch
 }
@@ -971,24 +987,40 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkDynamicSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
-	poolName := os.Getenv("GKE_NODE_POOL_NAME")
-	if poolName == "" {
-		return false, nil
-	}
-
-	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+clusterName, "--location="+clusterLocation, "--format=json(placementPolicy)")
-	if result.ExitCode != 0 {
-		return false, fmt.Errorf("failed to describe node pool: %s", result.Stderr)
-	}
-
-	var policy map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Stdout), &policy); err == nil {
-		if placement, ok := policy["placementPolicy"].(map[string]interface{}); ok {
-			if mode, ok := placement["acceleratorTopologyMode"].(string); ok && mode == "PROVISION_ONLY" {
-				return true, nil
+func (g *GKEOrchestrator) checkDynamicSlicingViaGKE() bool {
+	for _, np := range g.clusterDesc.NodePools {
+		if np.PlacementPolicy != nil {
+			mode := np.PlacementPolicy.AcceleratorTopologyMode
+			if mode == "PROVISION_ONLY" {
+				return true
 			}
 		}
 	}
-	return false, nil
+	return false
+}
+
+func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
+	logging.Info("Verifying cluster permissions for Kueue installation...")
+	checks := []struct {
+		verb     string
+		resource string
+		group    string
+	}{
+		{"create", "namespaces", ""},
+		{"create", "customresourcedefinitions", "apiextensions.k8s.io"},
+		{"create", "clusterroles", "rbac.authorization.k8s.io"},
+		{"create", "clusterrolebindings", "rbac.authorization.k8s.io"},
+	}
+
+	for _, c := range checks {
+		args := []string{"auth", "can-i", c.verb, c.resource}
+		if c.group != "" {
+			args = append(args, "--group="+c.group)
+		}
+		res := g.executor.ExecuteCommand("kubectl", args...)
+		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
+			return fmt.Errorf("unable to re-install kueue to version %s, this could be a permission issue. Please contact your cluster administrator for updating KUEUE settings", version)
+		}
+	}
+	return nil
 }

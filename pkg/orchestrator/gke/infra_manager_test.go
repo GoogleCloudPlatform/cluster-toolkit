@@ -241,6 +241,9 @@ func TestParseVersion(t *testing.T) {
 		{"v0.6.3", 0, 6, 3},
 		{"1.2.3", 1, 2, 3},
 		{"v1.2", 1, 2, 0},
+		{"v0.16.6-some-random-suffix", 0, 16, 6},
+		{"v0.16.6+build123", 0, 16, 6},
+		{"v0.16.6-rc1+build123", 0, 16, 6},
 		{"invalid", 0, 0, 0},
 	}
 
@@ -265,6 +268,7 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 		action  func()
 	}{
 		{pattern: "kubectl delete crd", action: func() { deleteCalled = true }, res: shell.CommandResult{ExitCode: 0}},
+		{pattern: "auth can-i", res: shell.CommandResult{ExitCode: 0, Stdout: "yes"}},
 		{pattern: "kubectl get crd", res: shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}},
 		{pattern: "jsonpath", res: shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}},
 		{pattern: "kubectl get deployment", res: shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}},
@@ -310,8 +314,8 @@ func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return failure with "not found" to simulate missing priority classes
-				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): priorityclass \"very-low\" not found"}
+				// Return only system priority classes to simulate no user priority classes
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical"}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
 				applyCalled = true
@@ -341,8 +345,8 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return success to simulate all are present
-				return shell.CommandResult{ExitCode: 0}
+				// Return system classes and at least one user class (e.g. 'low') to simulate pre-existing classes
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical low"}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
 				applyCalled = true
@@ -420,5 +424,89 @@ func TestRenderClusterQueue_NAP(t *testing.T) {
 	}
 	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
 		t.Errorf("expected nominalQuota: 80 for GPU, got %s", output)
+	}
+}
+
+func TestCheckAndInstallKueue_PermissionDenied(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i") {
+				if strings.Contains(fullCmd, "clusterroles") {
+					return shell.CommandResult{ExitCode: 0, Stdout: "no"}
+				}
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
+			}
+			if strings.Contains(fullCmd, "jsonpath") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	if err == nil {
+		t.Fatal("expected error due to insufficient permissions, got nil")
+	}
+
+	expectedErr := "unable to re-install kueue to version"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
+	deleteCalled := false
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			}
+			if strings.Contains(fullCmd, "kubectl delete crd") {
+				deleteCalled = true
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
+			}
+			if strings.Contains(fullCmd, "jsonpath") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	origPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = origPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !deleteCalled {
+		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
 	}
 }
