@@ -78,9 +78,9 @@ variable "size_gib" {
 }
 
 variable "per_unit_storage_throughput" {
-  description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000."
+  description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. If enable_dynamic_tier is false, this defaults to 500."
   type        = number
-  default     = 500
+  default     = null
 }
 
 variable "labels" {

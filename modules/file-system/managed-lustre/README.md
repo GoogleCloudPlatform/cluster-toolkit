@@ -155,7 +155,7 @@ to 6988.
 
 To deploy a Managed Lustre instance with Dynamic Tier enabled, you must use a **pre-existing VPC**. This is because the `DynamicTierCapacity` quota is scoped to a specific VPC network name, and you must request this quota before running the deployment.
 
-For the Dynamic Tier, the minimum capacity is currently **472,000 GiB**.
+For the Dynamic Tier, the minimum capacity is **472,000 GiB**.
 
 ```yaml
   - id: network
@@ -193,7 +193,7 @@ For the Dynamic Tier, the minimum capacity is currently **472,000 GiB**.
 > [!IMPORTANT]
 > **Dynamic Tier Prerequisites & Constraints:**
 >
-> 1. **VPC-Scoped Quota:** The Dynamic Tier requires requesting `DynamicTierCapacity` quota (which defaults to 0). This quota is scoped to a specific project, zone, and VPC name. Because of this, dynamically created VPCs are not recommended as you cannot request quota before the VPC is created.
+> 1. **VPC-Scoped Quota:** The Dynamic Tier requires requesting `DynamicTierCapacity` quota. This quota is scoped to a specific project, zone, and VPC name. Because of this, dynamically created VPCs are not recommended as you cannot request quota before the VPC is created.
 >    * Refer to the official guide on how to [Request Additional Storage Capacity Quota](https://cloud.google.com/managed-lustre/docs/quotas#request_additional_storage_capacity_quota).
 >    * You can request a quota increase using the following `gcloud` command:
 >
@@ -207,8 +207,7 @@ For the Dynamic Tier, the minimum capacity is currently **472,000 GiB**.
 >          --justification="Requesting Dynamic Tier capacity for Cluster Toolkit deployment"
 >      ```
 >
-> 2. **Minimum Size:** The current minimum capacity is **472,000 GiB** (and must be in multiples of 472,000 GiB).
-> 3. **IP Address Changes in GKE:** Managed Lustre assigns IP addresses dynamically. If the Lustre instance is recreated (e.g. due to size updates), it will get a new IP address. Since Kubernetes `PersistentVolume` (PV) specs are immutable, you must manually delete the old PV and PVC resources in GKE before redeploying.
+> 2. **Minimum Size:** The minimum capacity is **472,000 GiB** (and must be in multiples of 472,000 GiB).
 
 ### Example - CMEK
 
@@ -367,7 +366,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | Name of the Lustre instance | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
-| <a name="input_per_unit_storage_throughput"></a> [per\_unit\_storage\_throughput](#input\_per\_unit\_storage\_throughput) | Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. | `number` | `500` | no |
+| <a name="input_per_unit_storage_throughput"></a> [per\_unit\_storage\_throughput](#input\_per\_unit\_storage\_throughput) | Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. If enable\_dynamic\_tier is false, this defaults to 500. | `number` | `null` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Lustre instance will be created. | `string` | n/a | yes |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote mount point of the Managed Lustre instance | `string` | n/a | yes |
