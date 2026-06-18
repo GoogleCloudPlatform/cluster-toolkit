@@ -170,8 +170,8 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 		if maxLimit <= 0 {
 			continue
 		}
-		// Skip standard CPU, memory, and generic gpu/tpu resources as they are not distinct accelerator flavors
-		if resName == "cpu" || resName == "memory" || resName == "gpu" || resName == "tpu" {
+		// Skip standard CPU, memory, and generic non-accelerator resources as they are not distinct accelerator flavors
+		if resName == "cpu" || resName == "memory" || resName == "gpu" || resName == "tpu" || resName == "pods" || resName == "storage" || resName == "ephemeral-storage" {
 			continue
 		}
 

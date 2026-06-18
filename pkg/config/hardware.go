@@ -15,8 +15,6 @@
 package config
 
 import (
-	_ "embed"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -24,17 +22,6 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 )
-
-//go:embed machine_mappings.json
-var MachineMappingsJSON []byte
-
-type MachineMappings struct {
-	MachineFamilyToLabelMap map[string]string `json:"machine_family_to_label_map"`
-	AcceleratorShorthandMap map[string]string `json:"accelerator_shorthand_map"`
-	CPUMachineFamilies      []string          `json:"cpu_machine_families"`
-}
-
-var parsedMappings MachineMappings
 
 const defaultAcceleratorsPerVM = 4
 
@@ -151,9 +138,6 @@ func init() {
 	}
 	for _, v := range common3DTopologies {
 		valid3DShapes[v] = true
-	}
-	if err := json.Unmarshal(MachineMappingsJSON, &parsedMappings); err != nil {
-		panic(fmt.Sprintf("failed to unmarshal machine_mappings.json: %v", err))
 	}
 }
 
