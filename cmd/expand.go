@@ -16,9 +16,16 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/validators"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 )
 
 func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
@@ -71,4 +78,98 @@ func runExpandCmd(cmd *cobra.Command, args []string) {
 	bp, ctx := expandOrDie(cmd, args[0])
 	checkErr(bp.Export(expandFlags.outputPath), ctx)
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), expandFlags.outputPath)
+}
+
+func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
+	err := validators.Execute(bp)
+	if err == nil {
+		return
+	}
+	logging.Error("%s", renderError(err, ctx))
+
+	const errorMsg = `One or more blueprint validators has failed. See messages above for suggested
+actions. General troubleshooting guidance and instructions for configuring validators are shown below.
+
+- https://goo.gle/hpc-toolkit-troubleshooting
+- https://goo.gle/hpc-toolkit-validation
+
+Validators can be silenced or treated as warnings or errors:
+
+- https://goo.gle/hpc-toolkit-validation-levels
+`
+	logging.Error("%s", errorMsg)
+
+	switch bp.ValidationLevel {
+	case config.ValidationWarning:
+		{
+			logging.Error("%s\n", boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
+		}
+	case config.ValidationError:
+		{
+			logging.Fatal("%s", boldRed("Validation failed due to the issues listed above"))
+		}
+	}
+}
+
+func setCLIVariables(ds *config.DeploymentSettings, s []string) error {
+	for _, cliVar := range s {
+		arr := strings.SplitN(cliVar, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cliVar)
+		}
+		// Convert the variable's string literal to its equivalent default type.
+		key := arr[0]
+		var v config.YamlValue
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
+			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
+		}
+		ds.Vars = ds.Vars.With(key, v.Unwrap())
+	}
+	return nil
+}
+
+func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
+	if len(s) == 0 {
+		return nil // no op
+	}
+	be := config.TerraformBackend{Type: "gcs"}
+	for _, cfg := range s {
+		arr := strings.SplitN(cfg, "=", 2)
+
+		if len(arr) != 2 {
+			return fmt.Errorf("invalid format: '%s' should follow the 'name=value' format", cfg)
+		}
+
+		key, value := arr[0], arr[1]
+		switch key {
+		case "type":
+			be.Type = value
+		default:
+			be.Configuration = be.Configuration.With(key, cty.StringVal(value))
+		}
+	}
+	ds.TerraformBackendDefaults = be
+	return nil
+}
+
+// SetValidationLevel allows command-line tools to set the validation level
+func setValidationLevel(bp *config.Blueprint, s string) error {
+	switch s {
+	case "ERROR":
+		bp.ValidationLevel = config.ValidationError
+	case "WARNING":
+		bp.ValidationLevel = config.ValidationWarning
+	case "IGNORE":
+		bp.ValidationLevel = config.ValidationIgnore
+	default:
+		return errors.New("invalid validation level (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	}
+	return nil
+}
+
+func skipValidators(bp *config.Blueprint) {
+	for _, v := range expandFlags.validatorsToSkip {
+		bp.SkipValidator(v)
+	}
 }
