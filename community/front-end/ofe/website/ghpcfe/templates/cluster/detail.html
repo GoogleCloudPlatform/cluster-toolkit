@@ -78,24 +78,21 @@
   {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" or cluster.status == "n" %}
   <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
   <script>
-    setInterval(function () {
+    var refreshIntervalId = setInterval(function () {
       $.ajax({
         url: "{% url 'backend-cluster-status' object.id %}",
         type: "GET",
         dataType: "json",
         success: function (data) {
-          // update the object status display
-          var statusElement = $("#status-p");
-          var statusText = response.status;
-          statusElement.html("<b>Status: {{ object.get_status_display }}</b>");
-
-          // check if the status is "r" and stop the refresh interval
-          if (statusText == "r") {
+          // when the cluster becomes ready, stop polling and reload the page
+          // so it renders the fully-ready state
+          if (data.status === "r") {
             clearInterval(refreshIntervalId);
+            location.reload();
           }
         },
         error: function (xhr, status, error) {
-          console.log("Error refreshing data");
+          console.log("Error refreshing data:", error);
         }
       });
     }, 5000);

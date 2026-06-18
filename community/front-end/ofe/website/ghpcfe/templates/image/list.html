@@ -190,11 +190,11 @@ function refreshImageStatus(imageId) {
       var statusElement = $('#status-' + imageId + ' img');
 
       if (data.status === 'n' || data.status === 'c') {
-        statusElement.attr('src', '/static/img/loading.gif');
+        statusElement.attr('src', '/static/img/loading.gif').attr('alt', 'Loading');
       } else if (data.status === 'r') {
-        statusElement.attr('src', '/static/img/status-ready.png');
+        statusElement.attr('src', '/static/img/status-ready.png').attr('alt', 'Ready');
       } else if (data.status === 'e') {
-        statusElement.attr('src', '/static/img/status-error.png');
+        statusElement.attr('src', '/static/img/status-error.png').attr('alt', 'Error');
       }
 
       // Schedule the next refresh after 5 seconds
