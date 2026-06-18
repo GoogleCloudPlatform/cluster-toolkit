@@ -49,6 +49,7 @@ deployment_groups:
         destination: generate_hello.sh
         content: |
           #!/bin/sh
+          hostname \$(hostname -s)
           echo "Hello World" > /usr/local/hello.txt
 
 - group: packer

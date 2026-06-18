@@ -54,3 +54,6 @@
   ansible.builtin.file:
     path: "/{{ custom_vars.output_dir }}/{{ item }}.txt"
     state: absent
+
+- name: Verify Lustre KMS Key
+  ansible.builtin.include_tasks: verify-lustre-cmek.yml

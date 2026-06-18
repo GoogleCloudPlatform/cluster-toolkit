@@ -78,7 +78,7 @@ TEMPORAL_CONSTAINTS = [
 ]
 # TODO:
 # * Consider defining constraints (e.g. reservations used) as a tags within tests yamls
-# * Use better solution than randome brute force
+# * Use better solution than random brute force
 
 def list_builds() -> list[str]:
     builds = [b[:-5] for b in glob.glob("*.yaml", root_dir="../daily-tests/builds/")]

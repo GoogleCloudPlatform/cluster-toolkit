@@ -216,15 +216,17 @@ resource "google_container_cluster" "gke_cluster" {
 
   enable_multi_networking = local.derived_enable_multi_networking
 
+  enable_fqdn_network_policy = var.enable_fqdn_network_policy
+
   network_policy {
     # Enabling NetworkPolicy for clusters with DatapathProvider=ADVANCED_DATAPATH
     # is not allowed. Dataplane V2 will take care of network policy enforcement
     # instead.
-    enabled = false
+    enabled = try(var.network_policy.enabled, false)
     # GKE Dataplane V2 support. This must be set to PROVIDER_UNSPECIFIED in
     # order to let the datapath_provider take effect.
     # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/656#issuecomment-720398658
-    provider = "PROVIDER_UNSPECIFIED"
+    provider = try(var.network_policy.provider, "PROVIDER_UNSPECIFIED")
   }
 
   private_cluster_config {
@@ -328,6 +330,9 @@ resource "google_container_cluster" "gke_cluster" {
     slice_controller_config {
       enabled = var.enable_slice_controller
     }
+    network_policy_config {
+      disabled = !try(var.network_policy.enabled, false)
+    }
   }
 
   timeouts {
@@ -384,6 +389,14 @@ resource "google_container_cluster" "gke_cluster" {
       )
       error_message = "The GKE Slice Controller requires a GKE version of 1.35.0-gke.274500 or higher. Please update 'version_prefix' or 'min_master_version'."
     }
+    precondition {
+      condition     = !(local.derived_enable_dataplane_v2 && try(var.network_policy.enabled, false))
+      error_message = "Enabling network policy (Calico) is not supported when GKE Dataplane V2 is enabled. Dataplane V2 automatically manages network policy enforcement."
+    }
+    precondition {
+      condition     = !var.enable_fqdn_network_policy || local.derived_enable_dataplane_v2
+      error_message = "FQDN Network Policy requires GKE Dataplane V2 to be enabled."
+    }
   }
 
   monitoring_config {
@@ -401,7 +414,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "managed_machine_learning_diagnostics_config" {
-    for_each = var.enable_managed_ml_diagnostics ? [1] : []
+    for_each = var.enable_ml_diagnostics ? [1] : []
     content {
       enabled = true
     }
@@ -575,7 +588,7 @@ resource "kubernetes_namespace" "user_namespace" {
 }
 
 resource "kubernetes_labels" "workload_namespace_labels" {
-  count       = var.enable_managed_ml_diagnostics ? 1 : 0
+  count       = var.enable_ml_diagnostics ? 1 : 0
   api_version = "v1"
   kind        = "Namespace"
 
@@ -668,8 +681,8 @@ module "kubectl_apply" {
 resource "terraform_data" "validate_ml_diagnostics_version" {
   lifecycle {
     precondition {
-      condition     = !var.enable_managed_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
-      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version', or use the 'mldiagnostics' module instead."
+      condition     = !var.enable_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
+      error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
 }
