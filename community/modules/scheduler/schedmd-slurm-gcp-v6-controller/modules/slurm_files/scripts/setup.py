@@ -36,7 +36,6 @@ from util import (
     install_custom_scripts,
 )
 import conf
-import conf_v2411
 import slurmsync
 
 from setup_network_storage import (

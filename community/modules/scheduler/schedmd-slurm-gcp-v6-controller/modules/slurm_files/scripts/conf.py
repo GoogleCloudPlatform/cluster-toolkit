@@ -58,20 +58,6 @@ def dict_to_conf(conf, delim=" ") -> str:
         f"{k}={v}" for k, v in map(filter_conf, conf.items()) if v is not None
     )
 
-def topology_type(lkp: util.Lookup, partition: NSDict) -> str:
-    """
-    Returns configured topology type for a given partition.
-    """
-    if lkp.has_block_topology(partition):
-        if util.slurm_version_gte(lkp.slurm_version, "25.05"):
-            log.info(f"Partition {partition.partition_name} is using block topology")
-            return TOPOLOGY_BLOCK
-        else:
-            log.info(f"Slurm version < 25.05, falling back to tree topology for Partition {partition.partition_name}")
-    else:
-        log.info(f"Partition {partition.partition_name} is using tree topology")
-    return TOPOLOGY_TREE
-
 def topology_plugin(lkp: util.Lookup) -> str:
     """
     Returns configured topology plugin, defaults to `topology/tree`.
@@ -86,6 +72,33 @@ class SlurmConfigGenerator:
 
     def __init__(self, lkp: util.Lookup):
         self.lkp = lkp
+
+
+    @property
+    def supports_block_topology(self) -> bool:
+        return True
+
+    @property
+    def supports_partition_topology(self) -> bool:
+        return True
+
+    @property
+    def use_gpu_type(self) -> bool:
+        return True
+
+    def topology_type(self, partition: NSDict) -> str:
+        """
+        Returns configured topology type for a given partition.
+        """
+        if self.lkp.has_block_topology(partition):
+            if self.supports_block_topology:
+                log.info(f"Partition {partition.partition_name} is using block topology")
+                return TOPOLOGY_BLOCK
+            else:
+                log.info(f"Block topology not supported, falling back to tree topology for Partition {partition.partition_name}")
+        else:
+            log.info(f"Partition {partition.partition_name} is using tree topology")
+        return TOPOLOGY_TREE
 
     def get_conf_options(self) -> dict:
         params = self.lkp.cfg.cloud_parameters
@@ -183,7 +196,7 @@ class SlurmConfigGenerator:
             *(nodeset_lines(n, self.lkp) for n in self.lkp.cfg.nodeset.values()),
             *(nodeset_dyn_lines(n) for n in self.lkp.cfg.nodeset_dyn.values()),
             *(nodeset_tpu_lines(n, self.lkp) for n in self.lkp.cfg.nodeset_tpu.values()),
-            *(partitionlines(p, self.lkp) for p in self.lkp.cfg.partitions.values()),
+            *(self.partitionlines(p) for p in self.lkp.cfg.partitions.values()),
             *(suspend_exc_lines(self.lkp)),
         ]
         return "\n\n".join(filter(None, lines))
@@ -194,22 +207,133 @@ class SlurmConfigGenerator:
         conf_file.write_text(content)
         util.chown_slurm(conf_file, mode=0o644)
 
+    def generate_topology_data(self) -> Tuple[bool, Any]:
+        return gen_topology_yaml(self.lkp)
+
     def generate_topology(self) -> None:
         if self.lkp.cfg.nodeset:
-            _, summary = gen_topology_yaml(self.lkp)
+            _, summary = self.generate_topology_data()
             summary.dump(self.lkp)
             install_topology_yaml(self.lkp)
 
     def install_jobsubmit_lua(self) -> None:
         install_jobsubmit_lua(self.lkp)
 
-    def generate_configs(self) -> None:
+    def install_slurm_conf(self) -> None:
         install_slurm_conf(self.lkp)
+
+    def install_slurmdbd_conf(self) -> None:
         install_slurmdbd_conf(self.lkp)
-        self.gen_cloud_conf()
-        gen_cloud_gres_conf(self.lkp)
+
+    def gen_cloud_gres_conf(self) -> None:
+        """create cloud_gres.conf file"""
+        content = FILE_PREAMBLE + self.gen_cloud_gres_conf_lines()
+        conf_file = self.lkp.etc_dir / "cloud_gres.conf"
+        conf_file.write_text(content)
+        util.chown_slurm(conf_file, mode=0o600)
+
+    def install_gres_conf(self) -> None:
         install_gres_conf(self.lkp)
+
+    def install_cgroup_conf(self) -> None:
         install_cgroup_conf(self.lkp)
+
+    def partitionlines(self, partition) -> str:
+        """Make a partition line for the slurm.conf"""
+        MIN_MEM_PER_CPU = 100
+
+        def defmempercpu(nodeset_name: str) -> int:
+            nodeset = self.lkp.cfg.nodeset.get(nodeset_name)
+            template = nodeset.instance_template
+            machine = self.lkp.template_machine_conf(template)
+            mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
+            return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
+
+        defmem = min(
+            map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
+        )
+
+        nodesets = list(
+            chain(
+                partition.partition_nodeset,
+                partition.partition_nodeset_dyn,
+                partition.partition_nodeset_tpu,
+            )
+        )
+
+        is_tpu = len(partition.partition_nodeset_tpu) > 0
+        is_dyn = len(partition.partition_nodeset_dyn) > 0
+
+        oversub_exlusive = partition.enable_job_exclusive or is_tpu
+        power_down_on_idle = partition.enable_job_exclusive and not is_dyn
+
+        line_elements = {
+            "PartitionName": partition.partition_name,
+            "Nodes": ",".join(nodesets),
+            "State": "UP",
+            "DefMemPerCPU": defmem,
+            "SuspendTime": 300,
+            "Oversubscribe": "Exclusive" if oversub_exlusive else None,
+            "PowerDownOnIdle": "YES" if power_down_on_idle else None,
+            **partition.partition_conf,
+        }
+        
+        if self.supports_partition_topology and self.lkp.cfg.nodeset:
+            line_elements["Topology"] = self.topology_type(partition) 
+
+        return dict_to_conf(line_elements)
+
+    def gen_cloud_gres_conf_lines(self) -> str:
+        """generate cloud_gres.conf's content"""
+
+        use_gpu_type = self.use_gpu_type
+
+        lines = []
+        if use_gpu_type:
+            gpu_nodes_with_type: defaultdict[Tuple[int, Optional[str]], List[str]] = defaultdict(list)
+            for nodeset in self.lkp.cfg.nodeset.values():
+                ti = self.lkp.template_info(nodeset.instance_template)
+                gpu_count = ti.gpu.count if ti.gpu  else 0
+                gpu_type = ti.gpu.type if ti.gpu  else None
+                if gpu_count:
+                    key_with_type = (gpu_count, gpu_type)
+                    gpu_nodes_with_type[key_with_type].append(self.lkp.nodelist(nodeset))
+            
+            for (gpu_count, gpu_type), names in gpu_nodes_with_type.items():
+                lines.append(dict_to_conf({
+                    "NodeName": names,
+                    "Name": "gpu",
+                    "Type": gpu_type,
+                    "File": f"/dev/nvidia[0-{gpu_count-1}]" if gpu_count > 1 else "/dev/nvidia0",
+                }))
+        else:
+            gpu_nodes_without_type: defaultdict[int, List[str]] = defaultdict(list)
+            for nodeset in self.lkp.cfg.nodeset.values():
+                ti = self.lkp.template_info(nodeset.instance_template)
+                gpu_count = ti.gpu.count if ti.gpu  else 0
+                # gpu_type is not used in this branch, but is needed for template_info to be consistent
+                gpu_type = ti.gpu.type if ti.gpu  else None 
+                if gpu_count:
+                    key_without_type: int = gpu_count # Explicitly type key as int
+                    gpu_nodes_without_type[key_without_type].append(self.lkp.nodelist(nodeset))
+            
+            for gpu_count, names in gpu_nodes_without_type.items():
+                lines.append(dict_to_conf({
+                    "NodeName": names,
+                    "Name": "gpu",
+                    "File": f"/dev/nvidia[0-{gpu_count-1}]" if gpu_count > 1 else "/dev/nvidia0",
+                }))
+        
+        lines.append("\n")
+        return "\n".join(lines)
+
+    def generate_configs(self) -> None:
+        self.install_slurm_conf()
+        self.install_slurmdbd_conf()
+        self.gen_cloud_conf()
+        self.gen_cloud_gres_conf()
+        self.install_gres_conf()
+        self.install_cgroup_conf()
         self.install_jobsubmit_lua()
         self.generate_topology()
 
@@ -223,6 +347,10 @@ def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
     else:
         from conf_v2411 import SlurmConfigGeneratorV2411
         return SlurmConfigGeneratorV2411(lkp)
+
+def generate_configs_slurm_v2505(lkp: util.Lookup) -> None:
+    """Preserved for backward compatibility."""
+    get_generator(lkp).generate_configs()
 
 def conflines(lkp: util.Lookup) -> str:
     return get_generator(lkp).conflines()
@@ -277,51 +405,6 @@ def nodeset_dyn_lines(nodeset):
         {"NodeSet": nodeset.nodeset_name, "Feature": nodeset.nodeset_feature}
     )
 
-
-def partitionlines(partition, lkp: util.Lookup) -> str:
-    """Make a partition line for the slurm.conf"""
-    MIN_MEM_PER_CPU = 100
-
-    def defmempercpu(nodeset_name: str) -> int:
-        nodeset = lkp.cfg.nodeset.get(nodeset_name)
-        template = nodeset.instance_template
-        machine = lkp.template_machine_conf(template)
-        mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
-        return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
-
-    defmem = min(
-        map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
-    )
-
-    nodesets = list(
-        chain(
-            partition.partition_nodeset,
-            partition.partition_nodeset_dyn,
-            partition.partition_nodeset_tpu,
-        )
-    )
-
-    is_tpu = len(partition.partition_nodeset_tpu) > 0
-    is_dyn = len(partition.partition_nodeset_dyn) > 0
-
-    oversub_exlusive = partition.enable_job_exclusive or is_tpu
-    power_down_on_idle = partition.enable_job_exclusive and not is_dyn
-
-    line_elements = {
-        "PartitionName": partition.partition_name,
-        "Nodes": ",".join(nodesets),
-        "State": "UP",
-        "DefMemPerCPU": defmem,
-        "SuspendTime": 300,
-        "Oversubscribe": "Exclusive" if oversub_exlusive else None,
-        "PowerDownOnIdle": "YES" if power_down_on_idle else None,
-        **partition.partition_conf,
-    }
-    
-    if util.slurm_version_gte(lkp.slurm_version, "25.05") and lkp.cfg.nodeset:
-        line_elements["Topology"] = topology_type(lkp, partition) 
-
-    return dict_to_conf(line_elements)
 
 
 def suspend_exc_lines(lkp: util.Lookup) -> Iterable[str]:
@@ -504,59 +587,6 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, 0o600)
 
 
-def gen_cloud_gres_conf_lines(lkp: util.Lookup) -> str:
-    """generate cloud_gres.conf's content"""
-
-    use_gpu_type = util.slurm_version_gte(lkp.slurm_version, "25.05")
-
-    lines = []
-    if use_gpu_type:
-        gpu_nodes_with_type: defaultdict[Tuple[int, Optional[str]], List[str]] = defaultdict(list)
-        for nodeset in lkp.cfg.nodeset.values():
-            ti = lkp.template_info(nodeset.instance_template)
-            gpu_count = ti.gpu.count if ti.gpu  else 0
-            gpu_type = ti.gpu.type if ti.gpu  else None
-            if gpu_count:
-                key_with_type = (gpu_count, gpu_type)
-                gpu_nodes_with_type[key_with_type].append(lkp.nodelist(nodeset))
-        
-        for (gpu_count, gpu_type), names in gpu_nodes_with_type.items():
-            lines.append(dict_to_conf({
-                "NodeName": names,
-                "Name": "gpu",
-                "Type": gpu_type,
-                "File": f"/dev/nvidia[0-{gpu_count-1}]" if gpu_count > 1 else "/dev/nvidia0",
-            }))
-    else:
-        gpu_nodes_without_type: defaultdict[int, List[str]] = defaultdict(list)
-        for nodeset in lkp.cfg.nodeset.values():
-            ti = lkp.template_info(nodeset.instance_template)
-            gpu_count = ti.gpu.count if ti.gpu  else 0
-            # gpu_type is not used in this branch, but is needed for template_info to be consistent
-            gpu_type = ti.gpu.type if ti.gpu  else None 
-            if gpu_count:
-                key_without_type: int = gpu_count # Explicitly type key as int
-                gpu_nodes_without_type[key_without_type].append(lkp.nodelist(nodeset))
-        
-        for gpu_count, names in gpu_nodes_without_type.items():
-            lines.append(dict_to_conf({
-                "NodeName": names,
-                "Name": "gpu",
-                "File": f"/dev/nvidia[0-{gpu_count-1}]" if gpu_count > 1 else "/dev/nvidia0",
-            }))
-    
-    lines.append("\n")
-    return "\n".join(lines)
-
-
-def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
-    """create cloud_gres.conf file"""
-
-    content = FILE_PREAMBLE + gen_cloud_gres_conf_lines(lkp)
-
-    conf_file = lkp.etc_dir / "cloud_gres.conf"
-    conf_file.write_text(content)
-    util.chown_slurm(conf_file, mode=0o600)
 
 
 def install_gres_conf(lkp: util.Lookup) -> None:
