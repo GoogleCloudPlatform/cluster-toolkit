@@ -376,7 +376,7 @@ func ResolveTopologyForChips(computeType string, machineType string) (string, er
 		}
 	} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
 		isMultipleOf64 := totalChips >= 64 && totalChips%64 == 0
-		if !(isPowerOf2 || isMultipleOf64) {
+		if !isPowerOf2 && !isMultipleOf64 {
 			return "", fmt.Errorf("invalid size %d in compute-type %q. Valid sizes are powers of 2, or multiples of 64", totalChips, computeType)
 		}
 		if shape, exists := common3DTopologies[totalChips]; exists {
@@ -466,10 +466,8 @@ func Validate3DTopology(topology string, machineType string, dynamicSlicingCheck
 		return fmt.Errorf("topology %s exceeds max cubes limit of %d (current: %d)", topology, maxCubes, cubes)
 	}
 
-	if !(a <= b && b <= c) {
-		if topology != "2x2x1" {
-			return fmt.Errorf("topology %s dimensions must be in non-decreasing order (A <= B <= C)", topology)
-		}
+	if (a > b || b > c) && topology != "2x2x1" {
+		return fmt.Errorf("topology %s dimensions must be in non-decreasing order (A <= B <= C)", topology)
 	}
 
 	return nil

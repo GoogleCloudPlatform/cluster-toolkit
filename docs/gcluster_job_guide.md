@@ -298,6 +298,32 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
 
+### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
+
+> [!NOTE]
+> The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
+
+Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:
+
+```bash
+./gcluster job submit \
+  --name my-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
+
+Use the `--gke-nap-provisioning reservation` option and target a GCE reservation via the `--gke-nap-reservation` flag:
+
+```bash
+./gcluster job submit \
+  --name my-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
+```
+
 ### 6.3 Job Retention (TTL)
 
 By default, finished jobs are kept for 1 hour. You can change this using `--gke-ttl-after-finished` and pass flexible durations.
@@ -896,6 +922,27 @@ When the `--pathways` flag is specified, GCluster automatically refactors the Jo
 * **Co-located JAX Workers & Sidecars:** Deployed as worker pods hosting JAX and PJRT runtimes, with optional co-located sidecar containers using `--pathways-colocated-python-sidecar-image`.
 
 All GCS pathways artifact locations, elastic slice configurations, and proxy command arguments are dynamically compiled into the manifest based on your `--pathways-*` flags.
+
+---
+
+### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
+
+Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dynamically creates and deletes node pools based on unschedulable pod resource requirements. GCluster integrates with NAP to allow users to target specific compute consumption models.
+
+#### Capabilities & Scheduling Benefits
+
+* **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs. If the cluster runs low on spot instances or fails to acquire them, the pre-flight checks and scheduler ensure it doesn't silently route to standard pools if you explicitly targeted Spot.
+* **Reservation Targeting:** Target GCE reservations by name. GCluster supports simple reservation names, full GCP resource URIs, and complex reservation path identifiers containing block/subblock configurations. GCluster automatically extracts the short reservation identifier to populate the node selector and tolerations since GKE NAP only supports reservation-level scheduling on pods (scheduling to a specific block or sub-block within the reservation is not supported by GKE pod selectors).
+* **Kueue Resource Quota Alignment:** Kueue ResourceFlavors and ClusterQueues are dynamically matched with GKE NAP autoprovisioning limits to ensure fair sharing, priority queuing, and preemption.
+
+#### Orchestration & Under-The-Hood Mappings
+
+When GKE NAP options are used, GCluster performs several operations to structure the JobSet manifest:
+
+* **Tolerations and Selector Injection:**
+  * Spot: Injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector.
+  * Reservation: Injects reservation tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`) to allow scheduling on nodes spawned by GKE to consume the target reservation. If a block/sub-block path format is provided, the short reservation identifier is automatically extracted and used as the `<reservation-name>`.
+* **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type (e.g., `ct6e-standard-4t`, `a3-megagpu-8g`) is explicitly configured in GKE NAP limits. If the machine type is not covered by GKE NAP limits, GCluster **fails fast** during submission, preventing scheduling locks.
 
 ## 9. `gcluster job` Command Reference
 

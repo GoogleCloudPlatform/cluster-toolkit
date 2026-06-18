@@ -192,11 +192,88 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 	isSubSlicing := isDynamicSlicing || isStaticSlicing
 	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices, job.NodesPerSlice, isSubSlicing)
 
-	tolerationsStr, err := g.resolveTolerations(job.MachineType)
+	tolerationsStr, err := g.resolveTolerations(job.MachineType, job.GKENAPProvisioning, job.GKENAPReservation, 16)
 	if err != nil {
 		return err
 	}
 	opts.Tolerations = tolerationsStr
 
 	return nil
+}
+
+func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
+	var tolerations []corev1.Toleration
+	// Always add the standard GKE reservation toleration to support NAP where the node pool may not exist yet
+	tolerations = append(tolerations, corev1.Toleration{
+		Key:      "cloud.google.com/reservation-name",
+		Operator: corev1.TolerationOpEqual,
+		Value:    extractShortReservationName(reservationName),
+		Effect:   corev1.TaintEffectNoSchedule,
+	})
+
+	seenTaints := map[string]bool{
+		"cloud.google.com/reservation-name": true,
+	}
+
+	shortResName := extractShortReservationName(reservationName)
+	for _, np := range g.clusterDesc.NodePools {
+		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
+		if lblVal == "" {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && strings.EqualFold(extractShortReservationName(lblVal), shortResName) {
+			tolerations[0].Value = extractShortReservationName(lblVal)
+			for _, t := range np.Config.Taints {
+				// Avoid duplicate tolerations
+				if seenTaints[t.Key] {
+					continue
+				}
+				seenTaints[t.Key] = true
+				var effect corev1.TaintEffect
+				switch strings.ToUpper(t.Effect) {
+				case "NO_SCHEDULE":
+					effect = corev1.TaintEffectNoSchedule
+				case "PREFER_NO_SCHEDULE":
+					effect = corev1.TaintEffectPreferNoSchedule
+				case "NO_EXECUTE":
+					effect = corev1.TaintEffectNoExecute
+				default:
+					effect = corev1.TaintEffect(t.Effect)
+				}
+				tolerations = append(tolerations, corev1.Toleration{
+					Key:      t.Key,
+					Value:    t.Value,
+					Effect:   effect,
+					Operator: corev1.TolerationOpEqual,
+				})
+			}
+		}
+	}
+	return tolerations
+}
+
+func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
+	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
+	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
+
+	switch consumptionModel {
+	case "spot":
+		tolerations = append(tolerations, corev1.Toleration{
+			Key:      "cloud.google.com/gke-provisioning",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "spot",
+			Effect:   corev1.TaintEffectNoSchedule,
+		})
+	case "reservation":
+		tolerations = append(tolerations, g.resolveReservationTolerations(acceleratorType, reservationName)...)
+	}
+
+	if len(tolerations) == 0 {
+		return "", nil
+	}
+	b, err := k8syaml.Marshal(tolerations)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
+	}
+	return g.indentYaml(string(b), indent), nil
 }

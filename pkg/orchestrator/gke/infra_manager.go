@@ -312,18 +312,144 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	return nil
 }
 
+func (g *GKEOrchestrator) isResourceActive(staticAmount int, napLimitKey string) bool {
+	return staticAmount > 0 || (g.napEnabled && g.napLimits[napLimitKey] > 0)
+}
+
+func (g *GKEOrchestrator) isAccelActive(staticAmount int, napLimitKey string, fname string, flavorSub string) bool {
+	if staticAmount > 0 {
+		return true
+	}
+	return g.napEnabled && g.napLimits[napLimitKey] > 0 && strings.Contains(strings.ToLower(fname), flavorSub)
+}
+
+func (g *GKEOrchestrator) calculateCoveredResources() (map[string]bool, map[string]bool) {
+	mainMap := make(map[string]bool)
+	pathwaysMap := make(map[string]bool)
+
+	for fname, fc := range g.capacity.Flavors {
+		if fname == "pathways-flavor" {
+			if g.isResourceActive(fc.CPUs, "cpu") {
+				pathwaysMap["cpu"] = true
+			}
+			if g.isResourceActive(fc.MemoryGi, "memory") {
+				pathwaysMap["memory"] = true
+			}
+		} else {
+			if g.isResourceActive(fc.CPUs, "cpu") {
+				mainMap["cpu"] = true
+			}
+			if g.isResourceActive(fc.MemoryGi, "memory") {
+				mainMap["memory"] = true
+			}
+			if g.isAccelActive(fc.GPUs, "nvidia.com/gpu", fname, "nvidia") {
+				mainMap["nvidia.com/gpu"] = true
+			}
+			if g.isAccelActive(fc.TPUs, "google.com/tpu", fname, "tpu") {
+				mainMap["google.com/tpu"] = true
+			}
+		}
+	}
+	return mainMap, pathwaysMap
+}
+
+func isTPUFlavor(fname string) bool {
+	lower := strings.ToLower(fname)
+	return strings.Contains(lower, "tpu") || strings.Contains(lower, "ct")
+}
+
+func isGPUFlavor(fname string) bool {
+	return strings.Contains(strings.ToLower(fname), "nvidia")
+}
+
+func (g *GKEOrchestrator) getNAPNominalQuota(resName string, fname string) (interface{}, bool) {
+	if !g.napEnabled {
+		return nil, false
+	}
+	lookupKey := resName
+	if resName == "nvidia.com/gpu" || resName == "google.com/tpu" {
+		specificKey := strings.TrimPrefix(fname, "flavor-")
+		if _, ok := g.napLimits[specificKey]; ok {
+			lookupKey = specificKey
+		}
+	}
+	limit, ok := g.napLimits[lookupKey]
+	if !ok {
+		return nil, false
+	}
+	// Only apply TPU/GPU limit to matching flavors
+	if resName == "google.com/tpu" && !isTPUFlavor(fname) {
+		return 0, true
+	}
+	if resName == "nvidia.com/gpu" && !isGPUFlavor(fname) {
+		return 0, true
+	}
+	if resName == "memory" {
+		return fmt.Sprintf("%dG", limit), true // limit is in GB in GKE describe
+	}
+	return limit, true
+}
+
+func getStaticNominalQuota(resName string, fc FlavorCapacity) interface{} {
+	switch resName {
+	case "cpu":
+		return fc.CPUs
+	case "memory":
+		return fmt.Sprintf("%dGi", fc.MemoryGi)
+	case "nvidia.com/gpu":
+		return fc.GPUs
+	case "google.com/tpu":
+		return fc.TPUs
+	default:
+		return 0
+	}
+}
+
+func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fname string) interface{} {
+	if val, ok := g.getNAPNominalQuota(resName, fname); ok {
+		return val
+	}
+	return getStaticNominalQuota(resName, fc)
+}
+
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
+	mainCoveredResourcesMap, pathwaysCoveredResourcesMap := g.calculateCoveredResources()
+
+	// Pass 2: Build flavor lists with matched resources
 	var mainFlavors []map[string]interface{}
-	mainCoveredResourcesMap := make(map[string]bool)
-
 	var pathwaysFlavors []map[string]interface{}
-	pathwaysCoveredResourcesMap := make(map[string]bool)
 
-	for name, fc := range g.capacity.Flavors {
-		resources, isPathways := g.buildFlavorResources(name, fc, mainCoveredResourcesMap, pathwaysCoveredResourcesMap)
+	var fnames []string
+	for fname := range g.capacity.Flavors {
+		fnames = append(fnames, fname)
+	}
+	sort.Strings(fnames)
+
+	for _, fname := range fnames {
+		fc := g.capacity.Flavors[fname]
+		isPathways := (fname == "pathways-flavor")
+		var resources []map[string]interface{}
+
+		coveredMap := mainCoveredResourcesMap
+		if isPathways {
+			coveredMap = pathwaysCoveredResourcesMap
+		}
+
+		for res := range coveredMap {
+			resources = append(resources, map[string]interface{}{
+				"name":         res,
+				"nominalQuota": g.getNominalQuota(res, fc, fname),
+			})
+		}
+
 		if len(resources) > 0 {
+			// Sort resources alphabetically by name
+			sort.Slice(resources, func(i, j int) bool {
+				return resources[i]["name"].(string) < resources[j]["name"].(string)
+			})
+
 			flavor := map[string]interface{}{
-				"name":      name,
+				"name":      fname,
 				"resources": resources,
 			}
 			if isPathways {
@@ -379,43 +505,6 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	}
 
 	return cqBytes, nil
-}
-
-func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, mainCovered, pathwaysCovered map[string]bool) ([]map[string]interface{}, bool) {
-	var resources []map[string]interface{}
-	isPathways := (name == "pathways-flavor")
-
-	if fc.CPUs > 0 {
-		if isPathways {
-			pathwaysCovered["cpu"] = true
-		} else {
-			mainCovered["cpu"] = true
-		}
-		resources = append(resources, map[string]interface{}{"name": "cpu", "nominalQuota": fc.CPUs})
-	}
-	if fc.MemoryGi > 0 {
-		if isPathways {
-			pathwaysCovered["memory"] = true
-		} else {
-			mainCovered["memory"] = true
-		}
-		resources = append(resources, map[string]interface{}{"name": "memory", "nominalQuota": fmt.Sprintf("%dGi", fc.MemoryGi)})
-	}
-	if fc.GPUs > 0 {
-		mainCovered["nvidia.com/gpu"] = true
-		resources = append(resources, map[string]interface{}{"name": "nvidia.com/gpu", "nominalQuota": fc.GPUs})
-	}
-	if fc.TPUs > 0 {
-		mainCovered["google.com/tpu"] = true
-		resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
-	}
-
-	// Sort resources alphabetically by name
-	sort.Slice(resources, func(i, j int) bool {
-		return resources[i]["name"].(string) < resources[j]["name"].(string)
-	})
-
-	return resources, isPathways
 }
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {

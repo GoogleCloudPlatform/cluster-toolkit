@@ -77,6 +77,8 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
+	napEnabled                  bool
+	napLimits                   map[string]int64
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
@@ -237,9 +239,20 @@ type gkeJobNodePool struct {
 	PlacementPolicy  *gkePlacementPolicy `json:"placementPolicy,omitempty"`
 }
 
+type gkeResourceLimit struct {
+	ResourceType string `json:"resourceType"`
+	Maximum      int64  `json:"maximum,string"`
+}
+
+type gkeClusterAutoscaling struct {
+	EnableNodeAutoprovisioning bool               `json:"enableNodeAutoprovisioning"`
+	ResourceLimits             []gkeResourceLimit `json:"resourceLimits"`
+}
+
 type gkeCluster struct {
-	Locations []string         `json:"locations"`
-	NodePools []gkeJobNodePool `json:"nodePools"`
+	Locations   []string              `json:"locations"`
+	NodePools   []gkeJobNodePool      `json:"nodePools"`
+	Autoscaling gkeClusterAutoscaling `json:"autoscaling"`
 }
 
 // Types for JobSet status unmarshaling
