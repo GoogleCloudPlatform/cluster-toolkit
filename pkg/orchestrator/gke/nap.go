@@ -161,6 +161,41 @@ func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
 	return limits
 }
 
+func isNonAcceleratorResource(resName string) bool {
+	switch resName {
+	case "cpu", "memory", "gpu", "tpu", "pods", "storage", "ephemeral-storage":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveFlavorFromResource(resName string) (string, map[string]string, error) {
+	var flavorName string
+	var nodeLabels map[string]string
+
+	switch {
+	case resName == "google.com/tpu":
+		flavorName = "flavor-tpu-generic"
+	case resName == "nvidia.com/gpu":
+		flavorName = "flavor-nvidia-generic"
+	case strings.HasPrefix(resName, "nvidia-"):
+		flavorName = "flavor-" + resName
+		nodeLabels = map[string]string{
+			"cloud.google.com/gke-accelerator": resName,
+		}
+	case strings.HasPrefix(resName, "tpu-"):
+		flavorName = "flavor-" + resName
+		nodeLabels = map[string]string{
+			"cloud.google.com/gke-tpu-accelerator": resName,
+		}
+	default:
+		return "", nil, fmt.Errorf("unknown accelerator label %q", resName)
+	}
+
+	return flavorName, nodeLabels, nil
+}
+
 func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) error {
 	if !g.napEnabled {
 		return nil
@@ -170,31 +205,13 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 		if maxLimit <= 0 {
 			continue
 		}
-		// Skip standard CPU, memory, and generic non-accelerator resources as they are not distinct accelerator flavors
-		if resName == "cpu" || resName == "memory" || resName == "gpu" || resName == "tpu" || resName == "pods" || resName == "storage" || resName == "ephemeral-storage" {
+		if isNonAcceleratorResource(resName) {
 			continue
 		}
 
-		var flavorName string
-		var nodeLabels map[string]string
-
-		switch {
-		case resName == "google.com/tpu":
-			flavorName = "flavor-tpu-generic"
-		case resName == "nvidia.com/gpu":
-			flavorName = "flavor-nvidia-generic"
-		case strings.HasPrefix(resName, "nvidia-"):
-			flavorName = "flavor-" + resName
-			nodeLabels = map[string]string{
-				"cloud.google.com/gke-accelerator": resName,
-			}
-		case strings.HasPrefix(resName, "tpu-"):
-			flavorName = "flavor-" + resName
-			nodeLabels = map[string]string{
-				"cloud.google.com/gke-tpu-accelerator": resName,
-			}
-		default:
-			return fmt.Errorf("unknown accelerator label %q", resName)
+		flavorName, nodeLabels, err := resolveFlavorFromResource(resName)
+		if err != nil {
+			return err
 		}
 
 		if _, ok := flavors[flavorName]; !ok {
