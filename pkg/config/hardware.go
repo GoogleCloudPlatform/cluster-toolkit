@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -146,9 +145,6 @@ var allowed2DTopologies = map[int]string{
 var valid2DShapes = make(map[string]bool)
 var valid3DShapes = make(map[string]bool)
 
-var sortedTPUMachineFamilies []string
-var sortedGPUMachineFamilies []string
-
 func init() {
 	for _, v := range allowed2DTopologies {
 		valid2DShapes[v] = true
@@ -159,20 +155,6 @@ func init() {
 	if err := json.Unmarshal(MachineMappingsJSON, &parsedMappings); err != nil {
 		panic(fmt.Sprintf("failed to unmarshal machine_mappings.json: %v", err))
 	}
-
-	for k := range parsedMappings.MachineFamilyToLabelMap {
-		if IsTPU(k) {
-			sortedTPUMachineFamilies = append(sortedTPUMachineFamilies, k)
-		} else {
-			sortedGPUMachineFamilies = append(sortedGPUMachineFamilies, k)
-		}
-	}
-	sort.Slice(sortedTPUMachineFamilies, func(i, j int) bool {
-		return len(sortedTPUMachineFamilies[i]) > len(sortedTPUMachineFamilies[j])
-	})
-	sort.Slice(sortedGPUMachineFamilies, func(i, j int) bool {
-		return len(sortedGPUMachineFamilies[i]) > len(sortedGPUMachineFamilies[j])
-	})
 }
 
 func evalString(bp Blueprint, val cty.Value) (string, bool) {

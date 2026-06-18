@@ -40,7 +40,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	}
 	if len(cap.Accelerators) > 0 {
 		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
-		if key == resolvedType {
+		if strings.EqualFold(key, resolvedType) {
 			key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
 		}
 		if !isKnownGKEAccelerator(key) {
