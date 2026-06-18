@@ -14,13 +14,18 @@
 ---
 blueprint_name: slurm-h4d
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   project_id: ## Set GCP Project ID Here ##
   deployment_name: slurm-h4d
   region: us-central1
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
   instance_image:
-    family: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
     project: schedmd-slurm-public
   h4d_cluster_size: 2
 
@@ -58,6 +63,7 @@ deployment_groups:
         subnet_region: $(vars.region)
         subnet_ip: $(vars.rdma_net_range)
         region: $(vars.region)
+      nic_type: "IRDMA"
 
   - id: homefs
     source: modules/file-system/filestore
@@ -98,21 +104,7 @@ deployment_groups:
 
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
-      additional_networks:
-        $(concat(
-          [{
-            network=null,
-            subnetwork=h4d-rdma-net.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=null,
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(h4d-rdma-net.instance_additional_networks)
 
   - id: h4d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

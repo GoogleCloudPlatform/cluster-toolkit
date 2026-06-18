@@ -203,6 +203,7 @@ variable "network_interfaces" {
     alias_ip_range     (list(object), optional)
     EOT
   type = list(object({
+    #If both network and subnetwork are specified, the subnetwork must belong to the provided network to avoid configuration errors.
     network            = string,
     subnetwork         = string,
     subnetwork_project = string,
@@ -225,12 +226,6 @@ variable "network_interfaces" {
     }))
   }))
   default = []
-  validation {
-    condition = alltrue([
-      for ni in var.network_interfaces : (ni.network == null) != (ni.subnetwork == null)
-    ])
-    error_message = "All additional network interfaces must define exactly one of \"network\" or \"subnetwork\"."
-  }
   validation {
     condition = alltrue([
       for ni in var.network_interfaces : ni.nic_type == null || contains(["GVNIC", "VIRTIO_NET", "MRDMA", "IRDMA", "IDPF"], ni.nic_type)

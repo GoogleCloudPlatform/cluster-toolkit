@@ -51,6 +51,10 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
       error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
     }
+    precondition {
+      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || try(var.kueue.config_path, "") != "" || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
+      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
+    }
   }
 }
 
@@ -159,6 +163,14 @@ variable "jobset" {
   default = {}
 }
 
+variable "cert_manager" {
+  description = "Install [cert-manager](https://cert-manager.io/docs/) which manages TLS certificates for Kubernetes."
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v1.17.2")
+  })
+  default = {}
+}
 
 variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."
@@ -232,4 +244,32 @@ variable "module_id" {
   description = "The ID of the module as defined in the blueprint. Injected by ghpc."
   type        = string
   default     = "kubectl-apply" # Fallback if run manually
+}
+
+variable "cluster_endpoint" {
+  description = "The endpoint of the GKE cluster."
+  type        = string
+  default     = null
+}
+
+variable "cluster_ca_certificate" {
+  description = "The base64 encoded CA certificate of the GKE cluster. Must be base64 encoded; the module internally decodes this value using base64decode(...) before passing it to the providers."
+  type        = string
+  default     = null
+}
+
+variable "access_token" {
+  description = "The access token for Kubernetes/Helm providers."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "service_account_annotations" {
+  description = "Optional map of service accounts and workload identity emails to patch natively via HCL."
+  type = map(object({
+    namespace                 = string
+    gcp_service_account_email = string
+  }))
+  default = {}
 }

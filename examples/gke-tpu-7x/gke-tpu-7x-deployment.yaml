@@ -52,3 +52,6 @@ vars:
 
   # The name of the compute engine reservation of TPU 7x nodes
   reservation:
+
+  # The namespace to be configured for running workloads
+  user_namespace: default

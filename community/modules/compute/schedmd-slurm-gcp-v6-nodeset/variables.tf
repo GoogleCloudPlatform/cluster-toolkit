@@ -630,8 +630,8 @@ variable "dws_flex" {
   - use_bulk_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances
 
  Limitations:
-  - CAN NOT be used with reservations;
-  - CAN NOT be used with placement groups;
+  - CAN NOT be used with reservations.
+
 
  EOD
 

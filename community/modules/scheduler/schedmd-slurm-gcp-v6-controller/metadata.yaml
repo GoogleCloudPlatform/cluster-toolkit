@@ -24,9 +24,9 @@ ghpc:
   - validator: range
     inputs:
       vars: [static_ips]
-      max: 1
+      max: 2
       length_check: true # Validates the list's length instead of its elements.
-    error_message: "The Slurm modules supports 0 or 1 static IPs on controller instance."
+    error_message: "The Slurm module supports 0, 1, or 2 static IPs on controller instances."
   - validator: regex
     inputs:
       vars: [slurm_cluster_name]
@@ -41,3 +41,11 @@ ghpc:
       vars: [enable_smt, disable_smt]
       deprecated: true
     error_message: "Unsupported variables: 'enable_smt', 'disable_smt'. Please use 'advanced_machine_features.threads_per_core' instead."
+  - validator: conditional
+    level: warning
+    inputs:
+      trigger: enable_slurm_auth
+      trigger_value: false
+      dependent: enable_slurm_auth
+      dependent_value: true
+    error_message: "DEPRECATION NOTICE: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please plan to migrate to Slurm Native Authentication by setting enable_slurm_auth: true. See docs/slurm-native-auth-migration-guide.md for the destroy-and-recreate migration steps."

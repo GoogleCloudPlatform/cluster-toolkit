@@ -16,6 +16,9 @@
 blueprint_name: a4high-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   deployment_name: # supply deployment name
   project_id: # supply project ID
   region: # supply region
@@ -25,9 +28,8 @@ vars:
   instance_image_family: # supply instance image family
   # Image settings
   # Cluster env settings
-  # net0 and filestore ranges must not overlap
+  # net0 ranges must not overlap
   net0_range: 192.168.0.0/19
-  filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/18
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
@@ -36,7 +38,7 @@ vars:
     project: $(vars.instance_image_project)
     family: $(vars.instance_image_family)
   disk_size_gb: 100
-
+  benchmark_dir: $(ghpc_stage("../../../../examples/machine-learning/a4-highgpu-8g/system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -95,43 +97,6 @@ deployment_groups:
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
 
-  - id: homefs
-    source: modules/file-system/filestore
-    use:
-    - a4high-slurm-net-0
-    settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /home
-      reserved_ip_range: $(vars.filestore_ip_range)
-      deletion_protection:
-        enabled: true
-        reason: Avoid data loss
-    outputs:
-    - network_storage
-
-  # To use Managed Lustre as for the shared /home directory:
-  # 1. Comment out the filestore block above and the`filestore_ip_range` line in the vars block.
-  # 2. Uncomment the managed-lustre and private-service-access blocks
-  # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json above to true
-  # - id: private_service_access
-  #   source: modules/network/private-service-access
-  #   use: [a4high-slurm-net-0]
-
-  # - id: homefs
-  #   source: modules/file-system/managed-lustre
-  #   use:
-  #   - a4high-slurm-net-0
-  #   - private_service_access
-  #   settings:
-  #     size_gib: $(vars.lustre_size_gib)
-  #     name: $(vars.lustre_instance_id)
-  #     local_mount: /home
-  #     remote_mount: lustrefs
-  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
-  #   outputs:
-  #   - network_storage
-
   # The following four modules create and mount a Cloud Storage Bucket with
   # gcsfuse.  They are optional but recommended for many use cases.
   # (Optional) The following creates a GCS bucket that will be mounted
@@ -145,13 +110,14 @@ deployment_groups:
       enable_hierarchical_namespace: true
       local_mount: /gcs
       random_suffix: true
-      mount_options: "implicit_dirs,\
-                      metadata_cache_negative_ttl_secs=0,\
-                      metadata_cache_ttl_secs=-1,\
-                      stat_cache_max_size_mb=-1,\
-                      type_cache_max_size_mb=-1,\
-                      dir_mode=777,\
-                      file_mode=777,\
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
@@ -166,10 +132,18 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-checkpoints
       fs_type: gcsfuse
-      mount_options: "profile=aiml-checkpointing,\
-                      cache_dir=/mnt/localssd,\
-                      dir_mode=777,\
-                      file_mode=777,\
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for reading training data.
@@ -191,9 +165,14 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-training-data
       fs_type: gcsfuse
-      mount_options: "profile=aiml-training,\
-                      dir_mode=777,\
-                      file_mode=777,\
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
                       allow_other"
 
   # (Optional) Create a mount-point optimized for model serving.
@@ -207,10 +186,17 @@ deployment_groups:
       remote_mount: $(gcs_bucket.gcs_bucket_name)
       local_mount: /gcs-model-serving
       fs_type: gcsfuse
-      mount_options: "profile=aiml-serving,\
-                      cache_dir=/mnt/localssd,\
-                      dir_mode=777,\
-                      file_mode=777,\
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
                       allow_other"
 
 - group: cluster
@@ -218,7 +204,7 @@ deployment_groups:
   - id: a4high_startup
     source: modules/scripts/startup-script
     settings:
-      install_ansible: false
+      install_ansible: true
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
@@ -244,6 +230,58 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # --- DYNAMICALLY GENERATE HOST /etc/hostname ON BOOT TO ALLOW ENROOT BIND-MOUNTS ---
+      - type: shell
+        destination: write_hostname.sh
+        content: |
+          #!/bin/bash
+          echo "Checking host /etc/hostname status..."
+          if [ ! -f /etc/hostname ]; then
+            echo "Host /etc/hostname not found! Generating dynamically..."
+            hostname | tee /etc/hostname
+            echo "Host /etc/hostname written successfully."
+          else
+            echo "Host /etc/hostname already exists."
+          fi
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+
+          CUDA_VERSION="13.0.0"
+          FM_VERSION="580.65.06"
+          FILE_NAME="cuda_${CUDA_VERSION}_${FM_VERSION}_linux.run"
+          URL="https://developer.download.nvidia.com/compute/cuda/${CUDA_VERSION}/local_installers/${FILE_NAME}"
+
+          curl -s -L -o /tmp/$FILE_NAME "$URL"
+          sh /tmp/$FILE_NAME --silent --toolkit
+          rm -f /tmp/$FILE_NAME
+      - type: shell
+        destination: install-dcgm.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+
+          source /etc/os-release
+
+          UBUNTU_VERSION=`echo $VERSION_ID | tr -d '.'`
+          URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VERSION}/x86_64/cuda-keyring_1.1-1_all.deb"
+          echo "Downloading keyring from $URL"
+          curl -s -o /tmp/cuda-keyring_1.1-1_all.deb "$URL"
+          dpkg -i /tmp/cuda-keyring_1.1-1_all.deb
+          rm /tmp/cuda-keyring_1.1-1_all.deb
+
+          apt-get update -y
+          apt-get install -y \
+              datacenter-gpu-manager-4-cuda13 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
+
+          apt-mark hold \
+              datacenter-gpu-manager-4-cuda13 \
+              datacenter-gpu-manager-4-dev \
+              datacenter-gpu-manager-4-core
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -256,12 +294,6 @@ deployment_groups:
               enable_nvidia_dcgm: true
               enable_nvidia_persistenced: true
             tasks:
-            - name: Ensure datacenter-gpu-manager is installed
-              ansible.builtin.apt:
-                name: datacenter-gpu-manager
-                state: present
-                update_cache: yes
-              when: enable_nvidia_dcgm
             - name: Update Ops Agent configuration
               ansible.builtin.blockinfile:
                 path: /etc/google-cloud-ops-agent/config.yaml
@@ -385,7 +417,6 @@ deployment_groups:
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           # enable a GPU health check that runs at the completion of all jobs on A4 nodes
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
-          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
           # enable the use of password-free sudo within Slurm jobs on all compute nodes
           # feature is restricted to users with OS Admin Login IAM role
           # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
@@ -396,7 +427,12 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
-
+      - type: data
+        destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+        source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+      - type: data
+        destination: /opt/apps/system_benchmarks/README.md
+        source: $(vars.benchmark_dir)/README.md
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -404,7 +440,6 @@ deployment_groups:
     - a4high-slurm-net-0
     - a4high_partition
     - slurm_login
-    - homefs
     - gcs_bucket
     settings:
       enable_controller_public_ips: true

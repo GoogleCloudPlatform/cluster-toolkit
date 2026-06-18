@@ -18,11 +18,16 @@ blueprint_name: af3-slurm
 # this blueprint should be used with the extra variables defined in
 # af3-slurm-deployment.yaml
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   # Image settings
   base_image:
     project: schedmd-slurm-public
     # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-    family: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
    # You can find size of source image by using following command
    # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
   image_build_machine_type: n2-standard-16

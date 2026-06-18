@@ -369,3 +369,123 @@ The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two 
     ```
 
 The logs will display content from `shared_output.txt`, showing timestamps and hostnames from both pods, confirming that the filesystem is truly shared.
+
+### Understanding ML Diagnostics integration
+
+This blueprint includes support for easy installation and configuration of [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++), a managed service for profiling, logging, and monitoring AI/ML workloads on GKE.
+
+This feature automatically configures the GKE cluster with the necessary settings, labels the designated user namespace, and configures the Workload Identity service accounts required by the ML Diagnostics SDK.
+
+#### Enabling ML Diagnostics
+
+To enable Google Cloud ML Diagnostics, perform the following steps **before** deploying the blueprint:
+
+1. **Specify user workload namespace:** In the `vars:` section of `gke-tpu-v6e-deployment.yaml`, define the namespace to be pre-configured for your workloads by setting `user_namespace`. If not provided, the value will default to 'default'. The `user_namespace` will be automatically created by the `gke-tpu-v6e-cluster` module if it doesn't already exist. This namespace will be used across different modules.
+
+    ```yaml
+    vars:
+      # ... other variables ...
+      user_namespace: ai-workloads # Example namespace
+    ```
+
+2. **Add IAM Permissions:** The workload Kubernetes Service Account bound to the Google Service Account requires specific [roles](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview#iam-permissions) for running ML Diagnostics workloads. In the blueprint, ensure `"hypercomputecluster.editor"` is added to `project_roles` of the `workload_service_account` module.
+
+    ```yaml
+      - id: workload_service_account
+        source: modules/project/service-account
+        settings:
+          name: gke-wl-sa
+          project_roles:
+          # ... other roles ...
+          - hypercomputecluster.editor
+    ```
+
+3. **Configure GKE-CLUSTER:** Ensure the `gke-tpu-v6e-cluster` module is configured to enable ML diagnostics and create the Workload Identity resources in the user namespace.
+
+    ```yaml
+      - id: gke-tpu-v6e-cluster
+        source: modules/scheduler/gke-cluster
+        use: [gke-tpu-v6e-net-0, workload_service_account]
+        settings:
+          # ... other settings ...
+          namespace: $(vars.user_namespace)
+          configure_workload_identity_sa: true
+          enable_managed_ml_diagnostics: true
+    ```
+
+4. **Configure Kueue Namespace:** In the `workload-manager-install` module, ensure the Kueue LocalQueue is created in the user namespace by adding `namespace: $(vars.user_namespace)` to the `config_template_vars` for Kueue, if it is not provided, the value will default to 'default':
+
+    ```yaml
+          kueue:
+            install: true
+            config_path: $(vars.kueue_configuration_path)
+            config_template_vars:
+              # ... other vars ...
+              namespace: $(vars.user_namespace)
+    ```
+
+5. **Cert-Manager:** In the `workload-manager-install` module, ensure Cert-Manager is set to install, as it's required by the ML Diagnostics webhook:
+
+    ```yaml
+      - id: workload-manager-install
+        source: modules/management/kubectl-apply
+        use: [gke-tpu-v6e-cluster]
+        settings:
+          # ... kueue and other settings ...
+          cert_manager:
+            install: true
+            # version: "v1.17.2" # Optional: specify version
+    ```
+
+6. **ML Diagnostics Module (Optional, only for GKE versions < 1.35.0-gke.3065000)**: If you are deploying a GKE cluster with a version that does not support GKE-managed ML Diagnostics, you must add the 'mldiagnostics' module to manually install the injection webhook and connection operator charts.
+
+> [!IMPORTANT] Do not enable GKE-managed ML Diagnostics (enable_ml_diagnostics: true) if you are manually adding the mldiagnostics module, as this will cause a validation failure.
+
+    ```yaml
+      - id: gke-ml-diagnostics
+        source: modules/management/mldiagnostics
+        use: [gke-tpu-v6e-cluster, workload-manager-install]
+        # Optional: Specify the versions of the injection webhook and connection operator to install.
+        # settings:
+            # injection_webhook_version: "0.25.0" # Optional
+            # connection_operator_version: "0.21.0" # Optional
+          # Optional: Specify the namespace to be configured for running workloads with ML Diagnostics.
+          # If not provided, the value will be taken from gke-tpu-v6e-cluster module
+          # namespace: $(vars.user_namespace)
+    ```
+
+After making these changes, run the `gcluster deploy` command to create the GKE cluster with the ML diagnostics configuration.
+
+#### Testing ML Diagnostics Cluster Configuration
+
+1. Connect to your cluster:
+
+    ```sh
+    gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
+    ```
+
+    Replace the `DEPLOYMENT_NAME`,`REGION` and `PROJECT_ID` with the ones used in the blueprint.
+
+2. Verify user namespace is created and labeled with "managed-mldiagnostics-gke: true".
+
+    ```sh
+    kubectl describe ns <user_namespace>
+    ```
+
+3. Verify kubernetes service account in user namespace.
+
+    ```sh
+    kubectl get serviceaccount -n <user_namespace>
+    kubectl get sa workload-identity-k8s-sa -n <user_namespace> -o yaml
+    # Check for workload identity annotations
+    ```
+
+4. Verify Kueue LocalQueue in the user namespace.
+
+    ```sh
+    kubectl get localqueues -n <user_namespace>
+    ```
+
+These steps confirm that the ML Diagnostics components and their dependencies are correctly set up in the cluster.
+
+To test with sample workload, refer to the [ML Diagnostics Test README](../../modules/management/mldiagnostics/sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.

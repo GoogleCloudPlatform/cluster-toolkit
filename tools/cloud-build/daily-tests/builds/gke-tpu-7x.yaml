@@ -25,7 +25,7 @@ tags:
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 7200s
+timeout: 10800s
 
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -92,12 +92,14 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
-        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} chs_repo=$${CHS_REPO}" \
         --extra-vars="region=us-central1 zone=us-central1-c" \
         --extra-vars="enable_spot=$${ENABLE_SPOT}" \
         --extra-vars="@$${GKE_VARS_FILE}"
-  secretEnv: ['GCLUSTER_GCS_PATH']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CHS_REPO']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/${PROJECT_ID}/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'

@@ -16,6 +16,9 @@
 blueprint_name: hpc-amd-slurm-v6
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: amd-v6
   region: us-east4
@@ -168,7 +171,9 @@ deployment_groups:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
-        family: slurm-gcp-6-12-hpc-rocky-linux-8
+        # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+        # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+        family: slurm-gcp-6-12-hpc-rocky-linux-9
         project: schedmd-slurm-public
 
   - id: low_cost_nodeset

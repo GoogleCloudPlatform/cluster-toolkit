@@ -167,8 +167,15 @@ spec:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
+{{- if or .TopologyAnnotation .GCSFuseEnabled }}
             annotations:
+{{- if .TopologyAnnotation }}
+{{.TopologyAnnotation}}
+{{- end }}
+{{- if .GCSFuseEnabled }}
               gke-gcsfuse/volumes: "true"
+{{- end }}
+{{- end }}
           spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
