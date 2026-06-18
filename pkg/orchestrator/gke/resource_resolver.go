@@ -424,12 +424,15 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		if err != nil {
 			return JobProfile{}, false, false, err
 		}
-		if g.napEnabled {
+		if job.GKENAPProvisioning != "" {
 			if isDynamicSlicing {
-				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled")
+				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+			if isStaticSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
 			}
 			if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
-				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled")
+				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads")
 			}
 		}
 	}

@@ -20,9 +20,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"sort"
 	"strings"
-
-	corev1 "k8s.io/api/core/v1"
-	k8syaml "sigs.k8s.io/yaml"
 )
 
 func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (bool, error) {
@@ -33,7 +30,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	resolvedType := config.ResolveMachineType(machineType)
 
 	if config.IsTPU(resolvedType) {
-		key := config.GetTPULimitKey(resolvedType)
+		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
 		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0, nil
 	}
 
@@ -42,9 +39,12 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 		return false, err
 	}
 	if len(cap.Accelerators) > 0 {
-		key, err := config.GetGPULimitKey(resolvedType, cap.Accelerators[0].Type)
-		if err != nil {
-			return false, err
+		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+		if key == resolvedType {
+			key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
+		}
+		if !isKnownGKEAccelerator(key) {
+			return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
 		}
 		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0, nil
 	}
@@ -54,7 +54,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 
 func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
 	if !g.napEnabled && hasNAPFlags {
-		return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning=%q, --gke-nap-reservation=%q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
+		return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning %q, --gke-nap-reservation %q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
 	}
 	return nil
 }
@@ -71,7 +71,7 @@ func (g *GKEOrchestrator) getConfiguredLimitsError(computeType string) error {
 }
 
 func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
-	hasNAPFlags := job.GKENAPProvisioning != "" || job.GKENAPReservation != ""
+	hasNAPFlags := job.GKENAPProvisioning != ""
 
 	if err := g.checkNAPFlagsSupported(hasNAPFlags, job); err != nil {
 		return err
@@ -91,83 +91,6 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 	}
 
 	return nil
-}
-
-func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
-	var tolerations []corev1.Toleration
-	// Always add the standard GKE reservation toleration to support NAP where the node pool may not exist yet
-	tolerations = append(tolerations, corev1.Toleration{
-		Key:      "cloud.google.com/reservation-name",
-		Operator: corev1.TolerationOpEqual,
-		Value:    extractShortReservationName(reservationName),
-		Effect:   corev1.TaintEffectNoSchedule,
-	})
-
-	seenTaints := map[string]bool{
-		"cloud.google.com/reservation-name": true,
-	}
-
-	shortResName := extractShortReservationName(reservationName)
-	for _, np := range g.clusterDesc.NodePools {
-		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
-		if lblVal == "" {
-			continue
-		}
-		if strings.EqualFold(np.Config.MachineType, machineType) && strings.EqualFold(extractShortReservationName(lblVal), shortResName) {
-			tolerations[0].Value = extractShortReservationName(lblVal)
-			for _, t := range np.Config.Taints {
-				// Avoid duplicate tolerations
-				if seenTaints[t.Key] {
-					continue
-				}
-				seenTaints[t.Key] = true
-				var effect corev1.TaintEffect
-				switch strings.ToUpper(t.Effect) {
-				case "NO_SCHEDULE":
-					effect = corev1.TaintEffectNoSchedule
-				case "PREFER_NO_SCHEDULE":
-					effect = corev1.TaintEffectPreferNoSchedule
-				case "NO_EXECUTE":
-					effect = corev1.TaintEffectNoExecute
-				default:
-					effect = corev1.TaintEffect(t.Effect)
-				}
-				tolerations = append(tolerations, corev1.Toleration{
-					Key:      t.Key,
-					Value:    t.Value,
-					Effect:   effect,
-					Operator: corev1.TolerationOpEqual,
-				})
-			}
-		}
-	}
-	return tolerations
-}
-
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
-	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
-	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
-
-	switch consumptionModel {
-	case "spot":
-		tolerations = append(tolerations, corev1.Toleration{
-			Key:      "cloud.google.com/gke-provisioning",
-			Operator: corev1.TolerationOpEqual,
-			Value:    "spot",
-			Effect:   corev1.TaintEffectNoSchedule,
-		})
-	case "reservation":
-		tolerations = append(tolerations, g.resolveReservationTolerations(acceleratorType, reservationName)...)
-	}
-
-	if len(tolerations) == 0 {
-		return "", nil
-	}
-	b, err := k8syaml.Marshal(tolerations)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
-	}
-	return g.indentYaml(string(b), indent), nil
 }
 
 // extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
@@ -201,4 +124,84 @@ func extractShortReservationName(resName string) string {
 
 	// Fallback: Return the last segment
 	return parts[len(parts)-1]
+}
+
+func isKnownGKEAccelerator(key string) bool {
+	switch key {
+	case "nvidia-tesla-t4", "nvidia-tesla-v100":
+		return true
+	}
+	for _, val := range machineFamilyToLabelMap {
+		if val == key {
+			return true
+		}
+	}
+	return false
+}
+
+func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
+	limits := make(map[string]int64)
+	for _, rl := range autoscaling.ResourceLimits {
+		limits[rl.ResourceType] = rl.Maximum
+	}
+
+	for _, rl := range autoscaling.ResourceLimits {
+		resName := rl.ResourceType
+		maxVal := rl.Maximum
+		if resName == "gpu" || strings.Contains(resName, "nvidia") {
+			if maxVal > limits["nvidia.com/gpu"] {
+				limits["nvidia.com/gpu"] = maxVal
+			}
+		} else if strings.Contains(resName, "tpu") {
+			if maxVal > limits["google.com/tpu"] {
+				limits["google.com/tpu"] = maxVal
+			}
+		}
+	}
+	return limits
+}
+
+func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) error {
+	if !g.napEnabled {
+		return nil
+	}
+
+	for resName, maxLimit := range g.napLimits {
+		if maxLimit <= 0 {
+			continue
+		}
+		// Skip standard CPU, memory, and generic gpu/tpu resources as they are not distinct accelerator flavors
+		if resName == "cpu" || resName == "memory" || resName == "gpu" || resName == "tpu" {
+			continue
+		}
+
+		var flavorName string
+		var nodeLabels map[string]string
+
+		switch {
+		case resName == "google.com/tpu":
+			flavorName = "flavor-tpu-generic"
+		case resName == "nvidia.com/gpu":
+			flavorName = "flavor-nvidia-generic"
+		case strings.HasPrefix(resName, "nvidia-"):
+			flavorName = "flavor-" + resName
+			nodeLabels = map[string]string{
+				"cloud.google.com/gke-accelerator": resName,
+			}
+		case strings.HasPrefix(resName, "tpu-"):
+			flavorName = "flavor-" + resName
+			nodeLabels = map[string]string{
+				"cloud.google.com/gke-tpu-accelerator": resName,
+			}
+		default:
+			return fmt.Errorf("unknown accelerator label %q", resName)
+		}
+
+		if _, ok := flavors[flavorName]; !ok {
+			flavors[flavorName] = FlavorCapacity{
+				NodeLabels: nodeLabels,
+			}
+		}
+	}
+	return nil
 }

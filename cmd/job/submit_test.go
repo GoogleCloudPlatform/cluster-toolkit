@@ -515,7 +515,7 @@ func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
 		t.Fatalf("expected error when passing invalid provisioning model, but got nil")
 	}
 
-	expectedErr := "invalid --gke-nap-provisioning \"invalid-model\""
+	expectedErr := "invalid value \"invalid-model\" for --gke-nap-provisioning"
 	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
 	}
@@ -596,7 +596,7 @@ func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
 		t.Fatalf("expected error when passing reservation name with spot model, but got nil")
 	}
 
-	expectedErr := "--gke-nap-reservation is only valid when --gke-nap-provisioning=reservation"
+	expectedErr := "--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation"
 	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
 	}

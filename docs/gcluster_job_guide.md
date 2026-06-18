@@ -301,7 +301,6 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
 
 > [!NOTE]
-> ### GKE Node Auto-Provisioning (NAP) Only
 > The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
 
 Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:

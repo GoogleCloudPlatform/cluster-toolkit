@@ -376,7 +376,7 @@ func validateGKENAPFlags() error {
 	if gkeNapProvisioning != "" {
 		validModels := []string{"on-demand", "spot", "reservation"}
 		if !slices.Contains(validModels, gkeNapProvisioning) {
-			return fmt.Errorf("invalid --gke-nap-provisioning %q. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+			return fmt.Errorf("invalid value %q for --gke-nap-provisioning. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
 		}
 
 		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
@@ -384,7 +384,7 @@ func validateGKENAPFlags() error {
 		}
 	}
 	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
-		return fmt.Errorf("--gke-nap-reservation is only valid when --gke-nap-provisioning=reservation")
+		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
 	}
 	return nil
 }

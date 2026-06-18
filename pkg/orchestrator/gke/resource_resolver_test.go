@@ -509,16 +509,17 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 	setupMockMachineConfig(t)
 
 	tests := []struct {
-		name             string
-		napEnabled       bool
-		scheduler        string
-		topology         string
-		computeType      string
-		machineType      string
-		dynamicSlicing   bool
-		mockResponses    map[string][]shell.CommandResult
-		wantErr          bool
-		expectedErrMatch string
+		name               string
+		napEnabled         bool
+		gkeNapProvisioning string
+		scheduler          string
+		topology           string
+		computeType        string
+		machineType        string
+		dynamicSlicing     bool
+		mockResponses      map[string][]shell.CommandResult
+		wantErr            bool
+		expectedErrMatch   string
 	}{
 		{
 			name:        "NAP Cluster - Standard TPU allowed",
@@ -527,25 +528,40 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:           "NAP Cluster - TPU Dynamic Slicing disallowed",
-			napEnabled:     true,
-			computeType:    "tpu7x-128",
-			machineType:    "tpu7x-standard-4t",
-			topology:       "4x4x8",
-			dynamicSlicing: true,
+			name:               "NAP Cluster - TPU Dynamic Slicing disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "tpu7x-128",
+			machineType:        "tpu7x-standard-4t",
+			topology:           "4x4x8",
+			dynamicSlicing:     true,
 			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "4x4x8\n"}},
 			},
 			wantErr:          true,
-			expectedErrMatch: "TPU Dynamic Slicing is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+			expectedErrMatch: "TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads",
 		},
 		{
-			name:             "NAP Cluster - DWS Flex Scheduler disallowed",
-			napEnabled:       true,
-			computeType:      "v6e-8",
-			scheduler:        "gke.io/tpu-provisioning-request",
+			name:               "NAP Cluster - TPU Static Sub-slicing disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "v6e-8",
+			machineType:        "v6e-standard-8t",
+			topology:           "2x4",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"topologies":["4x8"]}}]}`}},
+			},
 			wantErr:          true,
-			expectedErrMatch: "TPU ProvisioningRequest (DWS Flex) is not supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+			expectedErrMatch: "TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads",
+		},
+		{
+			name:               "NAP Cluster - DWS Flex Scheduler disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "v6e-8",
+			scheduler:          "gke.io/tpu-provisioning-request",
+			wantErr:            true,
+			expectedErrMatch:   "TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads",
 		},
 	}
 
@@ -560,7 +576,7 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 				mockResponses["kubectl get resourceflavors"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
 			}
 			if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
-				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "4x8\n"}}
+				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "4x8\n"}, {ExitCode: 0, Stdout: "4x8\n"}}
 			}
 
 			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
@@ -585,10 +601,11 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 			})
 
 			job := &orchestrator.JobDefinition{
-				ComputeType:  tt.computeType,
-				MachineType:  tt.machineType,
-				Topology:     tt.topology,
-				GKEScheduler: tt.scheduler,
+				ComputeType:        tt.computeType,
+				MachineType:        tt.machineType,
+				Topology:           tt.topology,
+				GKEScheduler:       tt.scheduler,
+				GKENAPProvisioning: tt.gkeNapProvisioning,
 			}
 
 			_, _, _, err := orc.resolveHardwareRequirements(job)
@@ -625,7 +642,7 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				GKENAPProvisioning: "on-demand",
 			},
 			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"on-demand\", --gke-nap-reservation=\"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
 		},
 		{
 			name:       "Static Cluster - Empty string consumption model",
@@ -642,7 +659,7 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				GKENAPProvisioning: "spot",
 			},
 			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"spot\", --gke-nap-reservation=\"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"spot\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
 		},
 		{
 			name:       "Static Cluster - Reservation name flag set",
@@ -652,7 +669,7 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				GKENAPReservation:  "my-res",
 			},
 			wantErr:     true,
-			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning=\"on-demand\", --gke-nap-reservation=\"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
 		},
 		{
 			name:       "NAP Cluster - Machine type in NAP limits",

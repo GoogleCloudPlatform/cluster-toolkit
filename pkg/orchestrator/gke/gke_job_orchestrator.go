@@ -425,28 +425,6 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	return nil
 }
 
-func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
-	limits := make(map[string]int64)
-	for _, rl := range autoscaling.ResourceLimits {
-		limits[rl.ResourceType] = rl.Maximum
-	}
-
-	for _, rl := range autoscaling.ResourceLimits {
-		resName := rl.ResourceType
-		maxVal := rl.Maximum
-		if resName == "gpu" || strings.Contains(resName, "nvidia") {
-			if maxVal > limits["nvidia.com/gpu"] {
-				limits["nvidia.com/gpu"] = maxVal
-			}
-		} else if strings.Contains(resName, "tpu") {
-			if maxVal > limits["google.com/tpu"] {
-				limits["google.com/tpu"] = maxVal
-			}
-		}
-	}
-	return limits
-}
-
 func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
 	for _, np := range g.clusterDesc.NodePools {
 		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !g.isSystemPool(np) {
@@ -536,51 +514,6 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 		Flavors:  flavors,
 	}
 	return capacity, nodePoolSAs, nil
-}
-
-func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) error {
-	if !g.napEnabled {
-		return nil
-	}
-
-	for resName, maxLimit := range g.napLimits {
-		if maxLimit <= 0 {
-			continue
-		}
-		// Skip standard CPU, memory, and generic gpu/tpu resources as they are not distinct accelerator flavors
-		if resName == "cpu" || resName == "memory" || resName == "gpu" || resName == "tpu" {
-			continue
-		}
-
-		var flavorName string
-		var nodeLabels map[string]string
-
-		switch {
-		case resName == "google.com/tpu":
-			flavorName = "flavor-tpu-generic"
-		case resName == "nvidia.com/gpu":
-			flavorName = "flavor-nvidia-generic"
-		case strings.HasPrefix(resName, "nvidia-"):
-			flavorName = "flavor-" + resName
-			nodeLabels = map[string]string{
-				"cloud.google.com/gke-accelerator": resName,
-			}
-		case strings.HasPrefix(resName, "tpu-"):
-			flavorName = "flavor-" + resName
-			nodeLabels = map[string]string{
-				"cloud.google.com/gke-tpu-accelerator": resName,
-			}
-		default:
-			return fmt.Errorf("unknown accelerator label %q", resName)
-		}
-
-		if _, ok := flavors[flavorName]; !ok {
-			flavors[flavorName] = FlavorCapacity{
-				NodeLabels: nodeLabels,
-			}
-		}
-	}
-	return nil
 }
 
 func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
