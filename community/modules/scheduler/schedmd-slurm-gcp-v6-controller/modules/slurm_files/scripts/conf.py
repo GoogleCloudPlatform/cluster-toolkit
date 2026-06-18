@@ -117,7 +117,7 @@ class SlurmConfigGenerator:
         no_comma_params = get("no_comma_params", False)
 
         any_gpus = any(
-            self.lkp.template_info(nodeset.instance_template).gpu
+            getattr(self.lkp.template_info(nodeset.instance_template), "gpu", None)
             for nodeset in self.lkp.cfg.nodeset.values()
         )
 
@@ -244,6 +244,8 @@ class SlurmConfigGenerator:
 
         def defmempercpu(nodeset_name: str) -> int:
             nodeset = self.lkp.cfg.nodeset.get(nodeset_name)
+            if not nodeset:
+                return MIN_MEM_PER_CPU
             template = nodeset.instance_template
             machine = self.lkp.template_machine_conf(template)
             mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
@@ -293,8 +295,9 @@ class SlurmConfigGenerator:
             gpu_nodes_with_type: defaultdict[Tuple[int, Optional[str]], List[str]] = defaultdict(list)
             for nodeset in self.lkp.cfg.nodeset.values():
                 ti = self.lkp.template_info(nodeset.instance_template)
-                gpu_count = ti.gpu.count if ti.gpu  else 0
-                gpu_type = ti.gpu.type if ti.gpu  else None
+                gpu_attr = getattr(ti, "gpu", None)
+                gpu_count = gpu_attr.count if gpu_attr else 0
+                gpu_type = gpu_attr.type if gpu_attr else None
                 if gpu_count:
                     key_with_type = (gpu_count, gpu_type)
                     gpu_nodes_with_type[key_with_type].append(self.lkp.nodelist(nodeset))
@@ -310,9 +313,10 @@ class SlurmConfigGenerator:
             gpu_nodes_without_type: defaultdict[int, List[str]] = defaultdict(list)
             for nodeset in self.lkp.cfg.nodeset.values():
                 ti = self.lkp.template_info(nodeset.instance_template)
-                gpu_count = ti.gpu.count if ti.gpu  else 0
+                gpu_attr = getattr(ti, "gpu", None)
+                gpu_count = gpu_attr.count if gpu_attr else 0
                 # gpu_type is not used in this branch, but is needed for template_info to be consistent
-                gpu_type = ti.gpu.type if ti.gpu  else None 
+                gpu_type = gpu_attr.type if gpu_attr else None 
                 if gpu_count:
                     key_without_type: int = gpu_count # Explicitly type key as int
                     gpu_nodes_without_type[key_without_type].append(self.lkp.nodelist(nodeset))
