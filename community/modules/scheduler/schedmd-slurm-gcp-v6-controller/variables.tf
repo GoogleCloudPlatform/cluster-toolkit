@@ -509,7 +509,7 @@ variable "cloud_parameters" {
 }
 
 variable "experimental" {
-  description = "Experimental Slurm settings. Enable at your own risk."
+  description = "Experimental Slurm settings. These features are subject to change and may be modified in future releases."
   type = object({
     enable_async_reply = optional(bool, false)
   })

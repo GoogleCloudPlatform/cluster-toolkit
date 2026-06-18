@@ -29,10 +29,11 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
         enable_async_reply = experimental.get("enable_async_reply", False)
         
         if enable_async_reply:
-            params = list(conf_options.get("SlurmctldParameters", []))
-            if "enable_async_reply" not in params:
-                params.append("enable_async_reply")
-            conf_options["SlurmctldParameters"] = params
+            params = conf_options.get("SlurmctldParameters", [])
+            if isinstance(params, list):
+                if "enable_async_reply" not in params:
+                    params.append("enable_async_reply")
+                conf_options["SlurmctldParameters"] = params
                 
         return conf_options
 

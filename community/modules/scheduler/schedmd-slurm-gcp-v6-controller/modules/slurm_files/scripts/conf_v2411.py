@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Iterable, Dict, Set, Tuple
+from typing import List, Optional, Iterable, Dict, Set, Tuple, Any
 from itertools import chain
 from collections import defaultdict
 import logging
@@ -134,14 +134,29 @@ def install_topology_conf(lkp: util.Lookup) -> None:
 class SlurmConfigGeneratorV2411(conf.SlurmConfigGenerator):
     """Slurm 24.11 configuration generator."""
 
+    @property
+    def supports_block_topology(self) -> bool:
+        return False
+
+    @property
+    def supports_partition_topology(self) -> bool:
+        return False
+
+    @property
+    def use_gpu_type(self) -> bool:
+        return False
+
     def install_jobsubmit_lua(self) -> None:
         # 24.11 does not support or need job_submit.lua
         pass
 
+    def generate_topology_data(self) -> Tuple[bool, Any]:
+        return gen_topology_conf(self.lkp)
+
     def generate_topology(self) -> None:
         # 24.11 uses topology.conf instead of topology.yaml
         if self.lkp.cfg.nodeset:
-            _, summary = gen_topology_conf(self.lkp)
+            _, summary = self.generate_topology_data()
             summary.dump(self.lkp)
             install_topology_conf(self.lkp)
 
