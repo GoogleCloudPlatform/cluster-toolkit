@@ -164,14 +164,21 @@ def mount_fstab(mounts: list[NSMount], log):
             raise e
         log.info(f"Mount point '{path}' was mounted.")
         if mount_owner and ":" in mount_owner:
-            user, group = mount_owner.split(":", 2)
+            user, group = mount_owner.split(":", 1)
             try:
-                shutil.chown(path, user=user, group=group)
+                uid = int(user)
+            except ValueError:
+                uid = user
+            try:
+                gid = int(group)
+            except ValueError:
+                gid = group
+            try:
+                shutil.chown(path, user=uid, group=gid)
                 log.info(f"Mount point '{path}' changed owner to {user}:{group}.")
-            except LookupError:
-                # allow providing uid / gid, instead of username, password and handle: LookupError: no such user/group
-                os.chown(path, uid=int(user), gid=int(group))
-                log.info(f"Mount point '{path}' changed owner to uid/gid {user}:{group}.")
+            except LookupError as e:
+                log.error(f"Failed to resolve owner {user}:{group}: {e}")
+                raise e
 
         if mount_perm:
             mount_perm_int = int(mount_perm, 8)
