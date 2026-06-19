@@ -62,5 +62,5 @@ if [ -n "${LOCAL_MOUNT_MODE}" ]; then
 	chmod "${LOCAL_MOUNT_MODE}" "${LOCAL_MOUNT}"
 fi
 if [ -n "${LOCAL_MOUNT_OWNER}" ]; then
-	chwon "${LOCAL_MOUNT_OWNER}" "${LOCAL_MOUNT}"
+	chown "${LOCAL_MOUNT_OWNER}" "${LOCAL_MOUNT}"
 fi
