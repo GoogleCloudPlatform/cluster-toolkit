@@ -97,13 +97,13 @@ deployment_groups:
       #to a free id (and its files re-owned) first. Baked into the image so it
       #runs once at build time rather than on every node boot.
       - type: shell
-        source: ./hybrid-scripts/align_slurm_ids.sh
+        source: $(ghpc_stage("./hybrid-scripts/align_slurm_ids.sh"))
         destination: align_slurm_ids.sh
         args: "$(vars.slurm_uid) $(vars.slurm_gid)"
       #Optionally build a specific Slurm version into the image. Leave
       #vars.slurm_version empty ("") to skip; the script no-ops on an empty arg.
       - type: shell
-        source: ./hybrid-scripts/custom_slurm_version.sh
+        source: $(ghpc_stage("./hybrid-scripts/custom_slurm_version.sh"))
         destination: custom_slurm_version.sh
         args: "$(vars.slurm_version)"
       #This scripts creates on the compute node image all the necessary slurmd
