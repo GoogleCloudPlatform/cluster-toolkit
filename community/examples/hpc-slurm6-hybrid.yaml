@@ -21,7 +21,16 @@ blueprint_name: hpc-slurm6-hybrid
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  local_munge_key: /share/munge.key
+
+  #Key type: "munge" or "slurm". local_key is the path to your
+  #existing key on the shared filesystem; override it if it lives elsewhere.
+  key_type: munge
+  local_key: /share/$(vars.key_type).key
+
+  #This gets derived based on the key_type
+  cloud_key_location: /etc/$(vars.key_type)/$(vars.key_type).key
+  cloud_key_user: $(vars.key_type)
+
   deployment_name: slurm6-hybrid
   onprem_ctld_host: "your_slurmctld_name"
   onprem_ctld_addr: "your_slurmctld_IPaddres"
@@ -69,15 +78,15 @@ deployment_groups:
     settings:
       runners:
       - type: data
-        destination: /etc/munge/munge.key
-        source: $(vars.local_munge_key)
-      #Ensure munge key has the proper settings
+        destination: $(vars.cloud_key_location)
+        source: $(vars.local_key)
+      #Ensure key has the proper settings
       - type: shell
-        destination: prepare_munge_key.sh
+        destination: prepare_key.sh
         content: |
           #!/bin/sh
-          chmod 600 /etc/munge/munge.key
-          chown munge: /etc/munge/munge.key
+          chmod 600 $(vars.cloud_key_location)
+          chown $(vars.cloud_key_user): $(vars.cloud_key_location)
       #This scripts creates on the compute node image all the necessary slurmd
       #directories as we have on-prem. For things like the log or the etc dir
       #mkdir is good enough, but with the ln we keep it all in the same place.
@@ -92,9 +101,9 @@ deployment_groups:
           ln -s /var/log/slurm $(vars.on_prem_install_dir)/var/log
           chown -R $(vars.slurm_uid):$(vars.slurm_gid) $(vars.on_prem_install_dir)
 
-- group: packer
+- group: image
   modules:
-  - id: munge-enabled-image
+  - id: image-with-key
     source: modules/packer/custom-image
     kind: packer
     use:
