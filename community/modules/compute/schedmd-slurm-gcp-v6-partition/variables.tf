@@ -140,7 +140,7 @@ variable "nodeset" {
     subnetwork_self_link = string
     additional_networks = optional(list(object({
       network            = optional(string)
-      subnetwork         = string
+      subnetwork         = optional(string)
       subnetwork_project = optional(string)
       network_attachment = optional(string)
       network_ip         = optional(string, "")
