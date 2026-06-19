@@ -4,14 +4,16 @@
 #
 #    pip-compile --generate-hashes modules/scripts/startup-script/files/install_ansible_requirements.in
 #
-ansible==13.6.0 \
-    --hash=sha256:5141552c1bd37f56839eb5b11ef0d93e92391295c97947d507b8daf7265b12b8 \
-    --hash=sha256:d011ee5f895ca68b4670e39b910cee447b416a00a3e8d1bd599f4a6dff32ff12
+ansible==8.7.0 \
+    --hash=sha256:3a5ca5152e4547d590e40b542d76b18dbbe2b36da4edd00a13a7c51a374ff737 \
+    --hash=sha256:fa7d3bc2dfdb0ab031df645814ff86b15cb5ec041bfbee4041f795abfa5646ca
     # via -r modules/scripts/startup-script/files/install_ansible_requirements.in
-ansible-core==2.20.6 \
-    --hash=sha256:28f8cb1647f3459ccd38d098a06a33eaf49cbfce649e506ae6d5f1c2ac77dc1d \
-    --hash=sha256:3066c430e8cba46777bf736ebcd085c90b0d7664c3fbd8c5b85227f8579cdcbf
-    # via ansible
+ansible-core==2.15.13 \
+    --hash=sha256:e7f50bbb61beae792f5ecb86eff82149d3948d078361d70aedb01d76bc483c30 \
+    --hash=sha256:f542e702ee31fb049732143aeee6b36311ca48b7d13960a0685afffa0d742d7f
+    # via
+    #   -r modules/scripts/startup-script/files/install_ansible_requirements.in
+    #   ansible
 cffi==2.0.0 \
     --hash=sha256:00bdf7acc5f795150faa6957054fbbca2439db2f775ce831222b66f192f03beb \
     --hash=sha256:07b271772c100085dd28b74fa0cd81c8fb1a3ba18b21e03d7c27f3436a10606b \
@@ -327,7 +329,7 @@ pyyaml==6.0.3 \
     --hash=sha256:fa160448684b4e94d80416c0fa4aac48967a969efe22931448d853ada8baf926 \
     --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
     # via ansible-core
-resolvelib==1.2.1 \
-    --hash=sha256:7d08a2022f6e16ce405d60b68c390f054efcfd0477d4b9bd019cc941c28fad1c \
-    --hash=sha256:fb06b66c8da04172d9e72a21d7d06186d8919e32ae5ab5cdf5b9d920be805ac2
+resolvelib==1.0.1 \
+    --hash=sha256:04ce76cbd63fded2078ce224785da6ecd42b9564b1390793f64ddecbe997b309 \
+    --hash=sha256:d2da45d1a8dfee81bdd591647783e340ef3bcb104b54c383f70d422ef5cc7dbf
     # via ansible-core
