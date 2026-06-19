@@ -23,6 +23,15 @@ import (
 )
 
 func TestUserIdCmd(t *testing.T) {
+	// Isolate the config directory for tests to prevent modifying the real user config file
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("APPDATA", tempDir) // For Windows compatibility
+	t.Setenv("HOME", tempDir)    // For macOS/Linux compatibility
+
+	// Reset global state to ensure clean slates
+	userConfigExists = false
+
 	tests := []struct {
 		name           string
 		args           []string

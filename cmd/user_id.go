@@ -31,13 +31,13 @@ var userIdCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userId := "UNKNOWN"
 
-		if !UserConfigExists {
+		if !userConfigExists {
 			if err := config.InitUserConfig(); err == nil {
-				UserConfigExists = true
+				userConfigExists = true
 			}
 		}
 
-		if UserConfigExists {
+		if userConfigExists {
 			userId = config.GetPersistentUserId()
 		}
 
