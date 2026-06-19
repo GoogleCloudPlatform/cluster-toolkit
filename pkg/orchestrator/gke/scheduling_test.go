@@ -59,37 +59,66 @@ func TestGetAffinity(t *testing.T) {
 
 func TestGetTopologyAnnotation(t *testing.T) {
 	tests := []struct {
-		name      string
-		topology  string
-		numSlices int
-		wantKey   string
-		wantVal   string
+		name          string
+		topology      string
+		machineType   string
+		numSlices     int
+		nodesPerSlice int
+		wantKey       string
+		wantVal       string
+		wantSize      string
 	}{
 		{
-			name:      "single slice - tpu7x",
-			topology:  "2x2x1",
-			numSlices: 1,
-			wantKey:   "kueue.x-k8s.io/podset-required-topology",
-			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
+			name:          "single slice - tpu7x",
+			topology:      "2x2x1",
+			machineType:   "tpu7x-standard-4t",
+			numSlices:     1,
+			nodesPerSlice: 1,
+			wantKey:       "kueue.x-k8s.io/podset-required-topology",
+			wantVal:       "cloud.google.com/gke-tpu-partition-2x2x1-id",
 		},
 		{
-			name:      "multislice - tpu7x",
-			topology:  "2x2x1",
-			numSlices: 2,
-			wantKey:   "kueue.x-k8s.io/podset-slice-required-topology",
-			wantVal:   "cloud.google.com/gke-tpu-partition-2x2x1-id",
+			name:          "multislice - tpu7x",
+			topology:      "2x2x1",
+			machineType:   "tpu7x-standard-4t",
+			numSlices:     2,
+			nodesPerSlice: 1,
+			wantKey:       "kueue.x-k8s.io/podset-slice-required-topology",
+			wantVal:       "cloud.google.com/gke-tpu-partition-2x2x1-id",
+			wantSize:      "1",
 		},
 		{
-			name:      "empty topology",
-			topology:  "",
-			numSlices: 1,
-			wantKey:   "",
-			wantVal:   "",
+			name:          "single slice - v6e",
+			topology:      "2x2",
+			machineType:   "v6e-standard-8t",
+			numSlices:     1,
+			nodesPerSlice: 1,
+			wantKey:       "kueue.x-k8s.io/podset-required-topology",
+			wantVal:       "cloud.google.com/gke-tpu-slice-2x2-id",
+		},
+		{
+			name:          "multislice - v6e",
+			topology:      "2x2",
+			machineType:   "v6e-standard-8t",
+			numSlices:     4,
+			nodesPerSlice: 1,
+			wantKey:       "kueue.x-k8s.io/podset-slice-required-topology",
+			wantVal:       "cloud.google.com/gke-tpu-slice-2x2-id",
+			wantSize:      "1",
+		},
+		{
+			name:          "empty topology",
+			topology:      "",
+			machineType:   "v6e-standard-8t",
+			numSlices:     1,
+			nodesPerSlice: 1,
+			wantKey:       "",
+			wantVal:       "",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetTopologyAnnotation(tt.topology, tt.numSlices)
+			got := GetTopologyAnnotation(tt.topology, tt.machineType, tt.numSlices, tt.nodesPerSlice)
 			if tt.topology == "" {
 				if got != nil {
 					t.Errorf("Expected nil for empty topology, got %v", got)
@@ -101,6 +130,9 @@ func TestGetTopologyAnnotation(t *testing.T) {
 			}
 			if got[tt.wantKey] != tt.wantVal {
 				t.Errorf("Expected %s = %s, got %v", tt.wantKey, tt.wantVal, got[tt.wantKey])
+			}
+			if tt.wantSize != "" && got["kueue.x-k8s.io/podset-slice-size"] != tt.wantSize {
+				t.Errorf("Expected slice size %s, got %s", tt.wantSize, got["kueue.x-k8s.io/podset-slice-size"])
 			}
 		})
 	}

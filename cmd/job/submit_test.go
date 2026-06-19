@@ -248,6 +248,8 @@ func resetSubmitCmdFlags() {
 	priorityClassName = "medium"
 	isPathwaysJob = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
+	gkeNapProvisioning = ""
+	gkeNapReservation = ""
 }
 
 func TestParseVolumeFlag_PVC(t *testing.T) {
@@ -476,5 +478,126 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "failed to determine user identity") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "invalid-model",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing invalid provisioning model, but got nil")
+	}
+
+	expectedErr := "invalid value \"invalid-model\" for --gke-nap-provisioning"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "reservation",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing reservation model without reservation name, but got nil")
+	}
+
+	expectedErr := "--gke-nap-reservation is required when --gke-nap-provisioning=reservation"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "spot",
+		"--gke-nap-reservation", "my-reservation",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing reservation name with spot model, but got nil")
+	}
+
+	expectedErr := "--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
 	}
 }

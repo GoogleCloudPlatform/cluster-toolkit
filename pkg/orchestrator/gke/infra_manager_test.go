@@ -382,3 +382,43 @@ func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestRenderClusterQueue_NAP(t *testing.T) {
+	orc := &GKEOrchestrator{
+		napEnabled: true,
+		napLimits: map[string]int64{
+			"cpu":            1000,
+			"memory":         4000, // limit is in GB in napLimits
+			"nvidia.com/gpu": 80,
+		},
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"flavor-default": {
+					CPUs:     4,
+					MemoryGi: 16,
+				},
+				"nvidia-tesla-a100": {
+					GPUs: 2,
+				},
+			},
+		},
+	}
+
+	bytes, err := orc.renderClusterQueue("cluster-queue")
+	if err != nil {
+		t.Fatalf("renderClusterQueue failed: %v", err)
+	}
+
+	output := string(bytes)
+
+	// Verify nominal quotas are rendered from napLimits, not static capacities
+	if !strings.Contains(output, "nominalQuota: 1000") { // CPU limit from napLimits
+		t.Errorf("expected nominalQuota: 1000 for CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 4000G") { // Memory limit from napLimits
+		t.Errorf("expected nominalQuota: 4000G for Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
+		t.Errorf("expected nominalQuota: 80 for GPU, got %s", output)
+	}
+}
