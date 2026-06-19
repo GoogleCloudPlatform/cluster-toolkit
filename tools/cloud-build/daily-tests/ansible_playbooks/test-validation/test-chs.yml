@@ -85,7 +85,7 @@
     - name: Configure bucket for CHS
       ansible.builtin.shell: |
         set -e -u
-        chs configure bucket --name chs-results
+        chs configure storage gcs chs-results
       async: 120
       poll: 10
       changed_when: false

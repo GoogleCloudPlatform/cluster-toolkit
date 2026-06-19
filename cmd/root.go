@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -49,7 +50,8 @@ var (
 var (
 	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
 	telemetryCollector *telemetry.Collector
-	UserConfigExists   bool = false
+	UserConfigExists   bool        = false
+	telemetryFlushed   atomic.Bool // 2-state flag for whether telemetry event is flushed or not.
 )
 
 var (
@@ -80,8 +82,11 @@ func init() {
 
 			// Register the fatal hook to flush telemetry on hard failures
 			logging.FatalHook = func(exitCode int) {
-				if config.IsTelemetryEnabled() && telemetryCollector != nil {
-					telemetryCollector.Execute(exitCode)
+				// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
+				if telemetryFlushed.CompareAndSwap(false, true) {
+					if config.IsTelemetryEnabled() && telemetryCollector != nil {
+						telemetryCollector.Execute(exitCode)
+					}
 				}
 			}
 		}
@@ -141,8 +146,11 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 
-	if config.IsTelemetryEnabled() && UserConfigExists {
-		telemetryCollector.Execute(exitCode)
+	// Ensure telemetry is executed exactly once on normal exits to prevent recurrency
+	if telemetryFlushed.CompareAndSwap(false, true) {
+		if config.IsTelemetryEnabled() && UserConfigExists {
+			telemetryCollector.Execute(exitCode)
+		}
 	}
 
 	return err

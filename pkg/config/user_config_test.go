@@ -51,7 +51,7 @@ func TestInitUserConfig_NewUser(t *testing.T) {
 	}
 
 	// Verify File creation
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		t.Errorf("Expected config file to be created at %s", configFile)
 	}
@@ -61,7 +61,7 @@ func TestInitUserConfig_ExistingUser(t *testing.T) {
 	tempDir := setupTestEnv(t)
 
 	// Pre-populate an existing config file
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 
 	existingData := UserConfig{
@@ -89,7 +89,7 @@ func TestInitUserConfig_CorruptFile(t *testing.T) {
 	tempDir := setupTestEnv(t)
 
 	// Create a corrupt config file (invalid JSON)
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
 	_ = os.WriteFile(configFile, []byte("{invalid_json_here]"), 0644)
 
@@ -136,7 +136,7 @@ func TestSetTelemetry(t *testing.T) {
 	}
 
 	// Verify File on-disk state
-	configFile := filepath.Join(tempDir, "cluster-toolkit", "telemetry_config.json")
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
 	data, _ := os.ReadFile(configFile)
 
 	var settings UserConfig
@@ -159,5 +159,86 @@ func TestGenerateUniqueID(t *testing.T) {
 	// Because we hash hostname and username, the ID should be deterministic across calls on the same machine during a single execution.
 	if id1 != id2 {
 		t.Errorf("Expected generateUniqueID to be deterministic for the same machine/user context")
+	}
+}
+
+// TestGetIsGoogler_Nil verifies the default state of the cache for a new user.
+func TestGetIsGoogler_Nil(t *testing.T) {
+	_ = setupTestEnv(t)
+
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	// For a fresh config without the is_googler key, the pointer should be nil.
+	if GetIsGoogler() != nil {
+		t.Errorf("Expected GetIsGoogler to return nil initially, got %v", *GetIsGoogler())
+	}
+}
+
+// TestSetIsGoogler verifies setting the cache updates memory and persists to disk.
+func TestSetIsGoogler(t *testing.T) {
+	tempDir := setupTestEnv(t)
+
+	// Initialize first to set up the baseline
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig setup failed: %v", err)
+	}
+
+	// Action: update is_googler cache
+	err = SetIsGoogler(true)
+	if err != nil {
+		t.Fatalf("SetIsGoogler failed: %v", err)
+	}
+
+	// Verify in-memory state
+	cached := GetIsGoogler()
+	if cached == nil || !*cached {
+		t.Errorf("Expected IsGoogler to be true in memory state")
+	}
+
+	// Verify File on-disk state
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
+	data, _ := os.ReadFile(configFile)
+
+	var settings UserConfig
+	_ = json.Unmarshal(data, &settings)
+
+	if settings.IsGoogler == nil || !*settings.IsGoogler {
+		t.Errorf("Expected is_googler to be true in file, got: %v", settings.IsGoogler)
+	}
+}
+
+// TestInitUserConfig_ExistingIsGoogler verifies loading an existing config file that contains the cached value.
+func TestInitUserConfig_ExistingIsGoogler(t *testing.T) {
+	tempDir := setupTestEnv(t)
+
+	// Pre-populate an existing config file
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
+	_ = os.MkdirAll(filepath.Dir(configFile), 0755)
+
+	isGoogler := false
+	existingData := UserConfig{
+		UserID:           "existing-test-id",
+		TelemetryEnabled: true,
+		IsGoogler:        &isGoogler,
+	}
+	data, _ := json.Marshal(existingData)
+	_ = os.WriteFile(configFile, data, 0644)
+
+	err := InitUserConfig()
+	if err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	// Verify the in-memory state loaded the existing IsGoogler data
+	cached := GetIsGoogler()
+	if cached == nil {
+		t.Fatalf("Expected IsGoogler to be loaded from file, got nil")
+	}
+	if *cached != false {
+		t.Errorf("Expected IsGoogler to be false, got true")
 	}
 }

@@ -437,8 +437,8 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION."
     }
     precondition {
-      condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && var.enable_queued_provisioning == true)
-      error_message = "Custom accelerator topology modes (like PROVISION_ONLY) are incompatible with Dynamic Workload Scheduler (queued provisioning)."
+      condition     = !(var.accelerator_topology_mode == "PROVISION_ONLY" && try(var.reservation_affinity.consume_reservation_type, "") != "SPECIFIC_RESERVATION")
+      error_message = "PROVISION_ONLY accelerator topology mode is only supported on GKE node pools configured with SPECIFIC_RESERVATION reservation affinity."
     }
     precondition {
       condition = var.is_reservation_active || (
@@ -448,6 +448,15 @@ resource "google_container_node_pool" "node_pool" {
         (var.initial_node_count == null || var.initial_node_count == 0)
       )
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
+    }
+    precondition {
+      condition = !(
+        var.enable_flex_start &&
+        try(var.placement_policy.type == "COMPACT", false) &&
+        !module.tpu.is_tpu &&
+        !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type))
+      )
+      error_message = "Compact placement with DWS Flex start is only supported for A3 Ultra, A4, and H4D machine types."
     }
   }
 }

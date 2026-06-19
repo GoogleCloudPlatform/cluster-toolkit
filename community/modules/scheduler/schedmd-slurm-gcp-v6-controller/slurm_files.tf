@@ -119,6 +119,25 @@ locals {
 
 
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
+
+  state_spool_mount = one([
+    for ns in var.network_storage : ns
+    if ns.local_mount == "/var/spool/slurm"
+  ])
+
+  auto_munge_mount = (var.enable_backup_controller && local.state_spool_mount != null) ? {
+    server_ip     = local.state_spool_mount.server_ip
+    remote_mount  = local.state_spool_mount.remote_mount
+    fs_type       = local.state_spool_mount.fs_type
+    mount_options = "defaults,soft,intr,timeo=600,retrans=2"
+  } : var.munge_mount
+
+  auto_slurm_key_mount = (var.enable_backup_controller && local.state_spool_mount != null) ? {
+    server_ip     = local.state_spool_mount.server_ip
+    remote_mount  = local.state_spool_mount.remote_mount
+    fs_type       = local.state_spool_mount.fs_type
+    mount_options = "defaults,soft,intr,timeo=600,retrans=2"
+  } : var.slurm_key_mount
 }
 
 module "daos_network_storage_scripts" {
@@ -137,6 +156,10 @@ module "slurm_files" {
 
   project_id                    = var.project_id
   slurm_cluster_name            = local.slurm_cluster_name
+  slurm_control_host            = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
+  slurm_control_addr            = var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null
+  slurm_backup_controller_name  = var.enable_backup_controller ? local.slurm_backup_controller_name : null
+  slurm_backup_controller_ip    = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
   bucket_dir                    = var.bucket_dir
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
@@ -170,7 +193,9 @@ module "slurm_files" {
   task_epilog_scripts                = var.task_epilog_scripts
   task_prolog_scripts                = var.task_prolog_scripts
 
-  disable_default_mounts = !var.enable_default_mounts
+  munge_mount            = local.auto_munge_mount
+  slurm_key_mount        = local.auto_slurm_key_mount
+  disable_default_mounts = !var.enable_default_mounts || var.enable_backup_controller
   network_storage = [
     for storage in var.network_storage : {
       server_ip     = storage.server_ip,

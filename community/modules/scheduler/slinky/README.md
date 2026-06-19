@@ -114,7 +114,7 @@ squeue
 
 | Name | Version |
 | ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
 
@@ -167,6 +167,7 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the cluster and run basic Slurm commands. |
 | <a name="output_slurm_namespace"></a> [slurm\_namespace](#output\_slurm\_namespace) | namespace for the slurm chart |
 | <a name="output_slurm_operator_namespace"></a> [slurm\_operator\_namespace](#output\_slurm\_operator\_namespace) | namespace for the slinky operator chart |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

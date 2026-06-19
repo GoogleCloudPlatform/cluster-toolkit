@@ -313,7 +313,7 @@ This solution uses various GCS buckets to store required persistent information:
    This bucket is expected to contain a copy of the AlphaFold 3 weights as provided by the process
    described in section [AlphaFold 3 Model Weights](#alphafold-3-model-weights).
 
-   You can use [Google Cloud Console](htpps://console.cloud.google.com) to upload the
+   You can use [Google Cloud Console](https://console.cloud.google.com) to upload the
    uncompressed `af3.bin` weights file. Alternatively, you can execute on a shell where you have the weights and gcloud commands installed:
 
    ```bash

@@ -17,7 +17,8 @@ tags:
 - m.custom-image
 - m.startup-script
 - slurm6
-- m.filestore
+- m.managed-lustre
+- m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
@@ -48,14 +49,7 @@ steps:
   - |
     set -x -e
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     REGION=us-west4

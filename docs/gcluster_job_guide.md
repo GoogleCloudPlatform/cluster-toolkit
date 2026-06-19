@@ -228,7 +228,29 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
   --node-constraint "cloud.google.com/gke-nodepool=my-custom-nodepool"
 ```
 
-**Example 2: Use Placement Policy**
+**Example 2: Target Multiple Topologies (Dynamic Routing)**
+Use a pipe separator (`|`) in `--node-constraint` to specify multiple allowed values for a constraint. This generates a `nodeAffinity` block instead of a strict `nodeSelector`, allowing the workload to fall back to other pools if the preferred one is full.
+
+```bash
+./gcluster job submit \
+  --name my-fallback-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --node-constraint "cloud.google.com/gke-tpu-topology=2x2|4x4"
+```
+
+> [!CAUTION]
+> **Dynamic Slicing Interaction:**
+>
+> When using GKE Dynamic Slicing, be careful setting topology constraints in `--node-constraint`.
+>
+> GKE labels nodes with their *physical* pool topology (e.g., `4x4`). If you request a smaller slice (e.g., `2x2`) via `--topology`, GKE handles the placement via annotations automatically.
+>
+> However, if you also pass `--node-constraint "cloud.google.com/gke-tpu-topology=2x2"`, you are forcing strict Node Affinity. The scheduler will only look for nodes physically labeled `2x2` and will **refuse to schedule** on the `4x4` pool, defeating Dynamic Slicing.
+>
+> To avoid this, either omit the topology from `--node-constraint` when using Dynamic Slicing, or explicitly include the larger pool topologies in the pipe-separated list (e.g., `"2x2|4x4"`).
+
+**Example 3: Use Placement Policy**
 Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
 
 ```bash
@@ -240,7 +262,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
-**Example 3: Pod Failure Policy**
+**Example 4: Pod Failure Policy**
 Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
 
 ```bash
@@ -250,7 +272,7 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
   --restart-on-exit-codes 1,137
 ```
 
-**Example 4: Private Registry & Service Account**
+**Example 5: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
 
 ```bash
@@ -261,7 +283,7 @@ Use `--image-pull-secret` and `--service-account` for secure jobs.
   --service-account "my-workload-sa"
 ```
 
-**Example 5: Explicit Kueue Queue Selection**
+**Example 6: Explicit Kueue Queue Selection**
 Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
@@ -275,6 +297,32 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ```
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
+
+### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
+
+> [!NOTE]
+> The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
+
+Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:
+
+```bash
+./gcluster job submit \
+  --name my-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
+
+Use the `--gke-nap-provisioning reservation` option and target a GCE reservation via the `--gke-nap-reservation` flag:
+
+```bash
+./gcluster job submit \
+  --name my-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
+```
 
 ### 6.3 Job Retention (TTL)
 
@@ -820,9 +868,85 @@ completed step: 4, seconds: 1.182, TFLOP/s/device: 167.154, Tokens/s/device: 346
 completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 3452.840, loss: 9.184
 ```
 
-## 8. `gcluster job` Command Reference
+## 8. Advanced GKE Infrastructure Features
 
-### 8.1 Common Flags
+This section details how GCluster natively orchestrates advanced GKE hardware features—such as dynamic slice reconfiguration and the Pathways distributed AI framework—to deliver elite resource utilization and simplified scheduling.
+
+### 8.1 Dynamic Slicing (TPU7x)
+
+GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In GCluster, dynamic slicing is supported exclusively on TPU v7x (Ironwood) nodes.
+
+#### Capabilities & Scheduling Benefits
+
+* **Elastic Topology Provisioning:** Stitch multiple physical TPU v7x blocks together into a larger logical slice (e.g., wiring multiple `4x4x4` blocks together).
+* **Latency Optimization:** Kueue's Topology-Aware Scheduling (TAS) guarantees that TPU pods are placed with minimal network hop latency across the physical TPU architecture, ensuring maximum distributed training and inference throughput.
+* **Multi-Slice Synchronization:** For multi-slice jobs (`--num-slices > 1`), GCluster dynamically coordinates slice-level reservations to ensure all slices are acquired concurrently, preventing mismatched scaling or execution hangs.
+
+#### Orchestration & Under-The-Hood Mappings
+
+GCluster automatically translates a high-level TPU request into the specific scheduling annotations required by Kueue and the GKE Slice Controller:
+
+* **TPU v7x (Ironwood):** Maps topology to a partition-level requirement (`cloud.google.com/gke-tpu-partition-<topology>-id`) to align with configured physical sub-blocks.
+* **Queue Admission Keys:** Dynamically switches between a single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) annotation key depending on `--num-slices`.
+
+Additionally, GCluster automatically includes standard TPU topology labels (`cloud.google.com/gke-tpu-slice-topology: <topology>`) in the JobSet workload template to guarantee topology-aware scheduling.
+
+This automated TAS annotation injection and nodeSelector decoupling is enabled by default for supported TPU v7x configurations.
+
+#### GKE Documentation Reference
+
+For a deeper conceptual understanding or custom configurations, refer to Google Cloud's official public guides:
+
+* [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
+* [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
+* [GKE Workloads with Topology-Aware Scheduling (TAS)](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-topology-aware-scheduling)
+
+---
+
+### 8.2 Pathways Distributed AI Orchestration
+
+Pathways is a specialized distributed AI execution framework designed to coordinate large-scale multi-slice TPU workloads. GCluster provides first-class integration for compiling and deploying Pathways-enabled workloads without complex manual manifest configuration.
+
+#### Capabilities & Scheduling Benefits
+
+* **Simplified Multi-Slice Scaling:** Easily coordinate JAX/Pathways initialization across independent TPU slices without configuring complex master-worker setups.
+* **Resilient Orchestration:** Run resilient, restart-safe model training using Pathways elastic slices via native CLI flags.
+* **Co-located Sidecar Provisioning:** GCluster automatically builds and links all complementary Pathways infrastructure components directly inside your JobSet manifest.
+
+#### Orchestration & Under-The-Hood Mappings
+
+When the `--pathways` flag is specified, GCluster automatically refactors the JobSet manifest to deploy and coordinate three distinct functional roles across your GKE cluster:
+
+* **Pathways ResourceManager/Server:** Deployed within the JobSet to manage dynamic TPU worker allocations and host mappings.
+* **Pathways Proxy:** Handles execution requests and acts as the coordinator/entry point for the client workload.
+* **Co-located JAX Workers & Sidecars:** Deployed as worker pods hosting JAX and PJRT runtimes, with optional co-located sidecar containers using `--pathways-colocated-python-sidecar-image`.
+
+All GCS pathways artifact locations, elastic slice configurations, and proxy command arguments are dynamically compiled into the manifest based on your `--pathways-*` flags.
+
+---
+
+### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
+
+Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dynamically creates and deletes node pools based on unschedulable pod resource requirements. GCluster integrates with NAP to allow users to target specific compute consumption models.
+
+#### Capabilities & Scheduling Benefits
+
+* **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs. If the cluster runs low on spot instances or fails to acquire them, the pre-flight checks and scheduler ensure it doesn't silently route to standard pools if you explicitly targeted Spot.
+* **Reservation Targeting:** Target GCE reservations by name. GCluster supports simple reservation names, full GCP resource URIs, and complex reservation path identifiers containing block/subblock configurations. GCluster automatically extracts the short reservation identifier to populate the node selector and tolerations since GKE NAP only supports reservation-level scheduling on pods (scheduling to a specific block or sub-block within the reservation is not supported by GKE pod selectors).
+* **Kueue Resource Quota Alignment:** Kueue ResourceFlavors and ClusterQueues are dynamically matched with GKE NAP autoprovisioning limits to ensure fair sharing, priority queuing, and preemption.
+
+#### Orchestration & Under-The-Hood Mappings
+
+When GKE NAP options are used, GCluster performs several operations to structure the JobSet manifest:
+
+* **Tolerations and Selector Injection:**
+  * Spot: Injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector.
+  * Reservation: Injects reservation tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`) to allow scheduling on nodes spawned by GKE to consume the target reservation. If a block/sub-block path format is provided, the short reservation identifier is automatically extracted and used as the `<reservation-name>`.
+* **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type (e.g., `ct6e-standard-4t`, `a3-megagpu-8g`) is explicitly configured in GKE NAP limits. If the machine type is not covered by GKE NAP limits, GCluster **fails fast** during submission, preventing scheduling locks.
+
+## 9. `gcluster job` Command Reference
+
+### 9.1 Common Flags
 *These flags are common to almost all `gcluster job` subcommands (except `config`). They can be set as defaults via `config set`.*
 
 | Flag | Type | Description |
@@ -831,7 +955,7 @@ completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 345
 | `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
 | `-p, --project` | `string` | Google Cloud Project ID. |
 
-### 8.2 Configuration Commands
+### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
 
 #### `gcluster job config set [key] [value]`
@@ -851,10 +975,10 @@ Sets a persistent configuration property.
 #### `gcluster job config list`
 Lists all persistent configuration properties currently set.
 
-### 8.3 `submit` Flags
+### 9.3 `submit` Flags
 The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
 
-#### 8.3.1 General Flags
+#### 9.3.1 General Flags
 *These flags control core workload execution, identity, and basic build context options regardless of the underlying hardware paradigm.*
 
 | Flag | Type | Description |
@@ -875,9 +999,9 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |
 
-*(Note: `--cluster`, `--location`, and `--project` are also supported as common flags, see 8.1)*
+*(Note: `--cluster`, `--location`, and `--project` are also supported as common flags, see 9.1)*
 
-#### 8.3.2 TPU Related Flags
+#### 9.3.2 TPU Related Flags
 *Use these flags to orchestrate specialized TPU multi-slice topologies or leverage the Pathways distributed execution framework.*
 
 | Flag | Type | Description |
@@ -897,13 +1021,13 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
 
-#### 8.3.3 GPU Related Flags
+#### 9.3.3 GPU Related Flags
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*
 
 > [!NOTE]
 > Currently, GPU workloads leverage the standard **General Flags** (such as passing `--compute-type nvidia-l4` or `--compute-type nvidia-h100-8px`) and **GKE Only Flags** (such as placement policies). Specialized GPU flags (e.g., multi-node NVLink topologies or custom GPU drivers) will be documented here as they are added.
 
-#### 8.3.4 GKE & Advanced Orchestration Flags
+#### 9.3.4 GKE & Advanced Orchestration Flags
 *These flags unlock advanced GKE capabilities, including Kueue queue priorities, workload identities, network placements, and robust lifecycle failure policies.*
 
 | Flag | Type | Description |
@@ -912,7 +1036,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--priority` | `string` | Priority class or level assigned to the job queue (e.g., `low`, `medium`, `high`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
-| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. |
+| `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
 | `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |
 | `--gke-scheduler` | `string` | Specific GKE scheduler selection (e.g., `gke.io/topology-aware-auto`). |
@@ -921,7 +1045,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
 
-### 8.4 `list` Flags
+### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
 
 | Flag | Type | Description |
@@ -929,14 +1053,14 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--status` | `string` | Filter jobs by status (e.g., `Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
-### 8.5 `logs` Flags
+### 9.5 `logs` Flags
 *Use these flags when fetching logs.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-f, --follow` | `flag` | Stream logs continuously (like `tail -f`). |
 
-## 9. Troubleshooting: ImagePullBackOff
+## 10. Troubleshooting: ImagePullBackOff
 
 If your job status remains `Pending` and the underlying pods show `ImagePullBackOff` or `ErrImagePull`, the GKE node pool service account may lack permission to read from the Artifact Registry repository.
 
@@ -953,7 +1077,7 @@ gcloud artifacts repositories add-iam-policy-binding <REPOSITORY_NAME> \
 > [!TIP]
 > You can find the service account used by your node pool in the GKE console or by running `kubectl get nodes -o jsonpath='{.items[*].spec.providerID}'`.
 
-## 10. Cleanup
+## 11. Cleanup
 
 To avoid incurring unnecessary costs, destroy the deployed GKE cluster and its resources:
 

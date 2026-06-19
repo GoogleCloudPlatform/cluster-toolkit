@@ -218,3 +218,6 @@
   delegate_to: localhost
   ansible.builtin.command: kubectl delete pod lustre-test-pod --ignore-not-found=true
   changed_when: True
+
+- name: Verify Lustre KMS Key
+  ansible.builtin.include_tasks: verify-lustre-cmek.yml

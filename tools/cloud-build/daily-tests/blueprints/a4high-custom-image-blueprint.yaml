@@ -16,6 +16,9 @@
 blueprint_name: a4high-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   deployment_name: # supply deployment name
   project_id: # supply project ID
   region: # supply region
@@ -35,7 +38,7 @@ vars:
     project: $(vars.instance_image_project)
     family: $(vars.instance_image_family)
   disk_size_gb: 100
-  benchmark_dir: $(ghpc_stage("system_benchmarks"))
+  benchmark_dir: $(ghpc_stage("../../../../examples/machine-learning/a4-highgpu-8g/system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -227,6 +230,19 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # --- DYNAMICALLY GENERATE HOST /etc/hostname ON BOOT TO ALLOW ENROOT BIND-MOUNTS ---
+      - type: shell
+        destination: write_hostname.sh
+        content: |
+          #!/bin/bash
+          echo "Checking host /etc/hostname status..."
+          if [ ! -f /etc/hostname ]; then
+            echo "Host /etc/hostname not found! Generating dynamically..."
+            hostname -s | tee /etc/hostname
+            echo "Host /etc/hostname written successfully."
+          else
+            echo "Host /etc/hostname already exists."
+          fi
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |

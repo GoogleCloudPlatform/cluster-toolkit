@@ -79,6 +79,7 @@ deployment_groups:
     kind: terraform
     id: slurm_controller
     settings:
+      enable_slurm_auth: {{ cluster.enable_slurm_auth | lower }}
       instance_image:
         family: slurm-gcp-6-12-hpc-rocky-linux-8
         project: schedmd-slurm-public

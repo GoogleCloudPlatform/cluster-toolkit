@@ -1,0 +1,96 @@
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: Topology
+metadata:
+  name: dynamic-slicing-topology
+spec:
+  levels:
+  - nodeLabel: cloud.google.com/gce-topology-block
+  - nodeLabel: cloud.google.com/gke-tpu-partition-4x4x4-id
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: AdmissionCheck
+metadata:
+  name: dynamic-slicing-ac
+spec:
+  controllerName: accelerator.gke.io/slice
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: tpu-flavor
+spec:
+  nodeLabels:
+    cloud.google.com/gke-tpu-accelerator: ${accelerator_type}
+  topologyName: dynamic-slicing-topology
+  tolerations:
+  - effect: NoSchedule
+    key: google.com/tpu
+    value: "present"
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cluster-queue
+spec:
+  preemption:
+    reclaimWithinCohort: Never
+    withinClusterQueue: LowerPriority
+  namespaceSelector: {}
+  admissionChecks:
+  - dynamic-slicing-ac
+  resourceGroups:
+  - coveredResources: ["google.com/tpu"]
+    flavors:
+    - name: "tpu-flavor"
+      resources:
+      - name: "google.com/tpu"
+        nominalQuota: ${tpu_quota}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  namespace: default
+  name: user-queue
+spec:
+  clusterQueue: cluster-queue
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: very-low
+value: 100
+globalDefault: false
+description: "Very Low"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low
+value: 250
+globalDefault: false
+description: "Low"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medium
+value: 500
+globalDefault: false
+description: "Medium"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high
+value: 750
+globalDefault: false
+description: "High"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: very-high
+value: 1000
+globalDefault: false
+description: "Very High"

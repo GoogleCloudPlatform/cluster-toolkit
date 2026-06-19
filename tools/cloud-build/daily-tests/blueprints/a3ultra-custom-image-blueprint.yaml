@@ -16,6 +16,9 @@
 blueprint_name: a3ultra-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   deployment_name: # supply deployment name
   project_id: # supply project ID
   region: # supply region
@@ -208,6 +211,19 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      # --- DYNAMICALLY GENERATE HOST /etc/hostname ON BOOT TO ALLOW ENROOT BIND-MOUNTS ---
+      - type: shell
+        destination: write_hostname.sh
+        content: |
+          #!/bin/bash
+          echo "Checking host /etc/hostname status..."
+          if [ ! -f /etc/hostname ]; then
+            echo "Host /etc/hostname not found! Generating dynamically..."
+            hostname | tee /etc/hostname
+            echo "Host /etc/hostname written successfully."
+          else
+            echo "Host /etc/hostname already exists."
+          fi
       - type: shell
         destination: install-cuda-toolkit.sh
         content: |

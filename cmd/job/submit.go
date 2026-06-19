@@ -65,6 +65,9 @@ var (
 
 	volumeStr []string
 	pathways  orchestrator.PathwaysJobDefinition
+
+	gkeNapProvisioning string
+	gkeNapReservation  string
 )
 
 var SubmitCmd = &cobra.Command{
@@ -91,6 +94,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
+		if err := validateGKENAPFlags(); err != nil {
+			return err
+		}
+
 		priorityClassName = strings.ToLower(priorityClassName)
 		if priorityClassName != "" && !slices.Contains(orchestrator.ValidPriorityClasses, priorityClassName) {
 			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: %s",
@@ -110,6 +117,8 @@ func init() {
 	SubmitCmd.Flags().StringVar(&computeType, "compute-type", "", "Type of compute to request (e.g., 'n2-standard-32', 'nvidia-l4', 'v6e-8').")
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
+
+	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -131,9 +140,11 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
+	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
-	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
@@ -147,17 +158,12 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
-	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
-
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("compute-type")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
-	if err := config.ValidateHardwareRequest(computeType, topology, placementPolicy); err != nil {
-		return err
-	}
 	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
@@ -216,6 +222,8 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		UseParallelContainers:         !gkeDisableParallelContainers,
 		Timeout:                       timeoutStr,
 		PriorityClassName:             priorityClassName,
+		GKENAPProvisioning:            gkeNapProvisioning,
+		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
 		Volumes:                       vols,
@@ -286,7 +294,7 @@ func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error)
 		dest = lastPart
 
 		if strings.HasPrefix(vStr, "gs://") && !strings.HasPrefix(src, "gs://") {
-			return "", "", false, fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
+			return "", "", false, fmt.Errorf("invalid volume format: %s; missing destination", vStr)
 		}
 
 		if strings.Contains(src, ":") {
@@ -355,10 +363,28 @@ func validateBuildContext() error {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).")
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
+	}
+	return nil
+}
+
+func validateGKENAPFlags() error {
+	gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
+	if gkeNapProvisioning != "" {
+		validModels := []string{"on-demand", "spot", "reservation"}
+		if !slices.Contains(validModels, gkeNapProvisioning) {
+			return fmt.Errorf("invalid value %q for --gke-nap-provisioning. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+		}
+
+		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
+			return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+		}
+	}
+	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
+		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
 	}
 	return nil
 }

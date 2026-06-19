@@ -21,10 +21,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
@@ -260,10 +262,11 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 	t.Setenv("APPDATA", tempDir) // For Windows compatibility
 	t.Setenv("HOME", tempDir)    // For macOS/Linux compatibility
 
-	// Ensure config is initialized and telemetry is explicitly turned OFF
-	// to prevent actual network/telemetry calls during unit tests.
+	// Ensure config is initialized and telemetry is explicitly turned OFF to prevent actual network/telemetry calls during unit tests.
 	_ = config.InitUserConfig()
 	_ = config.SetTelemetry(false)
+	// Reset the flag at the start of the test block
+	telemetryFlushed.Store(false)
 
 	// Create a real *exec.ExitError for testing the exit code unwrapping logic
 	execCmd := exec.Command("false")
@@ -321,6 +324,9 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 			UserConfigExists = false
 			telemetryCollector = nil
 
+			// Reset the flag between subtests
+			telemetryFlushed.Store(false)
+
 			// Inject a dummy command to trigger specific error cases
 			dummyCmd := tt.setupCmd()
 			rootCmd.AddCommand(dummyCmd)
@@ -355,5 +361,46 @@ func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
 			// Cleanup dummy command for the next iteration
 			rootCmd.RemoveCommand(dummyCmd)
 		})
+	}
+}
+
+func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
+	// 1. Isolate config and reset state
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	_ = config.InitUserConfig()
+	_ = config.SetTelemetry(false) // Prevent actual telemetry network calls during the test
+
+	// Reset the atomic flag to its default state for a clean test
+	telemetryFlushed.Store(false)
+	telemetryCollector = nil
+
+	// 2. Execute PersistentPreRun to register the FatalHook
+	rootCmd.PersistentPreRun(rootCmd, []string{})
+
+	if logging.FatalHook == nil {
+		t.Fatal("Expected logging.FatalHook to be registered by PersistentPreRun")
+	}
+
+	// 3. Simulate multiple concurrent calls to logging.FatalHook
+	var wg sync.WaitGroup
+	numCalls := 10
+
+	for i := 0; i < numCalls; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// This simulates multiple goroutines hitting logging.Fatal concurrently,
+			// or a recursive logging.Fatal call inside the collector.
+			logging.FatalHook(1)
+		}()
+	}
+
+	// Wait for all concurrent executions to finish
+	wg.Wait()
+
+	// 4. Verify that the atomic flag was flipped to true and handled concurrency safely
+	if !telemetryFlushed.Load() {
+		t.Errorf("Expected telemetryFlushed to be true after FatalHook execution")
 	}
 }

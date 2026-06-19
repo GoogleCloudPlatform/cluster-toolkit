@@ -22,8 +22,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"strconv"
 	"strings"
-
-	k8syaml "sigs.k8s.io/yaml"
 )
 
 type MachineTypeCap struct {
@@ -82,8 +80,12 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 			MemoryMb:  int(mt.MemoryMb),
 		}
 
-		count, accelType, _ := config.ResolveAcceleratorInfo(mt, machineType)
+		count, accelType, isTPU := config.ResolveAcceleratorInfo(mt, machineType)
 		if count > 0 {
+			// Fetch correct accelerator type for TPUs using map
+			if isTPU {
+				accelType = g.GenerateGKENodeSelectorLabel(machineType)
+			}
 			cap.Accelerators = append(cap.Accelerators, struct {
 				Count int    `json:"guestAcceleratorCount"`
 				Type  string `json:"guestAcceleratorType"`
@@ -112,41 +114,111 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 		return false, nil
 	}
 
-	if val, ok := g.dynamicSlicingCache[opts.ComputeType]; ok {
+	if g.dynamicSlicingCache == nil {
+		g.dynamicSlicingCache = make(map[string]bool)
+	}
+
+	cacheKey := opts.ComputeType + ":" + opts.Topology
+	if val, ok := g.dynamicSlicingCache[cacheKey]; ok {
 		return val, nil
 	}
 
-	// Check for topologies.kueue.x-k8s.io CRD
-	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
-	if cResult.ExitCode != 0 {
-		logging.Warn("Topology CRD not found. Kueue Dynamic-slicing not active.")
-		g.dynamicSlicingCache[opts.ComputeType] = false
-		return false, nil
-	}
-
-	if !g.hasSliceAdmissionCheck() {
-		g.dynamicSlicingCache[opts.ComputeType] = false
-		return false, nil
-	}
-
 	// Check discovered node pools for dynamic-slicing
-	requestedMachineName, err := g.resolveMachineName(opts.ComputeType)
-	if err != nil {
-		return false, err
-	}
-	for _, np := range g.clusterDesc.NodePools {
-		if np.Config.MachineType == requestedMachineName {
-			if np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY" {
-				logging.Info("Dynamic-slicing PROVISION_ONLY mode detected for node pool %s.", np.Name)
-				g.dynamicSlicingCache[opts.ComputeType] = true
-				return true, nil
-			}
+	requestedMachineName := opts.MachineType
+	if requestedMachineName == "" {
+		var err error
+		requestedMachineName, err = g.resolveMachineName(opts.ComputeType)
+		if err != nil {
+			return false, err
 		}
 	}
 
-	logging.Info("Node pool does not have PROVISION_ONLY mode. Dynamic-slicing not active.")
-	g.dynamicSlicingCache[opts.ComputeType] = false
+	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
+	if !isTPU7x || !g.hasKueueTopologies() || !g.hasSliceAdmissionCheck() {
+		g.dynamicSlicingCache[cacheKey] = false
+		return false, nil
+	}
+
+	active, err := g.checkNodePoolsDynamicSlicing(requestedMachineName, opts, isTPU7x)
+	if err != nil {
+		return active, err
+	}
+	g.dynamicSlicingCache[cacheKey] = active
+	return active, nil
+}
+
+func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinition) (bool, error) {
+	if !config.IsTPU(job.MachineType) {
+		return false, nil
+	}
+
+	// Static sub-slicing (logical partitioning) is strictly unsupported for 3D Torus TPUs (v4 and v5p)
+	if config.Is3DTorusTPU(job.MachineType) {
+		return false, nil
+	}
+
+	cacheKey := fmt.Sprintf("%s-%s", job.MachineType, job.Topology)
+	if val, ok := g.staticSlicingCache[cacheKey]; ok {
+		return val, nil
+	}
+
+	if !g.hasKueueTopologies() {
+		g.staticSlicingCache[cacheKey] = false
+		return false, nil
+	}
+
+	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
+	output, err := g.queryDiscoveredTopologies(accelLabel)
+	if err != nil {
+		return false, fmt.Errorf("failed to discover topologies for static sub-slicing check: %w", err)
+	}
+	discoveredTopologies := g.parseTopologies(output)
+
+	for t := range discoveredTopologies {
+		fits, err := config.CheckTopologyContainment(job.Topology, t, job.MachineType)
+		if err != nil {
+			return false, err
+		}
+		if fits {
+			logging.Info("Static sub-slicing/TAS active: requested topology %s fits inside discovered physical topology %s.", job.Topology, t)
+			g.staticSlicingCache[cacheKey] = true
+			return true, nil
+		}
+	}
+
+	g.staticSlicingCache[cacheKey] = false
 	return false, nil
+}
+
+func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName string, opts ManifestOptions, isTPU7x bool) (bool, error) {
+	for _, np := range g.clusterDesc.NodePools {
+		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) {
+			continue
+		}
+
+		isProvisionOnly := isTPU7x && np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY"
+
+		if isProvisionOnly {
+			if err := validateTPU7xTopology(opts.Topology, requestedMachineName); err != nil {
+				return true, err
+			}
+			logging.Info("Dynamic-slicing PROVISION_ONLY mode validated for TPU7x node pool %s with topology %s.", np.Name, opts.Topology)
+			return true, nil
+		}
+	}
+
+	logging.Info("Node pool does not have dynamic topology subset requirement. Dynamic-slicing not active.")
+	return false, nil
+}
+
+func validateTPU7xTopology(topology string, machineType string) error {
+	if topology == "" {
+		return fmt.Errorf("topology must be specified explicitly via --topology flag for TPU 7x dynamic slicing")
+	}
+	if !config.TopologyRegex.MatchString(topology) {
+		return fmt.Errorf("invalid topology format %s", topology)
+	}
+	return config.Validate3DTopology(topology, machineType, true)
 }
 
 func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
@@ -179,6 +251,30 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 	return false
 }
 
+func (g *GKEOrchestrator) hasKueueTopologies() bool {
+	tResult := g.executor.ExecuteCommand("kubectl", "get", "topologies.kueue.x-k8s.io", "-o", "json")
+	if tResult.ExitCode != 0 {
+		logging.Warn("Failed to query Kueue topologies. Assuming dynamic-slicing not active.")
+		return false
+	}
+
+	var tList struct {
+		Items []interface{} `json:"items"`
+	}
+
+	if err := json.Unmarshal([]byte(tResult.Stdout), &tList); err != nil {
+		logging.Warn("Failed to parse Kueue topologies JSON: %v. Assuming dynamic-slicing not active.", err)
+		return false
+	}
+
+	if len(tList.Items) == 0 {
+		logging.Info("No Kueue topology resources found. Dynamic-slicing not active.")
+		return false
+	}
+
+	return true
+}
+
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
 		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
@@ -188,7 +284,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 
 	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
 
-	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, profile, mapped)
+	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, mapped)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.ComputeType, err)
 	}
@@ -202,7 +298,7 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 	return cpuLim, memLim, gpuLim, tpuLim, nil
 }
 
-func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, profile JobProfile, mapped string) (cpu, mem, gpu, tpu string, err error) {
+func (g *GKEOrchestrator) calculateGCPMachineResourceLimits(opts ManifestOptions, mapped string) (cpu, mem, gpu, tpu string, err error) {
 	machineName := opts.MachineType
 
 	count, err := g.FetchMachineCapacity(machineName, opts.ClusterLocation)
@@ -257,71 +353,102 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 	return "", fmt.Errorf("machine type %q could not be resolved from static maps or cluster state", acceleratorType)
 }
 
-func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefinition) (JobProfile, bool, error) {
-	if job.ComputeType == "" {
-		return JobProfile{}, false, nil
+func (g *GKEOrchestrator) resolveJobMachineType(computeType string) (string, error) {
+	parts := strings.Split(computeType, "-")
+	machineName, err := g.resolveMachineName(computeType)
+	if err == nil {
+		return machineName, nil
 	}
 
-	originalInput := job.ComputeType
-	parts := strings.Split(originalInput, "-")
+	prefix := parts[0]
+	candidates := config.GetCandidatesForShorthand(prefix)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
+	}
 
-	var machineName string
-	var err error
-
-	// 1. Try to resolve as full machine type or direct shorthand match
-	machineName, err = g.resolveMachineName(job.ComputeType)
+	machineName, err = g.resolveAmbiguousComputeShorthand(prefix, candidates)
 	if err != nil {
-		// 2. If resolveMachineName failed, check if it's a multi-node TPU shorthand!
-		prefix := parts[0]
-		candidates := config.GetCandidatesForShorthand(prefix)
-		if len(candidates) == 0 {
-			return JobProfile{}, false, fmt.Errorf("compute type %q is not a known shorthand and could not be resolved", prefix)
-		}
+		return "", err
+	}
+	return machineName, nil
+}
 
-		machineName, err = g.resolveAmbiguousComputeShorthand(prefix, candidates)
-		if err != nil {
-			return JobProfile{}, false, err
+func (g *GKEOrchestrator) resolveTPURequirements(job *orchestrator.JobDefinition) (isDynamicSlicing bool, isStaticSlicing bool, err error) {
+	isTPU7x := strings.Contains(strings.ToLower(job.MachineType), "tpu7x")
+	if isTPU7x && job.Topology == "" {
+		return false, false, fmt.Errorf("topology must be specified explicitly via --topology flag for TPU 7x machine type %s", job.MachineType)
+	}
+
+	// Validate topology shape before resolving/discovering
+	if job.Topology != "" {
+		if err := config.ValidateHardwareRequest(job.MachineType, job.Topology); err != nil {
+			return false, false, err
 		}
+	}
+
+	var topology string
+	topology, isDynamicSlicing, err = g.resolveTopology(job)
+	if err != nil {
+		return false, false, err
+	}
+	job.Topology = topology
+
+	if !isDynamicSlicing && job.Topology != "" {
+		isStaticSlicing, err = g.verifyStaticSlicingActive(job)
+		if err != nil {
+			return false, false, err
+		}
+	}
+
+	// Calculate VMs per slice
+	err = g.dynamicallyCalculateNodesPerSlice(job)
+	if err != nil {
+		return false, false, err
+	}
+
+	return isDynamicSlicing, isStaticSlicing, nil
+}
+
+func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefinition) (profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool, err error) {
+	if job.ComputeType == "" {
+		return JobProfile{}, false, false, nil
+	}
+
+	machineName, err := g.resolveJobMachineType(job.ComputeType)
+	if err != nil {
+		return JobProfile{}, false, false, err
 	}
 	job.MachineType = machineName
-
-	isDynamicSlicing := false
 	if config.IsTPU(machineName) {
-		// 3. Resolve Topology
-		topology, err := g.resolveTopology(job)
+		isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
 		if err != nil {
-			return JobProfile{}, false, err
+			return JobProfile{}, false, false, err
 		}
-		job.Topology = topology
-
-		// 4. Calculate VMs per slice
-		err = g.dynamicallyCalculateNodesPerSlice(job)
-		if err != nil {
-			return JobProfile{}, false, err
-		}
-
-		// 6. Verify dynamic slicing (super-slicing)
-		isDynamicSlicing, err = g.verifyDynamicSlicingActive(ManifestOptions{
-			ClusterName:     job.ClusterName,
-			ClusterLocation: job.ClusterLocation,
-			ComputeType:     job.ComputeType,
-		})
-		if err != nil {
-			logging.Warn("Failed to verify if dynamic slicing is active: %v. Assuming not active.", err)
-			isDynamicSlicing = false
+		if job.GKENAPProvisioning != "" {
+			if isDynamicSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+			if isStaticSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+			if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
+				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
 		}
 	}
-
-	// 5. Determine if CPU machine
 	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
 	if err != nil {
-		return JobProfile{}, false, err
+		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
+	}
+
+	if err := g.validateConsumptionForStaticCluster(job); err != nil {
+		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
 	return JobProfile{
 		IsCPUMachine:  isCPUMachine,
 		CapacityCount: capacity,
-	}, isDynamicSlicing, nil
+	}, isDynamicSlicing, isStaticSlicing, nil
 }
 
 func (g *GKEOrchestrator) resolveAmbiguousComputeShorthand(prefix string, candidates []string) (string, error) {
@@ -398,18 +525,6 @@ func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) err
 		}
 	}
 	return nil
-}
-
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, error) {
-	tolerations := GetTolerations(acceleratorType)
-	if len(tolerations) == 0 {
-		return "", nil
-	}
-	b, err := k8syaml.Marshal(tolerations)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
-	}
-	return g.indentYaml(string(b), 16), nil
 }
 
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {

@@ -26,6 +26,13 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+const (
+	// tpuTopologyLabel is the GKE label for TPU topology.
+	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
+	// nodePoolLabel is the GKE label for the node pool name.
+	nodePoolLabel = "cloud.google.com/gke-nodepool"
+)
+
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
@@ -70,7 +77,10 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
+	napEnabled                  bool
+	napLimits                   map[string]int64
 	dynamicSlicingCache         map[string]bool
+	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
 }
 
@@ -161,6 +171,7 @@ type ManifestOptions struct {
 	VolumeMountsYAML              string
 	GCSFuseEnabled                bool
 	IsDynamicSlicing              bool
+	IsStaticSlicing               bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool
@@ -205,6 +216,7 @@ type gkeNodePoolConfig struct {
 	Accelerators            []gkeAccelerator            `json:"accelerators"`
 	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
 	Taints                  []gkeTaint                  `json:"taints"`
+	Labels                  map[string]string           `json:"labels,omitempty"`
 }
 
 type gkeAutoscaling struct {
@@ -227,9 +239,20 @@ type gkeJobNodePool struct {
 	PlacementPolicy  *gkePlacementPolicy `json:"placementPolicy,omitempty"`
 }
 
+type gkeResourceLimit struct {
+	ResourceType string `json:"resourceType"`
+	Maximum      int64  `json:"maximum,string"`
+}
+
+type gkeClusterAutoscaling struct {
+	EnableNodeAutoprovisioning bool               `json:"enableNodeAutoprovisioning"`
+	ResourceLimits             []gkeResourceLimit `json:"resourceLimits"`
+}
+
 type gkeCluster struct {
-	Locations []string         `json:"locations"`
-	NodePools []gkeJobNodePool `json:"nodePools"`
+	Locations   []string              `json:"locations"`
+	NodePools   []gkeJobNodePool      `json:"nodePools"`
+	Autoscaling gkeClusterAutoscaling `json:"autoscaling"`
 }
 
 // Types for JobSet status unmarshaling

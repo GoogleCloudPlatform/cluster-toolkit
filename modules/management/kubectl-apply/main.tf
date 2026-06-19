@@ -20,8 +20,14 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
   enable_pathways  = var.enable_pathways_for_tpus || var.kueue.enable_pathways_for_tpus
+  enable_slicing   = var.kueue.enable_dynamic_slicing_for_tpus
 
-  kueue_default_config_template = local.enable_pathways ? "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl" : ""
+  kueue_default_config_template = lookup({
+    "true-true"  = "${path.module}/kueue/kueue-configuration-dynamic-slicing-pathways.yaml.tftpl",
+    "false-true" = "${path.module}/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl",
+    "true-false" = "${path.module}/kueue/kueue-configuration-pathways.yaml.tftpl",
+  }, "${local.enable_pathways}-${local.enable_slicing}", "")
+
 
   kueue_config_template_vars = merge(
     {
@@ -116,7 +122,7 @@ locals {
         # Step A: Use the fetched body if it's a URL
         contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body :
 
-        # Step B: Process directory files 
+        # Step B: Process directory files
         contains(keys(local.directory_manifests), index) ? (
           join("\n---\n", [
             # Use union() to combine the results of fileset (which are sets)
@@ -227,7 +233,7 @@ module "install_kueue" {
   depends_on = [var.gke_cluster_exists]
 }
 
-# This sleep ensures that subsequent configuration of Kueue custom resources 
+# This sleep ensures that subsequent configuration of Kueue custom resources
 # do not fail due to the webhook not being available.
 resource "time_sleep" "wait_for_webhook" {
   count           = local.install_kueue ? 1 : 0
