@@ -108,7 +108,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.20.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 7.20.0 |
@@ -117,7 +117,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.20.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.20.0 |
 | <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | >= 2.36 |
@@ -126,7 +126,7 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_mldiagnostics_version_check"></a> [mldiagnostics\_version\_check](#module\_mldiagnostics\_version\_check) | ../../internal/semver_compare | n/a |
 | <a name="module_slice_controller_version_check"></a> [slice\_controller\_version\_check](#module\_slice\_controller\_version\_check) | ../../internal/semver_compare | n/a |
@@ -135,7 +135,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.cpu_np](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
@@ -149,7 +149,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevant network objects on the cluster. | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = string<br/>    subnetwork_project = string<br/>    network_ip         = string<br/>    nic_type           = string<br/>    stack_type         = string<br/>    queue_count        = number<br/>    access_config = list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    }))<br/>    ipv6_access_config = list(object({<br/>      network_tier = string<br/>    }))<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_authenticator_security_group"></a> [authenticator\_security\_group](#input\_authenticator\_security\_group) | The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com | `string` | `null` | no |
 | <a name="input_auto_monitoring_scope"></a> [auto\_monitoring\_scope](#input\_auto\_monitoring\_scope) | Scope of auto monitoring for Managed Prometheus. Valid values are 'ALL' or 'NONE'. Defaults to 'NONE'.<br/>For more information see https://docs.cloud.google.com/kubernetes-engine/docs/how-to/configure-automatic-application-monitoring | `string` | `"NONE"` | no |
@@ -158,10 +158,12 @@ limitations under the License.
 | <a name="input_cluster_autoscaling"></a> [cluster\_autoscaling](#input\_cluster\_autoscaling) | GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration.<br/><br/>  enabled:               Enable/disable GKE Cluster autoscaling and auto-provisioning.<br/>  service\_account\_email: The service account tied to node-provisioning. Defaults to the deployment service account.<br/>  oauth\_scopes:          Scopes assigned to nodes provisioned by NAP.<br/>  autoprovisioning\_disk\_size\_gb: The disk size of auto-provisioned nodes (GB). Default 100.<br/>  autoprovisioning\_disk\_type:    The disk type of auto-provisioned nodes. Default pd-balanced.<br/>  autoprovisioning\_cpu\_max:      The maximum number of CPU cores limit. Default 1,000,000.<br/>  autoprovisioning\_memory\_max:   The maximum Memory limit in GB. Default 10,000,000.<br/>  limits:                Explicit upper bounds to apply during scaling.<br/>    autoprovisioning\_machine\_type: GCE machine type tier (used as input).<br/>    autoprovisioning\_resource\_type: The underlying specific GKE accelerator resource name (inferred by expansion).<br/>    autoprovisioning\_max\_count:    The ceiling for specific accelerator types. Default 1000.<br/><br/>  Note: `autoprovisioning_machine_type` is consumed dynamically by the toolkit pipeline to resolve <br/>  the precise `autoprovisioning_resource_type` (e.g. `nvidia-h100-80gb`) expected by Terraform.<br/><br/>  WARNING: Enabling autoscaling defaults to effectively unlimited scaling (1,000,000 CPU cores and 10,000,000 GB of memory) unless specific limits are passed in. This may result in large unexpected billing charges if a workload misconfiguration occurs. | <pre>object({<br/>    limits = list(object({<br/>      autoprovisioning_machine_type  = optional(string)<br/>      autoprovisioning_resource_type = optional(string)<br/>      autoprovisioning_max_count     = optional(number, 1000)<br/>    }))<br/>    service_account_email         = optional(string, "")<br/>    oauth_scopes                  = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    autoprovisioning_disk_size_gb = optional(number, 100)<br/>    autoprovisioning_disk_type    = optional(string, "pd-balanced")<br/>    autoprovisioning_auto_upgrade = optional(bool, true)<br/>    autoprovisioning_auto_repair  = optional(bool, true)<br/>    autoprovisioning_cpu_max      = optional(number, 1000000)<br/>    autoprovisioning_memory_max   = optional(number, 10000000)<br/>  })</pre> | `null` | no |
 | <a name="input_cluster_availability_type"></a> [cluster\_availability\_type](#input\_cluster\_availability\_type) | Type of cluster availability. Possible values are: {REGIONAL, ZONAL} | `string` | `"REGIONAL"` | no |
 | <a name="input_cluster_reference_type"></a> [cluster\_reference\_type](#input\_cluster\_reference\_type) | How the google\_container\_node\_pool.system\_node\_pools refers to the cluster. Possible values are: {SELF\_LINK, NAME} | `string` | `"SELF_LINK"` | no |
+| <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of technology used by the confidential nodes (e.g., SEV, SEV\_SNP, TDX). Leave null for default. | `string` | `null` | no |
 | <a name="input_configure_workload_identity_sa"></a> [configure\_workload\_identity\_sa](#input\_configure\_workload\_identity\_sa) | When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster. | `bool` | `false` | no |
 | <a name="input_default_max_pods_per_node"></a> [default\_max\_pods\_per\_node](#input\_default\_max\_pods\_per\_node) | The default maximum number of pods per node in this cluster. | `number` | `null` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | "Determines if the cluster can be deleted by gcluster commands or not".<br/>To delete a cluster provisioned with deletion\_protection set to true, you must first set it to false and apply the changes.<br/>Then proceed with deletion as usual. | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. Used in the GKE cluster name by default and can be configured with `prefix_with_deployment_name`. | `string` | n/a | yes |
+| <a name="input_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#input\_enable\_confidential\_nodes) | Enable Confidential Nodes at the cluster level. All nodes in the cluster will run on Confidential VMs. | `bool` | `false` | no |
 | <a name="input_enable_dataplane_v2"></a> [enable\_dataplane\_v2](#input\_enable\_dataplane\_v2) | Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters. If null, will default to false unless using multi-networking, in which case it will default to true | `bool` | `null` | no |
 | <a name="input_enable_dcgm_monitoring"></a> [enable\_dcgm\_monitoring](#input\_enable\_dcgm\_monitoring) | Enable GKE to collect DCGM metrics | `bool` | `true` | no |
 | <a name="input_enable_external_dns_endpoint"></a> [enable\_external\_dns\_endpoint](#input\_enable\_external\_dns\_endpoint) | Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.<br/>Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details. | `bool` | `false` | no |
@@ -232,7 +234,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#output\_cluster\_ca\_certificate) | The base64 encoded public certificate authority data for the GKE cluster. |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | The IP address or endpoint of the GKE cluster control plane. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |

@@ -335,10 +335,17 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  confidential_nodes {
+    enabled                    = var.enable_confidential_nodes
+    confidential_instance_type = var.confidential_instance_type
+  }
+
+
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
   }
+
 
   dynamic "node_pool_defaults" {
     for_each = var.enable_gcfs ? [1] : []
@@ -352,6 +359,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   node_config {
+    machine_type = var.enable_confidential_nodes ? var.system_node_pool_machine_type : "e2-medium"
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
@@ -396,6 +404,10 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = !var.enable_fqdn_network_policy || local.derived_enable_dataplane_v2
       error_message = "FQDN Network Policy requires GKE Dataplane V2 to be enabled."
+    }
+    precondition {
+      condition     = !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", var.system_node_pool_machine_type))
+      error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true."
     }
   }
 

@@ -50,12 +50,15 @@ module "kubectl_apply" {
         content = templatefile(
           "${path.module}/storage-class/${local.storage_class_name}.yaml.tftpl",
           {
-            name                = local.storage_class_name
-            labels              = local.labels
-            volume_binding_mode = var.sc_volume_binding_mode
-            reclaim_policy      = var.sc_reclaim_policy
-            topology_zones      = var.sc_topology_zones
+            name                        = local.storage_class_name
+            labels                      = local.labels
+            volume_binding_mode         = var.sc_volume_binding_mode
+            reclaim_policy              = var.sc_reclaim_policy
+            topology_zones              = var.sc_topology_zones
+            enable_confidential_storage = var.enable_confidential_storage
+            disk_encryption_kms_key     = var.disk_encryption_kms_key
         })
+        wait_for_rollout = false
       },
       var.namespace != "default" ? [{
         content = templatefile(
@@ -63,6 +66,7 @@ module "kubectl_apply" {
           {
             namespace = var.namespace
         })
+        wait_for_rollout = false
       }] : [],
       # create PersistentVolumeClaim in the cluster
       flatten([
@@ -79,6 +83,7 @@ module "kubectl_apply" {
                 namespace          = var.namespace
               }
             )
+            wait_for_rollout = false
           }
         ]
       ])

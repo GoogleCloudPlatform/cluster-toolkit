@@ -561,3 +561,15 @@ variable "dranet_allocation_mode" {
   default     = "All"
   description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
 }
+
+variable "enable_confidential_nodes" {
+  description = "Enable Confidential Nodes for this node pool."
+  type        = bool
+  default     = false
+}
+
+variable "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes (e.g., SEV, SEV_SNP, TDX). Leave null for default."
+  type        = string
+  default     = null
+}

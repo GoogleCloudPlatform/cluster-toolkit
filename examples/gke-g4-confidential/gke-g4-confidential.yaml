@@ -1,0 +1,207 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-g4-confidential
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: gke-g4-cvm
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # The VM shape (must be g4-standard-48 for RTX 6000 GPU Confidential nodes).
+  machine_type: g4-standard-48
+
+  # Number of GPUs in the VM (must be 1 for g4-standard-48).
+  num_gpus: 1
+
+  # The number of G4 nodes to be created in the pool.
+  static_node_count: 1
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The name of the compute engine reservation of G4 confidential nodes
+  reservation:
+
+  # Set to true to enable Confidential Storage (Hyperdisk Balanced)
+  enable_confidential_storage: false
+
+  # The Customer-Managed Encryption Key (CMEK) path (required if enable_confidential_storage is true)
+  disk_encryption_kms_key: ""
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-g4-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-g4-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: g4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-g4-net-0, workload_service_account]
+    settings:
+      # N2D supports AMD SEV (E2 is incompatible with cluster-level confidential nodes)
+      cluster_availability_type: REGIONAL
+      cluster_reference_type: NAME
+      system_node_pool_machine_type: "n2d-standard-16"
+      system_node_pool_disk_size_gb: 100
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_private_endpoint: false
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      additional_networks: $(gke-g4-net-1.instance_additional_networks)
+      version_prefix: "1.36."
+      release_channel: REGULAR
+      enable_confidential_nodes: true
+      confidential_instance_type: "SEV"
+
+    outputs: [instructions]
+
+  - id: g4-pool
+    source: modules/compute/gke-node-pool
+    use: [g4-cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.machine_type)
+      auto_upgrade: false
+      zones: [$(vars.zone)]
+      static_node_count: $(vars.static_node_count)
+      enable_numa_aware_scheduling: true
+      guest_accelerator:
+      - type: nvidia-rtx-pro-6000
+        count: $(vars.num_gpus)
+        gpu_driver_installation_config:
+          gpu_driver_version: LATEST
+      additional_networks: $(gke-g4-net-1.instance_additional_networks)
+
+      # Confidential Compute configuration for G4 Nodes
+      enable_confidential_nodes: true
+      confidential_instance_type: "SEV"
+
+      # Target our pre-existing reservation
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
+    outputs: [instructions]
+
+  - id: confidential_storage
+    source: modules/file-system/gke-storage
+    use: [g4-cluster]
+    settings:
+      storage_type: Hyperdisk-balanced
+      access_mode: ReadWriteOnce
+      capacity_gb: 100
+      sc_reclaim_policy: Delete
+      enable_confidential_storage: $(vars.enable_confidential_storage)
+      disk_encryption_kms_key: $(vars.disk_encryption_kms_key)
+
+  # Install Kueue and Jobset
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [g4-cluster]
+    settings:
+      kueue:
+        install: true
+        wait: true
+      jobset:
+        install: true
+
+  - id: nvidia_smi_job_template
+    source: modules/compute/gke-job-template
+    use: [g4-pool]
+    settings:
+      image: nvidia/cuda:12.6.0-base-ubuntu22.04
+      command:
+      - nvidia-smi
+      node_count: $(vars.static_node_count)
+      name: run-nvidia-smi
+      k8s_service_account_name: workload-identity-k8s-sa
+    outputs: [instructions]

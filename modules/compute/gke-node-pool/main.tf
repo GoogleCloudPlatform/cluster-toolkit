@@ -106,6 +106,7 @@ resource "google_container_node_pool" "node_pool" {
   name           = (max(var.num_node_pools, var.num_slices) == 1) ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
+  version        = var.gke_version
 
   node_count = var.static_node_count
   # Per-zone limits (min_node_count/max_node_count) are required to workaround a
@@ -221,6 +222,15 @@ resource "google_container_node_pool" "node_pool" {
       enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
+
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
+
 
     dynamic "gcfs_config" {
       for_each = var.enable_gcfs ? [1] : []
