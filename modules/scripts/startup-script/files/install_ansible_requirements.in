@@ -1,4 +1,1 @@
-pip==26.1.1
-wheel==0.47.0
-setuptools==82.0.1
 ansible==13.6.0

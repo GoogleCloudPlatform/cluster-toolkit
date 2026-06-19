@@ -17,7 +17,8 @@ set -ex
 REQ_PYTHON3_VERSION=9
 
 # Path to hashed requirements file
-REQ_FILE="$(dirname "$0")/install_ansible_requirements.txt"
+BUILD_TOOLS_REQ_FILE="$(dirname "$0")/build-tools.txt"
+ANSIBLE_REQ_FILE="$(dirname "$0")/install_ansible_requirements.txt"
 
 apt_wait() {
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
@@ -180,10 +181,15 @@ main() {
 	${python_path} -m venv "${venv_path}" --copies
 	venv_python_path=${venv_path}/bin/python3
 
-	# Upgrade pip if necessary
+	# Install build tools first
 	${venv_python_path} -m pip install \
 		--require-hashes \
-		-r "${REQ_FILE}"
+		-r "${BUILD_TOOLS_REQ_FILE}"
+
+	# Install Ansible and remaining dependencies
+	${venv_python_path} -m pip install \
+		--require-hashes \
+		-r "${ANSIBLE_REQ_FILE}"
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
