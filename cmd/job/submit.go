@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"strings"
 
@@ -82,6 +84,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 	RunE: runSubmitCmd,
 
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if len(workloadName) > 28 {
+			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		}
+
 		if err := validateImageFlags(); err != nil {
 			return err
 		}
@@ -99,10 +105,6 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		}
 
 		priorityClassName = strings.ToLower(priorityClassName)
-		if priorityClassName != "" && !slices.Contains(orchestrator.ValidPriorityClasses, priorityClassName) {
-			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: %s",
-				priorityClassName, strings.Join(orchestrator.ValidPriorityClasses, ", "))
-		}
 
 		return nil
 	},
@@ -139,7 +141,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
-	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
+	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
@@ -164,6 +166,12 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
+	if dryRunManifest != "" {
+		if err := ensureDryRunDir(dryRunManifest); err != nil {
+			return err
+		}
+	}
+
 	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
@@ -385,6 +393,32 @@ func validateGKENAPFlags() error {
 	}
 	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
 		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
+	}
+	return nil
+}
+
+func ensureDryRunDir(path string) error {
+	if len(path) > 0 && os.IsPathSeparator(path[len(path)-1]) {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	dir := filepath.Dir(path)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			prompt := fmt.Sprintf("Directory %q does not exist. Would you like to create it?", dir)
+			if shell.PromptYesNo(prompt) {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create directory %s: %w", dir, err)
+				}
+				return nil
+			}
+			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
+		}
+		return fmt.Errorf("failed to check directory %s: %w", dir, err)
 	}
 	return nil
 }

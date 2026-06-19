@@ -17,7 +17,9 @@ package job
 import (
 	"bytes"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -215,6 +217,38 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 	expectedErr := "--num-nodes cannot be used with TPU jobs"
 	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+		},
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "a-very-long-workload-name-that-exceeds-28-characters",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing long workload name, but got nil")
+	}
+
+	expectedErr := "cannot exceed 28 characters"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got: %v", expectedErr, err)
 	}
 }
 
@@ -599,5 +633,170 @@ func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
 	expectedErr := "--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation"
 	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_DryRunMissingDir_Approved(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	missingDirPath := filepath.Join(tmpDir, "non-existent-sub-dir", "manifest.yaml")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = oldPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
+
+	resetSubmitCmdFlags()
+
+	_, err = executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-missing-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", missingDirPath,
+	)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Dir(missingDirPath)); err != nil {
+		t.Errorf("expected directory %q to exist, got error: %v", filepath.Dir(missingDirPath), err)
+	}
+
+	if _, err := os.Stat(missingDirPath); err != nil {
+		t.Errorf("expected file %q to exist, got error: %v", missingDirPath, err)
+	}
+}
+
+func TestSubmitCmd_DryRunMissingDir_Rejected(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	missingDirPath := filepath.Join(tmpDir, "non-existent-sub-dir", "manifest.yaml")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = oldPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return false }
+
+	resetSubmitCmdFlags()
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-missing-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", missingDirPath,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "directory \"" + filepath.Dir(missingDirPath) + "\" does not exist"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v, output: %s", expectedErr, err, output)
+	}
+
+	if _, err := os.Stat(filepath.Dir(missingDirPath)); !os.IsNotExist(err) {
+		t.Errorf("expected directory %q to not exist, but it does", filepath.Dir(missingDirPath))
+	}
+}
+
+func TestSubmitCmd_DryRunIsDir_Existing(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	resetSubmitCmdFlags()
+
+	_, err = executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", tmpDir,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "must be a file path, not a directory path"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_DryRunIsDir_TrailingSlash(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	resetSubmitCmdFlags()
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", "/some/random/dir/path/",
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "must be a file path, not a directory path"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
 	}
 }
