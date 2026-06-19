@@ -971,9 +971,14 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 	validators := []func() error{
 		g.checkClusterConnectivity,
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
-		func() error { return g.ensurePriorityClassesInstalled() },
-		func() error { return g.validatePriorityClass(job.PriorityClassName) },
 		g.checkAndInstallJobSetCRD,
+	}
+
+	if job.PriorityClassName != "" {
+		validators = append(validators,
+			func() error { return g.ensurePriorityClassesInstalled() },
+			func() error { return g.validatePriorityClass(job.PriorityClassName) },
+		)
 	}
 
 	for _, validate := range validators {
