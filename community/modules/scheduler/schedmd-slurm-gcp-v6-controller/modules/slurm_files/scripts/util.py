@@ -71,6 +71,8 @@ class AttrDict(dict):
         self.update(*args, **kwargs)
 
     def __getattr__(self, key):
+        if key.startswith('__') and key.endswith('__'):
+            raise AttributeError(key)
         if key not in self:
             self[key] = AttrDict()
         return self[key]
@@ -85,11 +87,16 @@ class AttrDict(dict):
             raise AttributeError(e) from e
 
     def __setitem__(self, key, value):
+        super().__setitem__(key, self._convert(value))
+
+    def _convert(self, value):
         if isinstance(value, dict) and not isinstance(value, AttrDict):
-            value = AttrDict(value)
-        elif isinstance(value, list):
-            value = [AttrDict(x) if isinstance(x, dict) and not isinstance(x, AttrDict) else x for x in value]
-        super().__setitem__(key, value)
+            return AttrDict(value)
+        if isinstance(value, list):
+            return [self._convert(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._convert(x) for x in value)
+        return value
 
     def update(self, *args, **kwargs):
         for k, v in dict(*args, **kwargs).items():
@@ -97,15 +104,18 @@ class AttrDict(dict):
 
     def to_dict(self):
         """Recursively convert the AttrDict and its nested structures back to standard dicts."""
-        d = {}
-        for k, v in self.items():
-            if isinstance(v, AttrDict):
-                d[k] = v.to_dict()
-            elif isinstance(v, list):
-                d[k] = [x.to_dict() if isinstance(x, AttrDict) else x for x in v]
-            else:
-                d[k] = v
-        return d
+        return self._to_dict_helper(self)
+
+    def _to_dict_helper(self, value):
+        if isinstance(value, AttrDict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, dict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._to_dict_helper(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._to_dict_helper(x) for x in value)
+        return value
 
 NSDict = AttrDict
 import file_cache
@@ -818,7 +828,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
-def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+def _fetch_mounted_config() -> NSDict:
     if not dirs.slurm_bucket_mount.is_mount():
         raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
 
@@ -2015,7 +2025,7 @@ class Lookup:
             delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
-    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: Any) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -2032,7 +2042,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
 
-    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: Any) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
