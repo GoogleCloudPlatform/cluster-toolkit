@@ -31,6 +31,9 @@ vars:
   cloud_key_location: /etc/$(vars.key_type)/$(vars.key_type).key
   cloud_key_user: $(vars.key_type)
 
+  #leave this variable empty to use the default gcp slurm version
+  slurm_version: "25.11.6"
+
   deployment_name: slurm6-hybrid
   onprem_ctld_host: "your_slurmctld_name"
   onprem_ctld_addr: "your_slurmctld_IPaddres"
@@ -41,12 +44,14 @@ vars:
   output_dir: /share/$(vars.deployment_name)-files
   region: us-central1
   zone: us-central1-c
+
   # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
   latest_base_image: slurm-gcp-6-11-hpc-rocky-linux-8
   custom_image:
     family: hybrid
     project: $(vars.project_id)
   disk_size: 64
+
   #If the controller has a fixed IP or is always in a range specify it here
   controller_ip_range: "0.0.0.0/0"
   slurmd_port: 6818
@@ -95,6 +100,12 @@ deployment_groups:
         source: ./hybrid-scripts/align_slurm_ids.sh
         destination: align_slurm_ids.sh
         args: "$(vars.slurm_uid) $(vars.slurm_gid)"
+      #Optionally build a specific Slurm version into the image. Leave
+      #vars.slurm_version empty ("") to skip; the script no-ops on an empty arg.
+      - type: shell
+        source: ./hybrid-scripts/custom_slurm_version.sh
+        destination: custom_slurm_version.sh
+        args: "$(vars.slurm_version)"
       #This scripts creates on the compute node image all the necessary slurmd
       #directories as we have on-prem. For things like the log or the etc dir
       #mkdir is good enough, but with the ln we keep it all in the same place.
