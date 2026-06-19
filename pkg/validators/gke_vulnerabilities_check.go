@@ -86,12 +86,7 @@ func fetchAdvisories() (*VulnerabilityDB, error) {
 func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 	var warnings []string
 	for _, gkeVersion := range gkeVersions {
-
-		// Normalize version string for semver evaluation
-		if !strings.HasPrefix(gkeVersion, "v") {
-			gkeVersion = "v" + gkeVersion
-		}
-
+		gkeVersion = normalizeVersion(gkeVersion)
 		minorVersion := semver.MajorMinor(gkeVersion)
 
 		for _, adv := range db.Advisories {
@@ -103,10 +98,7 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 					gkeVersion, adv.CVE, adv.Name, adv.Link))
 			case "PATCHED":
 				if patchedVersion, exists := adv.PatchedVersions[minorVersion]; exists {
-					// Normalize patched version format
-					if !strings.HasPrefix(patchedVersion, "v") {
-						patchedVersion = "v" + patchedVersion
-					}
+					patchedVersion = normalizeVersion(patchedVersion)
 					if semver.Compare(gkeVersion, patchedVersion) < 0 {
 						warnings = append(warnings, fmt.Sprintf(
 							"SECURITY WARNING: Your GKE version %s might be vulnerable to %s (%s). "+
