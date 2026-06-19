@@ -407,8 +407,8 @@ class ClusterPartitionForm(forms.ModelForm):
                 specific_reservation = matching_reservation.get("specificReservationRequired")
                 if specific_reservation == False:
                     raise ValidationError(
-                        "You must use a 'specific' reservation type."
-                        "Please read the following URL for more information about setting up reservations:"
+                        "You must use a 'specific' reservation type. "
+                        "Please read the following URL for more information about setting up reservations: "
                         "https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work"
                     )
 
