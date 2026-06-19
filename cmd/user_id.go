@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
 
 	"github.com/spf13/cobra"
@@ -29,19 +30,14 @@ var userIdCmd = &cobra.Command{
 	Short: "Print your User ID (used in Toolkit Telemetry)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		userId := "UNKNOWN"
-
 		if !userConfigExists {
-			if err := config.InitUserConfig(); err == nil {
-				userConfigExists = true
+			if err := config.InitUserConfig(); err != nil {
+				return fmt.Errorf("failed to initialize user config: %w", err)
 			}
+			userConfigExists = true
 		}
 
-		if userConfigExists {
-			userId = config.GetPersistentUserId()
-		}
-
-		cmd.Printf("User ID: %v\n", userId)
+		cmd.Printf("User ID: %s\n", config.GetPersistentUserId())
 		return nil
 	},
 }
