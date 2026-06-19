@@ -187,11 +187,6 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		affinity["cpu-affinity"] = cpuAffinityStr
 	}
 
-	vols, err := parseVolumeFlag(volumeStr)
-	if err != nil {
-		return err
-	}
-
 	if timeoutStr != "-1s" {
 		awaitJobCompletion = true
 	}
@@ -234,88 +229,11 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
-		Volumes:                       vols,
+		RawMounts:                     volumeStr,
 		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
-}
-
-func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
-	var vols []orchestrator.VolumeDefinition
-	seenSources := make(map[string]bool)
-	seenDestinations := make(map[string]bool)
-
-	for i, vStr := range vStrs {
-		src, dest, readOnly, err := parseSingleVolume(vStr)
-		if err != nil {
-			return nil, err
-		}
-
-		if seenSources[src] {
-			return nil, fmt.Errorf("duplicate volume source: %s", src)
-		}
-		if seenDestinations[dest] {
-			return nil, fmt.Errorf("duplicate volume destination: %s", dest)
-		}
-		seenSources[src] = true
-		seenDestinations[dest] = true
-
-		volType := "pvc"
-		if strings.HasPrefix(src, "gs://") {
-			volType = "gcsfuse"
-		} else if strings.HasPrefix(src, "/") {
-			volType = "hostPath"
-		}
-
-		vols = append(vols, orchestrator.VolumeDefinition{
-			Name:      fmt.Sprintf("vol-%d", i),
-			Source:    src,
-			MountPath: dest,
-			Type:      volType,
-			ReadOnly:  readOnly,
-		})
-	}
-	return vols, nil
-}
-
-func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error) {
-	readOnly = true
-	idx := strings.LastIndex(vStr, ":")
-	if idx <= 0 || idx == len(vStr)-1 {
-		return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
-	}
-
-	lastPart := vStr[idx+1:]
-	srcDestPart := vStr[:idx]
-
-	if lastPart == "ro" || lastPart == "rw" {
-		readOnly = (lastPart == "ro")
-		idx = strings.LastIndex(srcDestPart, ":")
-		if idx <= 0 || idx == len(srcDestPart)-1 {
-			return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
-		}
-		src = srcDestPart[:idx]
-		dest = srcDestPart[idx+1:]
-	} else {
-		src = srcDestPart
-		dest = lastPart
-
-		if strings.HasPrefix(vStr, "gs://") && !strings.HasPrefix(src, "gs://") {
-			return "", "", false, fmt.Errorf("invalid volume format: %s; missing destination", vStr)
-		}
-
-		if strings.Contains(src, ":") {
-			if strings.HasPrefix(src, "gs://") {
-				if strings.Contains(src[5:], ":") {
-					return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
-				}
-			} else {
-				return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
-			}
-		}
-	}
-	return src, dest, readOnly, nil
 }
 
 func parseDurationToSeconds(dStr string, flagName string) (int, error) {

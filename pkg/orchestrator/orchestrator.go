@@ -89,7 +89,7 @@ type JobDefinition struct {
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
-	Volumes []VolumeDefinition
+	RawMounts []string
 
 	Verbose bool
 }
