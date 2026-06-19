@@ -249,6 +249,7 @@ type gkeAutoscaling struct {
 type gkePlacementPolicy struct {
 	AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
 	Type                    string `json:"type"`
+	TpuTopology             string `json:"tpuTopology"`
 }
 
 type gkeJobNodePool struct {

@@ -168,7 +168,7 @@ func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinit
 	}
 
 	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
-	output, err := g.queryDiscoveredTopologies(accelLabel)
+	output, err := g.queryDiscoveredTopologies(accelLabel, job.MachineType)
 	if err != nil {
 		return false, fmt.Errorf("failed to discover topologies for static sub-slicing check: %w", err)
 	}
