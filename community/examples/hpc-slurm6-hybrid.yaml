@@ -87,6 +87,14 @@ deployment_groups:
           #!/bin/sh
           chmod 600 $(vars.cloud_key_location)
           chown $(vars.cloud_key_user): $(vars.cloud_key_location)
+      #Align the cloud slurm user/group uid/gid with the on-prem values. If the
+      #target id is already taken by another account, that account is relocated
+      #to a free id (and its files re-owned) first. Baked into the image so it
+      #runs once at build time rather than on every node boot.
+      - type: shell
+        source: ./hybrid-scripts/align_slurm_ids.sh
+        destination: align_slurm_ids.sh
+        args: "$(vars.slurm_uid) $(vars.slurm_gid)"
       #This scripts creates on the compute node image all the necessary slurmd
       #directories as we have on-prem. For things like the log or the etc dir
       #mkdir is good enough, but with the ln we keep it all in the same place.
