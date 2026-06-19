@@ -386,6 +386,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 		machineType    string
 		requestedTopo  string
 		mockResponses  map[string][]shell.CommandResult
+		nodePools      []gkeJobNodePool
 		wantActive     bool
 		wantErr        bool
 		verifyCacheHit bool
@@ -473,12 +474,43 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			},
 			wantActive: false,
 		},
+		{
+			name:          "Static sub-slicing active (discovered from scaled-to-0 node pool)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "tpu-pool-4x4",
+					Config: gkeNodePoolConfig{
+						MachineType: "ct6e-standard-8t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						TpuTopology: "4x4",
+					},
+				},
+			},
+			wantActive: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExec := NewMockExecutor(tt.mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
+			if len(tt.nodePools) > 0 {
+				orc.clusterDesc.NodePools = tt.nodePools
+			}
 
 			job := &orchestrator.JobDefinition{
 				MachineType: tt.machineType,
