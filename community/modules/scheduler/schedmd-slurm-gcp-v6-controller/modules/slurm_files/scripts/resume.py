@@ -26,7 +26,7 @@ import yaml
 import collections
 from pathlib import Path
 from dataclasses import dataclass
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 
 import util
 from util import (

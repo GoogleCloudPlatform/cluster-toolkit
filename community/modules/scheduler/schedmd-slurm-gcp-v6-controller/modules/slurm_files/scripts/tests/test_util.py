@@ -24,7 +24,7 @@ import util
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
 from googleapiclient.errors import HttpError # type: ignore
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 
 # Note: need to install pytest-mock
 

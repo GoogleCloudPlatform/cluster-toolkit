@@ -60,7 +60,54 @@ import google.api_core.exceptions as gExceptions
 import requests as requests_lib
 
 import yaml
-from addict import Dict as NSDict # type: ignore
+class AttrDict(dict):
+    """A dict subclass that allows attribute access to keys, with auto-expansion.
+    
+    This replaces the external 'addict' dependency.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def __getattr__(self, key):
+        if key not in self:
+            self[key] = AttrDict()
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, key):
+        try:
+            del self[key]
+        except KeyError as e:
+            raise AttributeError(e) from e
+
+    def __setitem__(self, key, value):
+        if isinstance(value, dict) and not isinstance(value, AttrDict):
+            value = AttrDict(value)
+        elif isinstance(value, list):
+            value = [AttrDict(x) if isinstance(x, dict) and not isinstance(x, AttrDict) else x for x in value]
+        super().__setitem__(key, value)
+
+    def update(self, *args, **kwargs):
+        for k, v in dict(*args, **kwargs).items():
+            self[k] = v
+
+    def to_dict(self):
+        """Recursively convert the AttrDict and its nested structures back to standard dicts."""
+        d = {}
+        for k, v in self.items():
+            if isinstance(v, AttrDict):
+                d[k] = v.to_dict()
+            elif isinstance(v, list):
+                d[k] = [x.to_dict() if isinstance(x, AttrDict) else x for x in v]
+            else:
+                d[k] = v
+        return d
+
+NSDict = AttrDict
 import file_cache
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
