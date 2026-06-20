@@ -908,6 +908,8 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		podSpec["tolerations"] = tolerations
 	}
 
+	replaceDeprecatedRbacProxyImage(podSpec)
+
 	if podMeta, ok := template["metadata"].(map[interface{}]interface{}); ok {
 		labels, ok := podMeta["labels"].(map[interface{}]interface{})
 		if !ok {
@@ -919,6 +921,37 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		labels["control-plane"] = "controller-manager"
 		labels["app.kubernetes.io/component"] = "controller-manager"
 	}
+}
+
+// replaceDeprecatedRbacProxyImage replaces the deprecated image "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1"
+// with "quay.io/brancz/kube-rbac-proxy:v0.13.1" in the JobSet controller pods to avoid deployment failures
+// due to GCR container registry deprecation.
+//
+// TODO: Remove this helper function once the default JobSet version/manifest is upgraded.
+func replaceDeprecatedRbacProxyImage(podSpec map[interface{}]interface{}) {
+	replaceInContainerList := func(containerKey string) {
+		containers, ok := podSpec[containerKey].([]interface{})
+		if !ok {
+			return
+		}
+		for _, c := range containers {
+			containerMap, ok := c.(map[interface{}]interface{})
+			if !ok {
+				continue
+			}
+			img, ok := containerMap["image"].(string)
+			const deprecatedProxyPrefix = "gcr.io/kubebuilder/kube-rbac-proxy"
+			if ok && (img == deprecatedProxyPrefix || strings.HasPrefix(img, deprecatedProxyPrefix+":") || strings.HasPrefix(img, deprecatedProxyPrefix+"@")) {
+				suffix := strings.TrimPrefix(img, deprecatedProxyPrefix)
+				newImg := "quay.io/brancz/kube-rbac-proxy" + suffix
+				containerMap["image"] = newImg
+				logging.Info("Replaced deprecated image %s with %s in %s", img, newImg, containerKey)
+			}
+		}
+	}
+
+	replaceInContainerList("containers")
+	replaceInContainerList("initContainers")
 }
 
 func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
