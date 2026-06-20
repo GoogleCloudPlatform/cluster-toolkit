@@ -67,6 +67,14 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
     }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
+      error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
+      error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
   }
 }
 
@@ -151,6 +159,10 @@ variable "kueue" {
     controller_cpu                  = optional(string, null)
     controller_memory               = optional(string, null)
     controller_replicas             = optional(number, null)
+    slice_controller_cpu_request    = optional(string, "8000m")
+    slice_controller_memory_request = optional(string, "16Gi")
+    slice_controller_cpu_limit      = optional(string, "12000m")
+    slice_controller_memory_limit   = optional(string, "32Gi")
   })
   default = {}
 }
