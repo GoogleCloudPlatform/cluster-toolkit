@@ -20,11 +20,13 @@ vars:
   # Set to true to enable the secure Slurm Native Authentication standard.
   # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
   enable_slurm_auth: false
-  deployment_name: ## Deployment name ##
-  project_id: ## Project name ##
-  region: ## A4X Reservation Region ##
-  zone: ## A4X Reservation Zone ##
-  a4x_cluster_size: # supply cluster size
+  deployment_name: a4xnewtest ## Deployment name ##
+  project_id: hpc-toolkit-dev ## Project name ##
+  region: us-central1 ## A4X Reservation Region ##
+  zone: us-central1-b ## A4X Reservation Zone ##
+  a4x_cluster_size: 16 # supply cluster size
+  labels:
+    do-not-delete: "2026-06-26"
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
@@ -37,7 +39,6 @@ vars:
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
-  filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/19
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
@@ -47,7 +48,7 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: slurm-ubuntu2404-accelerator-arm64-64k
-  a4x_reservation_name: "" # supply reservation name
+  a4x_reservation_name: nvidia-gb200-jlr31fm12d525 # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # To enable Managed-Lustre please uncomment this section and fill out the settings.
@@ -56,15 +57,15 @@ vars:
   # Please refer https://cloud.google.com/managed-lustre/docs/locations
 
   # Managed-Lustre instance name. This should be unique for each deployment.
-  # lustre_instance_id: lustre-instance
+  lustre_instance_id: lustre-instance
 
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
   # Storage capacity of the lustre instance in GiB
-  # lustre_size_gib: 36000
+  lustre_size_gib: 36000
 
   # Maximum throughput of the lustre instance in MBps per TiB
-  # per_unit_storage_throughput: 500
+  per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: image-env
@@ -158,7 +159,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
-            install_managed_lustre: false,
+            install_managed_lustre: true,
           }
       - type: shell
         destination: install_slurm.sh
@@ -249,13 +250,14 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     settings:
+      zone: us-central1-c
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
       source_image: $(vars.base_image.image)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.built_image_family)
-      omit_external_ip: false
+      omit_external_ip: true
       metadata:
         # Needed in Ubuntu 24.04 for enroot, not required on VMs using this image
         # Unattended upgrades are disabled in this blueprint so that software does not
@@ -331,42 +333,23 @@ deployment_groups:
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
 
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [a4x-slurm-net-0]
+
   - id: homefs
-    source: modules/file-system/filestore
+    source: modules/file-system/managed-lustre
     use:
     - a4x-slurm-net-0
+    - private_service_access
     settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
       local_mount: /home
-      reserved_ip_range: $(vars.filestore_ip_range)
-      deletion_protection:
-        enabled: true
-        reason: Avoid data loss
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
     outputs:
     - network_storage
-
-  # To use Managed Lustre as for the shared /home directory:
-  # 1. Comment out the filestore block above and the`filestore_ip_range` line in the vars block.
-  # 2. Uncomment the managed-lustre and private-service-access blocks
-  # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json above to true
-  # - id: private_service_access
-  #   source: modules/network/private-service-access
-  #   use: [a4x-slurm-net-0]
-
-  # - id: homefs
-  #   source: modules/file-system/managed-lustre
-  #   use:
-  #   - a4x-slurm-net-0
-  #   - private_service_access
-  #   settings:
-  #     size_gib: $(vars.lustre_size_gib)
-  #     name: $(vars.lustre_instance_id)
-  #     local_mount: /home
-  #     remote_mount: lustrefs
-  #     per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
-  #   outputs:
-  #   - network_storage
 
   # The following four modules create and mount a Cloud Storage Bucket with
   # gcsfuse.  They are optional but recommended for many use cases.
@@ -464,6 +447,19 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - type: shell
+        destination: fix_metadata_route.sh
+        content: |
+          #!/bin/bash
+          # Ensure metadata server traffic always goes through nic0 gateway
+          # This prevents DNS and metadata failures when secondary NICs are brought up.
+          DEFAULT_GW=`ip route show default | awk '{print $3}' | head -n1`
+          if [ -n "$DEFAULT_GW" ]; then
+            echo "Pinning metadata server (169.254.169.254) via gateway $DEFAULT_GW"
+            ip route replace 169.254.169.254 via $DEFAULT_GW
+          else
+            echo "Warning: No default gateway found to pin metadata server"
+          fi
       - $(gcs_checkpoints.client_install_runner)
       - $(gcs_checkpoints.mount_runner)
       - $(gcs_training_data.client_install_runner)
@@ -633,7 +629,7 @@ deployment_groups:
     - a4x-slurm-net-0
     settings:
       region: $(vars.region)
-      zone: $(vars.zone)
+      zone: us-central1-c
       enable_login_public_ips: true
       instance_image_custom: true
       disk_type: hyperdisk-balanced
@@ -704,6 +700,7 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       machine_type: c4a-highcpu-16
+      zone: us-central1-c
       disk_type: hyperdisk-balanced
       instance_image_custom: true
       cloud_parameters:
