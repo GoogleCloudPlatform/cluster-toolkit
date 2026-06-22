@@ -549,3 +549,15 @@ variable "machine_configs" {
   type        = any
   default     = {}
 }
+
+variable "dranet_device_class_name" {
+  type        = string
+  default     = "mrdma.google.com"
+  description = "DRA device class name. Default is mrdma.google.com (RDMA). Set to netdev.google.com for non-RDMA machines."
+}
+
+variable "dranet_allocation_mode" {
+  type        = string
+  default     = "All"
+  description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'Exact')."
+}

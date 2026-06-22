@@ -308,6 +308,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
+| <a name="module_dranet_template_apply"></a> [dranet\_template\_apply](#module\_dranet\_template\_apply) | ../../management/kubectl-apply | n/a |
 | <a name="module_dranet_version_compare"></a> [dranet\_version\_compare](#module\_dranet\_version\_compare) | ../../internal/semver_compare | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
 | <a name="module_gpu_direct_version_compare"></a> [gpu\_direct\_version\_compare](#module\_gpu\_direct\_version\_compare) | ../../internal/semver_compare | n/a |
@@ -343,6 +344,8 @@ limitations under the License.
 | <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
+| <a name="input_dranet_allocation_mode"></a> [dranet\_allocation\_mode](#input\_dranet\_allocation\_mode) | Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'Exact'). | `string` | `"All"` | no |
+| <a name="input_dranet_device_class_name"></a> [dranet\_device\_class\_name](#input\_dranet\_device\_class\_name) | DRA device class name. Default is mrdma.google.com (RDMA). Set to netdev.google.com for non-RDMA machines. | `string` | `"mrdma.google.com"` | no |
 | <a name="input_enable_dranet"></a> [enable\_dranet](#input\_enable\_dranet) | Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). If null, automatically enabled for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster. | `bool` | `null` | no |
 | <a name="input_enable_flex_start"></a> [enable\_flex\_start](#input\_enable\_flex\_start) | If true, start the node pool with Flex Start provisioning model.<br/>To learn more about flex-start mode, please refer to<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and<br/>https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest | `bool` | `false` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
@@ -396,6 +399,7 @@ limitations under the License.
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_enable_dranet"></a> [enable\_dranet](#output\_enable\_dranet) | Boolean indicating whether managed DRANET is enabled on this node pool. |
 | <a name="output_guest_accelerator"></a> [guest\_accelerator](#output\_guest\_accelerator) | The accelerator type of the nodes. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
 | <a name="output_instance_templates"></a> [instance\_templates](#output\_instance\_templates) | The URLs of Instance Templates |
