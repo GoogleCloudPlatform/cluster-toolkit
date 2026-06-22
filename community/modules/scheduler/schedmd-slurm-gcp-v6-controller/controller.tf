@@ -218,6 +218,67 @@ resource "google_compute_instance_from_template" "controller" {
   }
 }
 
+data "google_compute_subnetwork" "controller_subnetwork" {
+  count     = var.enable_backup_controller ? 1 : 0
+  self_link = var.subnetwork_self_link
+}
+
+# HEALTH CHECK FIREWALL RULE (Allow GCP probers to reach controller MIG)
+resource "google_compute_firewall" "health_check_firewall_rule" {
+  count       = (var.enable_backup_controller && var.health_check.create_firewall_rule) ? 1 : 0
+  name        = "allow-health-check-${local.slurm_cluster_name}"
+  description = "Allow Managed Instance Group Health Checks for Slurm Controller VMs"
+  project     = one(data.google_compute_subnetwork.controller_subnetwork[*].project)
+  network     = one(data.google_compute_subnetwork.controller_subnetwork[*].network)
+
+  direction = "INGRESS"
+  source_ranges = [
+    "130.211.0.0/22",
+    "35.191.0.0/16",
+  ]
+  target_tags = [local.slurm_cluster_name]
+
+  allow {
+    protocol = "tcp"
+    ports    = [tostring(var.health_check.port)]
+  }
+}
+
+# CONTROLLER HEALTH CHECK (for HA autohealing)
+resource "google_compute_health_check" "controller_health_check" {
+  count       = var.enable_backup_controller ? 1 : 0
+  name        = "${local.slurm_cluster_name}-controller-hc"
+  description = "Health check for Slurm Controller HA instance group autohealing"
+  project     = local.controller_project_id
+
+  check_interval_sec  = var.health_check.check_interval_sec
+  timeout_sec         = var.health_check.timeout_sec
+  healthy_threshold   = var.health_check.healthy_threshold
+  unhealthy_threshold = var.health_check.unhealthy_threshold
+
+  dynamic "log_config" {
+    for_each = var.health_check.enable_logging ? [1] : []
+    content {
+      enable = true
+    }
+  }
+
+  dynamic "tcp_health_check" {
+    for_each = var.health_check.type == "tcp" ? [1] : []
+    content {
+      port = var.health_check.port
+    }
+  }
+
+  dynamic "http_health_check" {
+    for_each = var.health_check.type == "http" ? [1] : []
+    content {
+      port         = var.health_check.port
+      request_path = var.health_check.request_path
+    }
+  }
+}
+
 # ZONAL INSTANCE GROUP MANAGER (deployed if ha_type is zonal)
 resource "google_compute_instance_group_manager" "controller_zonal_mig" {
   count              = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? 1 : 0
@@ -226,9 +287,21 @@ resource "google_compute_instance_group_manager" "controller_zonal_mig" {
   zone               = var.zone
   project            = local.controller_project_id
   target_size        = 0
+
+  named_port {
+    name = "http"
+    port = var.health_check.port
+  }
+
   version {
     instance_template = module.slurm_controller_template.self_link
   }
+
+  auto_healing_policies {
+    health_check      = one(google_compute_health_check.controller_health_check[*].id)
+    initial_delay_sec = var.health_check.initial_delay_sec
+  }
+
   update_policy {
     type                  = "PROACTIVE"
     minimal_action        = "REPLACE"
@@ -253,9 +326,21 @@ resource "google_compute_region_instance_group_manager" "controller_regional_mig
   project                   = local.controller_project_id
   distribution_policy_zones = [var.zone, local.backup_zone]
   target_size               = 0
+
+  named_port {
+    name = "http"
+    port = var.health_check.port
+  }
+
   version {
     instance_template = module.slurm_controller_template.self_link
   }
+
+  auto_healing_policies {
+    health_check      = one(google_compute_health_check.controller_health_check[*].id)
+    initial_delay_sec = var.health_check.initial_delay_sec
+  }
+
   update_policy {
     type                         = "PROACTIVE"
     minimal_action               = "REPLACE"
