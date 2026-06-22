@@ -69,6 +69,13 @@
     fi
   become: true
 
+- name: Warm up Anywhere Cache
+  ansible.builtin.shell: |
+    fio --name=warmup --filename="{{ gcs_bucket_local_mount }}/fio" --filesize=1G --ioengine=libaio --direct=1 --bs=1M --rw=read --numjobs=1
+  args:
+    chdir: "{{ gcs_bucket_local_mount }}"
+  become: true
+
 - name: Run FIO test
   ansible.builtin.shell: |
     fio --name=randread_latency_test --filename="{{ gcs_bucket_local_mount }}/fio" --filesize=1G --time_based=1 --ramp_time=10s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=4K --iodepth=1 --rw=randread --disable_slat=1 --disable_clat=1 --lat_percentiles=1 --numjobs=1 --group_reporting --output-format=json > fio_output.json
