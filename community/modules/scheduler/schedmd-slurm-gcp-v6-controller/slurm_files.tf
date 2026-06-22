@@ -182,6 +182,7 @@ module "slurm_files" {
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+  enable_openmetrics   = var.enable_openmetrics
 
   enable_slurm_auth = var.enable_slurm_auth
 

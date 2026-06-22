@@ -35,6 +35,10 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
                     params.append("enable_async_reply")
                 conf_options["SlurmctldParameters"] = params
                 
+        # Enable native OpenMetrics (Prometheus) telemetry
+        enable_openmetrics = self.lkp.cfg.get("enable_openmetrics", False)
+        if enable_openmetrics:
+            conf_options["MetricsType"] = "metrics/openmetrics"
         return conf_options
 
 

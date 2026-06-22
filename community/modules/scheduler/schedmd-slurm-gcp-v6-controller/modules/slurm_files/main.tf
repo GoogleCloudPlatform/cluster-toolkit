@@ -53,6 +53,7 @@ locals {
     bucket_path                    = local.bucket_path
     enable_debug_logging           = var.enable_debug_logging
     extra_logging_flags            = var.extra_logging_flags
+    enable_openmetrics             = var.enable_openmetrics
     controller_state_disk          = var.controller_state_disk
 
     # storage
