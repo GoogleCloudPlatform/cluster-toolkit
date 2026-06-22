@@ -52,17 +52,17 @@ func InitUserConfig() error {
 	// Try to read from the local config file
 	if data, err := os.ReadFile(configFile); err == nil {
 		// Unmarshal into the local struct to avoid partial state corruption
-		if err := json.Unmarshal(data, &defaultConfig); err == nil {
-			// If the loaded config has an empty User ID, recreate it.
+		tempConfig := defaultConfig
+		if err := json.Unmarshal(data, &tempConfig); err == nil {
 			needsRepair := false
-			if defaultConfig.UserID == "" {
-				defaultConfig.UserID = GenerateUniqueIDFunc()
+			if tempConfig.UserID == "" {
+				tempConfig.UserID = GenerateUniqueIDFunc()
 				needsRepair = true
 			}
 
 			// Atomically apply the loaded config
 			mu.Lock()
-			globalUserConfig = defaultConfig
+			globalUserConfig = tempConfig
 			mu.Unlock()
 
 			// If we repaired an empty ID, write the fix back to the JSON file
