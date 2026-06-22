@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
@@ -34,6 +35,10 @@ import (
 
 var reservationNameRegex = regexp.MustCompile(`^projects/([^/]+)/reservations/([^/]+)$`)
 var resKeyRegex = regexp.MustCompile(`^(.*_)?reservation(_name)?$`)
+
+var newComputeService = func(ctx context.Context) (*compute.Service, error) {
+	return compute.NewService(ctx)
+}
 
 const gcsFuseProfileUserRole = "gke.gcsfuse.profileUser"
 
@@ -335,7 +340,7 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 		return nil
 	}
 
-	s, err := compute.NewService(ctx)
+	s, err := newComputeService(ctx)
 	if err != nil {
 		return handleClientError(err)
 	}
@@ -403,6 +408,44 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
 }
 
+func findReservationOwnerProject(bp config.Blueprint, reservationName string) string {
+	var ownerProject string
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		if ownerProject != "" {
+			return
+		}
+		settings := m.Settings
+		if settings.Has("reservation_affinity") {
+			val := settings.Get("reservation_affinity")
+			v, err := bp.Eval(val)
+			if err != nil || !v.Type().IsObjectType() {
+				return
+			}
+			attrs := v.AsValueMap()
+			if specRes, ok := attrs["specific_reservations"]; ok && specRes.Type().IsListType() {
+				iterator := specRes.ElementIterator()
+				for iterator.Next() {
+					_, resVal := iterator.Element()
+					if !resVal.Type().IsObjectType() {
+						continue
+					}
+					resAttrs := resVal.AsValueMap()
+					nameVal, hasName := resAttrs["name"]
+					projectVal, hasProject := resAttrs["project"]
+
+					if hasName && nameVal.Type() == cty.String && !nameVal.IsNull() && nameVal.AsString() == reservationName {
+						if hasProject && projectVal.Type() == cty.String && !projectVal.IsNull() && projectVal.AsString() != "" {
+							ownerProject = projectVal.AsString()
+							return
+						}
+					}
+				}
+			}
+		}
+	})
+	return ownerProject
+}
+
 func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 	if err := checkInputs(inputs, []string{"project_id", "zone", "reservation_name"}); err != nil {
 		return err
@@ -434,6 +477,11 @@ func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
 		// Use the project ID extracted from the path instead of the deployment project.
 		reservationProjectID = matches[1]
 		targetName = matches[2]
+	} else {
+		// It's a simple name. Check if we can find an owner project in the blueprint modules.
+		if ownerProj := findReservationOwnerProject(bp, resInput); ownerProj != "" {
+			reservationProjectID = ownerProj
+		}
 	}
 
 	// Pass context from the caller to ensure cancellation/timeouts are respected
