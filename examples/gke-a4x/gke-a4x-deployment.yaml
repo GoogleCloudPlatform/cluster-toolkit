@@ -45,3 +45,6 @@ vars:
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
+
+  # The number of node pools (num_slices) to be created
+  num_node_pools:

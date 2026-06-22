@@ -58,7 +58,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("failed to execute jobset template: %w", err)
 	}
-	return buf.String(), nil
+	return assembleManifest(buf.String(), opts.AdditionalManifests), nil
 }
 
 func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent int) (string, error) {
@@ -105,8 +105,8 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 		return "", fmt.Errorf("failed to marshal resources: %w", err)
 	}
 
-	resourcesStr := "resources:\n" + g.indentYaml(string(b), 2)
-	return g.indentYaml(resourcesStr, indent), nil
+	resourcesStr := "resources:\n" + indentYaml(string(b), 2)
+	return indentYaml(resourcesStr, indent), nil
 }
 
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (ManifestOptions, error) {
@@ -155,9 +155,16 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		return ManifestOptions{}, err
 	}
 
-	g.addVolumeOptions(&opts, job.Volumes)
+	sm := &StorageManager{orchestrator: g}
+	mountInfos, manifests, err := sm.ProcessMounts(job.RawMounts, job)
+	if err != nil {
+		return ManifestOptions{}, err
+	}
+	opts.AdditionalManifests = manifests
 
-	_, err := g.resolveResourcesAndGates(&opts, profile.IsCPUMachine, profile.CapacityCount, job)
+	sm.AddVolumeOptions(&opts, mountInfos)
+
+	_, err = g.resolveResourcesAndGates(&opts, profile.IsCPUMachine, profile.CapacityCount, job)
 	if err != nil {
 		return ManifestOptions{}, err
 	}
@@ -182,21 +189,124 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 	if err != nil {
 		return err
 	}
-	opts.PodFailurePolicy = g.indentYaml(podFailurePolicyStr, 12)
+	opts.PodFailurePolicy = indentYaml(podFailurePolicyStr, 12)
 
 	imagePullSecretsStr := g.generateImagePullSecrets(job.ImagePullSecrets)
 	if imagePullSecretsStr != "" {
-		opts.ImagePullSecrets = g.indentYaml(imagePullSecretsStr, 16)
+		opts.ImagePullSecrets = indentYaml(imagePullSecretsStr, 16)
 	}
 
 	isSubSlicing := isDynamicSlicing || isStaticSlicing
 	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices, job.NodesPerSlice, isSubSlicing)
 
-	tolerationsStr, err := g.resolveTolerations(job.MachineType)
+	tolerationsStr, err := g.resolveTolerations(job.MachineType, job.GKENAPProvisioning, job.GKENAPReservation, 16)
 	if err != nil {
 		return err
 	}
 	opts.Tolerations = tolerationsStr
 
 	return nil
+}
+
+func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
+	var tolerations []corev1.Toleration
+	// Always add the standard GKE reservation toleration to support NAP where the node pool may not exist yet
+	tolerations = append(tolerations, corev1.Toleration{
+		Key:      "cloud.google.com/reservation-name",
+		Operator: corev1.TolerationOpEqual,
+		Value:    extractShortReservationName(reservationName),
+		Effect:   corev1.TaintEffectNoSchedule,
+	})
+
+	seenTaints := map[string]bool{
+		"cloud.google.com/reservation-name": true,
+	}
+
+	shortResName := extractShortReservationName(reservationName)
+	for _, np := range g.clusterDesc.NodePools {
+		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
+		if lblVal == "" {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && strings.EqualFold(extractShortReservationName(lblVal), shortResName) {
+			tolerations[0].Value = extractShortReservationName(lblVal)
+			for _, t := range np.Config.Taints {
+				// Avoid duplicate tolerations
+				if seenTaints[t.Key] {
+					continue
+				}
+				seenTaints[t.Key] = true
+				var effect corev1.TaintEffect
+				switch strings.ToUpper(t.Effect) {
+				case "NO_SCHEDULE":
+					effect = corev1.TaintEffectNoSchedule
+				case "PREFER_NO_SCHEDULE":
+					effect = corev1.TaintEffectPreferNoSchedule
+				case "NO_EXECUTE":
+					effect = corev1.TaintEffectNoExecute
+				default:
+					effect = corev1.TaintEffect(t.Effect)
+				}
+				tolerations = append(tolerations, corev1.Toleration{
+					Key:      t.Key,
+					Value:    t.Value,
+					Effect:   effect,
+					Operator: corev1.TolerationOpEqual,
+				})
+			}
+		}
+	}
+	return tolerations
+}
+
+func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
+	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
+	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
+
+	switch consumptionModel {
+	case "spot":
+		tolerations = append(tolerations, corev1.Toleration{
+			Key:      "cloud.google.com/gke-provisioning",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "spot",
+			Effect:   corev1.TaintEffectNoSchedule,
+		})
+	case "reservation":
+		tolerations = append(tolerations, g.resolveReservationTolerations(acceleratorType, reservationName)...)
+	}
+
+	if len(tolerations) == 0 {
+		return "", nil
+	}
+	b, err := k8syaml.Marshal(tolerations)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
+	}
+	return indentYaml(string(b), indent), nil
+}
+
+func assembleManifest(mainManifest string, additionalManifests []string) string {
+	var resManifest strings.Builder
+	for _, m := range additionalManifests {
+		trimmed := strings.TrimSpace(m)
+		if trimmed == "" {
+			continue
+		}
+		resManifest.WriteString(trimmed)
+		resManifest.WriteString("\n---\n")
+	}
+	resManifest.WriteString(strings.TrimSpace(mainManifest))
+	return resManifest.String()
+}
+
+func indentYaml(s string, indent int) string {
+	lines := strings.Split(s, "\n")
+	padding := strings.Repeat(" ", indent)
+	var result []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			result = append(result, padding+line)
+		}
+	}
+	return strings.Join(result, "\n")
 }

@@ -159,6 +159,13 @@ locals {
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
   install_gib               = try(var.gib.install, false)
   install_asapd_lite        = try(var.asapd_lite.install, false)
+
+  jobset_controller_cpu    = try(var.jobset.controller_cpu, null) != null ? var.jobset.controller_cpu : (local.enable_slicing ? "4" : null)
+  jobset_controller_memory = try(var.jobset.controller_memory, null) != null ? var.jobset.controller_memory : (local.enable_slicing ? "16Gi" : null)
+
+  kueue_controller_cpu      = try(var.kueue.controller_cpu, null) != null ? var.kueue.controller_cpu : (local.enable_slicing ? "16" : null)
+  kueue_controller_memory   = try(var.kueue.controller_memory, null) != null ? var.kueue.controller_memory : (local.enable_slicing ? "64Gi" : null)
+  kueue_controller_replicas = try(var.kueue.controller_replicas, null) != null ? var.kueue.controller_replicas : (local.enable_slicing ? 3 : null)
 }
 
 data "http" "manifest_from_url" {
@@ -207,19 +214,19 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    var.kueue.controller_cpu != null || var.kueue.controller_memory != null || var.kueue.controller_replicas != null ? yamlencode({
+    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
       controllerManager = merge(
-        var.kueue.controller_replicas != null ? { replicas = var.kueue.controller_replicas } : {},
-        var.kueue.controller_cpu != null || var.kueue.controller_memory != null ? {
+        local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
+        local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
           manager = {
             resources = {
               requests = merge(
-                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
-                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
               )
               limits = merge(
-                var.kueue.controller_cpu != null ? { cpu = var.kueue.controller_cpu } : {},
-                var.kueue.controller_memory != null ? { memory = var.kueue.controller_memory } : {}
+                local.kueue_controller_cpu != null ? { cpu = local.kueue_controller_cpu } : {},
+                local.kueue_controller_memory != null ? { memory = local.kueue_controller_memory } : {}
               )
             }
           }
@@ -274,16 +281,16 @@ module "install_jobset" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/jobset/jobset-helm-values.yaml"),
-    var.jobset.controller_cpu != null || var.jobset.controller_memory != null ? yamlencode({
+    local.jobset_controller_cpu != null || local.jobset_controller_memory != null ? yamlencode({
       controller = {
         resources = {
           requests = merge(
-            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
-            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+            local.jobset_controller_cpu != null ? { cpu = local.jobset_controller_cpu } : {},
+            local.jobset_controller_memory != null ? { memory = local.jobset_controller_memory } : {}
           )
           limits = merge(
-            var.jobset.controller_cpu != null ? { cpu = var.jobset.controller_cpu } : {},
-            var.jobset.controller_memory != null ? { memory = var.jobset.controller_memory } : {}
+            local.jobset_controller_cpu != null ? { cpu = local.jobset_controller_cpu } : {},
+            local.jobset_controller_memory != null ? { memory = local.jobset_controller_memory } : {}
           )
         }
       }
@@ -482,4 +489,26 @@ resource "kubernetes_annotations" "sa_patch" {
   annotations = {
     "iam.gke.io/gcp-service-account" = each.value.gcp_service_account_email
   }
+}
+
+module "install_slice_controller" {
+  source        = "./helm_install"
+  count         = local.enable_slicing ? 1 : 0
+  release_name  = "slice-controller"
+  chart_name    = "${path.module}/raw-config-chart"
+  chart_version = "0.1.0"
+  wait          = true
+
+  values_yaml = [
+    yamlencode({
+      manifests = [templatefile("${path.module}/kueue/slice-controller.yaml.tftpl", {
+        cpu_request    = var.kueue.slice_controller_cpu_request
+        memory_request = var.kueue.slice_controller_memory_request
+        cpu_limit      = var.kueue.slice_controller_cpu_limit
+        memory_limit   = var.kueue.slice_controller_memory_limit
+      })]
+    })
+  ]
+
+  depends_on = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
 }

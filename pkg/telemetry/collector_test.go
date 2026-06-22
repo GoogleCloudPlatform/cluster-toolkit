@@ -432,6 +432,14 @@ func TestGetLatencyMs(t *testing.T) {
 }
 
 func TestGetClientInstallId(t *testing.T) {
+	// Mock the ID generator to always return the dummy value
+	originalGen := config.GenerateUniqueIDFunc
+	config.GenerateUniqueIDFunc = func() string {
+		return "a1b2c3d4e5f6"
+	}
+	// Ensure it gets restored after the test finishes
+	defer func() { config.GenerateUniqueIDFunc = originalGen }()
+
 	tests := []struct {
 		name       string
 		mockConfig func(configPath string)
@@ -449,14 +457,14 @@ func TestGetClientInstallId(t *testing.T) {
 			want: "a1b2c3d4e5f6",
 		},
 		{
-			name: "returns empty string when client install id is explicitly empty",
+			name: "recreates and returns client install id when it is explicitly set to empty string",
 			mockConfig: func(configPath string) {
 				// Mocks the case where the config has been corrupted or emptied
 				content := `{"user_id": ""}`
 				_ = os.MkdirAll(filepath.Dir(configPath), 0755)
 				_ = os.WriteFile(configPath, []byte(content), 0644)
 			},
-			want: "",
+			want: "a1b2c3d4e5f6",
 		},
 	}
 

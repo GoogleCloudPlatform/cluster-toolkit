@@ -157,9 +157,28 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 *This creates a JobSet with 2 replicas, each having 4 pods, totaling 8 nodes.*
 
-### 4.4 Example: Submit Job with Persistent Storage (Mounting Bucket)
+### 4.4 Example: Submit Job with Persistent Storage
 
-You can mount Cloud Storage buckets or host paths using the `--mount` flag. By default, mounts are read-only. You can specify read-write mode by appending `:rw` to the mount string:
+You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
+
+Mounts must use the format: `--mount "<src>:<dest>[:<mode>]"`
+* `mode` is optional and defaults to `ro` (read-only). To allow writes, append `:rw`.
+
+**Supported volume sources (`<src>`):**
+* **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
+* **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
+* **Existing PVC**: `<pvc-name>` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace)
+* **Host Path**: `/host/path/on/node` (mounts a directory directly from the host node)
+
+> [!NOTE]
+> ### Shared VPC / Cross-Project / Cross-Region Filestore
+>
+> * **Cross-Project**: For Shared VPC or cross-project setups where the Filestore instance resides in a different project than your GKE cluster, you **must use the IP address** instead of the instance name. `gcluster` will automatically fall back to using the IP directly with a default capacity of `1Ti` (1024 GiB) if the API lookup fails (e.g. if the user lacks the **Filestore Viewer** (`roles/file.viewer`) or primitive **Viewer** (`roles/viewer`) IAM role in the Filestore's project) or returns no matches. A warning log will be printed when this fallback is triggered. Note that this default capacity is only a metadata placeholder to satisfy Kubernetes requirements and does not restrict the actual storage capacity available on your Filestore share.
+> * **Cross-Region**: Mounting cross-region Filestores is supported as long as your VPC network has global routing enabled to allow cross-region NFS traffic. If instances with the same name exist in multiple regions, use the IP address to ensure the correct one is mounted.
+
+**Examples:**
+
+Mounting a GCS bucket (read-write):
 
 ```bash
 ./gcluster job submit \
@@ -169,6 +188,18 @@ You can mount Cloud Storage buckets or host paths using the `--mount` flag. By d
   --base-image python:3.9-slim \
   --build-context job_details \
   --mount "gs://<YOUR_BUCKET_NAME>:/data:rw"
+```
+
+Mounting an existing PVC named `lustre-pvc` (read-only):
+
+```bash
+./gcluster job submit \
+  --name my-lustre-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --mount "lustre-pvc:/data"
 ```
 
 ## 5. Verify the Job
@@ -297,6 +328,32 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ```
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
+
+### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
+
+> [!NOTE]
+> The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
+
+Use the `--gke-nap-provisioning spot` option to run your workload on Spot VMs:
+
+```bash
+./gcluster job submit \
+  --name my-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
+
+Use the `--gke-nap-provisioning reservation` option and target a GCE reservation via the `--gke-nap-reservation` flag:
+
+```bash
+./gcluster job submit \
+  --name my-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
+```
 
 ### 6.3 Job Retention (TTL)
 
@@ -897,6 +954,27 @@ When the `--pathways` flag is specified, GCluster automatically refactors the Jo
 
 All GCS pathways artifact locations, elastic slice configurations, and proxy command arguments are dynamically compiled into the manifest based on your `--pathways-*` flags.
 
+---
+
+### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
+
+Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dynamically creates and deletes node pools based on unschedulable pod resource requirements. GCluster integrates with NAP to allow users to target specific compute consumption models.
+
+#### Capabilities & Scheduling Benefits
+
+* **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs. If the cluster runs low on spot instances or fails to acquire them, the pre-flight checks and scheduler ensure it doesn't silently route to standard pools if you explicitly targeted Spot.
+* **Reservation Targeting:** Target GCE reservations by name. GCluster supports simple reservation names, full GCP resource URIs, and complex reservation path identifiers containing block/subblock configurations. GCluster automatically extracts the short reservation identifier to populate the node selector and tolerations since GKE NAP only supports reservation-level scheduling on pods (scheduling to a specific block or sub-block within the reservation is not supported by GKE pod selectors).
+* **Kueue Resource Quota Alignment:** Kueue ResourceFlavors and ClusterQueues are dynamically matched with GKE NAP autoprovisioning limits to ensure fair sharing, priority queuing, and preemption.
+
+#### Orchestration & Under-The-Hood Mappings
+
+When GKE NAP options are used, GCluster performs several operations to structure the JobSet manifest:
+
+* **Tolerations and Selector Injection:**
+  * Spot: Injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector.
+  * Reservation: Injects reservation tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`) to allow scheduling on nodes spawned by GKE to consume the target reservation. If a block/sub-block path format is provided, the short reservation identifier is automatically extracted and used as the `<reservation-name>`.
+* **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type (e.g., `ct6e-standard-4t`, `a3-megagpu-8g`) is explicitly configured in GKE NAP limits. If the machine type is not covered by GKE NAP limits, GCluster **fails fast** during submission, preventing scheduling locks.
+
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
@@ -936,18 +1014,18 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. *(Required)* |
+| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required)* |
 | `--compute-type` | `string` | The hardware target for the job. Accepts a full GCE machine type (e.g., 'n2-standard-32'), a GKE accelerator type (e.g., 'nvidia-l4'), or a TPU shorthand string representing total chips/cores (e.g., 'v6e-8'). *(Required)* The tool will automatically resolve the machine type, calculate num-nodes, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). |
 | `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. |
 | `-f, --platform` | `string` | Target platform architecture for the image build (Default: `linux/amd64`). |
-| `-o, --dry-run-out` | `string` | Local path to save the generated Kubernetes manifest instead of applying it. |
+| `-o, --dry-run-out` | `string` | Local file path to save the generated Kubernetes manifest instead of applying it (must specify a file path, not a directory). |
 | `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
-| `--mount` | `stringArray` | Mount storage volumes or buckets using the `<src>:<dest>[:<mode>]` format. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>:<dest>[:<mode>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |
@@ -986,7 +1064,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
-| `--priority` | `string` | Priority class or level assigned to the job queue (e.g., `low`, `medium`, `high`). |
+| `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |

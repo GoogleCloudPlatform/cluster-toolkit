@@ -22,8 +22,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"strconv"
 	"strings"
-
-	k8syaml "sigs.k8s.io/yaml"
 )
 
 type MachineTypeCap struct {
@@ -126,9 +124,13 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	}
 
 	// Check discovered node pools for dynamic-slicing
-	requestedMachineName, err := g.resolveMachineName(opts.ComputeType)
-	if err != nil {
-		return false, err
+	requestedMachineName := opts.MachineType
+	if requestedMachineName == "" {
+		var err error
+		requestedMachineName, err = g.resolveMachineName(opts.ComputeType)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
@@ -166,7 +168,7 @@ func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinit
 	}
 
 	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
-	output, err := g.queryDiscoveredTopologies(accelLabel)
+	output, err := g.queryDiscoveredTopologies(accelLabel, job.MachineType)
 	if err != nil {
 		return false, fmt.Errorf("failed to discover topologies for static sub-slicing check: %w", err)
 	}
@@ -417,17 +419,29 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 		return JobProfile{}, false, false, err
 	}
 	job.MachineType = machineName
-
 	if config.IsTPU(machineName) {
 		isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
 		if err != nil {
 			return JobProfile{}, false, false, err
 		}
+		if job.GKENAPProvisioning != "" {
+			if isDynamicSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+			if isStaticSlicing {
+				return JobProfile{}, false, false, fmt.Errorf("TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+			if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
+				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+			}
+		}
 	}
-
-	// Determine if CPU machine
 	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
 	if err != nil {
+		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
+	}
+
+	if err := g.validateConsumptionForStaticCluster(job); err != nil {
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
@@ -513,22 +527,10 @@ func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) err
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string) (string, error) {
-	tolerations := GetTolerations(acceleratorType)
-	if len(tolerations) == 0 {
-		return "", nil
-	}
-	b, err := k8syaml.Marshal(tolerations)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal tolerations: %w", err)
-	}
-	return g.indentYaml(string(b), 16), nil
-}
-
 func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
 	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
 	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
-		opts.SchedulingGates = g.indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
+		opts.SchedulingGates = indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
 		opts.SchedulerName = ""
 	}
 

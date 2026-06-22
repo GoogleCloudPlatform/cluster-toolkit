@@ -43,14 +43,6 @@ spec:
             annotations:
               kueue.x-k8s.io/podset-required-topology: "cloud.google.com/gce-topology-subblock"
               networking.gke.io/default-interface: 'eth0'
-              networking.gke.io/interfaces: |
-                [
-                  {"interfaceName":"eth0","network":"default"},
-                  {"interfaceName":"eth2","network":"rdma-0"},
-                  {"interfaceName":"eth3","network":"rdma-1"},
-                  {"interfaceName":"eth4","network":"rdma-2"},
-                  {"interfaceName":"eth5","network":"rdma-3"}
-                ]
           spec:
             activeDeadlineSeconds: 3600
             restartPolicy: Never
@@ -80,9 +72,12 @@ spec:
               emptyDir:
                 medium: "Memory"
                 sizeLimit: 250Gi
+            # 1. Dual Resource Claims (MNNVL NVLink Channel + DRANET RoCE NICs)
             resourceClaims:
             - name: compute-domain-channel
               resourceClaimTemplateName: nccl-test-compute-domain-channel
+            - name: rdma
+              resourceClaimTemplateName: default-rdma
             containers:
             - name: nccl-test
               stdin: true
@@ -175,5 +170,7 @@ spec:
                   nvidia.com/gpu: 4
                 requests:
                   nvidia.com/gpu: 4
+                # 2. Map container claims to both declared templates
                 claims:
                 - name: compute-domain-channel
+                - name: rdma

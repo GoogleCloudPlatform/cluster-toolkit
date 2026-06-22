@@ -92,15 +92,19 @@ variable "enable_backup_controller" {
   type        = bool
   default     = false
   validation {
-    condition     = var.enable_backup_controller == false || (length(var.network_storage) > 0 && var.controller_state_disk == null)
-    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null and network_storage must be provided (non-empty) to share state."
+    condition     = var.enable_backup_controller == false || (anytrue([for s in var.network_storage : s.local_mount == "/var/spool/slurm"]) && var.controller_state_disk == null && length(var.static_ips) >= 2 && var.cloudsql != null)
+    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null, network_storage must contain a shared mount for '/var/spool/slurm' to sync state, at least 2 static_ips must be provided, and an external database (cloudsql) must be configured."
   }
 }
 
-variable "backup_machine_type" {
-  description = "Machine type for the backup controller. If null, uses the same as the primary controller."
+variable "controller_ha_type" {
   type        = string
-  default     = null
+  default     = "zonal"
+  description = "Type of Managed Instance Group for controllers: 'zonal' or 'regional'."
+  validation {
+    condition     = contains(["zonal", "regional"], var.controller_ha_type)
+    error_message = "The controller_ha_type must be either 'zonal' or 'regional'."
+  }
 }
 
 variable "backup_zone" {
