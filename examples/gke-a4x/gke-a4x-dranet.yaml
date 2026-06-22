@@ -38,6 +38,9 @@ vars:
   # The number of nodes to be created
   static_node_count:
 
+  # The number of node pools (num_slices) to be created
+  num_node_pools:
+
   # The name of the compute engine reservation of A4X nodes in the form of
   # <project>/<reservation-name>
   # To target a BLOCK_NAME, the name of the extended reservation
@@ -244,6 +247,7 @@ deployment_groups:
         specific_reservations:
         - name: $(vars.reservation)
       enable_dranet: true
+      num_node_pools: $(vars.num_node_pools)
     outputs: [instructions]
 
   - id: workload-manager-install
