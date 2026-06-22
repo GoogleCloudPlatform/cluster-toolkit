@@ -573,3 +573,9 @@ variable "confidential_instance_type" {
   type        = string
   default     = null
 }
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage on the node pool. Node boot disks will be encrypted using keys protected by the Confidential VM."
+  type        = bool
+  default     = false
+}

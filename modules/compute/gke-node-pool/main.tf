@@ -154,17 +154,18 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb     = var.disk_size_gb
-    disk_type        = var.disk_type
-    resource_labels  = local.labels
-    labels           = local.kubernetes_labels
-    service_account  = var.service_account_email
-    oauth_scopes     = var.service_account_scopes
-    machine_type     = var.machine_type
-    spot             = var.spot
-    image_type       = var.image_type
-    flex_start       = var.enable_flex_start
-    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    resource_labels             = local.labels
+    labels                      = local.kubernetes_labels
+    service_account             = var.service_account_email
+    oauth_scopes                = var.service_account_scopes
+    machine_type                = var.machine_type
+    spot                        = var.spot
+    image_type                  = var.image_type
+    flex_start                  = var.enable_flex_start
+    max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    enable_confidential_storage = var.enable_confidential_storage
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator

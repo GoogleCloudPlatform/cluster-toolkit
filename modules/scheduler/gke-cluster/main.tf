@@ -359,7 +359,8 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   node_config {
-    machine_type = var.enable_confidential_nodes ? var.system_node_pool_machine_type : "e2-medium"
+    machine_type                = var.enable_confidential_nodes ? var.system_node_pool_machine_type : "e2-medium"
+    enable_confidential_storage = var.enable_confidential_storage
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
@@ -463,13 +464,14 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   node_config {
-    labels          = var.system_node_pool_kubernetes_labels
-    resource_labels = local.labels
-    service_account = var.service_account_email
-    oauth_scopes    = var.service_account_scopes
-    machine_type    = var.system_node_pool_machine_type
-    disk_size_gb    = var.system_node_pool_disk_size_gb
-    disk_type       = var.system_node_pool_disk_type
+    labels                      = var.system_node_pool_kubernetes_labels
+    resource_labels             = local.labels
+    service_account             = var.service_account_email
+    oauth_scopes                = var.service_account_scopes
+    machine_type                = var.system_node_pool_machine_type
+    disk_size_gb                = var.system_node_pool_disk_size_gb
+    disk_type                   = var.system_node_pool_disk_type
+    enable_confidential_storage = var.enable_confidential_storage
 
     dynamic "taint" {
       for_each = var.system_node_pool_taints

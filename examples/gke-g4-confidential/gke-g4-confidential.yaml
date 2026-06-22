@@ -142,6 +142,7 @@ deployment_groups:
       release_channel: REGULAR
       enable_confidential_nodes: true
       confidential_instance_type: "SEV"
+      enable_confidential_storage: $(vars.enable_confidential_storage)
 
     outputs: [instructions]
 

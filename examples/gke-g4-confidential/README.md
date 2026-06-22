@@ -73,7 +73,7 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `static_node_count` | Number of G4 GPU nodes to provision. |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
 | `reservation` | (Optional) The name of a zonal GCE reservation matching `g4-standard-48` to consume capacity from. |
-| `enable_confidential_storage` | (Optional) Set to `true` to enable Customer-Managed Encryption Key (CMEK) storage. Defaults to `false`. |
+| `enable_confidential_storage` | (Optional) Set to `true` to enable Confidential Storage, encrypting both the Kubernetes dynamic PVs (using CMEK) and the VM boot disks of all GKE nodes (system and workload). Defaults to `false`. |
 | `disk_encryption_kms_key` | (Optional) The resource path to your Cloud KMS key used for CMEK storage encryption. Defaults to empty (`""`). |
 
 ### (Optional) KMS CMEK Setup for Storage

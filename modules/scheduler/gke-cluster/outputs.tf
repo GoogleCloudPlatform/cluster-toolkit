@@ -153,3 +153,8 @@ output "confidential_instance_type" {
   description = "The type of technology used by the confidential nodes."
   value       = var.confidential_instance_type
 }
+
+output "enable_confidential_storage" {
+  description = "Indicates whether Confidential Storage is enabled at the cluster level."
+  value       = var.enable_confidential_storage
+}
