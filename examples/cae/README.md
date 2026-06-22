@@ -222,7 +222,7 @@ Depending on the software you want to use, different installation paths may be r
   ```
 
   where you can follow the installation steps manually. Or using the toolkit's
-  [startup-script](../../modules/scripts/startup-scripts/README.md) module, the process
+  [startup-script](../../modules/scripts/startup-script/README.md) module, the process
   can be automated.
 
   Once that is completed, the software will persist on the NFS Filestore share for as long as you

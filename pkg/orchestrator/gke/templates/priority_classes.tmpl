@@ -16,7 +16,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: very-low
-value: -100
+value: 100
 globalDefault: false
 description: "User-defined priority class for very low priority workloads."
 ---
@@ -24,7 +24,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: low
-value: 0
+value: 250
 globalDefault: false
 description: "User-defined priority class for low priority workloads."
 ---
@@ -32,7 +32,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: medium
-value: 100
+value: 500
 globalDefault: true
 description: "User-defined priority class for medium priority workloads."
 ---
@@ -40,7 +40,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: high
-value: 200
+value: 750
 globalDefault: false
 description: "User-defined priority class for high priority workloads."
 ---
@@ -48,6 +48,6 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: very-high
-value: 300
+value: 1000
 globalDefault: false
 description: "User-defined priority class for very high priority workloads."

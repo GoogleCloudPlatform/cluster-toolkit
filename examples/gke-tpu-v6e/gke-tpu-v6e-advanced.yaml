@@ -179,6 +179,7 @@ deployment_groups:
       enable_private_endpoint: false # Allows access from authorized public IPs
       enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)
       configure_workload_identity_sa: true
+      enable_ml_diagnostics: true
       namespace: $(vars.user_namespace)
       enable_filestore_csi: true
       enable_gcsfuse_csi: true
@@ -280,11 +281,6 @@ deployment_groups:
         install: true
       cert_manager:
         install: true
-
-  - id: gke-ml-diagnostics
-    source: modules/management/mldiagnostics
-    use: [gke-tpu-v6e-cluster, workload-manager-install]
-    outputs: [instructions]
 
   # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
   # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.

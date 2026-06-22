@@ -110,21 +110,18 @@ func ParseTPUCount(machineType string) int {
 
 // ResolveAcceleratorInfo returns the number and type of accelerators for a given machine type.
 func ResolveAcceleratorInfo(mt *compute.MachineType, machineType string) (count int, accelType string, isTPU bool) {
-	isTPU = strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")
+	isTPU = IsTPU(machineType)
 
 	if len(mt.Accelerators) > 0 {
 		acc := mt.Accelerators[0]
-		if isTPU || strings.Contains(strings.ToLower(acc.GuestAcceleratorType), "tpu") {
-			return int(acc.GuestAcceleratorCount), "tpu", true
-		}
-		return int(acc.GuestAcceleratorCount), acc.GuestAcceleratorType, false
+		return int(acc.GuestAcceleratorCount), acc.GuestAcceleratorType, isTPU
 	}
 
 	if count := ParseTPUCount(machineType); count > 0 {
-		return count, "tpu", true
+		return count, "tpu", isTPU
 	}
 
-	return 0, "", false
+	return 0, "", isTPU
 }
 
 // GetMachineType fetches machine type information from GCP Compute API with caching.

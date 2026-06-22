@@ -36,6 +36,12 @@ See the
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 
+## MPI Mode and Node Configuration
+
+When `mpi_mode` is enabled (set to `true`), this module automatically sets `task_count_per_node` to 1 in the generated Batch job template by default. The number of provisioned VMs is calculated as:
+
+`Total Compute Nodes = task_count / task_count_per_node`
+
 ## Shared VPC
 
 This module supports using a [shared VPC] with a Batch job. To accomplish this,
@@ -121,7 +127,7 @@ limitations under the License.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.0 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |

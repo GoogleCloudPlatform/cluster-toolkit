@@ -138,7 +138,7 @@ class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
 
 
 class CredentialViewSet(viewsets.ModelViewSet):
-    """Custom ModelViewSet for Crendential model"""
+    """Custom ModelViewSet for Credential model"""
 
     permission_classes = (
         IsAuthenticated,

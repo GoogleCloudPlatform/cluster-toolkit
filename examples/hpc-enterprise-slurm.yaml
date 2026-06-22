@@ -29,7 +29,9 @@ vars:
   slurm_image:
     # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
     # for a list of valid family options with Slurm
-    family: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
+    # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
+    family: slurm-gcp-6-12-hpc-rocky-linux-9
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false
@@ -70,11 +72,11 @@ deployment_groups:
     settings:
       name: controller
       project_roles:
+      - bigquery.dataOwner # needed if enable_bigquery_load is enabled
       - compute.instanceAdmin.v1
       - iam.serviceAccountUser
       - logging.logWriter
       - monitoring.metricWriter
-      - pubsub.admin
       - storage.objectViewer
 
   - id: login_sa
@@ -93,7 +95,7 @@ deployment_groups:
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
-      - storage.objectCreator
+      - storage.objectUser
 
   - id: homefs
     source: modules/file-system/filestore

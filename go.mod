@@ -22,6 +22,7 @@ require (
 
 require (
 	cloud.google.com/go/billing v1.20.4
+	cloud.google.com/go/filestore v1.10.3
 	cloud.google.com/go/resourcemanager v1.10.6
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-billy/v5 v5.8.0
@@ -146,7 +147,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
-	github.com/hashicorp/go-version v1.8.0 // indirect
+	github.com/hashicorp/go-version v1.9.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect

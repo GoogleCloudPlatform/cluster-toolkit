@@ -37,8 +37,14 @@ RUN wget https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_V
     mv shellcheck-${SHELLCHECK_VER}/shellcheck /usr/local/bin/shellcheck && \
     rm -rf shellcheck-*
 
-# --- Install TFLint ---
-RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+# --- Install TFLint Securely ---
+RUN TFLINT_ZIP_HASH="c004ec45ade3caf87cd4089feb1d2af9f7df57b13140a36df8a63c0a8cc69f14" && \
+    curl -fsSLo /tmp/tflint_linux_amd64.zip \
+      https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION:-v0.62.1}/tflint_linux_amd64.zip && \
+    echo "${TFLINT_ZIP_HASH}  /tmp/tflint_linux_amd64.zip" | sha256sum -c - && \
+    unzip -o /tmp/tflint_linux_amd64.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/tflint && \
+    rm -f /tmp/tflint_linux_amd64.zip
 
 # --- Add HashiCorp Repo and Install Terraform/Packer ---
 RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
@@ -81,13 +87,14 @@ RUN chmod a+rx $START_DIR/$HPC_WORK_FILE
 COPY $CW_DIR/$CODE_REQS $HPC_CONFIG_DIR/$CODE_REQS
 RUN chmod a+r $HPC_CONFIG_DIR/$CODE_REQS
 
+COPY tools/cloud-workstations/base-tooling-requirements.txt base-tooling-requirements.txt
 COPY tools/cloud-build/requirements.txt cloud_build_requirements.txt
 COPY docs/hybrid-slurm-cluster/requirements.txt slurm_requirements.txt
+COPY tools/cloud-workstations/requirements.txt slurm_gcp_requirements.txt
 
 # --- Install Python Dependencies ---
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/refs/heads/master/scripts/requirements.txt && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
-
+RUN pip install --require-hashes --no-cache-dir -r base-tooling-requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
+    pip install --require-hashes --no-cache-dir --prefer-binary --no-build-isolation -r slurm_gcp_requirements.txt && \
     rm -rf ~/.cache/pip/*

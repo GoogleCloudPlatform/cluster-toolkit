@@ -25,6 +25,7 @@ import time
 import yaml
 from pathlib import Path
 import functools
+import socket
 
 import util
 from util import (
@@ -221,7 +222,7 @@ def _generate_key(p: Path) -> None:
     run(f"dd if=/dev/random of={p} bs=1024 count=1")
 
 
-def setup_key(lkp: util.Lookup) -> None:
+def setup_key(lkp: util.Lookup, is_primary: bool = True) -> None:
     file_name = "munge.key"
     dir = dirs.munge
 
@@ -231,35 +232,79 @@ def setup_key(lkp: util.Lookup) -> None:
 
     dst = Path(dir / file_name)
 
-    if lkp.cfg.controller_state_disk.device_name:
-        # Copy key from persistent state disk
-        persist = slurmdirs.state / file_name
-        if not persist.exists():
-            _generate_key(persist)
+    shared_dir = Path(slurmdirs.state)
+    shared_key = shared_dir / file_name
 
-        shutil.copyfile(persist, dst)
+    if is_primary:
+        # Primary Controller Logic:
+        # 1. Restore  key from shared state if local is missing but shared exists
+        # 2. Generate local if neither exists
+        # 3. Sync local to shared
+
+        if not dst.exists():
+            if shared_key.exists():
+                log.info(f"Restoring {file_name} from {shared_key}")
+                shutil.copyfile(shared_key, dst)
+            elif lkp.cfg.controller_state_disk and lkp.cfg.controller_state_disk.device_name:
+                 # For zonal state disk (files might be directly there if mounted at slurmdirs.state)
+                 # But if slurmdirs.state IS shared_dir, we already checked shared_key.exists()
+                 # If controller_state_disk is used, slurmdirs.state IS the persistence.
+                 pass
+
+            if not dst.exists(): # Still missing
+                log.info(f"Generating {file_name}")
+                _generate_key(dst)
+
+        # Set permissions on local key
         if lkp.cfg.enable_slurm_auth:
             util.chown_slurm(dst, mode=0o400)
-            util.chown_slurm(persist, mode=0o400)
         else:
             shutil.chown(dst, user="munge", group="munge")
             os.chmod(dst, stat.S_IRUSR)
+
+        # Sync to shared location
+        if not shared_key.exists():
+            log.info(f"Syncing {file_name} to {shared_key}")
+            try:
+                shutil.copyfile(dst, shared_key)
+                if lkp.cfg.enable_slurm_auth:
+                    util.chown_slurm(shared_key, mode=0o400)
+                else:
+                    util.chown_slurm(shared_key, mode=0o600)
+            except Exception as e:
+                log.warning(f"Failed to sync key to shared storage: {e}")
+
     else:
-        if dst.exists():
-            log.info("key already exists. Skipping key generation.")
+        # Wait for key to appear in shared storage and copy to local destination
+
+        timeout = lkp.cfg.get("backup_controller_key_timeout", 300)
+        snooze = 10 # seconds
+        retries = int(timeout / snooze)
+        log.info(f"Waiting for {file_name} in {shared_dir} for up to {timeout} seconds")
+        for _ in range(retries):
+            if shared_key.exists():
+                break
+            time.sleep(snooze)
+
+        if not shared_key.exists():
+            log.error(f"Timed out waiting for {file_name} in {shared_dir}")
+            raise FileNotFoundError(f"{file_name} not found in shared storage")
+
+        log.info(f"Copying {file_name} from {shared_dir}")
+        shutil.copyfile(shared_key, dst)
+
+        if lkp.cfg.enable_slurm_auth:
+            util.chown_slurm(dst, mode=0o400)
         else:
-            _generate_key(dst)
-            if lkp.cfg.enable_slurm_auth:
-              util.chown_slurm(dst, mode=0o400)
-            else:
-              shutil.chown(dst, user="munge", group="munge")
-              os.chmod(dst, stat.S_IRUSR)
+            shutil.chown(dst, user="munge", group="munge")
+            os.chmod(dst, stat.S_IRUSR)
 
     if lkp.cfg.enable_slurm_auth:
         # Put key into shared volume for distribution
-        distributed = util.slurmdirs.key_distribution / file_name
-        shutil.copyfile(dst, distributed)
-        util.chown_slurm(distributed, mode=0o400)
+        if is_primary:
+            distributed = util.slurmdirs.key_distribution / file_name
+            shutil.copyfile(dst, distributed)
+            util.chown_slurm(distributed, mode=0o400)
         # Munge is distributed from /etc/munge.
     else:
         run("systemctl restart munge", timeout=30)
@@ -327,7 +372,7 @@ def update_system_config(file, content):
 
 def _symlink_mysql_datadir(lkp: util.Lookup) -> None:
     """ Symlink /var/lib/mysql to controller state disk if needed. """
-    if not lkp.cfg.controller_state_disk.device_name:
+    if not lkp.cfg.controller_state_disk or not lkp.cfg.controller_state_disk.device_name:
         return
     
     datadir = Path("/var/lib/mysql")
@@ -415,10 +460,13 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
     with blob.open('w') as f:
         f.write(yaml.dump(data))
 
-def setup_controller():
-    """Run controller setup"""
-    log.info("Setting up controller")
+def setup_controller(is_primary: bool):
+    """Shared controller setup logic for both primary and backup."""
+    role_name = "Primary" if is_primary else "Backup"
+    log.info(f"Setting up {role_name} controller")
     lkp = util.lookup()
+
+    # Topology and configuration
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     if util.slurm_version_gte(lkp.slurm_version, "25.05"):
@@ -426,20 +474,37 @@ def setup_controller():
     else:
         conf_v2411.generate_configs_slurm_v2411(lkp)
 
-
-    if lkp.cfg.controller_state_disk.device_name != None:
-        mount_save_state_disk()
-
-    setup_jwt_key()
-    setup_key(lkp)
-
     setup_sudoers()
     setup_network_storage()
+
+    # Ensure state directory permissions are correct (especially if mounted via NFS)
+    util.chown_slurm(slurmdirs.state)
+
+    # Primary-specific state disk mounting
+    if is_primary:
+        if lkp.cfg.controller_state_disk and lkp.cfg.controller_state_disk.device_name:
+            mount_save_state_disk()
+
+    setup_jwt_key()
+    setup_key(lkp, is_primary=is_primary)
 
     run_custom_scripts()
 
     if not lkp.cfg.cloudsql_secret:
         configure_mysql(lkp)
+
+    if not is_primary:
+        db_sentinel = Path(slurmdirs.state / "db_initialized")
+        timeout = 300
+        snooze = 10
+        retries = int(timeout / snooze)
+        log.info("Waiting for database initialization to complete on primary...")
+        for _ in range(retries):
+            if db_sentinel.exists():
+                break
+            time.sleep(snooze)
+        if not db_sentinel.exists():
+            log.warning("Timed out waiting for database initialization sentinel on primary. Proceeding anyway.")
 
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
@@ -464,6 +529,14 @@ def setup_controller():
         log.info(f"Removing {clustername_file} to prevent cluster ID mismatch")
         clustername_file.unlink()
 
+    if is_primary:
+        db_sentinel = Path(slurmdirs.state / "db_initialized")
+        try:
+            db_sentinel.touch()
+            util.chown_slurm(db_sentinel)
+        except Exception as e:
+            log.warning(f"Failed to create database initialization sentinel: {e}")
+
     run("systemctl enable slurmctld", timeout=30)
     run("systemctl restart slurmctld", timeout=30)
 
@@ -479,7 +552,7 @@ def setup_controller():
 
     log.info("Check status of cluster services")
     if not lkp.cfg.enable_slurm_auth:
-      run("systemctl status munge", timeout=30)
+        run("systemctl status munge", timeout=30)
     run("systemctl status slurmdbd", timeout=30)
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
@@ -498,21 +571,23 @@ def setup_controller():
 
     self_report_controller_address(lkp)
 
-    log.info("Done setting up controller")
+    log.info(f"Done setting up {role_name} controller")
     pass
-
 
 def setup_login():
     """run login node setup"""
     log.info("Setting up login")
 
     lkp = lookup()
-    slurmctld_host = f"{lkp.control_host}"
-    if lkp.control_addr:
-        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
-    sackd_options = [
-        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
-    ]
+    primary_control_host = lkp.control_host_addr or lkp.control_host
+    backup_control_host = lkp.cfg.get("slurm_backup_controller_ip") or lkp.cfg.get("slurm_backup_controller_name")
+
+    servers = [f"{primary_control_host}:{lkp.control_host_port}"]
+    if backup_control_host:
+        servers.append(f"{backup_control_host}:{lkp.control_host_port}")
+
+    conf_server_arg = ",".join(f'"{s}"' for s in servers)
+    sackd_options = [f"--conf-server={conf_server_arg}"]
     sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
     update_system_config("sackd", sysconf)
     install_custom_scripts()
@@ -522,7 +597,10 @@ def setup_login():
     if not lkp.cfg.enable_slurm_auth:
       run("systemctl restart munge", timeout=30)
     run("systemctl enable sackd", timeout=30)
-    run("systemctl restart sackd", timeout=30)
+    try:
+        run("systemctl restart sackd", timeout=30)
+    except Exception:
+        log.exception("Failed to restart sackd, ignoring failure.")
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     run_custom_scripts()
@@ -541,12 +619,15 @@ def setup_compute():
 
     lkp = lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
-    slurmctld_host = f"{lkp.control_host}"
-    if lkp.control_addr:
-        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
-    slurmd_options = [
-        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
-    ]
+    primary_control_host = lkp.control_host_addr or lkp.control_host
+    backup_control_host = lkp.cfg.get("slurm_backup_controller_ip") or lkp.cfg.get("slurm_backup_controller_name")
+
+    servers = [f"{primary_control_host}:{lkp.control_host_port}"]
+    if backup_control_host:
+        servers.append(f"{backup_control_host}:{lkp.control_host_port}")
+
+    conf_server_arg = ",".join(f'"{s}"' for s in servers)
+    slurmd_options = [f"--conf-server={conf_server_arg}"]
 
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature", silent=True)
@@ -631,6 +712,56 @@ def setup_cloud_ops() -> None:
             raise
 
 
+def populate_etc_hosts(lkp: util.Lookup) -> None:
+    """Populate static IP mappings for controllers in /etc/hosts to bypass DNS propagation latency."""
+    log.info("Populating /etc/hosts with controller IP mappings")
+    primary_name = lkp.cfg.get("slurm_control_host")
+    primary_ip = lkp.cfg.get("slurm_control_addr")
+    backup_name = lkp.cfg.get("slurm_backup_controller_name")
+    backup_ip = lkp.cfg.get("slurm_backup_controller_ip")
+
+    hosts_path = Path("/etc/hosts")
+    if not hosts_path.exists():
+        log.warning("/etc/hosts does not exist, skipping population")
+        return
+
+    try:
+        lines = hosts_path.read_text().splitlines()
+    except Exception as e:
+        log.error(f"Failed to read /etc/hosts: {e}")
+        return
+
+    names_to_remove = {name for name in (primary_name, backup_name) if name}
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "# Added by Slurm HA Setup":
+            continue
+        if not stripped or stripped.startswith("#"):
+            new_lines.append(line)
+            continue
+        parts = stripped.split()
+        if len(parts) > 1 and any(
+            any(p == name or p.startswith(f"{name}.") for p in parts[1:])
+            for name in names_to_remove
+        ):
+            continue
+        new_lines.append(line)
+
+    new_entries = []
+    if primary_ip and primary_name:
+        new_entries.append(f"{primary_ip} {primary_name}")
+    if backup_ip and backup_name:
+        new_entries.append(f"{backup_ip} {backup_name}")
+
+    if new_entries:
+        try:
+            hosts_path.write_text("\n".join(new_lines) + "\n\n# Added by Slurm HA Setup\n" + "\n".join(new_entries) + "\n")
+            log.info(f"Updated /etc/hosts with current controller mappings: {new_entries}")
+        except Exception as e:
+            log.error(f"Failed to write to /etc/hosts: {e}")
+
+
 def main():
     start_motd()
 
@@ -647,16 +778,44 @@ def main():
             log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
         time.sleep(sleep_seconds)
     log.info("Config fetched")
+    lkp = lookup()
+    populate_etc_hosts(lkp)
     setup_cloud_ops()
     configure_dirs()
     # call the setup function for the instance type
+    role = lookup().instance_role
+    if role == "controller":
+        try:
+            ha_role = util.instance_metadata("attributes/slurm_ha_role", silent=True)
+            if ha_role == "backup":
+                role = "backup_controller"
+            elif ha_role == "dynamic":
+                hostname = socket.gethostname()
+                short_hostname = hostname.split(".")[0]
+                if short_hostname.endswith("-0"):
+                    log.info(f"Dynamic HA: Hostname '{short_hostname}' ends with '-0'. Assuming Primary role.")
+                else:
+                    log.info(f"Dynamic HA: Hostname '{short_hostname}' does not end with '-0'. Assuming Standby Backup role.")
+                    role = "backup_controller"
+        except Exception as e:
+            log.warning(f"Failed to read slurm_ha_role metadata: {e}")
+            if lkp.cfg.get("slurm_backup_controller_name"):
+                hostname = socket.gethostname()
+                short_hostname = hostname.split(".")[0]
+                if short_hostname.endswith("-0"):
+                    log.info(f"Dynamic HA (Fallback): Hostname '{short_hostname}' ends with '-0'. Assuming Primary role.")
+                else:
+                    log.info(f"Dynamic HA (Fallback): Hostname '{short_hostname}' does not end with '-0'. Assuming Standby Backup role.")
+                    role = "backup_controller"
+
     {
-        "controller": setup_controller,
+        "controller": lambda: setup_controller(is_primary=True),
+        "backup_controller": lambda: setup_controller(is_primary=False),
         "compute": setup_compute,
         "login": setup_login,
     }.get(
-        lookup().instance_role,
-        lambda: log.fatal(f"Unknown node role: {lookup().instance_role}"))()
+        role,
+        lambda: log.fatal(f"Unknown node role: {role}"))()
 
     end_motd()
 
