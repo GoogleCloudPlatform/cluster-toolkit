@@ -406,8 +406,8 @@ resource "google_container_cluster" "gke_cluster" {
       error_message = "FQDN Network Policy requires GKE Dataplane V2 to be enabled."
     }
     precondition {
-      condition     = !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", var.system_node_pool_machine_type))
-      error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true."
+      condition     = !var.enable_confidential_nodes || !var.system_node_pool_enabled || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", var.system_node_pool_machine_type))
+      error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true and system_node_pool_enabled is true."
     }
   }
 

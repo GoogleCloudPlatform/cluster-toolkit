@@ -39,11 +39,11 @@ spec:
         args:
         - |
           echo "=== 1. CPU SEV Status (dmesg) ==="
-          dmesg | grep -i "Encryption Features active" || echo "dmesg check failed"
+          dmesg | grep -i "Encryption Features active" || { echo "dmesg check failed"; exit 1; }
 
           echo "=== 2. GPU CC Status (nvidia-smi) ==="
-          nvidia-smi conf-compute -f || echo "nvidia-smi conf-compute -f failed"
-          nvidia-smi conf-compute -grs || echo "nvidia-smi conf-compute -grs failed"
+          nvidia-smi conf-compute -f || { echo "nvidia-smi conf-compute -f failed"; exit 1; }
+          nvidia-smi conf-compute -grs || { echo "nvidia-smi conf-compute -grs failed"; exit 1; }
 
           echo "=== 3. Writing to Confidential Storage ==="
           echo "Writing test file to secure hyperdisk volume..."

@@ -161,10 +161,6 @@ deployment_groups:
           gpu_driver_version: LATEST
       additional_networks: $(gke-g4-net-1.instance_additional_networks)
 
-      # Confidential Compute configuration for G4 Nodes
-      enable_confidential_nodes: true
-      confidential_instance_type: "SEV"
-
       # Target our pre-existing reservation
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION

@@ -89,3 +89,12 @@ module "kubectl_apply" {
       ])
   ])
 }
+
+resource "terraform_data" "validate_confidential_storage" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_encryption_kms_key != null && var.disk_encryption_kms_key != "")
+      error_message = "Confidential Storage requires a Customer-Managed Encryption Key (CMEK). Please provide a valid 'disk_encryption_kms_key'."
+    }
+  }
+}
