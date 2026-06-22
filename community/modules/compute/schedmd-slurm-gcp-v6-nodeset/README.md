@@ -83,16 +83,17 @@ your Slurm nodes. Both local and shared reservations can be configured using the
 
 The format of the `reservation_name` input determines the type of reservation used:
 
-* **Local Reservation Format:** For reservations in the same project as the cluster (var.project_id), the name is sufficient:
-    `RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
+* **Local Reservation Format:** For reservations in the same project as the cluster (`var.project_id`), the name is sufficient:
+    `RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]`
 
 * **Shared Reservation Format:** For reservations shared from a different project, the full resource path is required:
-    `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]`
+    `projects/HOST_PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID[/reservationSubBlocks/SUBBLOCK_ID]]`
 
   Where:
   * `HOST_PROJECT_ID` is the project ID where the shared reservation was created.
   * `RESERVATION_NAME` is the name assigned to the specific reservation.
   * `BLOCK_ID` (Optional) is the identifier for a specific reservation block, if the reservation is composed of multiple blocks.
+  * `SUBBLOCK_ID` (Optional) is the identifier for a specific reservation subblock within a block.
 
 > **_NOTE:_** Using a shared reservation ideally requires the 'compute.reservations.get'
 > permission for the node service account in the host project (HOST_PROJECT_ID) to fetch full reservation details.
@@ -165,7 +166,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Version |
 | ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.11 |
 
 ## Providers
@@ -209,7 +210,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_disk_resource_manager_tags"></a> [disk\_resource\_manager\_tags](#input\_disk\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of boot disk to create for the partition compute nodes. | `number` | `50` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme. | `string` | `"pd-standard"` | no |
-| <a name="input_dws_flex"></a> [dws\_flex](#input\_dws\_flex) | If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.<br/> See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler<br/> Options:<br/> - enable: Enable DWS Flex Start<br/> - max\_run\_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).<br/> - use\_job\_duration: Use the job duration to determine the max\_run\_duration, if job duration is not set, max\_run\_duration will be used.<br/> - use\_bulk\_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances<br/><br/>Limitations:<br/> - CAN NOT be used with reservations;<br/> - CAN NOT be used with placement groups; | <pre>object({<br/>    enabled          = optional(bool, true)<br/>    max_run_duration = optional(number, 604800) # one week<br/>    use_job_duration = optional(bool, false)<br/>    use_bulk_insert  = optional(bool, false)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
+| <a name="input_dws_flex"></a> [dws\_flex](#input\_dws\_flex) | If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.<br/> See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler<br/> Options:<br/> - enable: Enable DWS Flex Start<br/> - max\_run\_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).<br/> - use\_job\_duration: Use the job duration to determine the max\_run\_duration, if job duration is not set, max\_run\_duration will be used.<br/> - use\_bulk\_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances<br/><br/>Limitations:<br/> - CAN NOT be used with reservations. | <pre>object({<br/>    enabled          = optional(bool, true)<br/>    max_run_duration = optional(number, 604800) # one week<br/>    use_job_duration = optional(bool, false)<br/>    use_bulk_insert  = optional(bool, false)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_maintenance_reservation"></a> [enable\_maintenance\_reservation](#input\_enable\_maintenance\_reservation) | Enables slurm reservation for scheduled maintenance. | `bool` | `false` | no |
 | <a name="input_enable_opportunistic_maintenance"></a> [enable\_opportunistic\_maintenance](#input\_enable\_opportunistic\_maintenance) | On receiving maintenance notification, maintenance will be performed as soon as nodes becomes idle. | `bool` | `false` | no |
@@ -241,7 +242,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/><br/>Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults. | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name or path of the reservation to use for VM resources. Must be a "SPECIFIC" reservation.<br/>Set to an empty string if using no reservation or automatically-consumed reservations.<br/><br/>Formats:<br/>- Local Reservation: For reservations in the same project as the cluster (var.project\_id), the name is sufficient:<br/>  RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/>- Shared Reservation: For reservations shared from a different project, the full resource path is required:<br/>  projects/HOST\_PROJECT\_ID/reservations/RESERVATION\_NAME[/reservationBlocks/BLOCK\_ID[/reservationSubBlocks/SUBBLOCK\_ID]]<br/><br/>Where:<br/>- HOST\_PROJECT\_ID: Project ID where the shared reservation was created.<br/>- RESERVATION\_NAME: The name assigned to the specific reservation.<br/>- BLOCK\_ID (Optional): The identifier for a specific reservation block, if the reservation is composed of multiple blocks.<br/>- SUBBLOCK\_ID (Optional): The identifier for a specific reservation subblock within a block.<br/><br/>Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults. | `string` | `""` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the compute instances. | `string` | `null` | no |

@@ -54,13 +54,25 @@ locals {
 
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
+  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+
+  # HA Locals
+  backup_zone                  = coalesce(var.backup_zone, var.zone)
+  slurm_backup_controller_name = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-1" : ""
+
+  # Merge HA metadata
   metadata = merge(
     local.disable_automatic_updates_metadata,
     var.metadata,
-    local.universe_domain
+    local.universe_domain,
+    var.enable_backup_controller ? {
+      slurm_ha_role                = "dynamic"
+      slurm_backup_controller_name = local.slurm_backup_controller_name
+      } : {
+      slurm_ha_role                = "primary"
+      slurm_backup_controller_name = ""
+    }
   )
-
-  controller_project_id = coalesce(var.controller_project_id, var.project_id)
 }
 
 data "google_project" "controller_project" {
@@ -139,6 +151,7 @@ module "slurm_controller_template" {
 # INSTANCE
 resource "google_compute_instance_from_template" "controller" {
   provider = google-beta
+  count    = var.enable_backup_controller ? 0 : 1
 
   name                     = "${local.slurm_cluster_name}-controller"
   project                  = local.controller_project_id
@@ -168,6 +181,153 @@ resource "google_compute_instance_from_template" "controller" {
     for_each = var.controller_network_attachment != null ? [1] : []
     content {
       network_attachment = var.controller_network_attachment
+    }
+  }
+
+  dynamic "network_interface" {
+    for_each = var.additional_networks
+    content {
+      network            = network_interface.value.network
+      subnetwork         = network_interface.value.subnetwork
+      subnetwork_project = network_interface.value.subnetwork_project
+      network_ip         = network_interface.value.network_ip
+      nic_type           = network_interface.value.nic_type
+      stack_type         = network_interface.value.stack_type
+      queue_count        = network_interface.value.queue_count
+      dynamic "access_config" {
+        for_each = network_interface.value.access_config
+        content {
+          nat_ip       = access_config.value.nat_ip
+          network_tier = access_config.value.network_tier
+        }
+      }
+      dynamic "ipv6_access_config" {
+        for_each = network_interface.value.ipv6_access_config
+        content {
+          network_tier = ipv6_access_config.value.network_tier
+        }
+      }
+      dynamic "alias_ip_range" {
+        for_each = network_interface.value.alias_ip_range
+        content {
+          ip_cidr_range         = alias_ip_range.value.ip_cidr_range
+          subnetwork_range_name = alias_ip_range.value.subnetwork_range_name
+        }
+      }
+    }
+  }
+}
+
+# ZONAL INSTANCE GROUP MANAGER (deployed if ha_type is zonal)
+resource "google_compute_instance_group_manager" "controller_zonal_mig" {
+  count              = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? 1 : 0
+  name               = "${local.slurm_cluster_name}-controller-mig"
+  base_instance_name = "${local.slurm_cluster_name}-controller"
+  zone               = var.zone
+  project            = local.controller_project_id
+  target_size        = 0
+  version {
+    instance_template = module.slurm_controller_template.self_link
+  }
+  update_policy {
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    replacement_method    = "RECREATE"
+    max_surge_fixed       = 0
+    max_unavailable_fixed = 1
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+  }
+}
+
+# REGIONAL INSTANCE GROUP MANAGER (deployed if ha_type is regional)
+resource "google_compute_region_instance_group_manager" "controller_regional_mig" {
+  count                     = (var.enable_backup_controller && var.controller_ha_type == "regional") ? 1 : 0
+  name                      = "${local.slurm_cluster_name}-controller-mig"
+  base_instance_name        = "${local.slurm_cluster_name}-controller"
+  region                    = var.region
+  project                   = local.controller_project_id
+  distribution_policy_zones = [var.zone, local.backup_zone]
+  target_size               = 0
+  version {
+    instance_template = module.slurm_controller_template.self_link
+  }
+  update_policy {
+    type                         = "PROACTIVE"
+    minimal_action               = "REPLACE"
+    replacement_method           = "RECREATE"
+    instance_redistribution_type = "NONE"
+    max_surge_fixed              = 0
+    max_unavailable_fixed        = 2
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+    precondition {
+      condition     = var.controller_ha_type != "regional" || var.zone != local.backup_zone
+      error_message = "For a regional controller HA deployment, 'zone' and 'backup_zone' must be different."
+    }
+  }
+}
+
+resource "google_compute_address" "controller_ips" {
+  for_each     = var.enable_backup_controller ? toset(var.static_ips) : []
+  project      = local.controller_project_id
+  name         = "${local.slurm_cluster_name}-controller-ip-${replace(each.value, ".", "-")}"
+  address_type = "INTERNAL"
+  subnetwork   = var.subnetwork_self_link
+  address      = each.value
+  region       = var.region
+}
+
+locals {
+  # Maps pre-allocated static IPs to instance suffixes (e.g. 0 and 1)
+  mig_instances = var.enable_backup_controller ? {
+    "${local.slurm_cluster_name}-controller-0" = var.static_ips[0]
+    "${local.slurm_cluster_name}-controller-1" = var.static_ips[1]
+  } : {}
+}
+
+# STATEFUL PER-INSTANCE IP CONFIGURATION (ZONAL)
+resource "google_compute_per_instance_config" "controller_zonal_stateful_ips" {
+  for_each               = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? local.mig_instances : {}
+  project                = local.controller_project_id
+  instance_group_manager = google_compute_instance_group_manager.controller_zonal_mig[0].name
+  zone                   = var.zone
+  name                   = each.key
+
+  preserved_state {
+    internal_ip {
+      interface_name = "nic0"
+      auto_delete    = "NEVER"
+      ip_address {
+        address = google_compute_address.controller_ips[each.value].self_link
+      }
+    }
+  }
+}
+
+# STATEFUL PER-INSTANCE IP CONFIGURATION (REGIONAL)
+resource "google_compute_region_per_instance_config" "controller_regional_stateful_ips" {
+  for_each                      = (var.enable_backup_controller && var.controller_ha_type == "regional") ? local.mig_instances : {}
+  project                       = local.controller_project_id
+  region_instance_group_manager = google_compute_region_instance_group_manager.controller_regional_mig[0].name
+  region                        = var.region
+  name                          = each.key
+
+  preserved_state {
+    internal_ip {
+      interface_name = "nic0"
+      auto_delete    = "NEVER"
+      ip_address {
+        address = google_compute_address.controller_ips[each.value].self_link
+      }
     }
   }
 }

@@ -330,6 +330,7 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a4x-pool]
     settings:
+      name: gcsfuse-fio-job
       security_context:  # to make sure the job have enough access to install the fio packages
       - key: runAsUser
         value: 0

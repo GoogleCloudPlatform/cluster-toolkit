@@ -111,7 +111,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed workbenches
+  <input type="checkbox" id="id_show_destroyed"/> <label for="id_show_destroyed">Show Destroyed workbenches</label>
   </div>
   {% else %}
     {% if normaluser or admin %}
@@ -145,6 +145,7 @@ function filterTable() {
 }
 function setupFilter() {
     var toggle = document.getElementById("id_show_destroyed");
+    if (!toggle) return;
     toggle_cookie = ($.cookie("workbench_list_show_destroyed") != "false");
     if ( toggle_cookie ) {
         toggle.checked = true;

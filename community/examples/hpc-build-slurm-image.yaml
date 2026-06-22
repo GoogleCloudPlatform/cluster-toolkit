@@ -15,13 +15,18 @@
 blueprint_name: hpc-build-slurm-image
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: build-slurm-1
   region: us-central1
   zone: us-central1-a
 
   image_build_machine_type: n2d-standard-16
-  build_from_image_family: hpc-rocky-linux-8
+  # Rocky 8: hpc-rocky-linux-8
+  # Rocky 9: hpc-rocky-linux-9
+  build_from_image_family: hpc-rocky-linux-9
   build_from_image_project: cloud-hpc-image-public
   build_from_git_ref: 6.12.1
   built_image_family: my-custom-slurm
@@ -46,15 +51,17 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
-          # Slurm build on Rocky8 will upgrade to python3.12 as part of build
-          dnf install -y python3.12 python3.12-pip
-          alternatives --set python3 /usr/bin/python3.12
-          python3 -m pip install pip --upgrade
-          python3 -m pip install ansible==8.7.0
-          python3 -m pip install selinux
+          # Slurm build will install and set python3.12 as the default python3
+          dnf install -y python3.12 python3.12-pip perl-ExtUtils-MakeMaker perl-devel
+          python3.12 -m pip install pip --upgrade
+          python3.12 -m pip install ansible==8.7.0
           export PATH=/usr/local/bin:$PATH
           ansible --version
-          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          n=0
+          until [ "$n" -ge 3 ] || ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents; do
+            ((n=n+1))
+            sleep 5
+          done
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -64,7 +71,8 @@ deployment_groups:
             "nvidia_version": "latest",
             "install_ompi": true,
             "install_lustre": false,
-            "install_gcsfuse": true
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops"
           }
       - type: shell
         destination: install_slurm.sh

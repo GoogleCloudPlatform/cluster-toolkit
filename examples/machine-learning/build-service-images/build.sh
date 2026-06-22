@@ -25,7 +25,7 @@ readonly SUFFIX="$2"
 readonly PROJECT="$3"
 
 if [[ ! -d "$RECIPE" ]]; then
-	echo "The '$RECIPE' does not exist. Available recepies: common, a3m"
+	echo "The '$RECIPE' does not exist. Available recipes: common, a3m"
 	exit 1
 fi
 

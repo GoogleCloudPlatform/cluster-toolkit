@@ -76,6 +76,15 @@ locals {
           --project ${var.project_id}
     EOT
   )
+
+  mldiagnostics_message = !var.enable_ml_diagnostics ? "" : trimspace(
+    <<-EOT
+      ML Diagnostics has been configured:
+        - Namespace '${var.namespace}' has been labeled 'managed-mldiagnostics-gke: "true"' to enable webhook injection.
+        - Ensure workloads run in the '${var.namespace}' namespace.
+        - Ensure your workload pods use the Kubernetes Service Account configured with Workload Identity: '${local.k8s_service_account_name}'.
+    EOT
+  )
 }
 
 output "instructions" {
@@ -89,6 +98,8 @@ output "instructions" {
       ${local.kubernetes_cluster_fetch_credential_message}
 
       ${local.kubernetes_service_account_message}
+
+      ${local.mldiagnostics_message}
     EOT
   )
 }

@@ -64,10 +64,6 @@ ghpc:
     error_message: "If a DWS Flex is enabled, `zones` should be empty."
   - validator: exclusive
     inputs:
-      vars: [enable_placement, dws_flex.enabled]
-    error_message: "Cannot use DWS Flex with `enable_placement`."
-  - validator: exclusive
-    inputs:
       vars: [reservation_name, dws_flex.enabled]
     error_message: "Cannot use reservations with DWS Flex."
   - validator: exclusive
@@ -86,3 +82,11 @@ ghpc:
     inputs:
       vars: [reservation_name, zones]
     error_message: "If a reservation is specified, `zones` should be empty."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        dws_flex.enabled: true
+        enable_placement: true
+      dependent: machine_type
+      pattern: "^(a3-ultragpu-|a4-|h4d-)"
+    error_message: "Compact placement with DWS Flex is only supported for A3 Ultra, A4, and H4D machine types."

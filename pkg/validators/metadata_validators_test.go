@@ -1036,3 +1036,112 @@ func TestValuesMatch(t *testing.T) {
 		t.Error("ValuesMatch: identical lists should match")
 	}
 }
+
+func TestConditionalRegexValidator(t *testing.T) {
+	mockInfo := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{
+				Name:    "enable_placement",
+				Type:    cty.Bool,
+				Default: true,
+			},
+		},
+	}
+	modulereader.SetModuleInfo("test/module", "terraform", mockInfo)
+
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "test-module",
+						Source: "test/module",
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"machine_type": cty.StringVal("h4d-standard-192"),
+							"dws_flex": cty.ObjectVal(map[string]cty.Value{
+								"enabled": cty.True,
+							}),
+							"enable_placement": cty.True,
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := ConditionalRegexValidator{}
+	rule := modulereader.ValidationRule{
+		Validator: "conditional_regex",
+		Inputs: map[string]interface{}{
+			"triggers": map[string]interface{}{
+				"dws_flex.enabled": true,
+				"enable_placement": true,
+			},
+			"dependent": "machine_type",
+			"pattern":   "^(a3-ultragpu-|a4-|h4d-)",
+		},
+	}
+
+	// 1. Passes on supported machine type
+	t.Run("passes_on_supported_machine", func(t *testing.T) {
+		bp := baseBP
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	// 2. Fails on unsupported machine type (e.g. g4-standard-48)
+	t.Run("fails_on_unsupported_machine", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.StringVal("g4-standard-48"),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.True,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected error on unsupported machine, got nil")
+		}
+		if !strings.Contains(err.Error(), "must match pattern") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+
+	// 3. Passes on unsupported machine type if dws_flex is disabled
+	t.Run("passes_on_unsupported_machine_if_dws_flex_disabled", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.StringVal("g4-standard-48"),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.False,
+			}),
+			"enable_placement": cty.True,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	// 4. Passes on unsupported machine type if placement is disabled
+	t.Run("passes_on_unsupported_machine_if_placement_disabled", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"machine_type": cty.StringVal("g4-standard-48"),
+			"dws_flex": cty.ObjectVal(map[string]cty.Value{
+				"enabled": cty.True,
+			}),
+			"enable_placement": cty.False,
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

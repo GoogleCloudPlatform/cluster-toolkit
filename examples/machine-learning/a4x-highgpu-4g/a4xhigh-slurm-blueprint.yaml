@@ -17,6 +17,9 @@
 blueprint_name: a4xhigh-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   deployment_name: ## Deployment name ##
   project_id: ## Project name ##
   region: ## A4X Reservation Region ##
@@ -25,7 +28,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20260218
+    image: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260522
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
@@ -181,8 +184,8 @@ deployment_groups:
               cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               nvidia_packages:
-              - cuda-toolkit-12-8
-              - datacenter-gpu-manager-4-cuda12
+              - cuda-toolkit-13-0
+              - datacenter-gpu-manager-4-cuda13
               - datacenter-gpu-manager-4-dev
             tasks:
             - name: Download NVIDIA repository package
@@ -239,15 +242,6 @@ deployment_groups:
                 name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
-      # The script below is intended to bypass the packer script that fails on Ubuntu 24.04 images
-      # Once Ubuntu 24.04 no longer sets ${HOSTNAME} to the FQDN, this can be removed
-      - type: shell
-        destination: stop_packer_early.sh
-        content: |
-          #!/bin/bash
-          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
-          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
 
 - group: image
   modules:
@@ -616,18 +610,7 @@ deployment_groups:
         ThreadsPerCore: 1
       additional_networks:
         $(concat(
-          [{
-            network=null,
-            subnetwork=a4x-slurm-net-1.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip="",
-            stack_type=null,
-            access_config=[],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+          a4x-slurm-net-1.instance_additional_networks,
           a4x-slurm-rdma-net.subnetwork_interfaces
         ))
 

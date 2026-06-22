@@ -17,6 +17,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
@@ -219,6 +220,16 @@ For this example the following is needed in the selected region:
   needed for the `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
+
+### [hpc-slurm-ha.yaml] ![community-badge]
+
+Creates a highly available (HA) Slurm cluster. This setup includes a primary controller
+and a backup controller to ensure control plane resilience. If the primary controller
+instance fails, the Slurm services can be failed over to the backup controller, minimizing
+downtime. This blueprint configures the necessary shared storage and network settings to
+support the HA configuration.
+
+[hpc-slurm-ha.yaml]: ./hpc-slurm-ha.yaml
 
 ### [hpc-enterprise-slurm.yaml] ![core-badge]
 
@@ -575,6 +586,11 @@ The blueprint contains the following:
 * A `batch-job-template` that builds a Batch job to execute the WRF job.
 * A `batch-login` VM that can be used to test and submit the Batch job.
 
+> **_NOTE:_** **Multi-Node Architecture:** This blueprint provisions a single login node and a multi-node compute cluster (defaulting to 2 compute nodes).
+>
+> * **Login Node:** A single VM instance used to install software, stage data, and submit jobs.
+> * **Compute Nodes:** Dynamically provisioned when the job is submitted, based on the `batch-job` module settings.
+
 **Usage instructions:**
 
 1. Spack install
@@ -862,7 +878,7 @@ For this example the following is needed in the selected region:
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
-of an existing image, `hpc-rocky-linux-8` in the case of this example.
+of an existing image, `hpc-rocky-linux-9` in the case of this example.
 
 The blueprint contains 3 groups:
 

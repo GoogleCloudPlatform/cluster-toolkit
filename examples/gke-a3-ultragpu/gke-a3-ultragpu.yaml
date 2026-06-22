@@ -171,7 +171,7 @@ deployment_groups:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
       additional_networks:
-        $(concat(gke-a3-ultra-net-1.additional_networks,
+        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
       # Cluster versions cannot be updated through the toolkit after creation
@@ -244,7 +244,7 @@ deployment_groups:
         specific_reservations:
         - name: $(vars.reservation)
       additional_networks:
-        $(concat(gke-a3-ultra-net-1.additional_networks,
+        $(concat(gke-a3-ultra-net-1.instance_additional_networks,
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
@@ -305,6 +305,7 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
+      name: gcsfuse-fio-job
       security_context:  # to make sure the job have enough access to install the fio packages
       - key: runAsUser
         value: 0

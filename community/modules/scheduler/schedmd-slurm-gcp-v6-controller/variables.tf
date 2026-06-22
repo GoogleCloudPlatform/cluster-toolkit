@@ -87,6 +87,32 @@ variable "bucket_dir" {
 # CONTROLLER: CLOUD # See variables_controller_instance.tf for the controller instance variables.
 #####################
 
+variable "enable_backup_controller" {
+  description = "Enables a secondary backup controller for High Availability."
+  type        = bool
+  default     = false
+  validation {
+    condition     = var.enable_backup_controller == false || (anytrue([for s in var.network_storage : s.local_mount == "/var/spool/slurm"]) && var.controller_state_disk == null && length(var.static_ips) >= 2 && var.cloudsql != null)
+    error_message = "When enable_backup_controller is true, controller_state_disk must be set to null, network_storage must contain a shared mount for '/var/spool/slurm' to sync state, at least 2 static_ips must be provided, and an external database (cloudsql) must be configured."
+  }
+}
+
+variable "controller_ha_type" {
+  type        = string
+  default     = "zonal"
+  description = "Type of Managed Instance Group for controllers: 'zonal' or 'regional'."
+  validation {
+    condition     = contains(["zonal", "regional"], var.controller_ha_type)
+    error_message = "The controller_ha_type must be either 'zonal' or 'regional'."
+  }
+}
+
+variable "backup_zone" {
+  description = "Zone for the backup controller. If null, it will be placed in the same region, potentially different zone."
+  type        = string
+  default     = null
+}
+
 #########
 # LOGIN #
 #########

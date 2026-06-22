@@ -20,6 +20,9 @@
 
 vars:
   # Define overall deployment variables
+  # [RECOMMENDED] Enable Slurm Native Authentication. MUNGE is deprecating and scheduled for complete removal on July 31, 2026.
+  # For upgrade instructions, see docs/slurm-native-auth-migration-guide.md.
+  enable_slurm_auth: true
   deployment_name: af3-slurm         # adjust if necessary
   project_id:                        # supply existing project id
   region: us-central1                # supply region with C3D-highmem and GPU capacity

@@ -23,6 +23,11 @@ import (
 	"github.com/fatih/color"
 )
 
+const (
+	successExitCode = 0
+	failureExitCode = 1
+)
+
 var (
 	infolog      *log.Logger
 	errorlog     *log.Logger
@@ -63,15 +68,25 @@ func Error(f string, a ...any) {
 	errorlog.Printf("%s: %s", formatTs(), msg)
 }
 
-// Fatal prints message to stderr and ends the program
+// Fatal prints message to stderr and ends the program with exit code 1
 func Fatal(f string, a ...any) {
-	defer Exit(1)
+	ExitWithCode(failureExitCode, f, a...)
+}
+
+// ExitWithCode ends the program with the specified exit code. It prints a message to stdout if exitCode is 0, or stderr otherwise.
+func ExitWithCode(exitCode int, f string, a ...any) {
+	defer Exit(exitCode)
 
 	msg := fmt.Sprintf(f, a...)
-	fatallog.Printf("%s: %s", formatTs(), msg)
+
+	if exitCode == successExitCode {
+		infolog.Printf("%s: %s", formatTs(), msg)
+	} else {
+		fatallog.Printf("%s: %s", formatTs(), msg)
+	}
 
 	// Execute the hook if it is registered
 	if FatalHook != nil {
-		FatalHook(1)
+		FatalHook(exitCode)
 	}
 }

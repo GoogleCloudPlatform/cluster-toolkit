@@ -1,0 +1,5 @@
+pre-commit
+ansible
+pyyaml
+google-cloud-build
+argparse

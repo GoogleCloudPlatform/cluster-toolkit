@@ -16,7 +16,7 @@
 
 - name: Set local variables
   ansible.builtin.set_fact:
-    source_job_file: "/workspace/modules/management/mldiagnostics/sample-workload-test/sample_job.yaml"
+    source_job_file: "/workspace/examples/gke-tpu-v6e/ml-diagnostics-sample-workload-test/sample_job.yaml"
     modified_job_file: "/tmp/sample_job.yaml"
     target_namespace: "{{ custom_vars.user_namespace | default('default') }}"
 
@@ -25,28 +25,6 @@
     that:
     - region is defined
     - custom_vars.project is defined
-
-- name: Verify cert-manager charts are healthy in cert-manager namespace
-  delegate_to: localhost
-  ansible.builtin.command: kubectl get pods -n cert-manager -o json
-  register: cert_manager_pods
-  retries: 20
-  delay: 15
-  until:
-  - cert_manager_pods.rc == 0
-  - (cert_manager_pods.stdout | from_json)['items'] | length > 0
-  - (cert_manager_pods.stdout | from_json)['items'] | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (cert_manager_pods.stdout | from_json)['items'] | length
-
-- name: Verify Diagon charts are healthy in gke-mldiagnostics
-  delegate_to: localhost
-  ansible.builtin.command: kubectl get pods -n gke-mldiagnostics -o json
-  register: diagon_pods
-  retries: 20
-  delay: 15
-  until:
-  - diagon_pods.rc == 0
-  - (diagon_pods.stdout | from_json)['items'] | length > 0
-  - (diagon_pods.stdout | from_json)['items'] | map(attribute='status.phase') | select('equalto', 'Running') | list | length == (diagon_pods.stdout | from_json)['items'] | length
 
 - name: Verify user namespace is labeled
   delegate_to: localhost

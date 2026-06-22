@@ -49,6 +49,12 @@ vars:
   # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
   enable_pathways_for_tpus: true
 
+  # Accelerator type for Kueue configuration
+  accelerator_type: tpu7x
+
+  # Enable Dynamic Slicing for TPUs
+  enable_dynamic_slicing_for_tpus: false
+
   # Kueue configuration
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
@@ -174,25 +180,12 @@ deployment_groups:
       enable_managed_lustre_csi: true  # enable Managed Lustre for the cluster
       enable_filestore_csi: true # enable Filestore for the cluster
       configure_workload_identity_sa: true
+      enable_ml_diagnostics: true
       namespace: $(vars.user_namespace)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-tpu-7x-net-1.network_name,
-            subnetwork=gke-tpu-7x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-tpu-7x-net-1.instance_additional_networks)
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.35."
@@ -202,6 +195,7 @@ deployment_groups:
         start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+      enable_slice_controller: $(vars.enable_dynamic_slicing_for_tpus)
     outputs: [instructions]
 
   - id: workload_policy
@@ -224,26 +218,12 @@ deployment_groups:
       machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-tpu-7x-net-1.network_name,
-            subnetwork=gke-tpu-7x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }]
-        ))
+      additional_networks: $(gke-tpu-7x-net-1.instance_additional_networks)
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
-    outputs: [instructions]
+    outputs: [instructions, machine_type, accelerator_topology_mode]
 
   # # --- MANAGED LUSTRE ADDITIONS ---
   # # Private Service Access (PSA) requires the compute.networkAdmin role which is
@@ -296,20 +276,18 @@ deployment_groups:
     settings:
       kueue:
         install: true
+        enable_dynamic_slicing_for_tpus: $(vars.enable_dynamic_slicing_for_tpus)
+        accelerator_topology_mode: $(gke-tpu-7x-pool.accelerator_topology_mode)
+        machine_type: $(gke-tpu-7x-pool.machine_type)
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-7x-pool.node_count_static * gke-tpu-7x-pool.tpu_chips_per_node)
-          accelerator_type: $(gke-tpu-7x-pool.tpu_accelerator_type)
+          accelerator_type: $(vars.accelerator_type)
           namespace: $(vars.user_namespace)
       jobset:
         install: true
       cert_manager:
         install: true
-
-  - id: gke-ml-diagnostics
-    source: modules/management/mldiagnostics
-    use: [gke-tpu-7x-cluster, workload-manager-install]
-    outputs: [instructions]
 
   # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
   # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
