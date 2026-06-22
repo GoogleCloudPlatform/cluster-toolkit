@@ -559,5 +559,5 @@ variable "dranet_device_class_name" {
 variable "dranet_allocation_mode" {
   type        = string
   default     = "All"
-  description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'Exact')."
+  description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
 }
