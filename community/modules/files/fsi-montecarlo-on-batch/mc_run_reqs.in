@@ -1,9 +1,0 @@
-absl-py
-avro
-google-auth
-google-cloud
-google-cloud-batch
-google-cloud-pubsub
-google-cloud-bigquery
-yfinance
-PyYAML
