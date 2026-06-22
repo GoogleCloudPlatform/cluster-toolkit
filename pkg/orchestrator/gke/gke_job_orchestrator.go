@@ -909,7 +909,7 @@ func (g *GKEOrchestrator) resolveTopology(job *orchestrator.JobDefinition) (stri
 
 	logging.Info("Auto-discovering Topology for %s...", job.MachineType)
 	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
-	output, err := g.queryDiscoveredTopologies(accelLabel)
+	output, err := g.queryDiscoveredTopologies(accelLabel, job.MachineType)
 	if err != nil {
 		return "", false, err
 	}
@@ -1047,8 +1047,17 @@ func (g *GKEOrchestrator) parseTopologies(output string) map[string]bool {
 	return topologies
 }
 
-func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string) (string, error) {
+func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineType string) (string, error) {
 	selector := fmt.Sprintf("cloud.google.com/gke-tpu-accelerator=%s", accelLabel)
+
+	var nodePoolTopologies []string
+	for _, np := range g.clusterDesc.NodePools {
+		if strings.EqualFold(np.Config.MachineType, machineType) {
+			if np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
+				nodePoolTopologies = append(nodePoolTopologies, np.PlacementPolicy.TpuTopology)
+			}
+		}
+	}
 
 	res := g.executor.ExecuteCommand("kubectl", "get", "resourceflavors.kueue.x-k8s.io", "-o", "jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 	output := strings.TrimSpace(res.Stdout)
@@ -1060,7 +1069,11 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string) (string, 
 		}
 		output = strings.TrimSpace(res.Stdout)
 	}
-	return output, nil
+
+	if len(nodePoolTopologies) > 0 {
+		output = strings.Join(nodePoolTopologies, "\n") + "\n" + output
+	}
+	return strings.TrimSpace(output), nil
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
