@@ -386,3 +386,44 @@ func TestExtractShortReservationName(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractReservationOwnerProject(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "my-res",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res",
+			want:  "my-project",
+		},
+		{
+			input: "projects/123456789/reservations/my-res",
+			want:  "123456789",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "my-project",
+		},
+		{
+			input: "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a/reservations/my-res",
+			want:  "my-project",
+		},
+		{
+			input: "my-project/my-res",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractReservationOwnerProject(tt.input)
+			if got != tt.want {
+				t.Errorf("extractReservationOwnerProject(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
