@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"hpc-toolkit/pkg/config"
+
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +34,14 @@ func TestUserIdCmd(t *testing.T) {
 	// Reset global state to ensure clean slates
 	userConfigExists = false
 
+	// Mock the ID generator to ensure a predictable user ID is returned
+	originalGen := config.GenerateUniqueIDFunc
+	config.GenerateUniqueIDFunc = func() string {
+		return "mocked-test-id-12345"
+	}
+	// Ensure the original generator gets restored after the test finishes
+	defer func() { config.GenerateUniqueIDFunc = originalGen }()
+
 	tests := []struct {
 		name           string
 		args           []string
@@ -42,7 +52,7 @@ func TestUserIdCmd(t *testing.T) {
 			name:           "success_with_no_arguments",
 			args:           []string{},
 			wantErr:        false,
-			expectedOutput: "User ID:",
+			expectedOutput: "mocked-test-id-12345", // Now testing for a specific non-empty ID
 		},
 		{
 			name:    "failure_with_unexpected_arguments",

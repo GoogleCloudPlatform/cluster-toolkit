@@ -22,11 +22,12 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(userIdCmd)
+	// Add the show-id command as a child of telemetry
+	telemetryCmd.AddCommand(userIdCmd)
 }
 
 var userIdCmd = &cobra.Command{
-	Use:   "get-user-id",
+	Use:   "show-id",
 	Short: "Print your User ID (used in Toolkit Telemetry)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -37,7 +38,7 @@ var userIdCmd = &cobra.Command{
 			userConfigExists = true
 		}
 
-		cmd.Printf("User ID: %s\n", config.GetPersistentUserId())
+		cmd.Printf("%s\n", config.GetPersistentUserId())
 		return nil
 	},
 }
