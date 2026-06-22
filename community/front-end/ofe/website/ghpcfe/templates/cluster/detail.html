@@ -78,7 +78,10 @@
   {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" or cluster.status == "n" %}
   <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
   <script>
-    var refreshIntervalId = setInterval(function () {
+    // Poll with a recursive setTimeout (rather than setInterval) so the next
+    // request is only scheduled after the previous one completes, avoiding
+    // overlapping requests if the server is slow.
+    function pollClusterStatus() {
       $.ajax({
         url: "{% url 'backend-cluster-status' object.id %}",
         type: "GET",
@@ -87,15 +90,18 @@
           // when the cluster becomes ready, stop polling and reload the page
           // so it renders the fully-ready state
           if (data.status === "r") {
-            clearInterval(refreshIntervalId);
             location.reload();
+          } else {
+            setTimeout(pollClusterStatus, 5000);
           }
         },
         error: function (xhr, status, error) {
           console.log("Error refreshing data:", error);
+          setTimeout(pollClusterStatus, 5000);
         }
       });
-    }, 5000);
+    }
+    pollClusterStatus();
   </script>
   {% endif %}
 
