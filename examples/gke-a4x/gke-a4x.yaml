@@ -76,7 +76,6 @@ vars:
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
 
-
 deployment_groups:
 - group: primary
   modules:
@@ -105,37 +104,6 @@ deployment_groups:
         - protocol: udp
           ports: ["0-65535"]
         - protocol: icmp
-
-  - id: gke-a4x-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-1
-      ips_per_nat: 6
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.64.0/18
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-
-  - id: gke-a4x-rdma-net
-    source: modules/network/gpu-rdma-vpc
-    settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
-      network_routing_mode: REGIONAL
-      subnetworks_template:
-        name_prefix: $(vars.deployment_name)-rdma-sub
-        count: 4
-        ip_range: 192.168.128.0/18
-        region: $(vars.region)
 
   - id: node_pool_service_account
     source: modules/project/service-account
@@ -207,22 +175,6 @@ deployment_groups:
         start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-a4x-net-1.network_name,
-            subnetwork=gke-a4x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
-         gke-a4x-rdma-net.subnetwork_interfaces_gke
-        ))
     outputs: [instructions]
 
   # # --- MANAGED LUSTRE ADDITIONS ---
@@ -294,22 +246,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-a4x-net-1.network_name,
-            subnetwork=gke-a4x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
-         gke-a4x-rdma-net.subnetwork_interfaces_gke
-        ))
+      enable_dranet: true
       num_node_pools: $(vars.num_node_pools)
     outputs: [instructions]
 
