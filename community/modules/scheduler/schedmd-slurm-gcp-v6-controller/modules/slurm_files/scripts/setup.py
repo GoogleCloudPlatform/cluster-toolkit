@@ -735,6 +735,59 @@ def setup_cloud_ops() -> None:
     file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
     file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
 
+    lkp = lookup()
+    enable_openmetrics = lkp.cfg.get("enable_openmetrics", False)
+    
+    if lkp.is_controller and enable_openmetrics and util.slurm_version_gte(lkp.slurm_version, "25.11"):
+        if "metrics" not in file or not isinstance(file["metrics"], dict):
+            file["metrics"] = {}
+        metrics = file["metrics"]
+        if "receivers" not in metrics or not isinstance(metrics["receivers"], dict):
+            metrics["receivers"] = {}
+        if "service" not in metrics or not isinstance(metrics["service"], dict):
+            metrics["service"] = {}
+        service = metrics["service"]
+        if "pipelines" not in service or not isinstance(service["pipelines"], dict):
+            service["pipelines"] = {}
+            
+        port = str(lkp.cfg.slurm_control_host_port).split('-')[0]
+        
+        file["metrics"]["receivers"]["slurm_prometheus"] = {
+            "type": "prometheus",
+            "config": {
+                "scrape_configs": [
+                    {
+                        "job_name": "slurm-controller-jobs",
+                        "metrics_path": "/metrics/jobs",
+                        "scrape_interval": "60s",
+                        "static_configs": [{"targets": [f"localhost:{port}"]}]
+                    },
+                    {
+                        "job_name": "slurm-controller-nodes",
+                        "metrics_path": "/metrics/nodes",
+                        "scrape_interval": "60s",
+                        "static_configs": [{"targets": [f"localhost:{port}"]}]
+                    },
+                    {
+                        "job_name": "slurm-controller-partitions",
+                        "metrics_path": "/metrics/partitions",
+                        "scrape_interval": "120s",
+                        "static_configs": [{"targets": [f"localhost:{port}"]}]
+                    },
+                    {
+                        "job_name": "slurm-controller-scheduler",
+                        "metrics_path": "/metrics/scheduler",
+                        "scrape_interval": "60s",
+                        "static_configs": [{"targets": [f"localhost:{port}"]}]
+                    }
+                ]
+            }
+        }
+        
+        file["metrics"]["service"]["pipelines"]["prometheus_pipeline"] = {
+            "receivers": ["slurm_prometheus"]
+        }
+
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 

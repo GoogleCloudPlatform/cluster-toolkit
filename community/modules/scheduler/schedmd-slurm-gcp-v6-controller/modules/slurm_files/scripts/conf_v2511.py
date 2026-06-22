@@ -49,6 +49,10 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
         if enable_health_check_start_only:
             conf_options["HealthCheckNodeState"] = "START_ONLY"
 
+        # Enable native OpenMetrics (Prometheus) telemetry
+        enable_openmetrics = self.lkp.cfg.get("enable_openmetrics", False)
+        if enable_openmetrics:
+            conf_options["MetricsType"] = "metrics/openmetrics"
         return conf_options
 
 
