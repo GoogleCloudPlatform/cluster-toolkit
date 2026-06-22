@@ -198,7 +198,7 @@ func getProjectNumber(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
 	projectName, err := fetchProjectName(ctx, projectID)
@@ -310,7 +310,7 @@ func getBillingAccountId(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
 	billingAccount, err := getProjectBillingAccount(ctx, projectID)
