@@ -125,6 +125,29 @@ To enable High Availability:
       mount_options: _netdev,hard,intr
 ```
 
+### Health Checks and Autohealing
+
+When `enable_backup_controller` is `true`, instances are managed by a Managed Instance Group (MIG) with an autohealing policy using a Google Compute Health Check. By default, a TCP health check probes port `6818` with `initial_delay_sec = 900` to allow time for controller startup.
+
+You can customize this configuration using the `health_check` settings block.
+
+#### Tuning Guidelines
+* **Slow Startup (large state/long startup scripts)**: Increase `initial_delay_sec` (e.g. `1200+`) to prevent premature restarts.
+* **Fast Failover**: Lower `initial_delay_sec` (e.g. `600`), `check_interval_sec`, and `timeout_sec`. Note: `timeout_sec` must be $\le$ `check_interval_sec`.
+* **Shared VPC**: The health check firewall rule must be created in the host project. If permissions are restricted or rules are pre-configured, set `create_firewall_rule` to `false` to disable automatic creation. If configuring firewall rules manually, you must allow ingress traffic from GCP health check prober IP ranges (`35.191.0.0/16` and `130.211.0.0/22`) to the controllers on the health check port.
+* **HTTP Health Checks**: Set `type` to `"http"` and configure `request_path` (e.g. `"/healthz"`) to check slurmctld endpoints. See [slurmctld HTTP server](https://slurm.schedmd.com/slurmctld.html#SECTION_HTTP-server) for more details.
+
+Example configuration overrides:
+
+```yaml
+    health_check:
+      type: "tcp"
+      initial_delay_sec: 1200
+      check_interval_sec: 20
+      timeout_sec: 10
+      create_firewall_rule: true
+```
+
 ### Backward Compatibility
 
 The HA feature is **opt-in**. If `enable_backup_controller` is set to `false`
@@ -370,6 +393,8 @@ limitations under the License.
 | [google-beta_google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
 | [google_compute_address.controller_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
+| [google_compute_firewall.health_check_firewall_rule](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
+| [google_compute_health_check.controller_health_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_health_check) | resource |
 | [google_compute_instance_group_manager.controller_zonal_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_group_manager) | resource |
 | [google_compute_per_instance_config.controller_zonal_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_per_instance_config) | resource |
 | [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
@@ -380,6 +405,7 @@ limitations under the License.
 | [google_storage_bucket_iam_member.legacy_readers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_iam_member.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_object.partition_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_compute_subnetwork.controller_subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 | [google_project.controller_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
@@ -439,6 +465,7 @@ limitations under the License.
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The only available flag is `trace_api` | `map(bool)` | `{}` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | `""` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
+| <a name="input_health_check"></a> [health\_check](#input\_health\_check) | Health check and autohealing configuration for controller HA instance groups. | <pre>object({<br/>    type                 = optional(string, "tcp")<br/>    port                 = optional(number, 6818)<br/>    initial_delay_sec    = optional(number, 900)<br/>    check_interval_sec   = optional(number, 60)<br/>    timeout_sec          = optional(number, 10)<br/>    healthy_threshold    = optional(number, 2)<br/>    unhealthy_threshold  = optional(number, 5)<br/>    enable_logging       = optional(bool, true)<br/>    request_path         = optional(string, "/healthz")<br/>    create_firewall_rule = optional(bool, true)<br/>    port_name            = optional(string, "slurmctld")<br/>  })</pre> | `{}` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted.<br/><br/>For more information on creating custom images that comply with Slurm on GCP<br/>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br/>  "family": "slurm-gcp-6-12-hpc-rocky-linux-9",<br/>  "project": "schedmd-slurm-public"<br/>}</pre> | no |
 | <a name="input_instance_image_custom"></a> [instance\_image\_custom](#input\_instance\_image\_custom) | A flag that designates that the user is aware that they are requesting<br/>to use a custom and potentially incompatible image for this Slurm on<br/>GCP module.<br/><br/>If the field is set to false, only the compatible families and project<br/>names will be accepted.  The deployment will fail with any other image<br/>family or name.  If set to true, no checks will be done.<br/><br/>See: https://goo.gle/hpc-slurm-images | `bool` | `false` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | DEPRECATED: Instance template can not be specified for controller. | `string` | `null` | no |
