@@ -37,6 +37,7 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
+  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   args:
@@ -51,7 +52,7 @@ steps:
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-debian.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:

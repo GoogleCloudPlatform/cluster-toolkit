@@ -1,0 +1,110 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Set Triage Agent Configuration
+  ansible.builtin.set_fact:
+    triage_gcs_bucket: "g-ift-agent-bucket"
+    triage_project_id: "508417052821"
+    triage_invoker_sa: "triage-invoker@hpc-toolkit-dev.iam.gserviceaccount.com"
+    triage_cloud_run_url: "https://failure-triage-agent-508417052821.us-central1.run.app"
+
+- name: Check Triage Agent Prerequisites
+  delegate_to: localhost
+  changed_when: false
+  args:
+    executable: /bin/bash
+  ansible.builtin.shell: |
+    BUILD_ID="{{ full_build_id | default('') }}"
+
+    if [ -z "$BUILD_ID" ]; then
+      echo "SKIPPED: No full_build_id provided. Append full_build_id=... to extra-vars to trigger."
+      exit 0
+    fi
+
+    if ! gcloud storage ls gs://{{ triage_gcs_bucket }}/ENABLE_TRIAGE_AGENT >/dev/null 2>&1; then
+      echo "SKIPPED: Failure Triage Agent is currently disabled (no ENABLE_TRIAGE_AGENT flag found in GCS)."
+      exit 0
+    fi
+
+    echo "PROCEED: Agent is enabled and build ID is present."
+  register: triage_init
+
+- name: Execute Triage Agent Pipeline
+  when: "'PROCEED' in triage_init.stdout"
+  vars:
+    triage_build_id: "{{ full_build_id | default('') }}"
+  block:
+  - name: Trigger Failure Triage Agent
+    delegate_to: localhost
+    changed_when: false
+    args:
+      executable: /bin/bash
+    ansible.builtin.shell: |
+      TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="{{ triage_invoker_sa }}" --audiences="{{ triage_cloud_run_url }}" 2>/dev/null)
+      if [ -z "$TOKEN" ]; then
+        echo "Failed to get identity token." >&2
+        exit 1
+      fi
+
+      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "{{ triage_cloud_run_url }}/trigger" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"build_id": "{{ triage_build_id }}", "project_id": "{{ triage_project_id }}"}')
+
+      if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "202" ]; then
+        echo "Failed to trigger agent. HTTP Status: $HTTP_STATUS" >&2
+        exit 1
+      fi
+
+  - name: Wait for Analysis to Complete
+    delegate_to: localhost
+    changed_when: false
+    args:
+      executable: /bin/bash
+    ansible.builtin.shell: |
+      sleep 300
+      for i in {1..30}; do
+        STATE_JSON=$(gcloud storage cat "gs://{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json" 2>/dev/null || echo '{}')
+        STATUS=$(echo "$STATE_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', ''))" 2>/dev/null)
+        if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+          if [ "$STATUS" = "completed" ]; then
+            sleep 300
+            gcloud storage cat "gs://{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json" 2>/dev/null || echo '{}'
+          else
+            echo "$STATE_JSON"
+          fi
+          exit 0
+        fi
+        sleep 60
+      done
+      exit 1
+    register: agent_state
+    ignore_errors: true
+
+  - name: Print Triage Report
+    delegate_to: localhost
+    ansible.builtin.debug:
+      msg: |
+        {% if agent_state.failed or (agent_state.stdout | default('{}', true) | from_json).status | default('') != 'completed' %}
+        Failure Triage Agent testing did not complete in time or failed internally.
+
+        State File Link:
+        https://console.cloud.google.com/storage/browser/_details/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
+        {% else %}
+        TRIAGE EXECUTIVE SUMMARY:
+        {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') }}
+
+        Full forensic report available at:
+        https://storage.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
+        {% endif %}

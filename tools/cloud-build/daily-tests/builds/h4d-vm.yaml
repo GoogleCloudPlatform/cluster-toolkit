@@ -35,13 +35,13 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
+  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=4"
   - "MACHINE_TYPE=h4d-highmem-192-lssd"
   - "INSTANCE_PREFIX=h4dsp"
-  - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/h4doptions.txt"
   - "ENABLE_SPOT_FALLBACK=true"
   args:
@@ -80,7 +80,7 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
         --user=sa_106486320838376751393 \
-        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="enable_spot=$${ENABLE_SPOT}" \
         --extra-vars="@$${H4D_VARS_FILE}"

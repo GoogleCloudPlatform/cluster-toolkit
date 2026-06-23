@@ -40,13 +40,13 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
+  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "MACHINE_TYPE=a3-highgpu-8g"
   - "NUM_NODES=4"
   - "INSTANCE_PREFIX=a3hsp"
   - "PROJECT_ID=$PROJECT_ID"
-  - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a3hoptions.txt"
   - "ENABLE_SPOT_FALLBACK=true"
   args:
@@ -83,7 +83,7 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
-      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} "\
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID "\
       --extra-vars="region=$${REGION} zone=$${ZONE}"\
       --extra-vars="enable_spot=$${ENABLE_SPOT} "\
       --extra-vars="tcpx_kernel_login=$${TCPX_KERNEL_LOGIN} tcpx_kernel_password=$${TCPX_KERNEL_PASSWORD} keyserver_ubuntu_key=$${KEYSERVER_UBUNTU_KEY} "\
