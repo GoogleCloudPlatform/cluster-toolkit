@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import os
 import sys
@@ -165,10 +165,12 @@ def mount_fstab(mounts: list[NSMount], log):
         log.info(f"Mount point '{path}' was mounted.")
         if mount_owner and ":" in mount_owner:
             user, group = mount_owner.split(":", 1)
+            uid: Union[int, str]
             try:
                 uid = int(user)
             except ValueError:
                 uid = user
+            gid: Union[int, str]
             try:
                 gid = int(group)
             except ValueError:
