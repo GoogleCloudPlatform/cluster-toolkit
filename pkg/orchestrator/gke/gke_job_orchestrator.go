@@ -1759,7 +1759,10 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	case "reservation":
 		nodeSelector["cloud.google.com/reservation-name"] = extractShortReservationName(job.GKENAPReservation)
 		if ownerProj := extractReservationOwnerProject(job.GKENAPReservation); ownerProj != "" {
-			nodeSelector["cloud.google.com/reservation-owner-project"] = ownerProj
+			nodeSelector["cloud.google.com/reservation-project"] = ownerProj
+		}
+		if subblock := extractReservationSubblock(job.GKENAPReservation); subblock != "" {
+			nodeSelector["cloud.google.com/reservation-subblocks"] = subblock
 		}
 	}
 

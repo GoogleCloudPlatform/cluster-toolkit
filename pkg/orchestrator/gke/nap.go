@@ -126,28 +126,6 @@ func extractShortReservationName(resName string) string {
 	return parts[len(parts)-1]
 }
 
-// extractReservationOwnerProject extracts the owner project from a GCE reservation resource URI.
-// E.g.,
-// - "projects/my-project/reservations/my-res" -> "my-project"
-// - "projects/123456789/reservations/my-res" -> "123456789"
-// - "my-res" -> ""
-func extractReservationOwnerProject(resName string) string {
-	resName = strings.TrimSuffix(resName, "/")
-	if !strings.Contains(resName, "/") {
-		return ""
-	}
-
-	parts := strings.Split(resName, "/")
-
-	for i, part := range parts {
-		if part == "projects" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-
-	return ""
-}
-
 func isKnownGKEAccelerator(key string) bool {
 	switch key {
 	case "nvidia-tesla-t4", "nvidia-tesla-v100":
@@ -243,4 +221,41 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 		}
 	}
 	return nil
+}
+
+// extractReservationSubblock extracts the subblock name from a GCE reservation resource URI or reservation path if it exists.
+// E.g.,
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "subblock-2"
+// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "subblock-2"
+// - "my-res" -> ""
+func extractReservationSubblock(resName string) string {
+	resName = strings.TrimSuffix(resName, "/")
+	if !strings.Contains(resName, "/") {
+		return ""
+	}
+	parts := strings.Split(resName, "/")
+	for i, part := range parts {
+		if part == "reservationSubBlocks" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+// extractReservationOwnerProject extracts the owner project from a GCE reservation resource URI if it exists.
+// E.g.,
+// - "projects/my-project/reservations/my-res" -> "my-project"
+// - "my-res" -> ""
+func extractReservationOwnerProject(resName string) string {
+	resName = strings.TrimSuffix(resName, "/")
+	if !strings.Contains(resName, "/") {
+		return ""
+	}
+	parts := strings.Split(resName, "/")
+	for i, part := range parts {
+		if part == "projects" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
 }
