@@ -387,6 +387,47 @@ func TestExtractShortReservationName(t *testing.T) {
 	}
 }
 
+func TestExtractReservationSubblock(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "my-res",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "subblock-2",
+		},
+		{
+			input: "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "subblock-2",
+		},
+		{
+			input: "nvidia-gb300-1elqwl23xva0f/reservationBlocks/nvidia-gb300-1elqwl23xva0f-block-0001/reservationSubBlocks/nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
+			want:  "nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2/",
+			want:  "subblock-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractReservationSubblock(tt.input)
+			if got != tt.want {
+				t.Errorf("extractReservationSubblock(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractReservationOwnerProject(t *testing.T) {
 	tests := []struct {
 		input string
@@ -416,6 +457,14 @@ func TestExtractReservationOwnerProject(t *testing.T) {
 			input: "my-project/my-res",
 			want:  "",
 		},
+		{
+			input: "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/",
+			want:  "my-project",
+		},
 	}
 
 	for _, tt := range tests {
@@ -423,6 +472,51 @@ func TestExtractReservationOwnerProject(t *testing.T) {
 			got := extractReservationOwnerProject(tt.input)
 			if got != tt.want {
 				t.Errorf("extractReservationOwnerProject(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractReservationBlock(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "my-res",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res",
+			want:  "",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "block-1",
+		},
+		{
+			input: "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+			want:  "block-1",
+		},
+		{
+			input: "nvidia-gb300-1elqwl23xva0f/reservationBlocks/nvidia-gb300-1elqwl23xva0f-block-0001/reservationSubBlocks/nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
+			want:  "nvidia-gb300-1elqwl23xva0f-block-0001",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2/",
+			want:  "block-1",
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1",
+			want:  "block-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractReservationBlock(tt.input)
+			if got != tt.want {
+				t.Errorf("extractReservationBlock(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

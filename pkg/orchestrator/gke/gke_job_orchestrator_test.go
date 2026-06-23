@@ -2472,7 +2472,72 @@ func TestSharedReservationManifestGeneration(t *testing.T) {
 	// Verify that the manifest contains the correct node selector labels
 	expectedLabels := []string{
 		"cloud.google.com/reservation-name: my-shared-res",
-		"cloud.google.com/reservation-owner-project: my-owner-project",
+		"cloud.google.com/reservation-project: my-owner-project",
+	}
+
+	for _, label := range expectedLabels {
+		if !strings.Contains(manifest, label) {
+			t.Errorf("Expected manifest to contain nodeSelector label %q, but it was missing.\nManifest:\n%s", label, manifest)
+		}
+	}
+}
+
+func TestSharedReservationSubblockManifestGeneration(t *testing.T) {
+	// Setup a minimal GKEOrchestrator
+	orc := &GKEOrchestrator{
+		projectID: "my-consumer-project",
+		clusterDesc: gkeCluster{
+			Locations: []string{"us-central1-a"},
+		},
+		napEnabled: true,
+		napLimits: map[string]int64{
+			"nvidia.com/gpu": 100,
+		},
+	}
+	// Mock machine capabilities fetcher to avoid actual API calls
+	orc.machineCapCache = map[string]MachineTypeCap{
+		"a3-highgpu-8g:us-central1-a": {
+			GuestCpus: 208,
+			MemoryMb:  1884160,
+			Accelerators: []struct {
+				Count int    `json:"guestAcceleratorCount"`
+				Type  string `json:"guestAcceleratorType"`
+			}{
+				{Count: 8, Type: "nvidia-h100-80gb"},
+			},
+		},
+	}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:       "shared-res-subblock-job",
+		MachineType:        "a3-highgpu-8g",
+		ComputeType:        "a3-highgpu-8g",
+		ClusterLocation:    "us-central1-a",
+		GKENAPProvisioning: "reservation",
+		GKENAPReservation:  "projects/my-owner-project/reservations/my-shared-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Verify that the manifest contains the correct node selector labels, including subblock
+	expectedLabels := []string{
+		"cloud.google.com/reservation-name: my-shared-res",
+		"cloud.google.com/reservation-project: my-owner-project",
+		"cloud.google.com/reservation-blocks: block-1",
+		"cloud.google.com/reservation-subblocks: subblock-2",
 	}
 
 	for _, label := range expectedLabels {

@@ -100,52 +100,70 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 // - "projects/my-project/reservations/my-res" -> "my-res"
 // - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
 // - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
-func extractShortReservationName(resName string) string {
-	resName = strings.TrimSuffix(resName, "/")
-	if !strings.Contains(resName, "/") {
-		return resName
-	}
-
-	parts := strings.Split(resName, "/")
-
-	// Case 1: Full GCP URI containing ".../reservations/RESERVATION_NAME/..."
-	for i, part := range parts {
-		if part == "reservations" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-
-	// Case 2: Path containing ".../reservationBlocks/..." but not "reservations" prefix
-	for i, part := range parts {
-		if part == "reservationBlocks" && i > 0 {
-			return parts[i-1]
-		}
-	}
-
-	// Fallback: Return the last segment
-	return parts[len(parts)-1]
+type parsedReservation struct {
+	Project  string
+	Name     string
+	Block    string
+	Subblock string
 }
 
-// extractReservationOwnerProject extracts the owner project from a GCE reservation resource URI.
-// E.g.,
-// - "projects/my-project/reservations/my-res" -> "my-project"
-// - "projects/123456789/reservations/my-res" -> "123456789"
-// - "my-res" -> ""
-func extractReservationOwnerProject(resName string) string {
+func parseReservationURI(resName string) parsedReservation {
 	resName = strings.TrimSuffix(resName, "/")
+	var parsed parsedReservation
 	if !strings.Contains(resName, "/") {
-		return ""
+		parsed.Name = resName
+		return parsed
 	}
 
 	parts := strings.Split(resName, "/")
-
-	for i, part := range parts {
-		if part == "projects" && i+1 < len(parts) {
-			return parts[i+1]
+	for i := 0; i < len(parts); i++ {
+		switch parts[i] {
+		case "projects":
+			if i+1 < len(parts) {
+				parsed.Project = parts[i+1]
+			}
+		case "reservations":
+			if i+1 < len(parts) {
+				parsed.Name = parts[i+1]
+			}
+		case "reservationBlocks":
+			if i+1 < len(parts) {
+				parsed.Block = parts[i+1]
+			}
+		case "reservationSubBlocks":
+			if i+1 < len(parts) {
+				parsed.Subblock = parts[i+1]
+			}
 		}
 	}
 
-	return ""
+	// Fallback for name if "reservations" was not found in the path but it has slashes
+	if parsed.Name == "" && len(parts) > 0 {
+		// If it has reservationBlocks, the name is the one before it
+		for i, part := range parts {
+			if part == "reservationBlocks" && i > 0 {
+				parsed.Name = parts[i-1]
+				break
+			}
+		}
+		// If still empty, fallback to last element
+		if parsed.Name == "" {
+			parsed.Name = parts[len(parts)-1]
+		}
+	}
+
+	return parsed
+}
+
+// extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
+// It handles standard URIs, simple names, and paths containing reservationBlocks/reservationSubBlocks.
+// E.g.,
+// - "my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
+// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
+func extractShortReservationName(resName string) string {
+	return parseReservationURI(resName).Name
 }
 
 func isKnownGKEAccelerator(key string) bool {
@@ -243,4 +261,30 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 		}
 	}
 	return nil
+}
+
+// extractReservationSubblock extracts the subblock name from a GCE reservation resource URI or reservation path if it exists.
+// E.g.,
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "subblock-2"
+// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "subblock-2"
+// - "my-res" -> ""
+func extractReservationSubblock(resName string) string {
+	return parseReservationURI(resName).Subblock
+}
+
+// extractReservationOwnerProject extracts the owner project from a GCE reservation resource URI if it exists.
+// E.g.,
+// - "projects/my-project/reservations/my-res" -> "my-project"
+// - "my-res" -> ""
+func extractReservationOwnerProject(resName string) string {
+	return parseReservationURI(resName).Project
+}
+
+// extractReservationBlock extracts the block name from a GCE reservation resource URI or reservation path if it exists.
+// E.g.,
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "block-1"
+// - "my-res/reservationBlocks/block-1" -> "block-1"
+// - "my-res" -> ""
+func extractReservationBlock(resName string) string {
+	return parseReservationURI(resName).Block
 }
