@@ -53,6 +53,7 @@ locals {
     bucket_path                    = local.bucket_path
     enable_debug_logging           = var.enable_debug_logging
     extra_logging_flags            = var.extra_logging_flags
+    enable_openmetrics             = var.enable_openmetrics
     controller_state_disk          = var.controller_state_disk
 
     # storage
@@ -73,6 +74,7 @@ locals {
     task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
     task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
     cloud_parameters    = var.cloud_parameters
+    experimental        = var.experimental
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -188,6 +190,7 @@ locals {
     "tools/task-prolog",
     "conf.py",
     "conf_v2411.py",
+    "conf_v2511.py",
     "file_cache.py",
     "get_tpu_vmcount.py",
     "job_submit.lua.tpl",
@@ -214,6 +217,7 @@ locals {
     "tools/task-prolog",
     "conf.py",
     "conf_v2411.py",
+    "conf_v2511.py",
     "file_cache.py",
     "get_tpu_vmcount.py",
     "job_submit.lua.tpl",

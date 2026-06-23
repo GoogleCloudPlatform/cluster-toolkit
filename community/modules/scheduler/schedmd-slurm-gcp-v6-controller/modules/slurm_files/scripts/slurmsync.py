@@ -47,7 +47,6 @@ from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
-import conf_v2411
 import watch_delete_vm_op
 import repair
 
@@ -467,10 +466,7 @@ def reconfigure_slurm():
     util.update_config(cfg_new)
 
     if lookup().is_controller:
-        if util.slurm_version_gte(lookup().slurm_version, "25.05"):
-            conf.generate_configs_slurm_v2505(lookup())
-        else:
-            conf_v2411.generate_configs_slurm_v2411(lookup())
+        conf.get_generator(lookup()).generate_configs()
 
         log.info("Restarting slurmctld to make changes take effect.")
         try:
@@ -494,11 +490,7 @@ def reconfigure_slurm():
 
 
 def _generate_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
-
-    if util.slurm_version_gte(lkp.slurm_version, "25.05"):
-        return conf.gen_topology_yaml(lkp)
-    else:
-        return conf_v2411.gen_topology_conf(lkp)
+    return conf.get_generator(lkp).generate_topology_data()
 
 def update_topology(lkp: util.Lookup) -> None:
     updated, summary = _generate_topology(lkp) # type: ignore[attr-defined]

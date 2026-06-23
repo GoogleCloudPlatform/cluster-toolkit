@@ -33,6 +33,12 @@ variable "enable_debug_logging" {
   default     = false
 }
 
+variable "enable_openmetrics" {
+  description = "Enable native Prometheus OpenMetrics telemetry via Slurm and Google Cloud Ops Agent"
+  type        = bool
+  default     = false
+}
+
 variable "extra_logging_flags" {
   type        = map(bool)
   description = "The only available flag is `trace_api`"
@@ -377,6 +383,15 @@ variable "cloud_parameters" {
     tree_width              = optional(number)
     prolog_flags            = optional(string)
     switch_type             = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
+variable "experimental" {
+  description = "Experimental Slurm settings. These features are subject to change and may be modified in future releases."
+  type = object({
+    enable_async_reply = optional(bool, false)
   })
   default  = {}
   nullable = false

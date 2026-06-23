@@ -169,6 +169,7 @@ module "slurm_files" {
   slurm_conf_template = var.slurm_conf_template
   cgroup_conf_tpl     = var.cgroup_conf_tpl
   cloud_parameters    = var.cloud_parameters
+  experimental        = var.experimental
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -181,6 +182,7 @@ module "slurm_files" {
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+  enable_openmetrics   = var.enable_openmetrics
 
   enable_slurm_auth = var.enable_slurm_auth
 
