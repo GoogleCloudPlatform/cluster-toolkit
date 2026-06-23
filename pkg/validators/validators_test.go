@@ -606,3 +606,95 @@ func (s *MySuite) TestReservationExistsValidatorWithSharedReservation_NotFound(c
 	c.Assert(err, NotNil) // Use Assert to stop execution if nil, avoiding panic on next line
 	c.Check(err.Error(), Matches, ".*was not found in any zone of project.*")
 }
+
+func (s *MySuite) TestReservationExistsValidatorWithSharedReservation_UnknownAndMarked(c *C) {
+	// 1. Mock the compute service to return success ONLY for the resolved owner-proj
+	oldCreator := newComputeService
+	defer func() { newComputeService = oldCreator }()
+	apiCalled := false
+	newComputeService = func(ctx context.Context) (*compute.Service, error) {
+		return mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			// Verify the API call is routed to the owner project resolved from the marked setting
+			if strings.Contains(path, "owner-proj") && strings.Contains(path, "us-central1-a") && strings.Contains(path, "my-shared-res") {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"name": "my-shared-res", "status": "READY"}`))
+				apiCalled = true
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}), nil
+	}
+
+	// 2. Create a marked reservation_affinity value (simulating sensitive or module-passed values)
+	markedAffinity := cty.ObjectVal(map[string]cty.Value{
+		"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+		"specific_reservations": cty.ListVal([]cty.Value{
+			cty.ObjectVal(map[string]cty.Value{
+				"name":    cty.StringVal("my-shared-res"),
+				"project": cty.StringVal("owner-proj"),
+			}),
+		}),
+	}).Mark("sensitive-metadata") // Mark the entire object
+
+	// 3. Set up a blueprint containing:
+	//    - A module with a MARKED reservation_affinity
+	//    - A module with an UNKNOWN reservation_affinity (simulating unresolved module outputs)
+	//    - A module with a list containing an UNKNOWN reservation element
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id":       cty.StringVal("consumer-proj"),
+			"zone":             cty.StringVal("us-central1-a"),
+			"reservation_name": cty.StringVal("my-shared-res"),
+		}),
+		Groups: []config.Group{
+			{
+				Modules: []config.Module{
+					{
+						ID: "module_with_marked_affinity",
+						Settings: config.NewDict(map[string]cty.Value{
+							"reservation_affinity": markedAffinity,
+						}),
+					},
+					{
+						ID: "module_with_unknown_affinity",
+						Settings: config.NewDict(map[string]cty.Value{
+							"reservation_affinity": cty.UnknownVal(cty.Object(map[string]cty.Type{
+								"consume_reservation_type": cty.String,
+							})),
+						}),
+					},
+					{
+						ID: "module_with_unknown_element",
+						Settings: config.NewDict(map[string]cty.Value{
+							"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+								"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+								"specific_reservations": cty.ListVal([]cty.Value{
+									cty.UnknownVal(cty.Object(map[string]cty.Type{
+										"name":    cty.String,
+										"project": cty.String,
+									})),
+								}),
+							}),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	// 4. Run the validator
+	inputs := config.NewDict(map[string]cty.Value{
+		"project_id":       cty.StringVal("consumer-proj"),
+		"zone":             cty.StringVal("us-central1-a"),
+		"reservation_name": cty.StringVal("my-shared-res"),
+	})
+
+	// Execution should NOT panic. It should safely skip unknown values,
+	// unmark the marked value, resolve "owner-proj", and succeed.
+	err := testReservationExists(bp, inputs)
+
+	// 5. Assertions
+	c.Assert(err, IsNil)
+	c.Check(apiCalled, Equals, true)
+}

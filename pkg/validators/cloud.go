@@ -408,42 +408,90 @@ func TestReservationExists(ctx context.Context, reservationProjectID string, zon
 	return fmt.Errorf("reservation %q was not found in any zone of project %q", reservationName, reservationProjectID)
 }
 
+// findReservationOwnerProject scans the blueprint's modules to see if a specific
+// reservation is configured as a shared reservation (meaning it has an explicit
+// 'project' field defined in its 'reservation_affinity' settings).
+// If found, it returns the owner project ID; otherwise, it returns an empty string.
 func findReservationOwnerProject(bp config.Blueprint, reservationName string) string {
 	var ownerProject string
+	// Walk through all modules in the blueprint to inspect their settings
 	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		// Short-circuit if we already found the owner project in a previous module
 		if ownerProject != "" {
 			return
 		}
-		settings := m.Settings
-		if settings.Has("reservation_affinity") {
-			val := settings.Get("reservation_affinity")
-			v, err := bp.Eval(val)
-			if err != nil || !v.Type().IsObjectType() {
-				return
-			}
-			attrs := v.AsValueMap()
-			if specRes, ok := attrs["specific_reservations"]; ok && specRes.Type().IsListType() {
-				iterator := specRes.ElementIterator()
-				for iterator.Next() {
-					_, resVal := iterator.Element()
-					if !resVal.Type().IsObjectType() {
-						continue
-					}
-					resAttrs := resVal.AsValueMap()
-					nameVal, hasName := resAttrs["name"]
-					projectVal, hasProject := resAttrs["project"]
-
-					if hasName && nameVal.Type() == cty.String && !nameVal.IsNull() && nameVal.AsString() == reservationName {
-						if hasProject && projectVal.Type() == cty.String && !projectVal.IsNull() && projectVal.AsString() != "" {
-							ownerProject = projectVal.AsString()
-							return
-						}
-					}
-				}
-			}
-		}
+		ownerProject = extractOwnerProjectFromModule(bp, m, reservationName)
 	})
 	return ownerProject
+}
+
+// extractOwnerProjectFromModule evaluates the 'reservation_affinity' setting of a module
+// and attempts to extract the owner project if it matches the target reservation.
+func extractOwnerProjectFromModule(bp config.Blueprint, m *config.Module, reservationName string) string {
+	settings := m.Settings
+	if !settings.Has("reservation_affinity") {
+		return ""
+	}
+	val := settings.Get("reservation_affinity")
+	v, err := bp.Eval(val)
+	if err != nil || v.IsNull() {
+		return ""
+	}
+	v, _ = v.Unmark()
+	if !v.IsKnown() || !v.Type().IsObjectType() {
+		return ""
+	}
+	attrs := v.AsValueMap()
+	specRes, ok := attrs["specific_reservations"]
+	if !ok {
+		return ""
+	}
+	return findProjectInSpecificReservations(specRes, reservationName)
+}
+
+// findProjectInSpecificReservations iterates over the 'specific_reservations' list
+// to find a reservation matching the target name and returns its owner project.
+func findProjectInSpecificReservations(specRes cty.Value, reservationName string) string {
+	specRes, _ = specRes.Unmark()
+	if specRes.IsNull() || !specRes.IsKnown() || !specRes.Type().IsListType() {
+		return ""
+	}
+	iterator := specRes.ElementIterator()
+	for iterator.Next() {
+		_, resVal := iterator.Element()
+		if proj := getProjectIfReservationMatches(resVal, reservationName); proj != "" {
+			return proj
+		}
+	}
+	return ""
+}
+
+// getProjectIfReservationMatches checks if a single reservation object matches the
+// target name and returns its owner project if specified.
+func getProjectIfReservationMatches(resVal cty.Value, reservationName string) string {
+	resVal, _ = resVal.Unmark()
+	if resVal.IsNull() || !resVal.IsKnown() || !resVal.Type().IsObjectType() {
+		return ""
+	}
+	resAttrs := resVal.AsValueMap()
+	if getSafeString(resAttrs, "name") != reservationName {
+		return ""
+	}
+	return getSafeString(resAttrs, "project")
+}
+
+// getSafeString extracts a string value from a cty.Value map by key, returning
+// an empty string if the key is missing, null, or not of type string.
+func getSafeString(attrs map[string]cty.Value, key string) string {
+	val, ok := attrs[key]
+	if !ok {
+		return ""
+	}
+	val, _ = val.Unmark()
+	if val.Type() != cty.String || val.IsNull() || !val.IsKnown() {
+		return ""
+	}
+	return val.AsString()
 }
 
 func testReservationExists(bp config.Blueprint, inputs config.Dict) error {
