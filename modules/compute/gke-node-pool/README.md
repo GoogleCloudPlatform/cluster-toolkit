@@ -340,6 +340,7 @@ limitations under the License.
 | <a name="input_autoscaling_min_node_count"></a> [autoscaling\_min\_node\_count](#input\_autoscaling\_min\_node\_count) | Minimum number of nodes per zone in the NodePool. Cannot be used with autoscaling\_total\_min\_nodes. | `number` | `null` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
+| <a name="input_boot_disk_kms_key"></a> [boot\_disk\_kms\_key](#input\_boot\_disk\_kms\_key) | The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable\_confidential\_storage is true. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
 | <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
 | <a name="input_confidential_instance_type"></a> [confidential\_instance\_type](#input\_confidential\_instance\_type) | The type of technology used by the confidential nodes (e.g., SEV, SEV\_SNP, TDX). Leave null for default. | `string` | `null` | no |

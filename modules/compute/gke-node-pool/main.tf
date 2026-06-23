@@ -166,6 +166,7 @@ resource "google_container_node_pool" "node_pool" {
     flex_start                  = var.enable_flex_start
     max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
     enable_confidential_storage = var.enable_confidential_storage
+    boot_disk_kms_key           = var.boot_disk_kms_key
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -461,13 +462,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
     precondition {
-      condition = !(
-        var.enable_flex_start &&
-        try(var.placement_policy.type == "COMPACT", false) &&
-        !module.tpu.is_tpu &&
-        !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type))
-      )
+      condition     = !(var.enable_flex_start && try(var.placement_policy.type == "COMPACT", false) && !module.tpu.is_tpu && !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type)))
       error_message = "Compact placement with DWS Flex start is only supported for A3 Ultra, A4, and H4D machine types."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.boot_disk_kms_key != null && var.boot_disk_kms_key != "")
+      error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
+      error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
     }
   }
 }

@@ -715,3 +715,9 @@ variable "enable_confidential_storage" {
   type        = bool
   default     = false
 }
+
+variable "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable_confidential_storage is true."
+  type        = string
+  default     = null
+}

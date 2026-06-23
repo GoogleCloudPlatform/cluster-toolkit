@@ -276,6 +276,20 @@ If you enabled Confidential Storage, run the storage validation test job which m
    > ```
    >
    > After deletion, modify the deployment file and run `./gcluster deploy` again to cleanly recreate the encrypted storage resources.
+   >
+   > **IMPORTANT:** Note on Re-deployment & State Drift (404 Disk Not Found)
+    >
+    > For convenience, this blueprint automatically pre-provisions the `hyperdisk-balanced-pvc-0` PVC during deployment.
+    >
+    > If you plan to **re-deploy or update** your GKE cluster (e.g., modifying node pools or running `./gcluster deploy` again), you must manage your storage state to prevent out-of-sync disk errors. If the GKE cluster or physical disks are recreated while the old Kubernetes PVC objects remain in your local workspace/namespace configuration, GKE will enter a state of "blind drift," causing new workloads to hang in `ContainerCreating` with a `404: Disk not found` error.
+    >
+    > To prevent or resolve this, always ensure you delete the stale PVC manually from your cluster before re-applying:
+    >
+    > ```bash
+    > kubectl delete pvc hyperdisk-balanced-pvc-0
+    > ```
+    >
+    > Once deleted, running `./gcluster deploy` again will cleanly recreate both the PVC and dynamically provision a fresh active physical disk.
 
 2. Submit the storage validation test job:
 

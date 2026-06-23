@@ -130,6 +130,7 @@ deployment_groups:
       cluster_reference_type: NAME
       system_node_pool_machine_type: "n2d-standard-16"
       system_node_pool_disk_size_gb: 100
+      system_node_pool_disk_type: "hyperdisk-balanced"
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_private_endpoint: false
@@ -143,6 +144,7 @@ deployment_groups:
       enable_confidential_nodes: true
       confidential_instance_type: "SEV"
       enable_confidential_storage: $(vars.enable_confidential_storage)
+      boot_disk_kms_key: $(vars.disk_encryption_kms_key)
 
     outputs: [instructions]
 
@@ -154,6 +156,7 @@ deployment_groups:
       auto_upgrade: false
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
+      disk_type: "hyperdisk-balanced"
       enable_numa_aware_scheduling: true
       guest_accelerator:
       - type: nvidia-rtx-pro-6000

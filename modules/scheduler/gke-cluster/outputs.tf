@@ -158,3 +158,8 @@ output "enable_confidential_storage" {
   description = "Indicates whether Confidential Storage is enabled at the cluster level."
   value       = var.enable_confidential_storage
 }
+
+output "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes."
+  value       = var.boot_disk_kms_key
+}
