@@ -27,7 +27,7 @@ import uuid
 import shutil
 from pathlib import Path
 from concurrent.futures import as_completed
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 
 import util
 from util import NSMount, lookup, run, dirs, separate
