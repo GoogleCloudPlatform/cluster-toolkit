@@ -453,7 +453,10 @@ func extractOwnerProjectFromModule(bp config.Blueprint, m *config.Module, reserv
 // to find a reservation matching the target name and returns its owner project.
 func findProjectInSpecificReservations(specRes cty.Value, reservationName string) string {
 	specRes, _ = specRes.Unmark()
-	if specRes.IsNull() || !specRes.IsKnown() || !specRes.Type().IsListType() {
+	if specRes.IsNull() || !specRes.IsKnown() {
+		return ""
+	}
+	if !specRes.Type().IsListType() && !specRes.Type().IsTupleType() {
 		return ""
 	}
 	iterator := specRes.ElementIterator()
