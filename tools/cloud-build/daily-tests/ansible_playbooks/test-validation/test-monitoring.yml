@@ -18,11 +18,11 @@
   become: true
   ansible.builtin.service_facts:
 
-- name: Fail if stackdriver agent is not running
+- name: Fail if Google Cloud Ops Agent is not running
   ansible.builtin.assert:
     that:
-    - ansible_facts.services["stackdriver-agent"].status == "enabled"
-    - ansible_facts.services["stackdriver-agent"].state == "running"
+    - ansible_facts.services["google-cloud-ops-agent"].status == "enabled"
+    - ansible_facts.services["google-cloud-ops-agent"].state == "running"
 
 - name: Check that monitoring dashboard has been created
   changed_when: false
