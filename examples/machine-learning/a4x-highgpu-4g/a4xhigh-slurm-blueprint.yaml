@@ -20,13 +20,11 @@ vars:
   # Set to true to enable the secure Slurm Native Authentication standard.
   # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
   enable_slurm_auth: false
-  deployment_name: a4xnewtest ## Deployment name ##
-  project_id: hpc-toolkit-dev ## Project name ##
-  region: us-central1 ## A4X Reservation Region ##
-  zone: us-central1-b ## A4X Reservation Zone ##
-  a4x_cluster_size: 16 # supply cluster size
-  labels:
-    do-not-delete: "2026-06-26"
+  deployment_name: ## Deployment name ##
+  project_id: ## Project name ##
+  region: ## A4X Reservation Region ##
+  zone: ## A4X Reservation Zone ##
+  a4x_cluster_size: # supply cluster size
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
@@ -48,7 +46,7 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: slurm-ubuntu2404-accelerator-arm64-64k
-  a4x_reservation_name: nvidia-gb200-jlr31fm12d525 # supply reservation name
+  a4x_reservation_name: # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # To enable Managed-Lustre please uncomment this section and fill out the settings.
