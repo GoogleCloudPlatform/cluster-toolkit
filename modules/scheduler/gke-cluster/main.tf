@@ -473,6 +473,14 @@ resource "google_container_node_pool" "system_node_pools" {
     enable_confidential_storage = var.enable_confidential_storage
     boot_disk_kms_key           = var.boot_disk_kms_key
 
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
+
     dynamic "taint" {
       for_each = var.system_node_pool_taints
       content {
