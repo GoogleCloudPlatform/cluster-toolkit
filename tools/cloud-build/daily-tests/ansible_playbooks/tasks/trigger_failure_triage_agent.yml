@@ -53,13 +53,13 @@
     environment:
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
     ansible.builtin.shell: |
-      TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="{{ triage_invoker_sa }}" --audiences="{{ triage_cloud_run_url }}" 2>/dev/null)
+      TOKEN=$(gcloud auth print-identity-token --impersonate-service-account="{{ triage_invoker_sa }}" --audiences="{{ triage_cloud_run_url }}")
       if [ -z "$TOKEN" ]; then
         echo "Failed to get identity token." >&2
         exit 1
       fi
 
-      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "{{ triage_cloud_run_url }}/trigger" \
+      HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "{{ triage_cloud_run_url }}/trigger" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{\"build_id\": \"$TRIAGE_BUILD_ID\", \"project_id\": \"{{ triage_project_id }}\"}")
