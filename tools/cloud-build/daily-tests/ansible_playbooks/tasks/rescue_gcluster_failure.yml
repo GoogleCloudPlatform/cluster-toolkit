@@ -19,7 +19,7 @@
     - workspace is defined
 
 - name: Include Failure Triage Agent trigger tasks
-  ansible.builtin.include_tasks: tasks/trigger_failure_triage_agent.yml
+  ansible.builtin.include_tasks: trigger_failure_triage_agent.yml
 
 - name: Delete Firewall Rule
   register: fw_deleted
