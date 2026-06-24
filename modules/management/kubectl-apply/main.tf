@@ -31,9 +31,11 @@ locals {
 
   kueue_config_template_vars = merge(
     {
-      pathways_cpu_quota    = 480
-      pathways_memory_quota = "2000G"
-      tpu_quota             = "999999" # Default high value if not set
+      pathways_cpu_quota      = 480
+      pathways_memory_quota   = "2000G"
+      tpu_flavor_cpu_quota    = "999999" # High default to avoid limiting TPU pods by CPU
+      tpu_flavor_memory_quota = "999999T"
+      tpu_quota               = "999999" # Default high value if not set
     },
     var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
   )
