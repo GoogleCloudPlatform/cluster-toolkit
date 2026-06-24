@@ -26,6 +26,8 @@ tags:
 - m.cloud-storage-bucket
 - m.gpu-rdma-vpc
 - m.pre-existing-network-storage
+- m.managed-lustre
+- m.private-service-access
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
