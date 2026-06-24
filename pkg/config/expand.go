@@ -71,10 +71,6 @@ func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
 }
 
 func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Blueprint) (err error) {
-	v, ok := attemptEvalModuleInput(val, bp)
-	if !ok || input.Type == cty.NilType {
-		return nil // skip, can do nothing
-	}
 	// cty does panic on some edge cases, e.g. (cty.NilVal)
 	// we don't anticipate any of those, but just in case, catch panic and return as error
 	defer func() {
@@ -82,6 +78,10 @@ func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Bl
 			err = fmt.Errorf("panic during type conversion for %q: %v", input.Name, r)
 		}
 	}()
+	v, ok := attemptEvalModuleInput(val, bp)
+	if !ok || input.Type == cty.NilType {
+		return nil // skip, can do nothing
+	}
 	if _, convErr := convert.Convert(v, input.Type); convErr != nil {
 		return fmt.Errorf("unsuitable value for %q: %w", input.Name, convErr)
 	}
