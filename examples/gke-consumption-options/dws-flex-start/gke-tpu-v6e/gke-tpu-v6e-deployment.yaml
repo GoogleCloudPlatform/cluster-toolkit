@@ -56,9 +56,3 @@ vars:
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
-
-  # The disk size of system node pool for this deployment.
-  system_node_pool_disk_size_gb:
-
-  # The disk size of v6e node pool for this deployment.
-  v6e_node_pool_disk_size_gb:

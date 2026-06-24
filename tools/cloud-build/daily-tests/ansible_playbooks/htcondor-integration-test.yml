@@ -70,7 +70,7 @@
       ansible.builtin.add_host:
         hostname: "{{ access_ip.stdout }}"
         groups: [remote_host]
-      when: access_ip.stdout | ansible.utils.ipaddr
+      when: (access_ip.stdout | default('')) | ansible.utils.ipaddr != false
     ## Setup firewall for cloud build
     - name: Create firewall rule
       register: fw_result

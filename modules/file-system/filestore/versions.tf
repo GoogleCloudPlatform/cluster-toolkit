@@ -26,11 +26,11 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.94.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.84.0"
+    module_name = "blueprints/terraform/hpc-toolkit:filestore/v1.94.0"
   }
 
-  required_version = "= 1.12.2"
+  required_version = ">= 1.12.2"
 }

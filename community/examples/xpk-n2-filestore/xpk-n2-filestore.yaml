@@ -31,7 +31,7 @@ vars:
   slice_vm_count: 2
   slice_cpu_count: 64
   xpk_version: v0.8.0
-  kueue_version: v0.11.1
+  kueue_version: v0.17.1
   jobset_version: 0.10.1
   kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
 
@@ -101,15 +101,10 @@ deployment_groups:
       - source: $(vars.storage_crd_path)
         # Server-side applies avoid last-applied-configuration and associated annotation length issues
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_applicationprofiles.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_jobtemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayclustertemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayjobtemplates.yaml
-        server_side_apply: true
       - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_volumebundles.yaml
-        server_side_apply: true
 
   - id: homefs
     source: modules/file-system/filestore

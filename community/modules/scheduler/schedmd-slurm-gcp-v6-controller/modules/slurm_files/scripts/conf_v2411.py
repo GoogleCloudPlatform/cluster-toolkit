@@ -23,7 +23,7 @@ import conf
 from pathlib import Path
 import util
 from util import dirs, slurmdirs
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 
 FILE_PREAMBLE = """
 # Warning:

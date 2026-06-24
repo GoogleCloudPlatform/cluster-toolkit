@@ -112,7 +112,7 @@ python3.12 -m ensurepip --upgrade
 pip3.12 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
-	pyyaml addict httplib2
+	pyyaml httplib2
 
 # Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3

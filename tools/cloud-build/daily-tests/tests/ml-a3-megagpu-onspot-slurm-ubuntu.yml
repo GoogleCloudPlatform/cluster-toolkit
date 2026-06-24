@@ -47,6 +47,7 @@ custom_vars:
     a3mega_onspot: true
   enable_spot: true
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   network_name_system: "{{ network }}"
   subnetwork_name_system: "{{ sub_network}}"
   region: "{{ region }}"

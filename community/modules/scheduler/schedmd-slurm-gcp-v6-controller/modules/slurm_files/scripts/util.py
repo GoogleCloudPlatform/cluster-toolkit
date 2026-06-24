@@ -60,7 +60,64 @@ import google.api_core.exceptions as gExceptions
 import requests as requests_lib
 
 import yaml
-from addict import Dict as NSDict # type: ignore
+class AttrDict(dict):
+    """A dict subclass that allows attribute access to keys, with auto-expansion.
+    
+    This replaces the external 'addict' dependency.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def __getattr__(self, key):
+        if key.startswith('__') and key.endswith('__'):
+            raise AttributeError(key)
+        if key not in self:
+            self[key] = AttrDict()
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, key):
+        try:
+            del self[key]
+        except KeyError as e:
+            raise AttributeError(e) from e
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, self._convert(value))
+
+    def _convert(self, value):
+        if isinstance(value, dict) and not isinstance(value, AttrDict):
+            return AttrDict(value)
+        if isinstance(value, list):
+            return [self._convert(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._convert(x) for x in value)
+        return value
+
+    def update(self, *args, **kwargs):
+        for k, v in dict(*args, **kwargs).items():
+            self[k] = v
+
+    def to_dict(self):
+        """Recursively convert the AttrDict and its nested structures back to standard dicts."""
+        return self._to_dict_helper(self)
+
+    def _to_dict_helper(self, value):
+        if isinstance(value, AttrDict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, dict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._to_dict_helper(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._to_dict_helper(x) for x in value)
+        return value
+
+NSDict = AttrDict
 import file_cache
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
@@ -162,16 +219,27 @@ class MachineType:
 
     @property
     def sockets(self) -> int:
+        if self.family == "n2d":
+            if "highmem" in self.name:
+                return 2 if self.guest_cpus >= 24 else 1
+            else:
+                return 2 if self.guest_cpus > 64 else 1
+        elif self.family == "n2":
+            # Without access to min-cpu-platform to distinguish ICX vs CLX,
+            # we default to the CLX split point (>= 32 vCPUs).
+            return 2 if self.guest_cpus >= 32 else 1
+
         return {
             "h3": 2,
             "h4d": 2,
-            "c2d": 2 if self.guest_cpus > 56 else 1,
             "a3": 2,
             "c2": 2 if self.guest_cpus > 30 else 1,
-            "c3": 2 if self.guest_cpus > 88 else 1,
+            "c2d": 2 if self.guest_cpus > 56 else 1,
+            "c3": 4 if self.guest_cpus > 88 else (2 if self.guest_cpus > 44 else 1),
             "c3d": 2 if self.guest_cpus > 180 else 1,
-            "c4": 2 if self.guest_cpus > 96 else 1,
+            "c4": 4 if self.guest_cpus > 96 else (2 if self.guest_cpus > 48 else 1),
             "c4d": 2 if self.guest_cpus > 192 else 1,
+            "n1": 2 if self.guest_cpus > 64 else 1,
         }.get(
             self.family,
             1,  # assume 1 socket for all other families
@@ -484,6 +552,11 @@ def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
     return parse_bucket_uri(uri)
 
+def blob_fetch(file):
+    bucket_name, _ = _get_bucket_and_common_prefix()
+    return storage_client().get_bucket(bucket_name).get_blob(file)
+
+
 def blob_get(file):
     bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
@@ -670,7 +743,11 @@ class _ConfigBlobs:
     
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
-            h.update(blob.md5_hash.encode("utf-8"))
+            # Fallback to blob_fetch if md5_hash is missing (can happen with CMEK/lists)
+            hash_val = blob_fetch(blob.name).md5_hash if blob.md5_hash is None else blob.md5_hash
+            # Fallback to crc32c or empty string if it's fundamentally CMEK encrypted
+            safe_hash = hash_val or blob.crc32c or ""
+            h.update(safe_hash.encode("utf-8"))
         return h.hexdigest()
 
 @dataclass
@@ -751,7 +828,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
-def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+def _fetch_mounted_config() -> NSDict:
     if not dirs.slurm_bucket_mount.is_mount():
         raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
 
@@ -1620,21 +1697,49 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
-    node_desc_regex = re.compile(
-        r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
-    )
-
     @lru_cache(maxsize=None)
-    def _node_desc(self, node_name):
+    def _node_desc(self, node_name: str) -> dict:
         """Get parts from node name"""
         if not node_name:
             node_name = self.hostname
-        # workaround below is for VMs whose hostname is FQDN
         node_name_short = node_name.split(".")[0]
-        m = self.node_desc_regex.match(node_name_short)
-        if not m:
-            raise Exception(f"node name {node_name} is not valid")
-        return m.groupdict()
+
+        if node_name_short.endswith("]"):
+            idx = node_name_short.rfind("-[")
+            if idx == -1:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix = node_name_short[:idx]
+            suffix = node_name_short[idx + 1 :]
+        else:
+            parts = node_name_short.rsplit("-", 1)
+            if len(parts) != 2:
+                raise Exception(f"node name {node_name} is not valid")
+            prefix, suffix = parts
+        
+        cluster_name = self.cfg.slurm_cluster_name
+        if not prefix.startswith(f"{cluster_name}-"):
+            raise Exception(f"node name {node_name} does not start with cluster name {cluster_name}")
+            
+        matched_ns = prefix[len(cluster_name)+1:]
+        
+        valid_nodesets = [
+            getattr(ns, "nodeset_name", None) 
+            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+        ]
+        
+        if matched_ns not in valid_nodesets:
+            raise Exception(f"could not find nodeset {matched_ns} for node {node_name}")
+            
+        is_range = suffix.startswith("[") and suffix.endswith("]")
+        
+        return {
+            "prefix": prefix,
+            "cluster": cluster_name,
+            "nodeset": matched_ns,
+            "suffix": None if is_range else suffix,
+            "range": suffix if is_range else None,
+            "node": suffix
+        }
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
@@ -1920,7 +2025,7 @@ class Lookup:
             delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
-    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: Any) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1937,7 +2042,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
 
-    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: Any) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
@@ -2027,12 +2132,19 @@ class Lookup:
         machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
-        machine_conf.threads_per_core = 1
-        _div = 2 if getThreadsPerCore(template) == 1 else 1
-        machine_conf.cpus = (
-            int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
-        )
-        machine_conf.cores_per_socket = int(machine_conf.cpus / machine_conf.sockets)
+        threads_per_core = getThreadsPerCore(template)
+        machine_conf.threads_per_core = threads_per_core
+        _div = 2 if threads_per_core == 1 else 1
+        # Check if visibleCoreCount is specified in the instance template
+        visible_cores = template.advancedMachineFeatures.visibleCoreCount
+        if visible_cores:
+            machine_conf.cpus = int(visible_cores) * threads_per_core
+        else:
+            machine_conf.cpus = (
+                int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
+            )
+        # Calculate cores_per_socket once for both cases
+        machine_conf.cores_per_socket = (machine_conf.cpus // machine_conf.threads_per_core) // machine_conf.sockets
         # Because the actual memory on the host will be different than
         # what is configured (e.g. kernel will take it). From
         # experiments, about 16 MB per GB are used (plus about 400 MB

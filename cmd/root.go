@@ -23,13 +23,18 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
+
+	"hpc-toolkit/cmd/cluster"
+	"hpc-toolkit/cmd/job"
 )
 
 // Git references when use Makefile
@@ -39,6 +44,14 @@ var (
 	GitCommitInfo  string
 	GitCommitHash  string
 	GitInitialHash string
+	GitIsOfficial  string
+)
+
+var (
+	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
+	telemetryCollector *telemetry.Collector
+	userConfigExists   bool        = false // userConfigExists tracks whether the user configuration has been initialized.
+	telemetryFlushed   atomic.Bool         // 2-state flag for whether telemetry event is flushed or not.
 )
 
 var (
@@ -52,7 +65,7 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.84.0",
+		Version:     config.GetToolkitVersion(),
 		Annotations: annotation,
 	}
 )
@@ -63,7 +76,24 @@ func init() {
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
 		initDependencies(cmd)
+		if err := config.InitUserConfig(); err == nil {
+			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
+			userConfigExists = true
+
+			// Register the fatal hook to flush telemetry on hard failures
+			logging.FatalHook = func(exitCode int) {
+				// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
+				if telemetryFlushed.CompareAndSwap(false, true) {
+					if config.IsTelemetryEnabled() && telemetryCollector != nil {
+						telemetryCollector.Execute(exitCode)
+					}
+				}
+			}
+		}
 	}
+
+	rootCmd.AddCommand(cluster.ClusterCmd)
+	rootCmd.AddCommand(job.JobCmd)
 }
 
 // Execute the root command
@@ -76,7 +106,11 @@ func Execute() error {
 
 	if len(GitCommitInfo) > 0 {
 		if len(GitTagVersion) == 0 {
-			GitTagVersion = "- not built from official release"
+			if GitIsOfficial == "true" {
+				GitTagVersion = "(official binary distribution)"
+			} else {
+				GitTagVersion = "- not built from official release"
+			}
 		}
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"
@@ -98,7 +132,28 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+
+	// Capture Error Code
+	exitCode := 0
+	if err != nil {
+		exitCode = 1 // Default generic error code
+
+		// Attempt to unwrap the specific exit code from the error
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	// Ensure telemetry is executed exactly once on normal exits to prevent recurrency
+	if telemetryFlushed.CompareAndSwap(false, true) {
+		if config.IsTelemetryEnabled() && userConfigExists {
+			telemetryCollector.Execute(exitCode)
+		}
+	}
+
+	return err
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git

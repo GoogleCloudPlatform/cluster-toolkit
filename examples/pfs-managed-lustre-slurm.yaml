@@ -16,6 +16,9 @@
 blueprint_name: managed-lustre-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: managed-lustre-slurm
   region: us-central1
@@ -31,6 +34,7 @@ vars:
   lustre_size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+  kms_key: ""
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -55,6 +59,7 @@ deployment_groups:
       remote_mount: lustrefs
       size_gib: $(vars.lustre_size_gib)
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+      kms_key: $(vars.kms_key)
 
 - group: slurm-cluster
   modules:

@@ -38,17 +38,14 @@ vars:
   # The number of nodes to be created
   static_node_count:
 
-  system_node_pool_disk_size_gb: 200
-  a4x_node_pool_disk_size_gb: 100
-  k8s_service_account_name: workload-identity-k8s-sa
+  # The number of node pools (num_slices) to be created
+  num_node_pools:
 
   # The name of the compute engine reservation of A4X nodes in the form of
   # <project>/<reservation-name>
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
-  compute_nodepool_machine_type: a4x-highgpu-4g
-  system_nodepool_machine_type: e2-standard-16
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
@@ -56,7 +53,12 @@ vars:
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
-  version_prefix: "1.33."
+  version_prefix: "1.35."
+  system_node_pool_disk_size_gb: 200
+  a4x_node_pool_disk_size_gb: 100
+  k8s_service_account_name: workload-identity-k8s-sa
+  compute_nodepool_machine_type: a4x-highgpu-4g
+  system_nodepool_machine_type: e2-standard-16
 
   # # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
@@ -73,7 +75,6 @@ vars:
 
   # # Maximum throughput of the lustre instance in MBps per TiB
   # per_unit_storage_throughput: 500
-
 
 deployment_groups:
 - group: primary
@@ -103,37 +104,6 @@ deployment_groups:
         - protocol: udp
           ports: ["0-65535"]
         - protocol: icmp
-
-  - id: gke-a4x-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-1
-      ips_per_nat: 6
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.64.0/18
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-
-  - id: gke-a4x-rdma-net
-    source: modules/network/gpu-rdma-vpc
-    settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
-      network_routing_mode: REGIONAL
-      subnetworks_template:
-        name_prefix: $(vars.deployment_name)-rdma-sub
-        count: 4
-        ip_range: 192.168.128.0/18
-        region: $(vars.region)
 
   - id: node_pool_service_account
     source: modules/project/service-account
@@ -187,6 +157,7 @@ deployment_groups:
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      enable_dataplane_v2: true
       enable_k8s_beta_apis:
       - "resource.k8s.io/v1beta1/deviceclasses"
       - "resource.k8s.io/v1beta1/resourceclaims"
@@ -205,22 +176,6 @@ deployment_groups:
         start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-a4x-net-1.network_name,
-            subnetwork=gke-a4x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
-         gke-a4x-rdma-net.subnetwork_interfaces_gke
-        ))
     outputs: [instructions]
 
   # # --- MANAGED LUSTRE ADDITIONS ---
@@ -292,22 +247,8 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
-      additional_networks:
-        $(concat(
-          [{
-            network=gke-a4x-net-1.network_name,
-            subnetwork=gke-a4x-net-1.subnetwork_name,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip=null,
-            stack_type=null,
-            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
-         gke-a4x-rdma-net.subnetwork_interfaces_gke
-        ))
+      enable_dranet: true
+      num_node_pools: $(vars.num_node_pools)
     outputs: [instructions]
 
   - id: workload-manager-install
@@ -317,7 +258,7 @@ deployment_groups:
       target_architecture: "arm64"
       kueue:
         install: true
-        version: "0.14.4"
+        version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4x-pool.static_gpu_count)
@@ -365,45 +306,24 @@ deployment_groups:
         effect: NoSchedule
     outputs: [instructions]
 
-  # Create a remote mount of training_bucket using
-  # mount options optimized for reading training data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/training-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-training
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(training_bucket.gcs_bucket_name)
-      local_mount: /training-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true"
-
-  # Create a remote mount of checkpoint_bucket using mount
-  # options optimized for writing and reading checkpoint data.
-  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
-  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
-  - id: gcs-checkpointing
-    source: modules/file-system/pre-existing-network-storage
-    settings:
-      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
-      local_mount: /checkpoint-data
-      fs_type: gcsfuse
-      mount_options: "implicit-dirs,metadata-cache:ttl-secs:-1,metadata-cache:stat-cache-max-size-mb:-1,metadata-cache:type-cache-max-size-mb:-1,file-cache:max-size-mb:-1,file-cache:cache-file-for-range-read:true,file-cache:enable-parallel-downloads:true,rename-dir-limit=200000"
-
-  # Persistent Volume for training data
+  # When utilizing GCS Fuse Storage Profiles, you must ensure the GKE Service Agent
+  # possesses the 'gke.gcsfuse.profileUser' custom IAM role assigned out-of-band.
+  # Please refer to 'modules/file-system/gke-persistent-volume/README.md' for instructions.
+  # Persistent Volume for training data using GCS Fuse Storage Profile
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4x-cluster]
+    use: [training_bucket, a4x-cluster]
     settings:
-      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
 
-  # Persistent Volume for checkpoint data
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4x-cluster]
+    use: [checkpoint_bucket, a4x-cluster]
     settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.
@@ -411,6 +331,7 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a4x-pool]
     settings:
+      name: gcsfuse-fio-job
       security_context:  # to make sure the job have enough access to install the fio packages
       - key: runAsUser
         value: 0

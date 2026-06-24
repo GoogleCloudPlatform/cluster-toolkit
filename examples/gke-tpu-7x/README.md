@@ -16,14 +16,11 @@ This guide also includes a `gke-tpu-7x-job.yaml` that creates a Kubernetes Pod a
 
 - `num_slices`: The number of identical, independent **TPU slices (node pools)** to create. A TPU slice is a collection of TPU chips that are physically connected by a dedicated, ultra-low-latency network called the Inter-Chip Interconnect (ICI). This is what allows the nodes to function as a single, cohesive supercomputer. Each node pool created by this variable corresponds to one such slice.
   - **Default value is 1**. Most use-cases require this value to be `1`. This blueprint will create one GKE node pool that contains all the nodes needed for your `tpu_topology`.
-  - **Advanced Use**: This variable acts as a multiplier. For example, if you set `num_slices: 3` and `static_node_count: 2`, the blueprint will create three separate node pools (...-pool-0, ...-pool-1, ...-pool-2), each containing `2` TPU nodes. This is an advanced feature for provisioning multiple, smaller, identical slices at once.
+  - **Advanced Use**: This variable acts as a multiplier. For example, if you set `num_slices: 3`, the blueprint will create three separate node pools (...-pool-0, ...-pool-1, ...-pool-2). This is an advanced feature for provisioning multiple, smaller, identical slices at once.
 - `tpu_topology`: The TPU topology desired. Topology is the number and physical arrangement of the TPU chips in a TPU slice.
   - **What it is**: This defines the shape and total size of your TPU "supercomputer". For the 3D-interconnected TPU 7x, you must specify this in XxYxZ format (e.g., `2x2x1`).
   - **Why it matters**: The product of the dimensions (X*Y*Z) gives you the total number of chips in your slice. This number is essential for calculating the `static_node_count`.
-  - **Example**: A tpu_topology of `2x2x1` creates a 4-chip slice. If you then use a `tpu7x-standard-4t` machine type (which has `4` chips per node), you can calculate your required `static_node_count` as `1` (4 total chips / 4 chips per node).
-- `static_node_count`: The **fixed, exact number of nodes (VMs)** required to build **each individual TPU slice** (*as defined by `num_slices`*) in your `tpu_topology`. **This is the most critical parameter to set correctly**. Cloud TPU slices are created as a single, rigid hardware unit with physical, high-speed interconnects (ICI) between all nodes. This is different from standard CPU or GPU node pools. For more details please refer to the [appendix](#how-to-calculate-static_node_count)
-  - **It is an exact requirement, not a maximum**. If your topology requires 4 nodes, you must set this value to `4`. Providing a different number will cause the deployment to **fail**.
-  - **It does not support autoscaling**. Because the hardware is physically interconnected, the size of the slice is fixed at creation time. There are no "*dynamic*" options.
+  - **Example**: A tpu_topology of `2x2x1` creates a 4-chip slice. If you then use a `tpu7x-standard-4t` machine type (which has `4` chips per node),then the derived `static_node_count` is `1` (4 total chips / 4 chips per node).
 
 ## Before you begin
 
@@ -39,7 +36,7 @@ Before you start, make sure you have performed the following tasks:
    - `roles/iam.serviceAccountAdmin`
 5. **Note the GKE Version Requirement**: Be aware that Cloud TPU 7x requires a specific minimum GKE version to function correctly.
    - **Minimum Version**: `1.34.3-gke.1318000` or later.
-   - **Blueprint Configuration**: The provided `gke-tpu-7x.yaml` blueprint is already configured to use a compatible version from the `RAPID` release channel. If you customize the blueprint, ensure you do not select a version older than this minimum requirement.
+   - **Blueprint Configuration**: The provided `gke-tpu-7x.yaml` blueprint is already configured to use a compatible version from the `REGULAR` release channel. If you customize the blueprint, ensure you do not select a version older than this minimum requirement.
 
 ## Create a cluster using Cluster Toolkit
 
@@ -81,11 +78,10 @@ This section guides you through the cluster creation process.
    - `num_slices`: the number of TPU slices (node pools) to create.
    - `machine_type`: the machine type of the TPU.
    - `tpu_topology`: the TPU placement topology for the node pool.
-   - `static_node_count`: the number of TPU nodes in each TPU slice (node pool).z
-
-    > (Note: This is calculated by dividing the total chips in the topology by the chips per machine. E.g. a `2x2x1` topology (4 chips) using `tpu7x-standard-4t` machines (4 chips) requires `static_node_count: 1`). For details refer to the [Appendix](#how-to-calculate-static_node_count).
    - `authorized_cidr`: The IP address range you want to allow to connect with the cluster.
    - `reservation`: the name of the compute engine reservation for your TPU 7x nodes.
+
+    > **Note:** The `static_node_count` is now automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`. For further details, please refer [appendix](#node-count-calculation)
 
 6. To modify advanced settings, edit `examples/gke-tpu-7x/gke-tpu-7x.yaml`.
 7. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
@@ -210,6 +206,16 @@ The `gke-tpu-7x-job.yaml` file creates a Pod resource in Kubernetes. The workloa
 
    If successful, this should display `Global device count: 8` near the end of the logs. [`jax.device_count()`](https://cloud.google.com/tpu/docs/jax-pods) reports the number of devices your workload is actively using. It actually counts the TensorCores, GKE allocates by Chip. For more details refer to the [Appendix](#how-to-calculate-the-expected-device-count-after-running-the-gke-tpu-7x-jobyaml)
 
+## Configuring ML Diagnostics
+
+This blueprint supports [Google Cloud ML Diagnostics](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview) (also known as Diagon++). This managed service simplifies the observability of AI/ML workloads on GKE by providing integrated profiling, automated log analysis, and topology-aware monitoring directly within the Google Cloud Console.
+
+This feature is enabled by default and requires GKE version 1.35.0-gke.3065000 or higher. It can be configured using the `enable_ml_diagnostics` setting in the `gke-tpu-7x-cluster` module. When enabled, the cluster is automatically configured with the necessary ML Diagnostics components, the designated user namespace is labeled, and the Workload Identity service accounts required by the ML Diagnostics SDK are provisioned.
+
+To leverage ML Diagnostics in your own workloads, you need to integrate the ML Diagnostics SDK within your job scripts. For detailed instructions on SDK integration and viewing your profiling data, please refer to the [Google Cloud ML Diagnostics documentation](https://docs.cloud.google.com/tpu/docs/ml-diagnostics/sdk).
+
+To test ML Diagnostics with a sample workload, refer to the [ML Diagnostics Sample Workload Test README](../gke-tpu-v6e/ml-diagnostics-sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
+
 ## Clean up
 
 To avoid recurring charges for the resources used, clean up the resources provisioned by Cluster Toolkit:
@@ -220,9 +226,10 @@ To avoid recurring charges for the resources used, clean up the resources provis
 
 ## Appendix
 
-### How to Calculate `static_node_count`
+### Node Count Calculation
 
 - The formula is: (`Total Chips in Topology`) / (`Chips per Machine`)
+- This value is automatically injected into your configuration during blueprint expansion.
 
 #### Example 1: *Single-Node Slice* (The default for this blueprint)
 
@@ -248,6 +255,8 @@ This example shows how `num_slices` and `static_node_count` work together. The g
 - **Calculation**: `8 / 4 = 2`
 - **Correct value**: `static_node_count: 2`
 - **Result**: This configuration will create three separate GKE node pools, and each of those node pools will contain two nodes. The total number of TPU nodes created will be `3 * 2 = 6`.
+
+**NOTE**: You can optionally provide an explicit `static_node_count` value in your deployment file. If you do, ensure it matches the above calculation formula. The toolkit will use explicit value and skip auto-calculation. Incorrect values will cause deployment failures, so auto-derivation is recommended.
 
 ### How to Calculate the Expected Device Count after running the `gke-tpu-7x-job.yaml`
 

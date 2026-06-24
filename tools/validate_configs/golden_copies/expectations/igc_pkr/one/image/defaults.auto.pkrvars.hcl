@@ -23,4 +23,6 @@ labels = {
 
 project_id = "invalid-project"
 
+region = "us-east4"
+
 zone = "us-east4-c"

@@ -55,18 +55,12 @@ steps:
   - |
     set -x -e
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/serverless-batch-mpi.yaml
+    SG_EXAMPLE=examples/batch-mpi.yaml
     bash tools/add_ttl_label.sh $${SG_EXAMPLE}
+
 
     sed -i "s/#   spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
     sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}

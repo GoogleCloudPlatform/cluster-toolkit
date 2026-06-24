@@ -35,6 +35,7 @@ Modules that are still in development and less stable are labeled with the
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
+* **[cloud-run]** ![core-badge] : Deploys a Google Cloud Run (v2) service.
 * **[schedmd-slurm-gcp-v6-partition]** ![core-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 * **[schedmd-slurm-gcp-v6-nodeset]** ![core-badge] :
@@ -58,6 +59,7 @@ Modules that are still in development and less stable are labeled with the
 * **[gke-partition]** ![community-badge] ![experimental-badge] : Creates a slinky partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 
 [vm-instance]: compute/vm-instance/README.md
+[cloud-run]: compute/cloud-run/README.md
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md
 [resource-policy]: ../modules/compute/resource-policy/README.md
 [gke-job-template]: ../modules/compute/gke-job-template/README.md
@@ -72,6 +74,8 @@ Modules that are still in development and less stable are labeled with the
 
 ### Database
 
+* **[redis]** ![core-badge] : Deploys a Google Cloud Memorystore for Redis instance.
+* **[spanner]** ![core-badge] : Creates Spanner instances and databases.
 * **[slurm-cloudsql-federation]** ![community-badge] ![experimental-badge] :
   Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
   integrated with a [slurm-controller][schedmd-slurm-gcp-v6-controller].
@@ -81,6 +85,8 @@ Modules that are still in development and less stable are labeled with the
   table. Primarily used for
   [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
+[redis]: database/redis/README.md
+[spanner]: database/spanner/README.md
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
 [bigquery-dataset]: ../community/modules/database/bigquery-dataset/README.md
 [bigquery-table]: ../community/modules/database/bigquery-table/README.md
@@ -116,11 +122,23 @@ Modules that are still in development and less stable are labeled with the
 [gke-persistent-volume]: file-system/gke-persistent-volume/README.md
 [weka-client]: ../community/modules/file-system/weka-client/README.md
 
+### IAM
+
+* **[iap-policy]** ![core-badge] : Configures IAM policy for Identity-Aware Proxy (IAP) on a Google Cloud Backend Service.
+
+[iap-policy]: iam/iap-policy/README.md
+
 ### Management
 
 * **[kubectl-apply]** ![core-badge] : Simplifies applying Kubernetes manifests to GKE clusters and deploying common infrastructure like Kueue, Jobset or NCCL gIB plugin.
+* **[kubernetes-namespace]** ![core-badge] : Creates a Kubernetes namespace.
+* **[direct-helm-install]** ![community-badge] ![experimental-badge] : Provides a standardized way to deploy Helm charts directly to a GKE cluster.
+* **[helm-upgrade]** ![community-badge] ![experimental-badge] : Manages Helm chart deployment lifecycles inside a GKE cluster.
 
 [kubectl-apply]: management/kubectl-apply/README.md
+[kubernetes-namespace]: management/kubernetes-namespace/README.md
+[direct-helm-install]: ../community/modules/management/direct-helm-install/README.md
+[helm-upgrade]: ../community/modules/management/helm-upgrade/README.md
 
 ### Monitoring
 
@@ -135,6 +153,8 @@ Modules that are still in development and less stable are labeled with the
 * **[vpc]** ![core-badge] : Creates a
   [Virtual Private Cloud (VPC)](https://cloud.google.com/vpc) network with
   regional subnetworks and firewall rules.
+* **[dns-managed-zone]** ![core-badge] : Creates a Google Cloud DNS Managed Zone.
+* **[global-static-ip]** ![core-badge] : Creates Google Cloud Global Static IP addresses.
 * **[multivpc]** ![core-badge] ![experimental-badge]: Creates a variable
   number of VPC networks using the [vpc] module.
 * **[pre-existing-vpc]** ![core-badge] : Used to connect newly
@@ -145,6 +165,8 @@ Modules that are still in development and less stable are labeled with the
   Configures Private Services Access for a VPC network (commonly used with [filestore] and [slurm-cloudsql-federation]).
 
 [vpc]: network/vpc/README.md
+[dns-managed-zone]: network/dns-managed-zone/README.md
+[global-static-ip]: network/global-static-ip/README.md
 [multivpc]: network/multivpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
 [firewall-rules]: network/firewall-rules/README.md
@@ -162,10 +184,12 @@ Modules that are still in development and less stable are labeled with the
 * **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
+* **[workload_identity_binding]** ![core-badge] : Creates a Workload Identity binding between a Google Service Account (GSA) and a Kubernetes Service Account (KSA).
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
 [service-account]: ../modules/project/service-account/README.md
+[workload_identity_binding]: project/workload_identity_binding/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
 ### Pub/Sub
@@ -242,6 +266,8 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[wait-for-startup]** ![community-badge] ![experimental-badge] : Waits for
   successful completion of a startup script on a compute VM.
 * **[gcloud]** ![community-badge] ![experimental-badge] : Executes arbitrary `gcloud` commands with create/destroy lifecycle.
+* **[gke-backend-fetcher]** ![community-badge] ![experimental-badge] : Fetches the BackendService associated with a GKE Ingress service.
+* **[spanner-migrations-runner]** ![community-badge] ![experimental-badge] : Runs Spanner DDL migrations from a specified directory.
 
 [startup-script]: scripts/startup-script/README.md
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
@@ -252,6 +278,14 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 [gcloud]: ../community/modules/scripts/gcloud/README.md
+[gke-backend-fetcher]: ../community/modules/scripts/gke-backend-fetcher/README.md
+[spanner-migrations-runner]: ../community/modules/scripts/spanner-migrations-runner/README.md
+
+### Security
+
+* **[kubernetes-secret]** ![core-badge] : Creates a Kubernetes secret in a specified namespace on a given GKE cluster.
+
+[kubernetes-secret]: security/kubernetes-secret/README.md
 
 ## Module Fields
 

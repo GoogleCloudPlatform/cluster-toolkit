@@ -141,7 +141,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={{ network }}
+        - --network={% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
@@ -173,7 +173,7 @@
       ansible.builtin.add_host:
         hostname: "{{ login_ip }}"
         groups: [remote_host]
-      when: login_ip | ansible.utils.ipaddr
+      when: (login_ip | default('')) | ansible.utils.ipaddr != false
 
     - name: Wait for host tasks
       ansible.builtin.include_tasks: tasks/wait-for-host.yml
@@ -211,8 +211,6 @@
   hosts: remote_host
   gather_facts: false  # must wait until host is reachable
   ignore_unreachable: true  # ensure always block will run even if SSH fails
-  vars:
-    key_type: "munge"
   tasks:
   - name: Slurm Test Block
     vars:
@@ -222,17 +220,16 @@
     - name: Gather facts
       ansible.builtin.setup:
 
-    - name: Wait until Munge is active
-      ansible.builtin.wait_for:
-        path: /var/run/munge/munge.socket.2
-        timeout: 600
-      when: key_type == 'munge'
+    - name: Wait until Slurm Key or Munge Socket is active
+      ansible.builtin.shell: |
+        test -f /etc/slurm/slurm.key || test -S /var/run/munge/munge.socket.2
+      args:
+        executable: /bin/bash
+      register: auth_active
+      until: auth_active.rc == 0
+      retries: 60
+      delay: 10
 
-    - name: Wait until Slurm key exists
-      ansible.builtin.wait_for:
-        path: /etc/slurm/slurm.key
-        timeout: 600  # Waits for up to 10 minutes for the file to appear
-      when: key_type == 'slurm'
 
     - name: Count Slurm nodes
       ansible.builtin.shell:

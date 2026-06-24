@@ -26,7 +26,7 @@ updates:
     interval: monthly
     day: monday
     time: "03:00"
-    timezone: America/Los_Angeles
+    timezone: Asia/Kolkata
   target-branch: develop
   ignore:
   - dependency-name: "google.golang.org/api"
@@ -49,11 +49,8 @@ updates:
   schedule:
     interval: monthly
     time: "03:00"
-    timezone: America/Los_Angeles
+    timezone: Asia/Kolkata
   target-branch: develop
-  reviewers:
-  - ek-nag
-  - mattstreet-nag
   groups:
     # group all OFE minor/patch updates together and individual PRs for major updates
     # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/optimizing-pr-creation-version-updates#example-3-individual-pull-requests-for-major-updates-and-grouped-for-minorpatch-updates

@@ -1,0 +1,49 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+test_name: a4x-slurm
+deployment_name: a4x-{{ build }}
+slurm_cluster_name: "a4x{{ build[0:4] }}"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+network: "{{ test_name }}"
+# Skipping nccl_test_path for now as it uses ramble
+sub_network: "{{ deployment_name }}-sub-0"
+post_deploy_tests:
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
+- test-validation/test-default-partition.yml
+- test-validation/test-enroot.yml
+- test-validation/test-gpus-slurm.yml
+# Skipping test-nccl.yml for now
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
+custom_vars:
+  gpu_partition: a4x
+  gpu_count: 4
+  partitions:
+  - a4x
+  mounts:
+  - /home
+cli_deployment_vars:
+  test_name: "{{ test_name }}"
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  a4x_reservation_name: "nvidia-gb200-uyrez5en64cu7"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  a4x_cluster_size: 2

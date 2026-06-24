@@ -17,10 +17,16 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
@@ -28,6 +34,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/spf13/cobra"
 	. "gopkg.in/check.v1"
 )
 
@@ -246,4 +253,154 @@ func initTestRepo(path string) (repo *git.Repository, initHash plumbing.Hash, er
 	}
 	_, err = commit("Last")
 	return
+}
+
+func TestExecute_TelemetryAndErrorHandling(t *testing.T) {
+	// Isolate the config directory for tests to prevent modifying the real user config file
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("APPDATA", tempDir) // For Windows compatibility
+	t.Setenv("HOME", tempDir)    // For macOS/Linux compatibility
+
+	// Ensure config is initialized and telemetry is explicitly turned OFF to prevent actual network/telemetry calls during unit tests.
+	_ = config.InitUserConfig()
+	_ = config.SetTelemetry(false)
+	// Reset the flag at the start of the test block
+	telemetryFlushed.Store(false)
+
+	// Create a real *exec.ExitError for testing the exit code unwrapping logic
+	execCmd := exec.Command("false")
+	exitErr := execCmd.Run()
+
+	tests := []struct {
+		name        string
+		setupCmd    func() *cobra.Command
+		expectError bool
+		expectedErr error
+	}{
+		{
+			name: "Successful command execution",
+			setupCmd: func() *cobra.Command {
+				return &cobra.Command{
+					Use: "dummy-success",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						return nil // No error
+					},
+				}
+			},
+			expectError: false,
+		},
+		{
+			name: "Generic error execution",
+			setupCmd: func() *cobra.Command {
+				return &cobra.Command{
+					Use: "dummy-error",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						return errors.New("generic error")
+					},
+				}
+			},
+			expectError: true,
+			expectedErr: errors.New("generic error"),
+		},
+		{
+			name: "ExitError execution",
+			setupCmd: func() *cobra.Command {
+				return &cobra.Command{
+					Use: "dummy-exit-error",
+					RunE: func(cmd *cobra.Command, args []string) error {
+						return exitErr // Should unwrap to a specific exit code internally
+					},
+				}
+			},
+			expectError: true,
+			expectedErr: exitErr,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset global state initialized by PersistentPreRun to ensure clean slates
+			userConfigExists = false
+			telemetryCollector = nil
+
+			// Reset the flag between subtests
+			telemetryFlushed.Store(false)
+
+			// Inject a dummy command to trigger specific error cases
+			dummyCmd := tt.setupCmd()
+			rootCmd.AddCommand(dummyCmd)
+
+			// Set args to invoke the dummy command
+			rootCmd.SetArgs([]string{dummyCmd.Use})
+
+			// Invoke the package-level Execute function
+			err := Execute()
+
+			// 1. Verify Error Handling Passthrough
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected an error but got nil")
+				} else if err.Error() != tt.expectedErr.Error() {
+					t.Errorf("Expected error '%v', got '%v'", tt.expectedErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+
+			// 2. Verify PersistentPreRun Initialization Logic
+			if !userConfigExists {
+				t.Errorf("Expected userConfigExists to be true, got false. PersistentPreRun did not execute.")
+			}
+			if telemetryCollector == nil {
+				t.Errorf("Expected telemetryCollector to be initialized, got nil.")
+			}
+
+			// Cleanup dummy command for the next iteration
+			rootCmd.RemoveCommand(dummyCmd)
+		})
+	}
+}
+
+func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
+	// 1. Isolate config and reset state
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	_ = config.InitUserConfig()
+	_ = config.SetTelemetry(false) // Prevent actual telemetry network calls during the test
+
+	// Reset the atomic flag to its default state for a clean test
+	telemetryFlushed.Store(false)
+	telemetryCollector = nil
+
+	// 2. Execute PersistentPreRun to register the FatalHook
+	rootCmd.PersistentPreRun(rootCmd, []string{})
+
+	if logging.FatalHook == nil {
+		t.Fatal("Expected logging.FatalHook to be registered by PersistentPreRun")
+	}
+
+	// 3. Simulate multiple concurrent calls to logging.FatalHook
+	var wg sync.WaitGroup
+	numCalls := 10
+
+	for i := 0; i < numCalls; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// This simulates multiple goroutines hitting logging.Fatal concurrently,
+			// or a recursive logging.Fatal call inside the collector.
+			logging.FatalHook(1)
+		}()
+	}
+
+	// Wait for all concurrent executions to finish
+	wg.Wait()
+
+	// 4. Verify that the atomic flag was flipped to true and handled concurrency safely
+	if !telemetryFlushed.Load() {
+		t.Errorf("Expected telemetryFlushed to be true after FatalHook execution")
+	}
 }

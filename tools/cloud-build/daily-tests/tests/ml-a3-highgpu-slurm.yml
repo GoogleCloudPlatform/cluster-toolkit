@@ -23,7 +23,7 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-network: "{{ test_name }}"
+network: "{{ deployment_name }}-net-0"
 nccl_test_path: "examples/machine-learning/a3-highgpu-8g/nccl-tests"
 sub_network: "{{ deployment_name }}-sub-0"
 post_deploy_tests:
@@ -43,7 +43,6 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
-  base_network_name: '{{ test_name }}'
   region: "{{ region }}"
   zone: "{{ zone }}"
   tcpx_kernel_login: "{{ tcpx_kernel_login }}"

@@ -48,14 +48,7 @@ steps:
   - |
     set -x -e
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     SG_EXAMPLE=examples/storage-gke.yaml
@@ -68,7 +61,9 @@ steps:
     echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
     echo '      zone: us-central1-b'               >> $${SG_EXAMPLE}
     bash tools/add_ttl_label.sh "$${SG_EXAMPLE}"
+    python3 tools/fix_vpc_name.py $${SG_EXAMPLE} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']

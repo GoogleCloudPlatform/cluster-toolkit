@@ -15,6 +15,9 @@
 blueprint_name: a3high-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   sys_net_range: 172.16.0.0/16
   filestore_ip_range: 192.168.0.0/29
   source_image_project_id: ubuntu-os-cloud
@@ -26,7 +29,7 @@ vars:
   localssd_mountpoint: /mnt/localssd
   enable_nvidia_dcgm: true
   disk_size_gb: 200
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1
   #Provisioning models (set to true or fill in reservation name, pick only one)
   a3_reservation_name: "" # supply reservation name
   a3_dws_flex_enabled: false
@@ -649,7 +652,7 @@ deployment_groups:
         tree_width: $(vars.a3_static_cluster_size)
       machine_type: c2-standard-8
       disk_type: pd-balanced
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       enable_controller_public_ips: true
       enable_external_prolog_epilog: true
       controller_startup_script: $(controller_startup.startup_script)

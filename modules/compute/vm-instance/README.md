@@ -167,8 +167,8 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | = 1.12.2 |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.13.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -176,7 +176,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.13.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
@@ -184,14 +184,14 @@ limitations under the License.
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../internal/gpu-definition | n/a |
 | <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google-beta_google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
 | [google_compute_address.compute_ip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
@@ -203,7 +203,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.<br/>See `name_prefix` for further details on resource naming behavior. | `bool` | `false` | no |
 | <a name="input_additional_persistent_disks"></a> [additional\_persistent\_disks](#input\_additional\_persistent\_disks) | Configurations of additional disks to be included on the partition nodes. | <pre>object({<br/>    count = optional(number, 0)<br/>    type  = optional(string, "pd-balanced")<br/>    size  = optional(number, 200)<br/>  })</pre> | `{}` | no |
 | <a name="input_allocate_ip"></a> [allocate\_ip](#input\_allocate\_ip) | If not null, allocate IPs with the given configuration. See details at<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address | <pre>object({<br/>    address_type = optional(string, "INTERNAL")<br/>    purpose      = optional(string),<br/>    network_tier = optional(string),<br/>    ip_version   = optional(string, "IPV4"),<br/>  })</pre> | `null` | no |
@@ -222,11 +222,12 @@ limitations under the License.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_ssd_count"></a> [local\_ssd\_count](#input\_local\_ssd\_count) | The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd. | `number` | `0` | no |
 | <a name="input_local_ssd_interface"></a> [local\_ssd\_interface](#input\_local\_ssd\_interface) | Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set. | `string` | `"NVME"` | no |
+| <a name="input_machine_configs"></a> [machine\_configs](#input\_machine\_configs) | Definition of GCE machine types and counts | `any` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for the instance creation | `string` | `"c2-standard-60"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | The name of the minimum CPU platform that you want the instance to use. | `string` | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | An optional name for all VM and disk resources.<br/>If not supplied, `deployment_name` will be used.<br/>When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set,<br/>then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>". | `string` | `null` | no |
-| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces. The options match that of the terraform<br/>network\_interface block of google\_compute\_instance. For descriptions of the<br/>subfields or more information see the documentation:<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface<br/><br/>**\_NOTE:\_** If `network_interfaces` are set, `network_self_link` and<br/>`subnetwork_self_link` will be ignored, even if they are provided through<br/>the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply<br/>to network interfaces defined in this variable.<br/><br/>Subfields:<br/>network            (string, required if subnetwork is not supplied)<br/>subnetwork         (string, required if network is not supplied)<br/>subnetwork\_project (string, optional)<br/>network\_ip         (string, optional)<br/>nic\_type           (string, optional, choose from ["GVNIC", "VIRTIO\_NET", "MRDMA", "IRDMA", "IDPF"])<br/>stack\_type         (string, optional, choose from ["IPV4\_ONLY", "IPV4\_IPV6", "IPV6\_ONLY"])<br/>queue\_count        (number, optional)<br/>access\_config      (object, optional)<br/>ipv6\_access\_config (object, optional)<br/>alias\_ip\_range     (list(object), optional) | <pre>list(object({<br/>    network            = string,<br/>    subnetwork         = string,<br/>    subnetwork_project = string,<br/>    network_ip         = string,<br/>    nic_type           = string,<br/>    stack_type         = string,<br/>    queue_count        = number,<br/>    access_config = list(object({<br/>      nat_ip                 = string,<br/>      public_ptr_domain_name = string,<br/>      network_tier           = string<br/>    })),<br/>    ipv6_access_config = list(object({<br/>      public_ptr_domain_name = string,<br/>      network_tier           = string<br/>    })),<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string,<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
+| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces. The options match that of the terraform<br/>network\_interface block of google\_compute\_instance. For descriptions of the<br/>subfields or more information see the documentation:<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nested_network_interface<br/><br/>**\_NOTE:\_** If `network_interfaces` are set, `network_self_link` and<br/>`subnetwork_self_link` will be ignored, even if they are provided through<br/>the `use` field. `bandwidth_tier` and `disable_public_ips` also do not apply<br/>to network interfaces defined in this variable.<br/><br/>Subfields:<br/>network            (string, required if subnetwork is not supplied)<br/>subnetwork         (string, required if network is not supplied)<br/>subnetwork\_project (string, optional)<br/>network\_ip         (string, optional)<br/>nic\_type           (string, optional, choose from ["GVNIC", "VIRTIO\_NET", "MRDMA", "IRDMA", "IDPF"])<br/>stack\_type         (string, optional, choose from ["IPV4\_ONLY", "IPV4\_IPV6", "IPV6\_ONLY"])<br/>queue\_count        (number, optional)<br/>access\_config      (object, optional)<br/>ipv6\_access\_config (object, optional)<br/>alias\_ip\_range     (list(object), optional) | <pre>list(object({<br/>    #If both network and subnetwork are specified, the subnetwork must belong to the provided network to avoid configuration errors.<br/>    network            = string,<br/>    subnetwork         = string,<br/>    subnetwork_project = string,<br/>    network_ip         = string,<br/>    nic_type           = string,<br/>    stack_type         = string,<br/>    queue_count        = number,<br/>    access_config = list(object({<br/>      nat_ip                 = string,<br/>      public_ptr_domain_name = string,<br/>      network_tier           = string<br/>    })),<br/>    ipv6_access_config = list(object({<br/>      public_ptr_domain_name = string,<br/>      network_tier           = string<br/>    })),<br/>    alias_ip_range = list(object({<br/>      ip_cidr_range         = string,<br/>      subnetwork_range_name = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the VM. Can use "default" for the default network. | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE` | `string` | `null` | no |
@@ -248,7 +249,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | External IP of the instances (if enabled) |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to SSH into the created VM. Commands may fail depending on VM configuration and IAM permissions. |
 | <a name="output_internal_ip"></a> [internal\_ip](#output\_internal\_ip) | Internal IP of the instances |

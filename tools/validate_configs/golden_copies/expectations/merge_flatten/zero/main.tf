@@ -15,7 +15,7 @@
   */
 
 module "network" {
-  source          = "./modules/embedded/modules/network/vpc"
+  source          = "../_modules/embedded/modules/network/vpc"
   deployment_name = var.deployment_name
   labels          = var.labels
   project_id      = var.project_id
@@ -23,7 +23,7 @@ module "network" {
 }
 
 module "first-fs" {
-  source          = "./modules/embedded/modules/file-system/filestore"
+  source          = "../_modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
   labels          = var.labels
   local_mount     = "/first"
@@ -34,7 +34,7 @@ module "first-fs" {
 }
 
 module "second-fs" {
-  source          = "./modules/embedded/modules/file-system/filestore"
+  source          = "../_modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
   labels          = var.labels
   local_mount     = "/first"
@@ -45,11 +45,12 @@ module "second-fs" {
 }
 
 module "first-vm" {
-  source          = "./modules/embedded/modules/compute/vm-instance"
+  source          = "../_modules/embedded/modules/compute/vm-instance"
   deployment_name = var.deployment_name
   labels = merge(var.labels, {
     green = "sleeves"
   })
+  machine_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
   network_storage = flatten([module.first-fs.network_storage])
   project_id      = var.project_id
   region          = var.region
@@ -57,9 +58,10 @@ module "first-vm" {
 }
 
 module "second-vm" {
-  source          = "./modules/embedded/modules/compute/vm-instance"
+  source          = "../_modules/embedded/modules/compute/vm-instance"
   deployment_name = var.deployment_name
   labels          = var.labels
+  machine_configs = "{\"gpus\": {}, \"tpus\": {}, \"cpus\": {}}"
   network_storage = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
   project_id      = var.project_id
   region          = var.region

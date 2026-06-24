@@ -14,20 +14,22 @@
   * limitations under the License.
   */
 
-provider "kubectl" {
-  host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  load_config_file       = false
-  apply_retry_count      = 15 # Terraform may apply resources in parallel, leading to potential dependency issues. This retry mechanism ensures that if a resource's dependencies aren't ready, Terraform will attempt to apply it again.
+locals {
+  host                   = var.cluster_endpoint != null ? "https://${var.cluster_endpoint}" : "https://${data.google_container_cluster.gke_cluster.endpoint}"
+  token                  = var.access_token != null ? var.access_token : data.google_client_config.default.access_token
+  cluster_ca_certificate = var.cluster_ca_certificate != null ? base64decode(var.cluster_ca_certificate) : base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
 }
 
 provider "helm" {
   kubernetes {
-    host  = "https://${data.google_container_cluster.gke_cluster.endpoint}"
-    token = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(
-      data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate,
-    )
+    host                   = local.host
+    token                  = local.token
+    cluster_ca_certificate = local.cluster_ca_certificate
   }
+}
+
+provider "kubernetes" {
+  host                   = local.host
+  token                  = local.token
+  cluster_ca_certificate = local.cluster_ca_certificate
 }

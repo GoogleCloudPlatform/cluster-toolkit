@@ -15,6 +15,8 @@
 
 set -e -o pipefail
 
+export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+
 run_test() {
 	example=$1
 	if [ -n "$2" ]; then
@@ -26,7 +28,7 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
@@ -120,7 +122,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/machine-learning/build-service-images/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'examples/machine-learning/a4x-highgpu-4g/*' -not -path 'examples/machine-learning/a4x-maxgpu-4g-metal/*' -not -path 'community/examples/gke-tpu-v6e/*' -not -path 'community/examples/xpk-n2-filestore/*' -not -path 'examples/gke-a4x/*' -not -path 'examples/science/af3-slurm/*' -not -path 'examples/gke-h4d/*' -not -path 'community/examples/hpc-slinky/*' -not -path 'examples/gke-g4/*' -not -path 'community/examples/slurm-gke/*' -not -path 'examples/hpc-slurm-h4d/*' -not -path 'examples/machine-learning/a3-highgpu-8g/*' -not -path 'examples/netapp-volumes.yaml' -not -path 'examples/gke-tpu-7x/*' -not -path 'examples/gke-tpu-v6e/*' -not -path 'examples/gke-a4x-max-bm/*')
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/machine-learning/build-service-images/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/gke-a3-highgpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'examples/machine-learning/a4x-highgpu-4g/*' -not -path 'examples/machine-learning/a4x-maxgpu-4g-metal/*' -not -path 'community/examples/gke-tpu-v6e/*' -not -path 'community/examples/xpk-n2-filestore/*' -not -path 'examples/gke-a4x/*' -not -path 'examples/science/af3-slurm/*' -not -path 'examples/gke-h4d/*' -not -path 'community/examples/hpc-slinky/*' -not -path 'examples/gke-g4/*' -not -path 'community/examples/slurm-gke/*' -not -path 'examples/hpc-slurm-h4d/*' -not -path 'examples/machine-learning/a3-highgpu-8g/*' -not -path 'examples/netapp-volumes.yaml' -not -path 'examples/gke-tpu-7x/*' -not -path 'examples/gke-tpu-v6e/*' -not -path 'examples/gke-a4x-max-bm/*')
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=

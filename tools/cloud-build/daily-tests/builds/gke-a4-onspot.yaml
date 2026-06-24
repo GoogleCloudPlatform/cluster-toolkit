@@ -24,7 +24,6 @@ tags:
 - m.vpc
 - m.cloud-storage-bucket
 - m.gke-persistent-volume
-- m.pre-existing-network-storage
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
@@ -61,14 +60,7 @@ steps:
     fi
     set -x
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     REGION="$${ZONE%-*}"
     BUILD_ID_SHORT=$${BUILD_ID:0:6}
     EXAMPLE_BP=examples/gke-a4/gke-a4.yaml
@@ -109,12 +101,14 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 \
-        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} chs_repo=$${CHS_REPO}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
         --extra-vars="enable_spot=$${ENABLE_SPOT}" \
         --extra-vars="@$${GKE_VARS_FILE}"
-  secretEnv: ['GCLUSTER_GCS_PATH']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CHS_REPO']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/${PROJECT_ID}/secrets/cluster-health-scanner/versions/latest
+    env: 'CHS_REPO'

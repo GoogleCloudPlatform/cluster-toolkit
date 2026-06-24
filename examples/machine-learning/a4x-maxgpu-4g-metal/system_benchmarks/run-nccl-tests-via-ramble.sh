@@ -44,7 +44,26 @@ read -t 30 -rp "To continue, hit [enter]. To cancel, type [Ctrl-c]. Will auto-co
 mkdir -p "${TEST_DIR}"
 
 # Install prerequisites
-sudo apt-get install -y python3-venv jq
+# Handle Munge service conflict
+MUNGE_ACTIVE=false
+if systemctl is-active --quiet munge; then
+	MUNGE_ACTIVE=true
+	echo "Stopping Munge to prevent package lock..."
+	sudo systemctl stop munge || true
+fi
+
+# Non-interactive installation
+echo "Installing prerequisites..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+	-o Dpkg::Options::="--force-confdef" \
+	-o Dpkg::Options::="--force-confold" \
+	python3-venv jq
+
+# Restart Munge if it was active
+if [ "$MUNGE_ACTIVE" = true ]; then
+	echo "Restarting Munge..."
+	sudo systemctl start munge || true
+fi
 
 # Create enroot credentials set up for artifact registry
 mkdir -p "${HOME}"/.enroot/

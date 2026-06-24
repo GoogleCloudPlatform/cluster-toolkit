@@ -1,5 +1,5 @@
 # PREAMBLE
-MIN_PACKER_VERSION=1.7.9 # for building images
+MIN_PACKER_VERSION=1.15.3 # for building images
 MIN_TERRAFORM_VERSION=1.12.2 # for deploying modules
 MIN_GOLANG_VERSION=1.24 # for building gcluster
 
@@ -16,6 +16,7 @@ TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -na
 PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 BINARY_TARGETS := ghpc gcluster
 INSTALL_DIRS := . ~/bin /usr/local/bin
+INSTALLATION_MODE = SOURCE
 
 ifneq (, $(shell which git))
 ## GIT IS PRESENT
@@ -33,7 +34,7 @@ endif
 
 gcluster: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg gcluster.go -type f)
 	$(info **************** building gcluster ************************)
-	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)'" gcluster.go
+	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)' -X 'main.gitIsOfficial=$(GIT_IS_OFFICIAL)' -X 'main.installationMode=$(INSTALLATION_MODE)'" gcluster.go
 	@ln -sf gcluster ghpc
 
 ghpc: gcluster

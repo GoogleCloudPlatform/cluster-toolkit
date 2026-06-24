@@ -27,6 +27,7 @@ while (<>){
     pkg/validators 10
     pkg/inspect 60
     pkg/modulewriter 79
+    pkg/orchestrator/gke 50
     pkg 80
   );
 

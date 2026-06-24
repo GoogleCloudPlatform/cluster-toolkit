@@ -23,10 +23,13 @@ validators:
   skip: true
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -35,11 +38,21 @@ vars:
   enable_login_public_ips: true
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1
   #Provisioning models (set to true or fill in reservation name, pick only one)
   a3mega_reservation_name: ""  # supply reservation name
   a3mega_dws_flex_enabled: false
   a3mega_enable_spot_vm: false
+
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: primary
@@ -83,6 +96,12 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
 
       # The following holds NVIDIA software that was already installed on the
       # accelerator base image to be the same driver version. This reduces the
@@ -135,7 +154,7 @@ deployment_groups:
             "install_cuda": false,
             "install_ompi": true,
             "install_lustre": false,
-            "install_managed_lustre": false,
+            "install_managed_lustre": true,
             "install_gcsfuse": true,
             "monitoring_agent": "cloud-ops",
             "use_open_drivers": true
@@ -153,48 +172,50 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
+
       - type: ansible-local
-        destination: update-gvnic.yml
+        destination: install_cuda_and_dcgm.yml
         content: |
           ---
-          - name: Install updated gVNIC driver from GitHub
+          - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
             vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
+              nvidia_packages:
+                - cuda-toolkit-13-0
+                - nvidia-container-toolkit
+                - datacenter-gpu-manager-4-cuda13
+                - datacenter-gpu-manager-4-dev
+                - datacenter-gpu-manager-4-core
             tasks:
-            - name: Install driver dependencies
-              ansible.builtin.apt:
-                name:
-                - dkms
-            - name: Download gVNIC package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install updated gVNIC
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-      - type: shell
-        destination: install-cuda-toolkit.sh
-        content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          add-nvidia-repositories -y
-          apt update -y
-          apt install -y \
-              cuda-toolkit-12-8 \
-              nvidia-container-toolkit \
-              datacenter-gpu-manager-4-cuda12=1:4.5.1-1 \
-              datacenter-gpu-manager-4-dev=1:4.5.1-1 \
-              datacenter-gpu-manager-4-core=1:4.5.1-1
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: "{{ cuda_repo_url }}"
+                  state: present
 
-          # 2. Hold ALL components
-          apt-mark hold \
-              datacenter-gpu-manager-4-cuda12 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install NVIDIA packages
+                ansible.builtin.apt:
+                  name: "{{ nvidia_packages }}"
+                  state: present
+                  allow_downgrade: yes
+
+              - name: Hold DCGM packages
+                ansible.builtin.command:
+                  argv:
+                    - apt-mark
+                    - hold
+                    - "{{ item }}"
+                loop:
+                  - datacenter-gpu-manager-4-cuda13
+                  - datacenter-gpu-manager-4-dev
+                  - datacenter-gpu-manager-4-core
+
       # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
@@ -213,6 +234,17 @@ deployment_groups:
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: shell
+        destination: fix_enroot_env.sh
+        content: |
+          #!/bin/bash
+          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
+          # Required for enroot/pyxis to work
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+          fi
+
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |
@@ -267,27 +299,97 @@ deployment_groups:
         destination: install_dmabuf.yml
         content: |
           ---
-          - name: Install DMBABUF import helper
+          - name: Install patched DMABUF import helper
             hosts: all
             become: true
+            vars:
+              dmabuf_version: "1.1"
             tasks:
             - name: Setup apt-transport-artifact-registry repository
               ansible.builtin.apt_repository:
                 repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
                 state: present
+                filename: artifact-registry
+
             - name: Install driver dependencies
               ansible.builtin.apt:
                 name:
-                - dkms
                 - apt-transport-artifact-registry
+                - dkms
+                state: present
+                update_cache: true
+
             - name: Setup gpudirect-tcpxo apt repository
               ansible.builtin.apt_repository:
-                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                repo: deb [arch=all trusted=yes] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
                 state: present
-            - name: Install DMABUF import helper DKMS package
-              ansible.builtin.apt:
-                name: dmabuf-import-helper
-                state: present
+                filename: gpudirect-tcpxo
+
+            - name: Check if dmabuf-import-helper DKMS module is already installed
+              ansible.builtin.command:
+                cmd: dkms status -m dmabuf-import-helper -v {{ dmabuf_version }}
+              register: dkms_status
+              failed_when: false
+              changed_when: false
+
+            - name: Install and patch dmabuf-import-helper
+              block:
+                - name: Create temp directory for dmabuf package
+                  ansible.builtin.tempfile:
+                    state: directory
+                    suffix: dmabuf
+                  register: tempdir
+
+                - name: Download dmabuf-import-helper package
+                  ansible.builtin.command:
+                    cmd: apt-get download dmabuf-import-helper
+                    chdir: "{{ tempdir.path }}"
+                  register: download_res
+                  changed_when: download_res.rc == 0
+
+                - name: Extract dmabuf-import-helper deb package
+                  ansible.builtin.shell:
+                    cmd: dpkg-deb -x *.deb .
+                    chdir: "{{ tempdir.path }}"
+                  register: extract_res
+                  changed_when: extract_res.rc == 0
+
+                - name: Clean existing dmabuf source in /usr/src
+                  ansible.builtin.file:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}
+                    state: absent
+
+                - name: Move dmabuf-import-helper source to /usr/src
+                  ansible.builtin.command:
+                    cmd: mv "{{ tempdir.path }}/usr/src/dmabuf-import-helper-{{ dmabuf_version }}" /usr/src/
+                  register: move_res
+                  changed_when: move_res.rc == 0
+
+                - name: Patch import-helper.c for kernel 6.17 compatibility
+                  ansible.builtin.replace:
+                    path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}/import-helper.c
+                    regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
+                    replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+
+                - name: Add dmabuf-import-helper to DKMS
+                  ansible.builtin.command:
+                    cmd: dkms add -m dmabuf-import-helper -v {{ dmabuf_version }}
+                  when: "'added' not in dkms_status.stdout"
+
+                - name: Build dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms build -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Install dmabuf-import-helper via DKMS
+                  ansible.builtin.command:
+                    cmd: dkms install -m dmabuf-import-helper -v {{ dmabuf_version }}
+
+                - name: Clean up temp directory
+                  ansible.builtin.file:
+                    path: "{{ tempdir.path }}"
+                    state: absent
+              when: "'installed' not in dkms_status.stdout"
+
       - type: ansible-local
         destination: aperture_devices.yml
         content: |
@@ -372,6 +474,7 @@ deployment_groups:
       metadata:
         user-data: |
           #cloud-config
+          create_hostname_file: true
           write_files:
           - path: /etc/apt/apt.conf.d/20auto-upgrades
             permissions: '0644'
@@ -408,19 +511,18 @@ deployment_groups:
     source: modules/network/private-service-access
     use:
     - sysnet
+
   - id: homefs
-    source: modules/file-system/filestore
+    source: modules/file-system/managed-lustre
     use:
     - sysnet
     - private_service_access
     settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240
-      local_mount: /home
-      mount_options: "defaults,hard"
-      deletion_protection:
-        enabled: true
-        reason: Avoid data loss
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: $(vars.local_mount_homefs)
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
     outputs:
     - network_storage
 
@@ -649,7 +751,7 @@ deployment_groups:
       machine_type: c2-standard-8
       enable_cleanup_compute: true
       enable_external_prolog_epilog: true
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      slurm_conf_tpl: ../_modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       controller_startup_script: $(controller_startup.startup_script)
       login_startup_script: |
         #!/bin/bash

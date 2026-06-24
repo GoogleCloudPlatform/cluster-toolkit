@@ -129,3 +129,9 @@ variable "import_gcs_bucket_uri" {
     error_message = "The GCS bucket uri must start with 'gs://'"
   }
 }
+
+variable "kms_key" {
+  description = "The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project_id>/locations/<location>/keyRings/<key_ring>/cryptoKeys/<key_name>"
+  type        = string
+  default     = null
+}

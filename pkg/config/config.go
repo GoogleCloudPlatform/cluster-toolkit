@@ -17,13 +17,20 @@ package config
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/agext/levenshtein"
 	"github.com/hashicorp/hcl/v2"
@@ -36,7 +43,10 @@ import (
 )
 
 const (
-	maxHintDist int = 3 // Maximum Levenshtein distance where we suggest a hint
+	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
+	latestToolkitVersion     = "v1.94.0"
+	// SharedModulesDirName is the name of the shared directory for embedded modules
+	SharedModulesDirName = "_modules"
 )
 
 // map[moved module path]replacing module path
@@ -57,6 +67,10 @@ type GroupName string
 func (n GroupName) Validate() error {
 	if n == "" {
 		return EmptyGroupName
+	}
+
+	if n == ".ghpc" || string(n) == SharedModulesDirName {
+		return fmt.Errorf("group name %q is reserved", n)
 	}
 
 	if !regexp.MustCompile(`^\w(-*\w)*$`).MatchString(string(n)) {
@@ -84,6 +98,10 @@ func (g *Group) Clone() Group {
 		c.Modules[i] = m.Clone()
 	}
 	return c
+}
+
+func GetToolkitVersion() string {
+	return latestToolkitVersion
 }
 
 // ModuleIndex returns the index of the input module in the group
@@ -295,6 +313,10 @@ type Blueprint struct {
 	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
 	// was explicitly present in the user's source (runtime-only, not serialized).
 	YamlCtx *YamlCtx `yaml:"-"`
+	// AddCreatorLabel indicates whether to add the creator label
+	AddCreatorLabel bool `yaml:"-"`
+	// CreatorUsername is the username to use for the creator label
+	CreatorUsername string `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {
@@ -951,4 +973,267 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 		res[n] = ev
 	}
 	return NewDict(res), nil
+}
+
+// GetAllBpModules returns a slice of all modules defined in the blueprint.
+func GetAllBpModules(bp *Blueprint) []Module {
+	var modules []Module
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		modules = append(modules, *m)
+	})
+	return modules
+}
+
+// GetPredefinedModules fetches modules, utilizing the shared cache helper.
+func GetPredefinedModules() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_modules_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		return fetchModulesFromGitHub(version)
+	})
+}
+
+// GetPredefinedExampleFiles fetches example files, utilizing the shared cache helper.
+func GetPredefinedExampleFiles() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_examples_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		return fetchExampleFilesFromGitHub(version)
+	})
+}
+
+// GetStandardBlueprintNames fetches blueprint names, utilizing the shared cache helper.
+func GetStandardBlueprintNames() []string {
+	version := GetToolkitVersion()
+	cacheName := fmt.Sprintf("standard_blueprints_%s.json", version)
+
+	return getOrFetchCachedList(cacheName, func() []string {
+		// First, ensure we have the list of example files to parse
+		exampleFiles := GetPredefinedExampleFiles()
+		// Then, fetch the blueprint names from those files
+		return fetchBlueprintNamesFromGitHub(exampleFiles, version)
+	})
+}
+
+// getOrFetchCachedList is a generic helper that handles file-based caching for string slices.
+// It attempts to read from the local cache first if within a 24 hr TTL, and if it fails, executes the provided fetchFn.
+func getOrFetchCachedList(cacheFileName string, fetchFn func() []string) []string {
+	// 1. Determine the cache directory using the shared helper
+	cacheFile := filepath.Join(getLocalDirPath(true), cacheFileName)
+
+	// 2. Try to read from the local cache first, checking if it is within the 24-hour TTL
+	if stat, err := os.Stat(cacheFile); err == nil && time.Since(stat.ModTime()) < 24*time.Hour {
+		if data, err := os.ReadFile(cacheFile); err == nil {
+			var cachedList []string
+			if err := json.Unmarshal(data, &cachedList); err == nil {
+				return cachedList // Cache hit and within TTL!
+			}
+		}
+	}
+
+	// 3. Cache miss or expired TTL: Execute the provided fetch callback
+	fetchedList := fetchFn()
+
+	// 4. Save the successfully fetched list to the cache file (resets the ModTime)
+	if len(fetchedList) > 0 {
+		if data, err := json.Marshal(fetchedList); err == nil {
+			_ = os.MkdirAll(filepath.Dir(cacheFile), 0755)
+			_ = os.WriteFile(cacheFile, data, 0644)
+		}
+	}
+
+	return fetchedList
+}
+
+// getLocalDirPath determines the directory for storing local files (cache or config).
+func getLocalDirPath(isCache bool) string {
+	var baseDir string
+	var err error
+	if isCache {
+		baseDir, err = os.UserCacheDir()
+	} else {
+		baseDir, err = os.UserConfigDir()
+	}
+	if err != nil {
+		baseDir = os.TempDir() // Fallback if standard dir is unavailable
+	}
+	return filepath.Join(baseDir, "cluster-toolkit")
+}
+
+// TreeResponse represents the expected JSON structure from the GitHub Git Trees API
+type TreeResponse struct {
+	Tree []struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	} `json:"tree"`
+}
+
+// MinimalBlueprint is a lightweight struct to extract only the blueprint_name
+type MinimalBlueprint struct {
+	BlueprintName string `yaml:"blueprint_name"`
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+// fetchGitTree queries the GitHub API and decodes the JSON into a TreeResponse for the specific version.
+func fetchGitTree(version string) (*TreeResponse, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	req.Header.Set("User-Agent", "cluster-toolkit")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
+
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	return &treeResp, nil
+}
+
+// fetchModulesFromGitHub parses the GitHub tree to find standard modules.
+func fetchModulesFromGitHub(version string) []string {
+	moduleSet := make(map[string]bool)
+	predefinedModules := make([]string, 0)
+	treeResp, err := fetchGitTree(version)
+
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// Check for Terraform and Packer files in the module directories.
+			if item.Type == "blob" &&
+				(strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/")) &&
+				(strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl")) {
+				moduleDir := path.Dir(item.Path)
+				if !moduleSet[moduleDir] {
+					moduleSet[moduleDir] = true
+					predefinedModules = append(predefinedModules, moduleDir)
+				}
+			}
+		}
+	}
+
+	return predefinedModules
+}
+
+// fetchExampleFilesFromGitHub parses the GitHub tree to find standard example YAML files.
+func fetchExampleFilesFromGitHub(version string) []string {
+	predefinedExamples := make([]string, 0)
+	treeResp, err := fetchGitTree(version)
+
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// Check for YAML files in the examples directories.
+			if item.Type == "blob" &&
+				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+				(strings.HasSuffix(item.Path, ".yaml") || strings.HasSuffix(item.Path, ".yml")) {
+
+				predefinedExamples = append(predefinedExamples, item.Path)
+			}
+		}
+	}
+
+	return predefinedExamples
+}
+
+// fetchBlueprintNamesFromGitHub fetches and parses the blueprint names from the provided example files concurrently.
+func fetchBlueprintNamesFromGitHub(standardExampleFiles []string, version string) []string {
+	blueprintNamesSet := make(map[string]bool)
+	blueprintNames := make([]string, 0)
+
+	numJobs := len(standardExampleFiles)
+	if numJobs == 0 {
+		return blueprintNames
+	}
+
+	jobs := make(chan string, numJobs)
+	results := make(chan string, numJobs)
+	var wg sync.WaitGroup
+
+	// Set up a bounded worker pool (e.g., 10 concurrent connections)
+	numWorkers := min(numJobs, 10)
+
+	// 1. Start the worker goroutines
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go worker(version, jobs, results, &wg)
+	}
+
+	// 2. Feed the jobs channel with the file paths
+	for _, examplePath := range standardExampleFiles {
+		jobs <- examplePath
+	}
+	close(jobs) // Signal that no more jobs will be sent
+
+	// 3. Wait for all workers to finish in the background, then close the results channel
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// 4. Collect results synchronously (prevents race conditions on the map)
+	for bpName := range results {
+		if !blueprintNamesSet[bpName] {
+			blueprintNamesSet[bpName] = true
+			blueprintNames = append(blueprintNames, bpName)
+		}
+	}
+	return blueprintNames
+}
+
+// worker fetches YAML files from GitHub and extracts the blueprint_name
+func worker(version string, jobs <-chan string, results chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for examplePath := range jobs {
+		// Create a context with a strict 10-second timeout for each file fetch
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		rawURL := fmt.Sprintf("https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/%s/%s", version, examplePath)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			cancel()
+			continue
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			cancel()
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				var bp MinimalBlueprint
+				// Unmarshal gracefully ignores all fields except blueprint_name
+				if err := yaml.Unmarshal(body, &bp); err == nil && bp.BlueprintName != "" {
+					results <- bp.BlueprintName
+				}
+			}
+		}
+
+		resp.Body.Close()
+		cancel() // Release the context resources
+	}
 }

@@ -27,3 +27,9 @@ variable "placement_policy" {
     tpu_topology = optional(string)
   })
 }
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
+}

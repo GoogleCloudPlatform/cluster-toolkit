@@ -68,7 +68,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -399,4 +399,10 @@ variable "network_storage" {
     mount_options = string,
   }))
   default = []
+}
+
+variable "machine_configs" {
+  description = "Definition of GCE machine types and counts"
+  type        = any
+  default     = {}
 }

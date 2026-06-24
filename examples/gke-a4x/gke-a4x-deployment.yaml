@@ -46,8 +46,5 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
-  # The disk size of system node pool for this deployment.
-  system_node_pool_disk_size_gb:
-
-  # The disk size of a4x node pool for this deployment.
-  a4x_node_pool_disk_size_gb:
+  # The number of node pools (num_slices) to be created
+  num_node_pools:

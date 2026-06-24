@@ -19,6 +19,9 @@ terraform_backend_defaults:
     bucket: # supply bucket to store Terraform state
 
 vars:
+  # [RECOMMENDED] Enable Slurm Native Authentication. MUNGE is deprecating and scheduled for complete removal on July 31, 2026.
+  # For upgrade instructions, see docs/slurm-native-auth-migration-guide.md.
+  enable_slurm_auth: true
   deployment_name: # supply unique deployment name
   project_id: # supply existing project id
   region: # supply region with a3-highgpu-8g capacity in reservation
@@ -30,7 +33,7 @@ vars:
   slurm_cluster_name: # supply name for slurm cluster (lowercase letters, numbers, and hyphens, max 20 characters, must start with a letter)
   a3_static_cluster_size: # supply a3-highgpu-8g reservation size
   a3_partition_name: # supply partition name
-  disk_size_gb: 200
+
   # Additional provisioning models (pick only one), can be used to substitute `a3_reservation_name`:
   #
   # a3_dws_flex_enabled: true

@@ -22,7 +22,6 @@ tags:
 - m.cloud-storage-bucket
 - m.gke-job-template
 - m.gke-persistent-volume
-- m.pre-existing-network-storage
 - gke
 
 substitutions:
@@ -50,14 +49,7 @@ steps:
     set -e -u -o pipefail
     set -x
     cd /workspace
-    if [ "${_TEST_PREFIX}" == "daily-" ]; then
-        gsutil cp gs://$${GCLUSTER_GCS_PATH}/latest/gcluster-bundle.zip .
-        unzip -o gcluster-bundle.zip
-        # Grant execution permissions to the binary
-        chmod +x gcluster
-    else
-        make
-    fi
+    bash tools/get_binary.sh "${_TEST_PREFIX}"
     ZONE=asia-northeast1-b
     REGION=asia-northeast1
     BUILD_ID_SHORT="$${BUILD_ID:0:6}"

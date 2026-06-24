@@ -1,0 +1,342 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package job
+
+import (
+	"fmt"
+	"hpc-toolkit/pkg/config"
+	"os"
+	"path/filepath"
+	"slices"
+	"time"
+
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
+
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+var (
+	imageName      string
+	baseImage      string
+	buildContext   string
+	commandToRun   string
+	computeType    string
+	dryRunManifest string
+
+	workloadName     string
+	kueueQueueName   string
+	numNodes         int
+	numSlices        int
+	restarts         int
+	ttlAfterFinished string
+	gracePeriodStr   string
+
+	gkeDisableParallelContainers bool
+
+	placementPolicy string
+	nodeConstraint  map[string]string
+
+	cpuAffinityStr     string
+	restartOnExitCodes []int
+	imagePullSecrets   string
+	serviceAccountName string
+	topology           string
+	gkeScheduler       string
+	platform           string
+
+	awaitJobCompletion bool
+	timeoutStr         string
+	priorityClassName  string
+	isPathwaysJob      bool
+	verbose            bool
+
+	volumeStr []string
+	pathways  orchestrator.PathwaysJobDefinition
+
+	gkeNapProvisioning string
+	gkeNapReservation  string
+)
+
+var SubmitCmd = &cobra.Command{
+	Use:   "submit",
+	Short: "Submits a workload on a GKE cluster using JobSet.",
+	Long: `The 'submit' command deploys a workload (Kubernetes JobSet)
+on a GKE cluster, integrated with Kueue. Image can be pre-built (--image)
+or built on-the-fly using Crane (--base-image with --build-context).
+
+It accepts parameters for the container image, command to execute, accelerator type,
+and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
+	RunE: runSubmitCmd,
+
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if len(workloadName) > 28 {
+			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		}
+
+		if err := validateImageFlags(); err != nil {
+			return err
+		}
+
+		if err := validatePathwaysFlags(); err != nil {
+			return err
+		}
+
+		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
+			return err
+		}
+
+		if err := validateGKENAPFlags(); err != nil {
+			return err
+		}
+
+		priorityClassName = strings.ToLower(priorityClassName)
+
+		return nil
+	},
+	SilenceUsage: true,
+}
+
+func init() {
+	SubmitCmd.Flags().StringVarP(&imageName, "image", "i", "", "Name of the pre-built container image to run. Must include the full path including registry (e.g., us-docker.pkg.dev/my-project/my-repo/my-image:tag).")
+	SubmitCmd.Flags().StringVarP(&baseImage, "base-image", "B", "", "Name of the base image for Crane to build upon (e.g., python:3.9-slim). Requires --build-context.")
+	SubmitCmd.Flags().StringVarP(&buildContext, "build-context", "b", "", "Path to the build context directory for Crane (e.g., .). Required with --base-image.")
+	SubmitCmd.Flags().StringVarP(&commandToRun, "command", "e", "", "Command to execute in the container (e.g., 'python train.py'). Required.")
+	SubmitCmd.Flags().StringVar(&computeType, "compute-type", "", "Type of compute to request (e.g., 'n2-standard-32', 'nvidia-l4', 'v6e-8').")
+	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
+	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
+
+	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
+
+	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
+	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
+	SubmitCmd.Flags().IntVar(&numNodes, "num-nodes", 1, "The number of nodes to use per group/slice. Defaults to 1 for CPU/GPU, or auto-calculated for TPUs.")
+	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
+	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
+	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
+	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
+	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
+
+	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of the GKE placement policy to use.")
+	SubmitCmd.Flags().StringToStringVar(&nodeConstraint, "node-constraint", nil, "Key=value pairs for node labels to target specific nodes. Maps to nodeSelector in GKE, and to SLURM's --constraint.")
+	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
+	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
+	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images.")
+	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Service account name for the pods.")
+	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
+	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
+	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
+	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
+	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
+	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
+
+	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
+	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
+	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
+	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
+	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
+	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
+	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 1, "Maximum times the workers in a slice can be restarted. Used with --pathways-elastic-slices.")
+	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
+	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
+	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
+	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
+
+	_ = SubmitCmd.MarkFlagRequired("command")
+	_ = SubmitCmd.MarkFlagRequired("name")
+	_ = SubmitCmd.MarkFlagRequired("compute-type")
+}
+
+func runSubmitCmd(cmd *cobra.Command, args []string) error {
+	if dryRunManifest != "" {
+		if err := ensureDryRunDir(dryRunManifest); err != nil {
+			return err
+		}
+	}
+
+	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
+	if err != nil {
+		return err
+	}
+
+	gracePeriodSeconds, err := parseDurationToSeconds(gracePeriodStr, "--grace-period")
+	if err != nil {
+		return err
+	}
+
+	affinity := map[string]string{}
+	if cpuAffinityStr != "" {
+		affinity["cpu-affinity"] = cpuAffinityStr
+	}
+
+	if timeoutStr != "-1s" {
+		awaitJobCompletion = true
+	}
+
+	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
+		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+	}
+
+	jobDef := orchestrator.JobDefinition{
+		ImageName:                     imageName,
+		BaseImage:                     baseImage,
+		BuildContext:                  buildContext,
+		Platform:                      platform,
+		CommandToRun:                  commandToRun,
+		ComputeType:                   computeType,
+		DryRunManifest:                dryRunManifest,
+		ProjectID:                     projectID,
+		ClusterName:                   clusterName,
+		ClusterLocation:               location,
+		WorkloadName:                  workloadName,
+		KueueQueueName:                kueueQueueName,
+		NumSlices:                     numSlices,
+		NodesPerSlice:                 numNodes,
+		MaxRestarts:                   restarts,
+		TtlSecondsAfterFinished:       ttlSeconds,
+		TerminationGracePeriodSeconds: gracePeriodSeconds,
+		PlacementPolicy:               placementPolicy,
+		NodeConstraint:                nodeConstraint,
+		Affinity:                      affinity,
+		RestartOnExitCodes:            restartOnExitCodes,
+		ImagePullSecrets:              imagePullSecrets,
+		ServiceAccountName:            serviceAccountName,
+		Topology:                      topology,
+		GKEScheduler:                  gkeScheduler,
+		AwaitJobCompletion:            awaitJobCompletion,
+		UseParallelContainers:         !gkeDisableParallelContainers,
+		Timeout:                       timeoutStr,
+		PriorityClassName:             priorityClassName,
+		GKENAPProvisioning:            gkeNapProvisioning,
+		GKENAPReservation:             gkeNapReservation,
+		IsPathwaysJob:                 isPathwaysJob,
+		Pathways:                      pathways,
+		RawMounts:                     volumeStr,
+		Verbose:                       verbose,
+	}
+
+	return orc.SubmitJob(jobDef)
+}
+
+func parseDurationToSeconds(dStr string, flagName string) (int, error) {
+	d, err := time.ParseDuration(dStr)
+	if err == nil {
+		return int(d.Seconds()), nil
+	}
+
+	var seconds int
+	if _, err := fmt.Sscanf(dStr, "%d", &seconds); err == nil {
+		return seconds, nil
+	}
+
+	return 0, fmt.Errorf("invalid duration format for %s: %s. Expected formats: 1h, 30m, 3600", flagName, dStr)
+}
+
+func validatePathwaysFlags() error {
+	if isPathwaysJob {
+		if pathways.GCSLocation == "" {
+			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
+		}
+	} else {
+		// Check if any pathways-specific flag is set without --pathways
+		if pathways != (orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) {
+			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+		}
+	}
+	return nil
+}
+
+func validateImageFlags() error {
+	if err := validateImageSources(); err != nil {
+		return err
+	}
+	return validateBuildContext()
+}
+
+func validateImageSources() error {
+	if (imageName == "" && baseImage == "") || (buildContext != "" && baseImage == "") {
+		return fmt.Errorf("either --image or --base-image must be provided")
+	}
+	if imageName != "" && buildContext != "" {
+		return fmt.Errorf("--build-context cannot be provided when --image is used as no build is performed")
+	}
+	if baseImage != "" && buildContext == "" {
+		return fmt.Errorf("a --build-context must be provided when --base-image is used for a Crane build")
+	}
+	return nil
+}
+
+func validateBuildContext() error {
+	if buildContext == "" {
+		return nil
+	}
+	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
+	}
+	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
+		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
+	}
+	return nil
+}
+
+func validateGKENAPFlags() error {
+	gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
+	if gkeNapProvisioning != "" {
+		validModels := []string{"on-demand", "spot", "reservation"}
+		if !slices.Contains(validModels, gkeNapProvisioning) {
+			return fmt.Errorf("invalid value %q for --gke-nap-provisioning. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+		}
+
+		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
+			return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+		}
+	}
+	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
+		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
+	}
+	return nil
+}
+
+func ensureDryRunDir(path string) error {
+	if len(path) > 0 && os.IsPathSeparator(path[len(path)-1]) {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	dir := filepath.Dir(path)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			prompt := fmt.Sprintf("Directory %q does not exist. Would you like to create it?", dir)
+			if shell.PromptYesNo(prompt) {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create directory %s: %w", dir, err)
+				}
+				return nil
+			}
+			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
+		}
+		return fmt.Errorf("failed to check directory %s: %w", dir, err)
+	}
+	return nil
+}

@@ -17,6 +17,9 @@
 blueprint_name: a4xmax-bm-slurm
 
 vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: false
   deployment_name: ## Deployment name ##
   project_id: ## Project name ##
   region: ## A4X-Max Reservation Region ##
@@ -30,7 +33,7 @@ vars:
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-a4x-max-metal # Needs to be built with MOFED
-  build_slurm_from_git_ref: 6.10.10
+  build_slurm_from_git_ref: 6.12.1
 
   # Cluster env settings
   net0_range: 10.1.1.0/24
@@ -160,7 +163,7 @@ deployment_groups:
           set -e -x
           echo "Setting up asapd-lite service from Docker image..."
 
-          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.4"
+          ASAPD_IMAGE="us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8"
 
           # Authenticate Docker with gcloud
           gcloud auth configure-docker us-docker.pkg.dev -q

@@ -46,6 +46,7 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   network_name_system: "{{ network }}"
   subnetwork_name_system: "{{ sub_network}}"
   region: "{{ region }}"
@@ -57,4 +58,4 @@ cli_deployment_vars:
   enable_nvidia_dcgm: "true"
   a3mega_reservation_name: a3mega-reservation-0
   enable_nvidia_persistenced: true
-  final_image_family: "{{ deployment_name}}-u22"
+  final_image_family: "{{ deployment_name}}-u24"

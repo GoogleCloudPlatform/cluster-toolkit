@@ -140,6 +140,29 @@ is_excluded() {
 	return 1 # Not excluded
 }
 
+# Returns 0 if $1 (creation timestamp) is newer than or equal to $CUTOFF_TIME.
+# Returns 1 otherwise (meaning resource is older and candidate for deletion).
+is_newer() {
+	local creation_time="$1"
+	[[ -z "$creation_time" ]] && return 1
+
+	local creation_seconds cutoff_seconds
+	if ! creation_seconds=$(date -d "$creation_time" -u +%s 2>/dev/null); then
+		log "WARNING" "Failed to parse creation timestamp: $creation_time"
+		return 1
+	fi
+	if ! cutoff_seconds=$(date -d "$CUTOFF_TIME" -u +%s 2>/dev/null); then
+		log "WARNING" "Failed to parse cutoff time: $CUTOFF_TIME"
+		return 1
+	fi
+
+	if [[ $creation_seconds -ge $cutoff_seconds ]]; then
+		return 0 # Newer (should be protected)
+	else
+		return 1 # Older
+	fi
+}
+
 # Executes the delete command if not in DRY_RUN mode.
 execute_delete() {
 	local resource_type="$1"
@@ -202,24 +225,33 @@ populate_protected_resources() {
 	declare -A INSTANCES_TO_PROTECT # Map instance_name -> zone
 	declare -A TPUS_TO_PROTECT      # Map tpu_name -> zone
 
-	# Part 1: Protect instances, templates, and networks used by EXCLUDED GKE clusters.
+	# Part 1: Protect instances, templates, and networks used by EXCLUDED or NEW GKE clusters.
 	log "INFO" "Checking for GKE clusters to protect..."
 	local clusters_data
-	if ! clusters_data=$(gcloud container clusters list --project="$PROJECT_ID" --format="value(name,location,resourceLabels.map())"); then
+	if ! clusters_data=$(gcloud container clusters list --project="$PROJECT_ID" --format="value(name,location,createTime,resourceLabels.map())"); then
 		log "ERROR" "Failed to list GKE clusters."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r cluster_name location labels_str; do
+		while IFS=$'\t' read -r cluster_name location create_time labels_str; do
 			if [[ -z "$cluster_name" ]]; then
 				log "DEBUG" "Skipping GKE cluster line with empty name."
 				continue
 			fi
 
-			if ! is_excluded "$cluster_name" "$labels_str"; then # Returns 1 if NOT excluded
+			local protect=false
+			if is_excluded "$cluster_name" "$labels_str"; then
+				protect=true
+				log "INFO" "GKE Cluster ${cluster_name} is protected because it is in the exclusion list."
+			elif is_newer "$create_time"; then
+				protect=true
+				log "INFO" "GKE Cluster ${cluster_name} (created: $create_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "false" ]]; then
 				continue
 			fi
 
-			log "INFO" "GKE Cluster ${cluster_name} in ${location} is PROTECTED."
+			log "INFO" "Protecting GKE Cluster ${cluster_name} and its sub-resources..."
 			EXCLUSION_MAP["${cluster_name}"]=1 # Add cluster itself to exclusion map
 
 			local node_pools_data
@@ -303,18 +335,29 @@ populate_protected_resources() {
 		done <<<"$clusters_data"
 	fi
 
-	# Part 2: Protect instances based on their name in EXCLUSION_MAP or labels.
+	# Part 2: Protect instances based on their name in EXCLUSION_MAP, labels, or creation time.
 	log "INFO" "Checking for Compute Instances to protect..."
 	local instances_data
 	if ! instances_data=$(gcloud compute instances list \
 		--project="$PROJECT_ID" \
-		--format="value(name,zone.basename(),labels.map())"); then
+		--format="value(name,zone.basename(),creationTimestamp,labels.map())"); then
 		log "ERROR" "Failed to list Compute Instances."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r inst_name zone labels_str; do
+		while IFS=$'\t' read -r inst_name zone creation_time labels_str; do
 			[[ -z "$inst_name" ]] && continue
-			if is_excluded "$inst_name" "$labels_str"; then # Returns 0 if excluded
+
+			local protect=false
+			if [[ -n "${EXCLUSION_MAP[${inst_name}]:-}" ]]; then
+				protect=true
+			elif is_excluded "$inst_name" "$labels_str"; then
+				protect=true
+			elif is_newer "$creation_time"; then
+				protect=true
+				log "INFO" "Instance ${inst_name} (created: $creation_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "true" ]]; then
 				if ! [[ -v EXCLUSION_MAP["$inst_name"] ]]; then
 					log "INFO" "Protecting Instance: ${inst_name} in ${zone}"
 					EXCLUSION_MAP["${inst_name}"]=1
@@ -385,21 +428,31 @@ populate_protected_resources() {
 		done
 	fi
 
-	# Part 4: Protect TPU VMs based on their name in EXCLUSION_MAP or labels.
+	# Part 4: Protect TPU VMs based on their name in EXCLUSION_MAP, labels, or creation time.
 	log "INFO" "Checking for TPU VMs to protect..."
 	local tpus_data
-	if ! tpus_data=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="value(name,ZONE,labels.map())"); then
+	if ! tpus_data=$(gcloud compute tpus tpu-vm list --project="$PROJECT_ID" --zone - --format="value(name,ZONE,createTime,labels.map())"); then
 		log "ERROR" "Failed to list TPU VMs."
 		((ERROR_COUNT++)) || true
 	else
 		if [[ -z "$tpus_data" ]]; then
 			log "INFO" "No TPU VMs found in project $PROJECT_ID."
 		else
-			while IFS=$'\t' read -r tpu_name tpu_zone tpu_labels; do
+			while IFS=$'\t' read -r tpu_name tpu_zone create_time tpu_labels; do
 				[[ -z "$tpu_name" ]] && continue
 				log "DEBUG" "Read TPU: name='${tpu_name}', zone='${tpu_zone}', labels='${tpu_labels}'"
 
-				if is_excluded "$tpu_name" "$tpu_labels"; then # Returns 0 if excluded
+				local protect=false
+				if [[ -n "${EXCLUSION_MAP[${tpu_name}]:-}" ]]; then
+					protect=true
+				elif is_excluded "$tpu_name" "$tpu_labels"; then
+					protect=true
+				elif is_newer "$create_time"; then
+					protect=true
+					log "INFO" "TPU VM ${tpu_name} (created: $create_time) is protected because it was created after cutoff time."
+				fi
+
+				if [[ "$protect" == "true" ]]; then
 					if ! [[ -v EXCLUSION_MAP["$tpu_name"] ]]; then
 						log "INFO" "Protecting TPU VM '${tpu_name}' in ${tpu_zone} by adding to exclusion map."
 						EXCLUSION_MAP["${tpu_name}"]=1
@@ -503,17 +556,17 @@ populate_protected_resources() {
 		done <<<"$templates_data"
 	fi
 
-	# Part 8: Protect Networks used by EXCLUDED Managed Lustre instances.
+	# Part 8: Protect Networks used by EXCLUDED or NEW Managed Lustre instances.
 	log "INFO" "Checking for Managed Lustre instances to protect networks for..."
 
 	local lustre_data
 	if ! lustre_data=$(gcloud lustre instances list \
 		--project="$PROJECT_ID" \
 		--location=- \
-		--format="value(name,location)"); then
+		--format="value(name,location,createTime)"); then
 		log "WARNING" "Failed to list Managed Lustre instances for network protection."
 	else
-		while IFS=$'\t' read -r name location; do
+		while IFS=$'\t' read -r name location create_time; do
 			[[ -z "$name" ]] && continue
 
 			# Fetch label correctly
@@ -528,8 +581,18 @@ populate_protected_resources() {
 				labels_str="time-to-live=$label_value"
 			fi
 
+			local protect=false
 			if is_excluded "$name" "$labels_str"; then
+				protect=true
+			elif is_newer "$create_time"; then
+				protect=true
+				log "INFO" "Managed Lustre instance ${name} (created: $create_time) is protected because it was created after cutoff time."
+			fi
+
+			if [[ "$protect" == "true" ]]; then
 				log "INFO" "Managed Lustre instance ${name} in ${location} is PROTECTED."
+				# Add to EXCLUSION_MAP to prevent deletion of the Lustre instance itself
+				EXCLUSION_MAP["${name}"]=1
 
 				local network_uri
 				network_uri=$(gcloud lustre instances describe "$name" \
@@ -669,47 +732,142 @@ process_addresses() {
 }
 
 process_iam_deleted_members() {
-	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts ---"
-	local policy_data
-	if ! policy_data=$(gcloud projects get-iam-policy "$PROJECT_ID" --format="value(bindings[].role,bindings[].members)"); then
-		log "ERROR" "Failed to get IAM policy."
+	log "INFO" "--- Processing: IAM Role Bindings for Deleted Service Accounts (Bulk) ---"
+
+	# Run the python bulk script inline
+	if ! python3 - "$PROJECT_ID" "$DRY_RUN" <<'EOF'; then
+import json, os, subprocess, sys, tempfile
+
+project_id = sys.argv[1]
+dry_run = sys.argv[2].lower() == "true"
+
+try:
+    # 1. Fetch the current IAM policy
+    res = subprocess.run(["gcloud", "projects", "get-iam-policy", project_id, "--format=json"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print("ERROR: Failed to get IAM policy:", res.stderr)
+        sys.exit(1)
+
+    policy = json.loads(res.stdout)
+
+    # 2. Clean up bindings
+    original_member_count = 0
+    cleaned_member_count = 0
+    removed_members = []
+
+    new_bindings = []
+    for binding in policy.get("bindings", []):
+        role = binding.get("role")
+        members = binding.get("members", [])
+        original_member_count += len(members)
+        
+        cleaned_members = []
+        for m in members:
+            if m.startswith("deleted:serviceAccount:"):
+                removed_members.append((role, m))
+            else:
+                cleaned_members.append(m)
+                
+        if cleaned_members:
+            binding["members"] = cleaned_members
+            new_bindings.append(binding)
+            cleaned_member_count += len(cleaned_members)
+
+    policy["bindings"] = new_bindings
+    removed_count = len(removed_members)
+    print(f"Original member bindings: {original_member_count}")
+    print(f"Cleaned member bindings: {cleaned_member_count}")
+    print(f"Deleted service account bindings to remove: {removed_count}")
+
+    if removed_count == 0:
+        print("No deleted service accounts found in IAM policy. Nothing to do.")
+        sys.exit(0)
+
+    # 3. Apply or show changes
+    if dry_run:
+        print(f"[DRY-RUN] Would remove {removed_count} deleted service account bindings.")
+        print("Sample bindings to remove:")
+        for r, m in removed_members[:10]:
+            print(f"  - Role: {r}, Member: {m}")
+    else:
+        print(f"Applying bulk IAM policy update to remove {removed_count} bindings...")
+        temp_name = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+                temp_name = f.name
+                json.dump(policy, f)
+                
+            res2 = subprocess.run(["gcloud", "projects", "set-iam-policy", project_id, temp_name, "--format=json"], capture_output=True, text=True)
+            if res2.returncode != 0:
+                print("ERROR: Failed to set IAM policy:", res2.stderr)
+                sys.exit(1)
+            print("SUCCESS: Successfully removed all deleted service accounts from IAM policy in bulk!")
+        finally:
+            if temp_name and os.path.exists(temp_name):
+                os.remove(temp_name)
+except Exception as e:
+    print(f"ERROR: An unexpected error occurred: {e}")
+    sys.exit(1)
+EOF
+		log "ERROR" "Bulk IAM cleanup failed."
+		((ERROR_COUNT++)) || true
+	else
+		log "INFO" "Finished bulk processing of IAM deleted members."
+	fi
+}
+
+process_service_accounts() {
+	log "INFO" "--- Processing: Service Accounts ---"
+	local sas_data
+	if ! sas_data=$(gcloud iam service-accounts list --project="$PROJECT_ID" --format="value(email,displayName)"); then
+		log "ERROR" "Failed to list Service Accounts."
 		((ERROR_COUNT++)) || true
 		return 0
 	fi
-	if [[ -z "$policy_data" ]]; then
-		log "INFO" "No IAM bindings found."
+	if [[ -z "$sas_data" ]]; then
+		log "INFO" "No service accounts found."
 		return 0
 	fi
 
 	local count=0
-	while IFS=$'\t' read -r role members_str; do
-		if [[ -z "$role" || -z "$members_str" ]]; then continue; fi
+	while IFS=$'\t' read -r email _; do
+		[[ -z "$email" ]] && continue
 
-		IFS=';' read -ra members <<<"$members_str"
-		for member in "${members[@]}"; do
-			if [[ "$member" == deleted:serviceAccount:* ]]; then
-				local -a cmd=(
-					"gcloud" "projects" "remove-iam-policy-binding" "$PROJECT_ID"
-					"--member=$member"
-					"--role=$role"
-					"--condition=None"
-					"--quiet"
-				)
+		local username="${email%%@*}"
 
-				if [[ "$DRY_RUN" == "true" ]]; then
-					log "DRY-RUN" "Would remove IAM binding: $member from role $role"
-				else
-					log "EXECUTE" "Removing IAM binding: $member from role $role"
-					if ! "${cmd[@]}" >/dev/null; then
-						log "ERROR" "Failed to remove IAM binding for $member in role $role"
-						((ERROR_COUNT++)) || true
-					fi
+		# Safety filter: only process service accounts matching integration test patterns
+		if [[ "$username" != *-compute && "$username" != *-controller && "$username" != *-login && "$username" != *-sa && "$username" != dummy-* && "$username" != test-* ]]; then
+			log "SKIP" "Service Account $email does not match known test patterns. Skipping to prevent accidental deletion."
+			continue
+		fi
+
+		# Check if the service account is protected/excluded
+		local protected=false
+
+		# 1. Check if the full email or the username part is directly in EXCLUSION_MAP
+		if [[ -n "${EXCLUSION_MAP[${email}]:-}" || -n "${EXCLUSION_MAP[${username}]:-}" ]]; then
+			protected=true
+		fi
+
+		# 2. Check if any protected resource name (keys of EXCLUSION_MAP) is a substring of the email
+		if [[ "$protected" == "false" ]]; then
+			for protected_name in "${!EXCLUSION_MAP[@]}"; do
+				if [[ "$email" == *"$protected_name"* ]]; then
+					protected=true
+					log "DEBUG" "Service Account $email is protected because it contains protected resource name: $protected_name"
+					break
 				fi
-				((count++)) || true
-			fi
-		done
-	done <<<"$policy_data"
-	log "INFO" "Finished processing IAM deleted members. $count bindings actioned."
+			done
+		fi
+
+		# 3. If not protected, delete it
+		if [[ "$protected" == "false" ]]; then
+			execute_delete "Service Account" "$email" "" \
+				gcloud iam service-accounts delete "$email" --project="$PROJECT_ID" --quiet
+			((count++)) || true
+		fi
+	done <<<"$sas_data"
+	log "INFO" "Finished processing Service Accounts. $count service accounts actioned."
 }
 
 process_vm_images() {
@@ -1113,6 +1271,7 @@ main() {
 
 	# --- Phase 5: IAM Cleanup ---
 	log "INFO" "--- PHASE 5: Cleaning up IAM Policy Bindings ---"
+	process_service_accounts
 	process_iam_deleted_members
 
 	log "INFO" "CLEANUP RUN FINISHED for project: $PROJECT_ID"
