@@ -29,13 +29,18 @@
     TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
   ansible.builtin.shell: |
     if [ -z "$TRIAGE_BUILD_ID" ]; then
-      echo "SKIPPED: No full_build_id provided. Append full_build_id=... to extra-vars to trigger."
+      echo "SKIPPED: The 'full_build_id' variable is missing." >&2
+      exit 0
+    fi
+
+    if ! gcloud storage buckets describe "gs://$TRIAGE_GCS_BUCKET" >/dev/null 2>&1; then
+      echo "SKIPPED: Triage Agent bucket '$TRIAGE_GCS_BUCKET' does not exist." >&2
       exit 0
     fi
 
     CONFIG_CONTENT=$(gcloud storage cat "gs://$TRIAGE_GCS_BUCKET/config_triage_agent.env" 2>/dev/null || echo "enable_agent=false")
-    if ! echo "$CONFIG_CONTENT" | grep -qi "^enable_agent=true"; then
-      echo "SKIPPED: Failure Triage Agent is currently disabled in config_triage_agent.env."
+    if ! echo "$CONFIG_CONTENT" | grep -qi '^[[:space:]]*enable_agent[[:space:]]*=[[:space:]]*true'; then
+      echo "SKIPPED: Failure Triage Agent is currently disabled in config_triage_agent.env." >&2
       exit 0
     fi
 
@@ -64,13 +69,17 @@
         exit 1
       fi
 
-      HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$TRIAGE_CLOUD_RUN_URL/trigger" \
+      RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "$TRIAGE_CLOUD_RUN_URL/trigger" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{\"build_id\": \"$TRIAGE_BUILD_ID\", \"project_number\": \"$TRIAGE_PROJECT_NUMBER\"}")
 
-      if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "202" ]; then
+      HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+      BODY=$(echo "$RESPONSE" | sed '$d')
+
+      if [ "$HTTP_STATUS" != "202" ]; then
         echo "Failed to trigger agent. HTTP Status: $HTTP_STATUS" >&2
+        echo "Response Body: $BODY" >&2
         exit 1
       fi
 
@@ -83,6 +92,7 @@
       TRIAGE_BUILD_ID: "{{ triage_build_id }}"
       TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
     ansible.builtin.shell: |
+      # Wait for Cloud Run to start and for the initial state file to be copied
       sleep 60
       for i in {1..30}; do
         STATE_JSON=$(gcloud storage cat "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" 2>/dev/null || echo '{}')
@@ -91,6 +101,7 @@
           echo "$STATE_JSON"
           exit 0
         fi
+        # Time delay between polling attempts
         sleep 60
       done
       exit 1
@@ -103,13 +114,13 @@
       msg: |
         {% if agent_state.failed or (agent_state.stdout | default('{}', true) | from_json).status | default('') != 'completed' %}
         Failure Triage Agent testing did not complete in time or failed internally.
-
-        State File Link:
-        https://console.cloud.google.com/storage/browser/_details/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
         {% else %}
         TRIAGE EXECUTIVE SUMMARY:
-        {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') }}
+        {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') | wordwrap(100) }}
 
-        Full forensic report available at:
+        Full diagnostic report available at:
         https://storage.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
         {% endif %}
+
+        For detailed intermediate state information, please review the state file:
+        https://console.cloud.google.com/storage/browser/_details/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
