@@ -114,17 +114,23 @@ func (w PackerWriter) restoreState(deploymentDir string) error {
 		dest := filepath.Join(deploymentDir, relPath)
 
 		// Ensure the destination directory exists before writing (it should have been created by writeGroup).
-		if _, err := os.Stat(filepath.Dir(dest)); err == nil {
-			bytesRead, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("failed to read previous packer manifest %s: %w", path, err)
+		_, err = os.Stat(filepath.Dir(dest))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
 			}
-			err = os.WriteFile(dest, bytesRead, 0644)
-			if err != nil {
-				return fmt.Errorf("failed to write previous packer manifest %s: %w", dest, err)
-			}
-			logging.Info("Restored packer manifest to %s", dest)
+			return fmt.Errorf("failed to stat destination directory %s: %w", filepath.Dir(dest), err)
 		}
+
+		bytesRead, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read previous packer manifest %s: %w", path, err)
+		}
+		err = os.WriteFile(dest, bytesRead, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to write previous packer manifest %s: %w", dest, err)
+		}
+		logging.Info("Restored packer manifest to %s", dest)
 
 		return nil
 	})
