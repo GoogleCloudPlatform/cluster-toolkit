@@ -179,6 +179,44 @@ func (s *zeroSuite) TestRestoreTfState(c *C) {
 	c.Check(err, IsNil)
 }
 
+func (s *zeroSuite) TestRestorePackerState(c *C) {
+	// set up dir structure
+	//
+	// └── test_dir
+	//    ├── .ghpc
+	//       └── previous_deployment_groups
+	//          └── packer_group
+	//             └── image
+	//                └── packer-manifest.json
+	//    └── packer_group
+	//       └── image
+	depDir := c.MkDir()
+	groupName := "packer_group"
+	subPath := "image"
+	manifestContent := `{"builds": [{"artifact_id": "my-image"}]}`
+
+	prevGroup := filepath.Join(HiddenGhpcDir(depDir), prevGroupDirName, groupName, subPath)
+	curGroup := filepath.Join(depDir, groupName, subPath)
+	prevManifest := filepath.Join(prevGroup, packerManifestFileName)
+
+	c.Assert(os.MkdirAll(prevGroup, 0755), IsNil)
+	c.Assert(os.MkdirAll(curGroup, 0755), IsNil)
+	c.Assert(os.WriteFile(prevManifest, []byte(manifestContent), 0644), IsNil)
+
+	testWriter := PackerWriter{}
+	c.Check(testWriter.restoreState(depDir), IsNil)
+
+	// check manifest file was copied to current resource group dir
+	curManifest := filepath.Join(curGroup, packerManifestFileName)
+	_, err := os.Stat(curManifest)
+	c.Check(err, IsNil)
+
+	// check content is identical
+	gotContent, err := os.ReadFile(curManifest)
+	c.Check(err, IsNil)
+	c.Check(string(gotContent), Equals, manifestContent)
+}
+
 func TestGetTypeTokensRelaxed(t *testing.T) {
 	type test struct {
 		input cty.Type

@@ -19,9 +19,11 @@ package modulewriter
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -85,8 +87,52 @@ func (w PackerWriter) writeGroup(
 	return nil
 }
 
+const packerManifestFileName = "packer-manifest.json"
+
 func (w PackerWriter) restoreState(deploymentDir string) error {
-	// TODO: restore packer-manifest.json if it exists
+	prevGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevGroupDirName)
+
+	// If the previous deployment groups directory doesn't exist, there is nothing to restore.
+	if _, err := os.Stat(prevGroupPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	err := filepath.WalkDir(prevGroupPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != packerManifestFileName {
+			return nil
+		}
+
+		// Found a packer-manifest.json. Determine its relative path from prevGroupPath.
+		relPath, err := filepath.Rel(prevGroupPath, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for %s: %w", path, err)
+		}
+
+		dest := filepath.Join(deploymentDir, relPath)
+
+		// Ensure the destination directory exists before writing (it should have been created by writeGroup).
+		if _, err := os.Stat(filepath.Dir(dest)); err == nil {
+			bytesRead, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("failed to read previous packer manifest %s: %w", path, err)
+			}
+			err = os.WriteFile(dest, bytesRead, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to write previous packer manifest %s: %w", dest, err)
+			}
+			logging.Info("Restored packer manifest to %s", dest)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error trying to restore packer manifests: %w", err)
+	}
+
 	return nil
 }
 
