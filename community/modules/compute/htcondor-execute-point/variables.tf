@@ -141,6 +141,7 @@ variable "network_interfaces" {
     Each network interface should have the following fields:
     - network (required): The self link of the network
     - subnetwork (optional): The self link of the subnetwork
+    - subnetwork_project (optional): The self link of the subnetwork project
     - nic_type (optional): "GVNIC" or "VIRTIO_NET"
     - stack_type (optional): "IPV4_ONLY" or "IPV4_IPV6"
     - network_ip (optional): Specific IP address to assign
