@@ -1170,12 +1170,6 @@ var machineFamilyToLabelMap = map[string]string{
 func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) string {
 	resolvedLower := strings.ToLower(acceleratorType)
 
-	// Fallback for direct values
-	switch resolvedLower {
-	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5-lite-podslice":
-		return acceleratorType
-	}
-
 	parts := strings.Split(resolvedLower, "-")
 
 	// Try matching first two parts (e.g., "g2-standard")

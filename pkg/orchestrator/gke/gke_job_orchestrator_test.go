@@ -2259,3 +2259,48 @@ func TestPopulateNAPFlavors(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateGKENodeSelectorLabel(t *testing.T) {
+	orc := &GKEOrchestrator{}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Mapped families (2 parts)
+		{"g2-standard-48", "nvidia-l4"},
+		{"a3-highgpu-8g", "nvidia-h100-80gb"},
+		{"a2-highgpu-1g", "nvidia-tesla-a100"},
+		{"g4-standard-4", "nvidia-rtx-pro-6000"},
+		{"ct6e-standard-8t", "tpu-v6e-slice"},
+
+		// Mapped families (1 part)
+		{"v6e-standard", "tpu-v6e-slice"},
+		{"v5litepod-slice", "tpu-v5-lite-podslice"},
+		{"v4-podslice", "tpu-v4-podslice"},
+		{"l4-standard", "nvidia-l4"},
+
+		// Old switch fallbacks (unmapped directly, but should return as is)
+		{"nvidia-tesla-a100", "nvidia-tesla-a100"},
+		{"tpu-v4-podslice", "tpu-v4-podslice"},
+		{"tpu-v6e-slice", "tpu-v6e-slice"},
+		{"tpu-v5p-slice", "tpu-v5p-slice"},
+		{"tpu-v5-lite-podslice", "tpu-v5-lite-podslice"},
+
+		// Unmapped values
+		{"unknown-accelerator", "unknown-accelerator"},
+		{"h100", "h100"},
+
+		// Case insensitivity
+		{"G2-STANDARD-48", "nvidia-l4"},
+		{"NVIDIA-TESLA-A100", "NVIDIA-TESLA-A100"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := orc.GenerateGKENodeSelectorLabel(tc.input)
+			if got != tc.want {
+				t.Errorf("GenerateGKENodeSelectorLabel(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
