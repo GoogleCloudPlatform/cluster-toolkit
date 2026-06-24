@@ -51,13 +51,18 @@ steps:
     bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=us-central1
-    ZONE=us-central1-b
+    REGION=us-west8
+    ZONE=us-west8-a
 
     BLUEPRINT="/workspace/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
+
+    # Adding this as filestore APIs are not available on us-west8-a. Should be removed once reservation is moved or updated to non us-west8-a region
+    sed -i '/- id: homefs/,/- network_storage/d' $${BLUEPRINT}
+    sed -i '/- homefs/d' $${BLUEPRINT}
+    sed -i '/filestore_ip_range:/d' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 \
