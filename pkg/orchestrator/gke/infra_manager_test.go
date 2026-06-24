@@ -68,10 +68,12 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 				"flavor-tpu": { // TPU flavor (name contains 'tpu')
 					CPUs:     100,
 					MemoryGi: 400,
+					TPUs:     8, // Physical TPU capacity
 				},
-				"pathways-flavor": { // Pathways flavor
+				"pathways-flavor": { // Pathways flavor (CPU-only)
 					CPUs:     480,
 					MemoryGi: 2000,
+					TPUs:     0, // No TPUs
 				},
 			},
 		},
@@ -86,18 +88,27 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 
 	// Verify quotas are rendered correctly
 	// The TPU flavor (flavor-tpu) CPU/Memory must be overridden to the high defaults (999999 / 999999T)
+	// The TPU nominal quota should match physical capacity (8)
 	if !strings.Contains(output, "nominalQuota: \"999999\"") {
 		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
 	}
 	if !strings.Contains(output, "nominalQuota: 999999T") {
 		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
 	}
+	if !strings.Contains(output, "nominalQuota: 8") {
+		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
+	}
+
 	// The Pathways flavor CPU/Memory should remain at their physical/mocked values
+	// The TPU nominal quota for Pathways flavor must be successfully injected as 0
 	if !strings.Contains(output, "nominalQuota: 480") {
 		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
 	}
 	if !strings.Contains(output, "nominalQuota: 2000Gi") {
 		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 0") {
+		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
 	}
 
 	// Verify SINGLE resource group (unified when Pathways is active)
