@@ -63,13 +63,14 @@ steps:
     sed -i "s/<your-ip-address>/$${IP}/" $${EXAMPLE_BP}
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
 
-    # 1. Add the fix_vpc_name.py script execution
-    python3 tools/fix_vpc_name.py $${EXAMPLE_BP} "${_TEST_PREFIX}"
+    # 1. Run the script execution
+    python3 tools/fix_vpc_name.py "$${EXAMPLE_BP}" "${_TEST_PREFIX}"
 
-    # 2. Add separated extra-vars to safely isolate an empty test_prefix from use_fixed_vpc
+    # 2. Use isolated flags to avoid empty string space-parsing errors
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX}" \
       --extra-vars="use_fixed_vpc=true" \
+      --extra-vars="test_name=gke-managed-lustre" \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-lustre.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
