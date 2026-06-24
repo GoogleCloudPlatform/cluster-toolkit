@@ -561,3 +561,27 @@ variable "dranet_allocation_mode" {
   default     = "All"
   description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
 }
+
+variable "enable_confidential_nodes" {
+  description = "Enable Confidential Nodes for this node pool."
+  type        = bool
+  default     = false
+}
+
+variable "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes (e.g., SEV, SEV_SNP, TDX). Leave null for default."
+  type        = string
+  default     = null
+}
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage on the node pool. Node boot disks will be encrypted using keys protected by the Confidential VM."
+  type        = bool
+  default     = false
+}
+
+variable "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable_confidential_storage is true."
+  type        = string
+  default     = null
+}
