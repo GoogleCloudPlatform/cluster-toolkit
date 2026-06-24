@@ -46,7 +46,7 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: slurm-ubuntu2404-accelerator-arm64-64k
-  a4x_reservation_name: # supply reservation name
+  a4x_reservation_name: "" # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # To enable Managed-Lustre please uncomment this section and fill out the settings.
