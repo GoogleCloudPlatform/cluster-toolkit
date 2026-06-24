@@ -125,6 +125,7 @@ locals {
       for ni in var.network_interfaces : {
         network            = ni.network
         subnetwork         = ni.subnetwork
+        subnetwork_project = ni.subnetwork_project
         nic_type           = ni.nic_type
         stack_type         = ni.stack_type
         network_ip         = ni.network_ip
@@ -138,6 +139,7 @@ locals {
       {
         network            = var.network_self_link
         subnetwork         = var.subnetwork_self_link
+        subnetwork_project = null
         nic_type           = null
         stack_type         = null
         network_ip         = ""
