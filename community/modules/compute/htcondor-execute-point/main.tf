@@ -184,11 +184,12 @@ module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 14.0"
 
-  name_prefix = local.name_prefix
-  project_id  = var.project_id
-  region      = var.region
-  network     = local.network_interfaces[0].network
-  subnetwork  = local.network_interfaces[0].subnetwork
+  name_prefix        = local.name_prefix
+  project_id         = var.project_id
+  region             = var.region
+  network            = local.network_interfaces[0].network
+  subnetwork         = local.network_interfaces[0].subnetwork
+  subnetwork_project = local.network_interfaces[0].subnetwork_project
 
   additional_networks = [
     for network_interface in slice(local.network_interfaces, 1, length(local.network_interfaces)) : {
