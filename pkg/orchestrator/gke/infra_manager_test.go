@@ -65,7 +65,7 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	orc := &GKEOrchestrator{
 		capacity: ClusterCapacity{
 			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {
+				"flavor-tpu": { // TPU flavor (name contains 'tpu')
 					CPUs:     100,
 					MemoryGi: 400,
 				},
@@ -85,17 +85,33 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	output := string(bytes)
 
 	// Verify quotas are rendered correctly
-	if !strings.Contains(output, "nominalQuota: 100") {
-		t.Errorf("expected nominalQuota: 100 for CPU, got %s", output)
+	// The TPU flavor (flavor-tpu) CPU/Memory must be overridden to the high defaults (999999 / 999999T)
+	if !strings.Contains(output, "nominalQuota: \"999999\"") {
+		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
 	}
+	if !strings.Contains(output, "nominalQuota: 999999T") {
+		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
+	}
+	// The Pathways flavor CPU/Memory should remain at their physical/mocked values
 	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for CPU, got %s", output)
+		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 2000Gi") {
+		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
 	}
 
-	// Verify TWO resource groups
+	// Verify SINGLE resource group (unified when Pathways is active)
 	count := strings.Count(output, "coveredResources:")
-	if count != 2 {
-		t.Errorf("expected 2 coveredResources blocks for Pathways case, got %d. Output: %s", count, output)
+	if count != 1 {
+		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
+	}
+
+	// Verify both flavors are present in the output
+	if !strings.Contains(output, "name: flavor-tpu") {
+		t.Errorf("expected flavor-tpu in output, got %s", output)
+	}
+	if !strings.Contains(output, "name: pathways-flavor") {
+		t.Errorf("expected pathways-flavor in output, got %s", output)
 	}
 }
 
