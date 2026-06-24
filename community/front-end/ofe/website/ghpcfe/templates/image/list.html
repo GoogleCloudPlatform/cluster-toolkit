@@ -193,8 +193,10 @@ function refreshImageStatus(imageId) {
         statusElement.attr('src', '/static/img/loading.gif').attr('alt', 'Loading');
       } else if (data.status === 'r') {
         statusElement.attr('src', '/static/img/status-ready.png').attr('alt', 'Ready');
+        return; // Stop polling once the image is in a terminal ready state
       } else if (data.status === 'e') {
         statusElement.attr('src', '/static/img/status-error.png').attr('alt', 'Error');
+        return; // Stop polling once the image is in a terminal error state
       }
 
       // Schedule the next refresh after 5 seconds

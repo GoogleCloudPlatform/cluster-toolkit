@@ -87,9 +87,10 @@
         type: "GET",
         dataType: "json",
         success: function (data) {
-          // when the cluster becomes ready, stop polling and reload the page
-          // so it renders the fully-ready state
-          if (data.status === "r") {
+          // If the status is no longer in an active polling state, reload the
+          // page to render the final state (e.g., ready, error, deleted).
+          const activeStatuses = ["c", "i", "t", "n"];
+          if (!activeStatuses.includes(data.status)) {
             location.reload();
           } else {
             setTimeout(pollClusterStatus, 5000);
