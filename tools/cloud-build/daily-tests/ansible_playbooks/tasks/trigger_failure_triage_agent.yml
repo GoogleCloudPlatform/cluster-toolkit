@@ -33,8 +33,9 @@
       exit 0
     fi
 
-    if ! gcloud storage ls "gs://$TRIAGE_GCS_BUCKET/ENABLE_TRIAGE_AGENT" >/dev/null 2>&1; then
-      echo "SKIPPED: Failure Triage Agent is currently disabled (no ENABLE_TRIAGE_AGENT flag found in GCS)."
+    CONFIG_CONTENT=$(gcloud storage cat "gs://$TRIAGE_GCS_BUCKET/config_triage_agent.env" 2>/dev/null || echo "enable_agent=false")
+    if ! echo "$CONFIG_CONTENT" | grep -qi "^enable_agent=true"; then
+      echo "SKIPPED: Failure Triage Agent is currently disabled in config_triage_agent.env."
       exit 0
     fi
 
