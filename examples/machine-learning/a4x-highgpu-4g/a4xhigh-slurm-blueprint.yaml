@@ -248,7 +248,6 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     settings:
-      zone: us-central1-c
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
@@ -627,7 +626,6 @@ deployment_groups:
     - a4x-slurm-net-0
     settings:
       region: $(vars.region)
-      zone: us-central1-c
       enable_login_public_ips: true
       instance_image_custom: true
       disk_type: hyperdisk-balanced
@@ -698,7 +696,6 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       machine_type: c4a-highcpu-16
-      zone: us-central1-c
       disk_type: hyperdisk-balanced
       instance_image_custom: true
       cloud_parameters:
