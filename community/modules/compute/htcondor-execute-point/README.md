@@ -196,7 +196,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -204,14 +204,14 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
 
 | Name | Source | Version |
-|------|--------|---------|
+| ---- | ------ | ------- |
 | <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 14.0 |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 14.0 |
@@ -220,7 +220,7 @@ limitations under the License.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_storage_bucket_object.execute_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [null_resource.execute_config](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
@@ -229,7 +229,7 @@ limitations under the License.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
@@ -249,7 +249,7 @@ limitations under the License.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor execute points | `map(string)` | `{}` | no |
 | <a name="input_min_idle"></a> [min\_idle](#input\_min\_idle) | Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max\_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly. | `number` | `0` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module | `string` | n/a | yes |
-| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces to attach to HTCondor execute point instances.<br/>Each network interface should have the following fields:<br/>- network (required): The self link of the network<br/>- subnetwork (optional): The self link of the subnetwork<br/>- nic\_type (optional): "GVNIC" or "VIRTIO\_NET"<br/>- stack\_type (optional): "IPV4\_ONLY" or "IPV4\_IPV6"<br/>- network\_ip (optional): Specific IP address to assign<br/>- queue\_count (optional): Queue count for multiqueue NIC<br/>- access\_config (optional): List of NAT config objects<br/>- ipv6\_access\_config (optional): List of IPv6 access config objects<br/>- alias\_ip\_range (optional): List of alias IP ranges<br/><br/>If the list is empty, the module will fall back to using var.network\_self\_link<br/>and var.subnetwork\_self\_link for backward compatibility.<br/><br/>NB: If you update the current setup with network interfaces, you may need to delete the current mig to apply the new network interface configuration | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = optional(string)<br/>    subnetwork_project = optional(string)<br/>    nic_type           = optional(string)<br/>    stack_type         = optional(string)<br/>    network_ip         = optional(string, "")<br/>    queue_count        = optional(number)<br/>    access_config = optional(list(object({<br/>      nat_ip       = optional(string)<br/>      network_tier = optional(string)<br/>    })), [])<br/>    ipv6_access_config = optional(list(object({<br/>      network_tier = optional(string)<br/>    })), [])<br/>    alias_ip_range = optional(list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    })), [])<br/>  }))</pre> | `[]` | no |
+| <a name="input_network_interfaces"></a> [network\_interfaces](#input\_network\_interfaces) | A list of network interfaces to attach to HTCondor execute point instances.<br/>Each network interface should have the following fields:<br/>- network (required): The self link of the network<br/>- subnetwork (optional): The self link of the subnetwork<br/>- subnetwork\_project (optional): The self link of the subnetwork project<br/>- nic\_type (optional): "GVNIC" or "VIRTIO\_NET"<br/>- stack\_type (optional): "IPV4\_ONLY" or "IPV4\_IPV6"<br/>- network\_ip (optional): Specific IP address to assign<br/>- queue\_count (optional): Queue count for multiqueue NIC<br/>- access\_config (optional): List of NAT config objects<br/>- ipv6\_access\_config (optional): List of IPv6 access config objects<br/>- alias\_ip\_range (optional): List of alias IP ranges<br/><br/>If the list is empty, the module will fall back to using var.network\_self\_link<br/>and var.subnetwork\_self\_link for backward compatibility.<br/><br/>NB: If you update the current setup with network interfaces, you may need to delete the current mig to apply the new network interface configuration | <pre>list(object({<br/>    network            = string<br/>    subnetwork         = optional(string)<br/>    subnetwork_project = optional(string)<br/>    nic_type           = optional(string)<br/>    stack_type         = optional(string)<br/>    network_ip         = optional(string, "")<br/>    queue_count        = optional(number)<br/>    access_config = optional(list(object({<br/>      nat_ip       = optional(string)<br/>      network_tier = optional(string)<br/>    })), [])<br/>    ipv6_access_config = optional(list(object({<br/>      network_tier = optional(string)<br/>    })), [])<br/>    alias_ip_range = optional(list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    })), [])<br/>  }))</pre> | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network HTCondor execute points will join | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HTCondor execute points will be created | `string` | n/a | yes |
@@ -266,7 +266,7 @@ limitations under the License.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_autoscaler_runner"></a> [autoscaler\_runner](#output\_autoscaler\_runner) | Toolkit runner to configure the HTCondor autoscaler |
 | <a name="output_mig_id"></a> [mig\_id](#output\_mig\_id) | ID of the managed instance group containing the execute points |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
