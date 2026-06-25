@@ -14,10 +14,10 @@
 ---
 - name: Set Triage Agent Configuration
   ansible.builtin.set_fact:
-    triage_gcs_bucket: "{{ triage_gcs_bucket_override | default('g-ift-agent-bucket') }}"
-    triage_project_number: "{{ triage_project_number_override | default('508417052821') }}"
-    triage_invoker_sa: "{{ triage_invoker_sa_override | default('triage-invoker@hpc-toolkit-dev.iam.gserviceaccount.com') }}"
-    triage_cloud_run_url: "{{ triage_cloud_run_url_override | default('https://failure-triage-agent-508417052821.us-central1.run.app') }}"
+    triage_gcs_bucket: "{{ triage_gcs_bucket_override | default('') }}"
+    triage_project_number: "{{ triage_project_number_override | default('') }}"
+    triage_invoker_sa: "{{ triage_invoker_sa_override | default('') }}"
+    triage_cloud_run_url: "{{ triage_cloud_run_url_override | default('') }}"
 
 - name: Check Triage Agent Prerequisites
   delegate_to: localhost
@@ -27,7 +27,15 @@
   environment:
     TRIAGE_BUILD_ID: "{{ full_build_id | default('') }}"
     TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
+    TRIAGE_PROJECT_NUMBER: "{{ triage_project_number }}"
+    TRIAGE_INVOKER_SA: "{{ triage_invoker_sa }}"
+    TRIAGE_CLOUD_RUN_URL: "{{ triage_cloud_run_url }}"
   ansible.builtin.shell: |
+    if [ -z "$TRIAGE_GCS_BUCKET" ] || [ -z "$TRIAGE_PROJECT_NUMBER" ] || [ -z "$TRIAGE_INVOKER_SA" ] || [ -z "$TRIAGE_CLOUD_RUN_URL" ]; then
+      echo "SKIPPED: One or more Triage Agent configuration variables are missing." >&2
+      exit 0
+    fi
+
     if [ -z "$TRIAGE_BUILD_ID" ]; then
       echo "SKIPPED: The 'full_build_id' variable is missing." >&2
       exit 0
@@ -46,6 +54,7 @@
 
     echo "PROCEED: Agent is enabled and build ID is present."
   register: triage_init
+  ignore_errors: true
 
 - name: Execute Triage Agent Pipeline
   when: "'PROCEED' in triage_init.stdout"
@@ -82,6 +91,7 @@
         echo "Response Body: $BODY" >&2
         exit 1
       fi
+    ignore_errors: true
 
   - name: Wait for Analysis to Complete
     delegate_to: localhost

@@ -83,11 +83,23 @@ steps:
       --extra-vars="enable_spot=$${ENABLE_SPOT}" \
       --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
       --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
-      --extra-vars="@$${VARS_FILE}"
-  secretEnv: ['CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY']
+      --extra-vars="@$${VARS_FILE}" \
+        --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
+        --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
+        --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
+        --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
+  secretEnv: ['CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/custom-image-project/versions/latest
     env: 'CUSTOM_IMAGE_PROJECT'
   - versionName: projects/${PROJECT_ID}/secrets/custom-image-family-2404/versions/latest
     env: 'CUSTOM_IMAGE_FAMILY'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
+    env: 'TRIAGE_GCS_BUCKET'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
+    env: 'TRIAGE_PROJECT_NUMBER'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
+    env: 'TRIAGE_INVOKER_SA'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
+    env: 'TRIAGE_CLOUD_RUN_URL'
