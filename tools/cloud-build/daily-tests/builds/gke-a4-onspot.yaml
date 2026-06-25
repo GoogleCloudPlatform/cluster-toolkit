@@ -39,13 +39,13 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
-  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=4"
   - "MACHINE_TYPE=a4-highgpu-8g"
   - "INSTANCE_PREFIX=a4spgke"
+  - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/a4hoptions.txt"
   - "ENABLE_SPOT_FALLBACK=true"
   args:

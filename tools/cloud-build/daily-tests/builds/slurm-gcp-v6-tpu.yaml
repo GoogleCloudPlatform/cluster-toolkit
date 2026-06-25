@@ -36,7 +36,6 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
-  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
   - "MACHINE_TYPE=tpu"
@@ -45,6 +44,7 @@ steps:
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=2"
   - "INSTANCE_PREFIX=v3sp"
+  - "BUILD_ID=$BUILD_ID"
   - "OPTIONS_GCS_PATH=gs://hpc-ctk1357/tpuv3options.txt"
   args:
   - -c
