@@ -12,12 +12,6 @@ parameters:
   type: hyperdisk-balanced
   provisioned-throughput-on-create: "250Mi"
   provisioned-iops-on-create: "7000"
-  %{~ if enable_confidential_storage == true ~}
-  enable-confidential-storage: "true"
-  %{~ endif ~}
-  %{~ if disk_encryption_kms_key != null && disk_encryption_kms_key != "" ~}
-  disk-encryption-kms-key: "${disk_encryption_kms_key}"
-  %{~ endif ~}
 volumeBindingMode: ${volume_binding_mode}
 reclaimPolicy: ${reclaim_policy}
   %{~ if topology_zones != null ~}

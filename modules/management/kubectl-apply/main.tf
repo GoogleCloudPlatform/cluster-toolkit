@@ -192,7 +192,7 @@ module "kubectl_apply_manifests" {
   chart_name    = "${path.module}/raw-config-chart"
   chart_version = "0.1.0"
   namespace     = each.value.namespace
-  atomic        = each.value.wait_for_rollout
+  atomic        = true
   wait          = each.value.wait_for_rollout
   timeout       = 1200
   values_yaml = [

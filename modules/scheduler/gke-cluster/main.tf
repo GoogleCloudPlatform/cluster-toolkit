@@ -335,17 +335,10 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  confidential_nodes {
-    enabled                    = var.enable_confidential_nodes
-    confidential_instance_type = var.confidential_instance_type
-  }
-
-
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
   }
-
 
   dynamic "node_pool_defaults" {
     for_each = var.enable_gcfs ? [1] : []
@@ -359,7 +352,6 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   node_config {
-    machine_type = var.enable_confidential_nodes ? var.system_node_pool_machine_type : "e2-medium"
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
@@ -404,10 +396,6 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = !var.enable_fqdn_network_policy || local.derived_enable_dataplane_v2
       error_message = "FQDN Network Policy requires GKE Dataplane V2 to be enabled."
-    }
-    precondition {
-      condition     = !var.enable_confidential_nodes || !var.system_node_pool_enabled || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", var.system_node_pool_machine_type))
-      error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true and system_node_pool_enabled is true."
     }
   }
 
@@ -463,23 +451,13 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   node_config {
-    labels                      = var.system_node_pool_kubernetes_labels
-    resource_labels             = local.labels
-    service_account             = var.service_account_email
-    oauth_scopes                = var.service_account_scopes
-    machine_type                = var.system_node_pool_machine_type
-    disk_size_gb                = var.system_node_pool_disk_size_gb
-    disk_type                   = var.system_node_pool_disk_type
-    enable_confidential_storage = var.enable_confidential_storage
-    boot_disk_kms_key           = var.boot_disk_kms_key
-
-    dynamic "confidential_nodes" {
-      for_each = var.enable_confidential_nodes ? [1] : []
-      content {
-        enabled                    = true
-        confidential_instance_type = var.confidential_instance_type
-      }
-    }
+    labels          = var.system_node_pool_kubernetes_labels
+    resource_labels = local.labels
+    service_account = var.service_account_email
+    oauth_scopes    = var.service_account_scopes
+    machine_type    = var.system_node_pool_machine_type
+    disk_size_gb    = var.system_node_pool_disk_size_gb
+    disk_type       = var.system_node_pool_disk_type
 
     dynamic "taint" {
       for_each = var.system_node_pool_taints
@@ -540,14 +518,6 @@ resource "google_container_node_pool" "system_node_pools" {
     precondition {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
-    }
-    precondition {
-      condition     = !var.enable_confidential_storage || (var.boot_disk_kms_key != null && var.boot_disk_kms_key != "")
-      error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
-    }
-    precondition {
-      condition     = !var.enable_confidential_storage || (var.system_node_pool_disk_type != null && can(regex("^hyperdisk", var.system_node_pool_disk_type)))
-      error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set system_node_pool_disk_type to 'hyperdisk-balanced' or another hyperdisk type."
     }
   }
 }
