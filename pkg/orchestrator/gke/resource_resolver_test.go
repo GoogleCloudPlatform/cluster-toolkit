@@ -945,5 +945,3 @@ func TestFetchMachineCapabilities_NodePoolEmptyLocations_ClusterZonesFallback(t 
 		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
 	}
 }
-
-
