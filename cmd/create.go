@@ -21,16 +21,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
-	"hpc-toolkit/pkg/modulewriter"
 
 	"github.com/spf13/cobra"
 )
@@ -47,7 +46,6 @@ func addCreateFlags(c *cobra.Command) *cobra.Command {
 		"Forces overwrite of existing deployment directory. \n"+
 			"If set, --overwrite-deployment is implied. \n"+
 			"No validation is performed on the existing deployment directory.")
-
 	return addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/)
 }
 
