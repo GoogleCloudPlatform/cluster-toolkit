@@ -129,5 +129,5 @@
         https://storage.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
         {% endif %}
 
-        For detailed intermediate state information, please review the state file:
+        For detailed intermediate state information, please review the diagnostic state file:
         https://console.cloud.google.com/storage/browser/_details/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
