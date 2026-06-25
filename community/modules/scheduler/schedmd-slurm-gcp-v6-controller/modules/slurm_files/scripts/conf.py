@@ -26,7 +26,7 @@ import uuid
 import util
 from util import dirs, slurmdirs
 import tpu
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 import yaml
 import socket
 import time

@@ -22,16 +22,91 @@ import (
 )
 
 func TestGetNodeSelector(t *testing.T) {
-	opts := SchedulingOptions{
-		PlacementPolicy:    "compact-placement",
-		NodeAffinityLabels: map[string]string{"key": "value"},
+	tests := []struct {
+		name      string
+		opts      SchedulingOptions
+		wantKey   string
+		wantValue string
+		wantErr   bool
+	}{
+		{
+			name: "basic labels inclusion",
+			opts: SchedulingOptions{
+				PlacementPolicy: "compact-placement",
+				NodeAffinityLabels: map[string]string{
+					"key": "value",
+				},
+			},
+			wantKey:   "key",
+			wantValue: "value",
+		},
+		{
+			name: "skip pipe separated values (goes to affinity)",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"pipe-key": "val1|val2",
+				},
+			},
+			wantKey: "pipe-key",
+		},
+		{
+			name: "single value topology inclusion",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "4x4",
+				},
+			},
+			wantKey:   "cloud.google.com/gke-tpu-topology",
+			wantValue: "4x4",
+		},
+		{
+			name: "case insensitivity canonicalization",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "4X4",
+				},
+			},
+			wantKey:   "cloud.google.com/gke-tpu-topology",
+			wantValue: "4x4",
+		},
+		{
+			name: "invalid topology format fails",
+			opts: SchedulingOptions{
+				NodeAffinityLabels: map[string]string{
+					"cloud.google.com/gke-tpu-topology": "invalid",
+				},
+			},
+			wantErr: true,
+		},
 	}
-	selector := GetNodeSelector(opts)
-	if selector["cloud.google.com/gke-placement-group"] != "compact-placement" {
-		t.Errorf("Expected placement policy label, got %v", selector["cloud.google.com/gke-placement-group"])
-	}
-	if selector["key"] != "value" {
-		t.Errorf("Expected user label, got %v", selector["key"])
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selector, err := getNodeSelector(tt.opts)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error but got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantValue == "" {
+				if selector != nil {
+					if _, exists := selector[tt.wantKey]; exists {
+						t.Errorf("Expected key %s to be excluded from nodeSelector", tt.wantKey)
+					}
+				}
+			} else {
+				if selector == nil {
+					t.Fatal("Expected selector, got nil")
+				}
+				if val := selector[tt.wantKey]; val != tt.wantValue {
+					t.Errorf("Expected key %s value to be %q, got %q", tt.wantKey, tt.wantValue, val)
+				}
+			}
+		})
 	}
 }
 
@@ -176,7 +251,10 @@ func TestGetNodeSelector_DynamicTopology(t *testing.T) {
 		},
 		Topology: "2x2",
 	}
-	selector := GetNodeSelector(opts)
+	selector, err := getNodeSelector(opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if selector["normal-key"] != "value" {
 		t.Errorf("Expected normal-key to be 'value', got %v", selector["normal-key"])
@@ -184,8 +262,8 @@ func TestGetNodeSelector_DynamicTopology(t *testing.T) {
 	if _, exists := selector["pipe-key"]; exists {
 		t.Errorf("Expected pipe-key to be excluded from nodeSelector")
 	}
-	if _, exists := selector["cloud.google.com/gke-tpu-topology"]; exists {
-		t.Errorf("Expected cloud.google.com/gke-tpu-topology to be excluded from nodeSelector due to smart merging")
+	if selector["cloud.google.com/gke-tpu-topology"] != "2x2" {
+		t.Errorf("Expected cloud.google.com/gke-tpu-topology to be '2x2', got %v", selector["cloud.google.com/gke-tpu-topology"])
 	}
 }
 
@@ -208,26 +286,14 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 			wantValues: []string{"val1", "val2"},
 		},
 		{
-			name: "smart merging (legacy case)",
-			opts: SchedulingOptions{
-				Topology: "2x2",
-				NodeAffinityLabels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "4x4",
-				},
-			},
-			wantKey:    "cloud.google.com/gke-tpu-topology",
-			wantValues: []string{"2x2", "4x4"},
-		},
-		{
-			name: "prioritize baseline and deduplicate",
+			name: "multiple topologies in constraint fails",
 			opts: SchedulingOptions{
 				Topology: "2x2x1",
 				NodeAffinityLabels: map[string]string{
 					"cloud.google.com/gke-tpu-topology": "2x2x2|2x2x1",
 				},
 			},
-			wantKey:    "cloud.google.com/gke-tpu-topology",
-			wantValues: []string{"2x2x1", "2x2x2"},
+			wantErr: true,
 		},
 		{
 			name: "null safety with whitespace (now fails)",
@@ -235,38 +301,6 @@ func TestGetAffinity_ConstraintsAndMerging(t *testing.T) {
 				Topology: "2x2x1",
 				NodeAffinityLabels: map[string]string{
 					"cloud.google.com/gke-tpu-topology": " | ",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "null safety with empty string",
-			opts: SchedulingOptions{
-				Topology: "2x2x1",
-				NodeAffinityLabels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "",
-				},
-			},
-			wantKey:    "cloud.google.com/gke-tpu-topology",
-			wantValues: []string{"2x2x1"},
-		},
-		{
-			name: "skip baseline for dynamic slicing",
-			opts: SchedulingOptions{
-				Topology: "2x2x1",
-				NodeAffinityLabels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "2x2x2",
-				},
-				IsDynamicSlicing: true,
-			},
-			wantKey:    "cloud.google.com/gke-tpu-topology",
-			wantValues: []string{"2x2x2"},
-		},
-		{
-			name: "invalid topology format",
-			opts: SchedulingOptions{
-				NodeAffinityLabels: map[string]string{
-					"cloud.google.com/gke-tpu-topology": "invalid",
 				},
 			},
 			wantErr: true,

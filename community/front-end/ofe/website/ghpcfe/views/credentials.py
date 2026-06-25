@@ -18,6 +18,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import generic
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.contrib import messages
+from django.db.models import RestrictedError
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -124,7 +125,7 @@ class CredentialDeleteView(SuperUserRequiredMixin, DeleteView):
     def post(self, request, *args, **kwargs):
         try:
             delete_request = super().delete(request, *args, **kwargs)
-            messages.success(self.request, f"Credential successfully deleted.")
+            messages.success(self.request, "Credential successfully deleted.")
             return delete_request
         except RestrictedError:
             msg = """Credential deletion failed due to a foreign key constraint.

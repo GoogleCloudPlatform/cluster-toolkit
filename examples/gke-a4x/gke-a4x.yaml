@@ -157,6 +157,7 @@ deployment_groups:
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
       enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      enable_dataplane_v2: true
       enable_k8s_beta_apis:
       - "resource.k8s.io/v1beta1/deviceclasses"
       - "resource.k8s.io/v1beta1/resourceclaims"

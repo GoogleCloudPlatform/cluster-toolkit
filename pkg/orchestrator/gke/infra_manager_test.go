@@ -65,13 +65,15 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	orc := &GKEOrchestrator{
 		capacity: ClusterCapacity{
 			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {
+				"flavor-tpu": { // TPU flavor (name contains 'tpu')
 					CPUs:     100,
 					MemoryGi: 400,
+					TPUs:     8, // Physical TPU capacity
 				},
-				"pathways-flavor": { // Pathways flavor
+				"pathways-flavor": { // Pathways flavor (CPU-only)
 					CPUs:     480,
 					MemoryGi: 2000,
+					TPUs:     0, // No TPUs
 				},
 			},
 		},
@@ -85,17 +87,42 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	output := string(bytes)
 
 	// Verify quotas are rendered correctly
-	if !strings.Contains(output, "nominalQuota: 100") {
-		t.Errorf("expected nominalQuota: 100 for CPU, got %s", output)
+	// The TPU flavor (flavor-tpu) CPU/Memory must be overridden to the high defaults (999999 / 999999T)
+	// The TPU nominal quota should match physical capacity (8)
+	if !strings.Contains(output, "nominalQuota: \"999999\"") {
+		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
 	}
-	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for CPU, got %s", output)
+	if !strings.Contains(output, "nominalQuota: 999999T") {
+		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 8") {
+		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
 	}
 
-	// Verify TWO resource groups
+	// The Pathways flavor CPU/Memory should remain at their physical/mocked values
+	// The TPU nominal quota for Pathways flavor must be successfully injected as 0
+	if !strings.Contains(output, "nominalQuota: 480") {
+		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 2000Gi") {
+		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 0") {
+		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
+	}
+
+	// Verify SINGLE resource group (unified when Pathways is active)
 	count := strings.Count(output, "coveredResources:")
-	if count != 2 {
-		t.Errorf("expected 2 coveredResources blocks for Pathways case, got %d. Output: %s", count, output)
+	if count != 1 {
+		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
+	}
+
+	// Verify both flavors are present in the output
+	if !strings.Contains(output, "name: flavor-tpu") {
+		t.Errorf("expected flavor-tpu in output, got %s", output)
+	}
+	if !strings.Contains(output, "name: pathways-flavor") {
+		t.Errorf("expected pathways-flavor in output, got %s", output)
 	}
 }
 
@@ -552,5 +579,128 @@ func TestValidatePriorityClass_NotExist(t *testing.T) {
 	expected := `priority class "medium" does not exist in the cluster`
 	if !strings.Contains(err.Error(), expected) {
 		t.Errorf("expected error to contain %q, got %v", expected, err)
+	}
+}
+
+func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
+	tests := []struct {
+		name     string
+		podSpec  map[interface{}]interface{}
+		wantSpec map[interface{}]interface{}
+	}{
+		{
+			name: "replaces v0.13.1 image",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces v0.14.0 image dynamically",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+		},
+		{
+			name: "ignores unrelated images",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces image in initContainers",
+			podSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replaceDeprecatedRbacProxyImage(tt.podSpec)
+
+			checkContainers := func(key string) {
+				containers, ok1 := tt.podSpec[key].([]interface{})
+				wantContainers, ok2 := tt.wantSpec[key].([]interface{})
+				if ok1 != ok2 {
+					t.Fatalf("mismatch in %s presence: got %v, want %v", key, ok1, ok2)
+				}
+				if !ok1 {
+					return
+				}
+				if len(containers) != len(wantContainers) {
+					t.Fatalf("length mismatch for %s: got %d, want %d", key, len(containers), len(wantContainers))
+				}
+				for i := range containers {
+					c := containers[i].(map[interface{}]interface{})
+					w := wantContainers[i].(map[interface{}]interface{})
+					if c["image"] != w["image"] {
+						t.Errorf("image mismatch in %s: got %q, want %q", key, c["image"], w["image"])
+					}
+				}
+			}
+
+			checkContainers("containers")
+			checkContainers("initContainers")
+		})
 	}
 }

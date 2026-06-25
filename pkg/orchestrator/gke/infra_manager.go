@@ -435,6 +435,18 @@ func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fna
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	mainCoveredResourcesMap, pathwaysCoveredResourcesMap := g.calculateCoveredResources()
 
+	_, hasPathways := g.capacity.Flavors["pathways-flavor"]
+
+	// If pathways is active, we unify the resource groups to prevent Kueue from
+	// merging incompatible node selectors for TPU worker pods (which request both
+	// TPU and CPU/Memory).
+	if hasPathways {
+		for res := range pathwaysCoveredResourcesMap {
+			mainCoveredResourcesMap[res] = true
+		}
+		pathwaysCoveredResourcesMap = make(map[string]bool) // Clear to prevent second group generation
+	}
+
 	// Pass 2: Build flavor lists with matched resources
 	var mainFlavors []map[string]interface{}
 	var pathwaysFlavors []map[string]interface{}
@@ -448,31 +460,19 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	for _, fname := range fnames {
 		fc := g.capacity.Flavors[fname]
 		isPathways := (fname == "pathways-flavor")
-		var resources []map[string]interface{}
 
 		coveredMap := mainCoveredResourcesMap
-		if isPathways {
+		if isPathways && !hasPathways {
 			coveredMap = pathwaysCoveredResourcesMap
 		}
 
-		for res := range coveredMap {
-			resources = append(resources, map[string]interface{}{
-				"name":         res,
-				"nominalQuota": g.getNominalQuota(res, fc, fname),
-			})
-		}
-
+		resources := g.buildFlavorResources(coveredMap, fc, fname)
 		if len(resources) > 0 {
-			// Sort resources alphabetically by name
-			sort.Slice(resources, func(i, j int) bool {
-				return resources[i]["name"].(string) < resources[j]["name"].(string)
-			})
-
 			flavor := map[string]interface{}{
 				"name":      fname,
 				"resources": resources,
 			}
-			if isPathways {
+			if isPathways && !hasPathways {
 				pathwaysFlavors = append(pathwaysFlavors, flavor)
 			} else {
 				mainFlavors = append(mainFlavors, flavor)
@@ -481,29 +481,11 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	}
 
 	var resourceGroups []map[string]interface{}
-
-	var mainCoveredResources []string
-	for res := range mainCoveredResourcesMap {
-		mainCoveredResources = append(mainCoveredResources, res)
+	if rg := buildResourceGroup(mainCoveredResourcesMap, mainFlavors); rg != nil {
+		resourceGroups = append(resourceGroups, rg)
 	}
-	sort.Strings(mainCoveredResources)
-	if len(mainCoveredResources) > 0 {
-		resourceGroups = append(resourceGroups, map[string]interface{}{
-			"coveredResources": mainCoveredResources,
-			"flavors":          mainFlavors,
-		})
-	}
-
-	var pathwaysCoveredResources []string
-	for res := range pathwaysCoveredResourcesMap {
-		pathwaysCoveredResources = append(pathwaysCoveredResources, res)
-	}
-	sort.Strings(pathwaysCoveredResources)
-	if len(pathwaysCoveredResources) > 0 {
-		resourceGroups = append(resourceGroups, map[string]interface{}{
-			"coveredResources": pathwaysCoveredResources,
-			"flavors":          pathwaysFlavors,
-		})
+	if rg := buildResourceGroup(pathwaysCoveredResourcesMap, pathwaysFlavors); rg != nil {
+		resourceGroups = append(resourceGroups, rg)
 	}
 
 	cqMap := map[string]interface{}{
@@ -525,6 +507,45 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	}
 
 	return cqBytes, nil
+}
+
+func (g *GKEOrchestrator) buildFlavorResources(coveredMap map[string]bool, fc FlavorCapacity, fname string) []map[string]interface{} {
+	var resources []map[string]interface{}
+	_, hasPathways := g.capacity.Flavors["pathways-flavor"]
+	for res := range coveredMap {
+		var quota = g.getNominalQuota(res, fc, fname)
+		if hasPathways && isTPUFlavor(fname) {
+			switch res {
+			case "cpu":
+				quota = "999999"
+			case "memory":
+				quota = "999999T"
+			}
+		}
+		resources = append(resources, map[string]interface{}{
+			"name":         res,
+			"nominalQuota": quota,
+		})
+	}
+	sort.Slice(resources, func(i, j int) bool {
+		return resources[i]["name"].(string) < resources[j]["name"].(string)
+	})
+	return resources
+}
+
+func buildResourceGroup(coveredMap map[string]bool, flavors []map[string]interface{}) map[string]interface{} {
+	var coveredResources []string
+	for res := range coveredMap {
+		coveredResources = append(coveredResources, res)
+	}
+	sort.Strings(coveredResources)
+	if len(coveredResources) == 0 {
+		return nil
+	}
+	return map[string]interface{}{
+		"coveredResources": coveredResources,
+		"flavors":          flavors,
+	}
 }
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {
@@ -908,6 +929,8 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		podSpec["tolerations"] = tolerations
 	}
 
+	replaceDeprecatedRbacProxyImage(podSpec)
+
 	if podMeta, ok := template["metadata"].(map[interface{}]interface{}); ok {
 		labels, ok := podMeta["labels"].(map[interface{}]interface{})
 		if !ok {
@@ -919,6 +942,37 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		labels["control-plane"] = "controller-manager"
 		labels["app.kubernetes.io/component"] = "controller-manager"
 	}
+}
+
+// replaceDeprecatedRbacProxyImage replaces the deprecated image "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1"
+// with "quay.io/brancz/kube-rbac-proxy:v0.13.1" in the JobSet controller pods to avoid deployment failures
+// due to GCR container registry deprecation.
+//
+// TODO: Remove this helper function once the default JobSet version/manifest is upgraded.
+func replaceDeprecatedRbacProxyImage(podSpec map[interface{}]interface{}) {
+	replaceInContainerList := func(containerKey string) {
+		containers, ok := podSpec[containerKey].([]interface{})
+		if !ok {
+			return
+		}
+		for _, c := range containers {
+			containerMap, ok := c.(map[interface{}]interface{})
+			if !ok {
+				continue
+			}
+			img, ok := containerMap["image"].(string)
+			const deprecatedProxyPrefix = "gcr.io/kubebuilder/kube-rbac-proxy"
+			if ok && (img == deprecatedProxyPrefix || strings.HasPrefix(img, deprecatedProxyPrefix+":") || strings.HasPrefix(img, deprecatedProxyPrefix+"@")) {
+				suffix := strings.TrimPrefix(img, deprecatedProxyPrefix)
+				newImg := "quay.io/brancz/kube-rbac-proxy" + suffix
+				containerMap["image"] = newImg
+				logging.Info("Replaced deprecated image %s with %s in %s", img, newImg, containerKey)
+			}
+		}
+	}
+
+	replaceInContainerList("containers")
+	replaceInContainerList("initContainers")
 }
 
 func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {

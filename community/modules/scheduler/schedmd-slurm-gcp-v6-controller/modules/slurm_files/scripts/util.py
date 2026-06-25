@@ -60,7 +60,64 @@ import google.api_core.exceptions as gExceptions
 import requests as requests_lib
 
 import yaml
-from addict import Dict as NSDict # type: ignore
+class AttrDict(dict):
+    """A dict subclass that allows attribute access to keys, with auto-expansion.
+    
+    This replaces the external 'addict' dependency.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def __getattr__(self, key):
+        if key.startswith('__') and key.endswith('__'):
+            raise AttributeError(key)
+        if key not in self:
+            self[key] = AttrDict()
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, key):
+        try:
+            del self[key]
+        except KeyError as e:
+            raise AttributeError(e) from e
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, self._convert(value))
+
+    def _convert(self, value):
+        if isinstance(value, dict) and not isinstance(value, AttrDict):
+            return AttrDict(value)
+        if isinstance(value, list):
+            return [self._convert(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._convert(x) for x in value)
+        return value
+
+    def update(self, *args, **kwargs):
+        for k, v in dict(*args, **kwargs).items():
+            self[k] = v
+
+    def to_dict(self):
+        """Recursively convert the AttrDict and its nested structures back to standard dicts."""
+        return self._to_dict_helper(self)
+
+    def _to_dict_helper(self, value):
+        if isinstance(value, AttrDict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, dict):
+            return {k: self._to_dict_helper(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._to_dict_helper(x) for x in value]
+        if isinstance(value, tuple):
+            return tuple(self._to_dict_helper(x) for x in value)
+        return value
+
+NSDict = AttrDict
 import file_cache
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
@@ -771,7 +828,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
-def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+def _fetch_mounted_config() -> NSDict:
     if not dirs.slurm_bucket_mount.is_mount():
         raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
 
@@ -1968,7 +2025,7 @@ class Lookup:
             delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
-    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: Any) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1985,7 +2042,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
 
-    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: Any) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 

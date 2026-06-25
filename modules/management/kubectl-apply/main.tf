@@ -31,9 +31,11 @@ locals {
 
   kueue_config_template_vars = merge(
     {
-      pathways_cpu_quota    = 480
-      pathways_memory_quota = "2000G"
-      tpu_quota             = "999999" # Default high value if not set
+      pathways_cpu_quota      = 480
+      pathways_memory_quota   = "2000G"
+      tpu_flavor_cpu_quota    = "999999" # High default to avoid limiting TPU pods by CPU
+      tpu_flavor_memory_quota = "999999T"
+      tpu_quota               = "999999" # Default high value if not set
     },
     var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
   )
@@ -190,7 +192,7 @@ module "kubectl_apply_manifests" {
   chart_name    = "${path.module}/raw-config-chart"
   chart_version = "0.1.0"
   namespace     = each.value.namespace
-  atomic        = true
+  atomic        = each.value.wait_for_rollout
   wait          = each.value.wait_for_rollout
   timeout       = 1200
   values_yaml = [
