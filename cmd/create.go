@@ -31,7 +31,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
-	"hpc-toolkit/pkg/validators"
 
 	"github.com/spf13/cobra"
 )
@@ -49,7 +48,7 @@ func addCreateFlags(c *cobra.Command) *cobra.Command {
 			"If set, --overwrite-deployment is implied. \n"+
 			"No validation is performed on the existing deployment directory.")
 
-	return addGkeVulnerabilitiesCheckFlag(addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/))
+	return addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/)
 }
 
 func init() {
@@ -84,8 +83,6 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 func doCreate(cmd *cobra.Command, path string) string {
 	bp, ctx := expandOrDie(cmd, path)
-	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
-	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)

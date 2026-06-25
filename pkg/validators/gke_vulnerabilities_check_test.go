@@ -84,6 +84,16 @@ func TestEvaluate(t *testing.T) {
 			wantCount:   1, // Only PENDING matches
 			wantStrings: []string{"CVE-2026-TEST-PENDING"},
 		},
+		{
+			name:        "Raw base version is flagged against GKE patched version",
+			gkeVersions: []string{"1.35.3"}, // The patched version in the mock DB is "v1.35.3-gke.1000"
+			wantCount:   2,
+			wantStrings: []string{
+				"CVE-2026-TEST-PENDING",
+				"CVE-2026-TEST-PATCHED",
+				"upgrade your blueprint to at least v1.35.3-gke.1000",
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -321,4 +331,30 @@ func mockFetchGKEVersionForPrefix(projectID, region, prefix, releaseChannel stri
 		}
 	}
 	return "", nil
+}
+
+func TestCompareGKEVersions(t *testing.T) {
+	tests := []struct {
+		name     string
+		v1       string
+		v2       string
+		expected int
+	}{
+		{"Equal normal versions", "1.35.3", "1.35.3", 0},
+		{"Equal GKE versions", "1.35.3-gke.1000", "v1.35.3-gke.1000", 0},
+		{"v1 is older minor", "1.34.0", "1.35.0", -1},
+		{"v1 is newer minor", "1.36.0", "1.35.0", 1},
+		{"v1 is normal, v2 is GKE", "1.35.3", "1.35.3-gke.1000", -1}, // Core bug fix
+		{"v1 is GKE, v2 is normal", "1.35.3-gke.1000", "1.35.3", 1},
+		{"v1 GKE is older", "1.35.3-gke.1000", "1.35.3-gke.2000", -1},
+		{"v1 GKE is newer", "1.35.3-gke.3000", "1.35.3-gke.2000", 1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compareGKEVersions(tc.v1, tc.v2); got != tc.expected {
+				t.Errorf("compareGKEVersions(%q, %q) = %d, want %d", tc.v1, tc.v2, got, tc.expected)
+			}
+		})
+	}
 }

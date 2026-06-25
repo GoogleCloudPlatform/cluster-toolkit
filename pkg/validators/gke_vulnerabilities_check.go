@@ -19,6 +19,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,8 +99,7 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 					gkeVersion, adv.CVE, adv.Name, adv.Link))
 			case "PATCHED":
 				if patchedVersion, exists := adv.PatchedVersions[minorVersion]; exists {
-					patchedVersion = normalizeVersion(patchedVersion)
-					if semver.Compare(gkeVersion, patchedVersion) < 0 {
+					if compareGKEVersions(gkeVersion, patchedVersion) < 0 {
 						warnings = append(warnings, fmt.Sprintf(
 							"SECURITY WARNING: Your GKE version %s might be vulnerable to %s (%s). "+
 								"Please upgrade your blueprint to at least %s. See: %s",
@@ -202,7 +202,7 @@ func getHighestMatchingVersion(versions []string, prefix string) string {
 			latest = version
 			continue
 		}
-		if semver.Compare(normalizeVersion(version), normalizeVersion(latest)) > 0 {
+		if compareGKEVersions(version, latest) > 0 {
 			latest = version
 		}
 	}
@@ -238,4 +238,42 @@ func fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel st
 	}
 
 	return getHighestMatchingVersion(candidates, prefix), nil
+}
+
+// compareGKEVersions compares two GKE versions.
+// It correctly handles the -gke.X suffix by treating it as a post-release build number instead of a standard semver pre-release tag.
+func compareGKEVersions(v1, v2 string) int {
+	base1, build1 := parseGKEVersion(v1)
+	base2, build2 := parseGKEVersion(v2)
+
+	// Compare the base versions using standard semver comparison
+	cmp := semver.Compare(base1, base2)
+	if cmp != 0 {
+		return cmp
+	}
+
+	// If base versions are equal, compare the GKE build numbers
+	if build1 < build2 {
+		return -1
+	}
+	if build1 > build2 {
+		return 1
+	}
+	return 0
+}
+
+// parseGKEVersion separates the base version from the GKE build number.
+func parseGKEVersion(v string) (string, int) {
+	v = normalizeVersion(v)
+	parts := strings.Split(v, "-gke.")
+	base := parts[0]
+	build := 0
+	if len(parts) > 1 {
+		// Ignore any trailing semver build metadata (e.g. +meta) when parsing the build number
+		buildStr := strings.Split(parts[1], "+")[0]
+		if b, err := strconv.Atoi(buildStr); err == nil {
+			build = b
+		}
+	}
+	return base, build
 }
