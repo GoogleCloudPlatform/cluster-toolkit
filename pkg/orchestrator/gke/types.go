@@ -256,6 +256,7 @@ type gkeJobNodePool struct {
 	Name             string              `json:"name"`
 	Config           gkeNodePoolConfig   `json:"config"`
 	InitialNodeCount int                 `json:"initialNodeCount"`
+	Locations        []string            `json:"locations,omitempty"`
 	Autoscaling      gkeAutoscaling      `json:"autoscaling"`
 	PlacementPolicy  *gkePlacementPolicy `json:"placementPolicy,omitempty"`
 }

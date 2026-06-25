@@ -103,6 +103,7 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 	g := newTestGKEOrchestrator(nil)
 	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
 	g.clusterZones = []string{"europe-west2-a", "europe-west2-c", "europe-west2-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = true
 
 	_, err := g.FetchMachineCapacity("tpu7x-1", "europe-west2")
 
@@ -347,6 +348,7 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 			mockExecutor := NewMockExecutor(mockResponses)
 			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
 			if len(tt.nodePools) > 0 {
 				for _, mt := range tt.nodePools {
 					orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
@@ -826,3 +828,122 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 		})
 	}
 }
+
+type ZoneSelectiveMockMachineTypeClient struct {
+	AllowedZone string
+	MT          *compute.MachineType
+}
+
+func (m *ZoneSelectiveMockMachineTypeClient) GetMachineType(project, zone, machineType string) (*compute.MachineType, error) {
+	if zone != m.AllowedZone {
+		return nil, fmt.Errorf("machine type not found in zone %s", zone)
+	}
+	return m.MT, nil
+}
+
+func TestFetchMachineCapabilities_NodePoolSpecificZones(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-np-0",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu-v5-lite-podslice",
+			},
+			Locations: []string{"us-central1-c"},
+		},
+	}
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-c",
+		MT: &compute.MachineType{
+			GuestCpus: 4,
+			MemoryMb:  16384,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 4 {
+		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
+	}
+}
+
+func TestFetchMachineCapabilities_NoPools_NAPDisabled_Fails(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = false
+
+	_, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err == nil {
+		t.Fatalf("Expected error, got nil")
+	}
+
+	expectedErr := "no node pool matching machine type found and GKE Node Auto-Provisioning is disabled"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestFetchMachineCapabilities_NoPools_NAPEnabled_Fallback(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = true
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-b",
+		MT: &compute.MachineType{
+			GuestCpus: 8,
+			MemoryMb:  32768,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 8 {
+		t.Errorf("cap.GuestCpus = %d, want 8", cap.GuestCpus)
+	}
+}
+
+func TestFetchMachineCapabilities_NodePoolEmptyLocations_ClusterZonesFallback(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-b"}
+	g.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-np-0",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu-v5-lite-podslice",
+			},
+			Locations: []string{}, // Empty/inherited locations
+		},
+	}
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-b",
+		MT: &compute.MachineType{
+			GuestCpus: 4,
+			MemoryMb:  16384,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 4 {
+		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
+	}
+}
+
+
