@@ -202,6 +202,21 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
   --mount "lustre-pvc:/data"
 ```
 
+### 4.5 Example: Submit Job with Custom Environment Variables
+
+You can pass custom environment variables to the container using the `--env` flag:
+
+```bash
+./gcluster job submit \
+  --name my-env-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --env "TRAINING_EPOCHS=10" \
+  --env "DEBUG=true"
+```
+
 ## 5. Verify the Job
 
 Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
@@ -1038,6 +1053,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>:<dest>[:<mode>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
+| `--env` | `stringArray` | Custom environment variables to pass to the workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |

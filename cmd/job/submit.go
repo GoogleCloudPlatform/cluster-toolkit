@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"time"
 
@@ -70,6 +71,9 @@ var (
 
 	gkeNapProvisioning string
 	gkeNapReservation  string
+
+	envVars          []string
+	validEnvKeyRegex = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
 )
 
 var SubmitCmd = &cobra.Command{
@@ -104,6 +108,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
+		if err := validateEnvFlags(envVars); err != nil {
+			return err
+		}
+
 		priorityClassName = strings.ToLower(priorityClassName)
 
 		return nil
@@ -121,6 +129,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -232,10 +241,42 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
 		RawMounts:                     volumeStr,
+		Env:                           parseEnvFlags(envVars),
 		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
+}
+
+func parseEnvFlags(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
+	}
+	res := make(map[string]string)
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			res[parts[0]] = parts[1]
+		}
+	}
+	return res
+}
+
+func validateEnvFlags(envs []string) error {
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid environment variable format: %q. Must be in KEY=VALUE format", env)
+		}
+		key := parts[0]
+		if key == "" {
+			return fmt.Errorf("invalid environment variable key in %q: key cannot be empty", env)
+		}
+		if !validEnvKeyRegex.MatchString(key) {
+			return fmt.Errorf("invalid environment variable name: %q. Must conform to POSIX environment variable naming rules (letters, numbers, and underscores, cannot start with a digit)", key)
+		}
+	}
+	return nil
 }
 
 func parseDurationToSeconds(dStr string, flagName string) (int, error) {
