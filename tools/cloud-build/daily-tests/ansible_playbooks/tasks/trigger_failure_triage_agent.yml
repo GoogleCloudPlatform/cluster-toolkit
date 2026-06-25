@@ -103,9 +103,13 @@
       TRIAGE_GCS_BUCKET: "{{ triage_gcs_bucket }}"
     ansible.builtin.shell: |
       # Wait for Cloud Run to start and for the initial state file to be copied
-      sleep 60
+      for i in {1..12}; do
+        if gcloud storage ls "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 5
+      done
 
-      # Fail fast if state.json is not present after initial buffer
       if ! gcloud storage ls "gs://$TRIAGE_GCS_BUCKET/$TRIAGE_BUILD_ID/state.json" >/dev/null 2>&1; then
         echo "Agent failed to start: state.json was not created within 60 seconds." >&2
         exit 1
