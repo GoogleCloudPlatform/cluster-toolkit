@@ -16,11 +16,12 @@
 tags:
 - m.vpc
 - m.private-service-access
-- m.firewall-rules
 - m.managed-lustre
-- m.service-account
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- slurm6
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
