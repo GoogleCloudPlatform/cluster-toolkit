@@ -141,7 +141,6 @@ spec:
             containers:
             - name: workload-container
               image: {{.FullImageName}}
-              imagePullPolicy: Always
               securityContext:
                 privileged: true
               resources:
@@ -170,10 +169,13 @@ spec:
               - "-c"
               - |
                 echo "GCluster Start: $(date)"
-                _sigterm() (kill -SIGTERM $! 2>/dev/null;)
+                _sigterm() {
+                  kill -SIGTERM $PID 2>/dev/null
+                  wait $PID
+                  exit 143
+                }
                 trap _sigterm SIGTERM
-                ({{.CommandToRun}}) & PID=$!
-                while kill -0 $PID 2>/dev/null; do sleep 5; done
+                {{.CommandToRun}} & PID=$!
                 wait $PID
                 EXIT_CODE=$?
                 echo "GCluster End: $(date)"

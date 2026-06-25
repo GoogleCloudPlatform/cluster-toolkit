@@ -489,7 +489,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "24"`,
-		"_sigterm() (kill -SIGTERM $! 2>/dev/null;)",
+		"kill -SIGTERM $PID",
 	}
 
 	for _, substr := range expectedSubstrs {

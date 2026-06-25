@@ -123,7 +123,15 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 
 	parts := strings.Split(originalAccelType, "-")
 	instanceType := parts[0]
-	pathwaysInstanceType := fmt.Sprintf("%s:%s", instanceType, schedOpts.Topology)
+
+	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
+	// derive the Pathways short platform key to avoid duplicating mapping tables.
+	gkeLabel := g.GenerateGKENodeSelectorLabel(instanceType)
+	pathwaysPlatform := strings.ReplaceAll(gkeLabel, "-podslice", "")
+	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")
+	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-", "")
+
+	pathwaysInstanceType := fmt.Sprintf("%s:%s", pathwaysPlatform, schedOpts.Topology)
 
 	opts := ManifestOptions{
 		IsDynamicSlicing:              isDynamicSlicing,
