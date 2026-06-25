@@ -485,8 +485,6 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "32Gi"`,
 		"restartStrategy: Recreate",
 		"privileged: true",
-		"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS",
-		"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "24"`,
 		"kill -SIGTERM $PID",

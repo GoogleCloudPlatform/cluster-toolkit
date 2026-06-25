@@ -127,7 +127,13 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
 	// derive the Pathways short platform key to avoid duplicating mapping tables.
 	gkeLabel := g.GenerateGKENodeSelectorLabel(instanceType)
-	pathwaysPlatform := strings.ReplaceAll(gkeLabel, "-podslice", "")
+	// Normalize GKE's "v5-lite" naming to JAX/Pathways's standard "v5e" naming
+	// to ensure correct topology lookup in the Pathways server binary.
+	normalizedLabel := gkeLabel
+	if strings.Contains(gkeLabel, "v5-lite") {
+		normalizedLabel = strings.ReplaceAll(gkeLabel, "v5-lite", "v5e")
+	}
+	pathwaysPlatform := strings.ReplaceAll(normalizedLabel, "-podslice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-", "")
 

@@ -156,12 +156,6 @@ spec:
                 value: GCP
               - name: JAX_BACKEND_TARGET
                 value: grpc://$(PATHWAYS_HEAD):29000
-              - name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS
-                value: "grpc_insecure_override"
-              - name: TEST_UNDECLARED_OUTPUTS_DIR
-                value: "/tmp"
-              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
-                value: "true"
               command:
               - "/bin/bash"
               - "-c"
