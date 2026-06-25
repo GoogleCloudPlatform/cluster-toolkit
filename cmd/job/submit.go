@@ -195,6 +195,8 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
 	}
 
+	jobTopology := strings.ToLower(strings.TrimSpace(topology))
+
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
 		BaseImage:                     baseImage,
@@ -219,7 +221,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		RestartOnExitCodes:            restartOnExitCodes,
 		ImagePullSecrets:              imagePullSecrets,
 		ServiceAccountName:            serviceAccountName,
-		Topology:                      topology,
+		Topology:                      jobTopology,
 		GKEScheduler:                  gkeScheduler,
 		AwaitJobCompletion:            awaitJobCompletion,
 		UseParallelContainers:         !gkeDisableParallelContainers,

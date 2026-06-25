@@ -581,3 +581,126 @@ func TestValidatePriorityClass_NotExist(t *testing.T) {
 		t.Errorf("expected error to contain %q, got %v", expected, err)
 	}
 }
+
+func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
+	tests := []struct {
+		name     string
+		podSpec  map[interface{}]interface{}
+		wantSpec map[interface{}]interface{}
+	}{
+		{
+			name: "replaces v0.13.1 image",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces v0.14.0 image dynamically",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+		},
+		{
+			name: "ignores unrelated images",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces image in initContainers",
+			podSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replaceDeprecatedRbacProxyImage(tt.podSpec)
+
+			checkContainers := func(key string) {
+				containers, ok1 := tt.podSpec[key].([]interface{})
+				wantContainers, ok2 := tt.wantSpec[key].([]interface{})
+				if ok1 != ok2 {
+					t.Fatalf("mismatch in %s presence: got %v, want %v", key, ok1, ok2)
+				}
+				if !ok1 {
+					return
+				}
+				if len(containers) != len(wantContainers) {
+					t.Fatalf("length mismatch for %s: got %d, want %d", key, len(containers), len(wantContainers))
+				}
+				for i := range containers {
+					c := containers[i].(map[interface{}]interface{})
+					w := wantContainers[i].(map[interface{}]interface{})
+					if c["image"] != w["image"] {
+						t.Errorf("image mismatch in %s: got %q, want %q", key, c["image"], w["image"])
+					}
+				}
+			}
+
+			checkContainers("containers")
+			checkContainers("initContainers")
+		})
+	}
+}

@@ -1744,10 +1744,12 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 
 func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isCPUMachine bool) (string, error) {
 	nodeSelector := make(map[string]string)
-	if existing := GetNodeSelector(schedOpts); existing != nil {
-		for k, v := range existing {
-			nodeSelector[k] = v
-		}
+	existing, err := getNodeSelector(schedOpts)
+	if err != nil {
+		return "", err
+	}
+	for k, v := range existing {
+		nodeSelector[k] = v
 	}
 
 	// Inject unified consumption options
