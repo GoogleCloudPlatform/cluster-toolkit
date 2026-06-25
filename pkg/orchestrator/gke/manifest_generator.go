@@ -127,11 +127,14 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
 	// derive the Pathways short platform key to avoid duplicating mapping tables.
 	gkeLabel := g.GenerateGKENodeSelectorLabel(instanceType)
-	// Normalize GKE's "v5-lite" naming to JAX/Pathways's standard "v5e" naming
-	// to ensure correct topology lookup in the Pathways server binary.
+	// Normalize GKE node selector labels to match JAX/Pathways platform keys:
+	// 1. Map GKE "v5-lite" (TPU v5e) to JAX standard "v5e" (deriving tpuv5e)
+	// 2. Map GKE "v5p" (TPU v5p) to JAX standard "v5" (deriving tpuv5)
 	normalizedLabel := gkeLabel
 	if strings.Contains(gkeLabel, "v5-lite") {
 		normalizedLabel = strings.ReplaceAll(gkeLabel, "v5-lite", "v5e")
+	} else if strings.Contains(gkeLabel, "v5p") {
+		normalizedLabel = strings.ReplaceAll(gkeLabel, "v5p", "v5")
 	}
 	pathwaysPlatform := strings.ReplaceAll(normalizedLabel, "-podslice", "")
 	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")

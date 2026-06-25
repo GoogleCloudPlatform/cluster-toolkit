@@ -132,9 +132,6 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
-              volumeMounts:
-              - mountPath: /tmp
-                name: shared-tmp
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
@@ -165,8 +162,10 @@ spec:
               - |
                 echo "GCluster Start: $(date)"
                 _sigterm() {
-                  kill -SIGTERM $PID 2>/dev/null
-                  wait $PID
+                  if [ -n "$PID" ]; then
+                    kill -SIGTERM $PID 2>/dev/null
+                    wait $PID
+                  fi
                   exit 143
                 }
                 trap _sigterm SIGTERM
