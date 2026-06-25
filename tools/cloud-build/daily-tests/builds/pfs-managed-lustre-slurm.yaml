@@ -21,8 +21,6 @@ tags:
 - m.service-account
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
-- m.schedmd-slurm-gcp-v6-compute
-- slurm
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
