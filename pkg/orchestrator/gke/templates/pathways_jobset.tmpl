@@ -89,6 +89,8 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -125,6 +127,8 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: TPU_SKIP_MDS_QUERY
                 value: "true"
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -156,6 +160,8 @@ spec:
                 value: GCP
               - name: JAX_BACKEND_TARGET
                 value: grpc://$(PATHWAYS_HEAD):29000
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               command:
               - "/bin/bash"
               - "-c"
@@ -169,14 +175,13 @@ spec:
                   exit 143
                 }
                 trap _sigterm SIGTERM
-                {{.CommandToRun}} & PID=$!
+                (
+                  {{.CommandToRun}}
+                ) & PID=$!
                 wait $PID
                 EXIT_CODE=$?
                 echo "GCluster End: $(date)"
                 exit $EXIT_CODE
-              volumeMounts:
-                - mountPath: /tmp
-                  name: shared-tmp
 {{- if .VolumeMountsYAML }}
 {{.VolumeMountsYAML}}
 {{- end }}
@@ -186,10 +191,6 @@ spec:
               image: {{.Pathways.ColocatedPythonSidecarImage}}
             {{- end}}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
 {{.VolumesYAML}}
   - name: worker
     replicas: {{.NumSlices}}
@@ -284,15 +285,10 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
 {{.ResourcesString}}
-              volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
 {{.VolumesYAML}}
 {{- if .NodeSelector }}
             nodeSelector:
