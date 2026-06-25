@@ -125,6 +125,7 @@ locals {
       for ni in var.network_interfaces : {
         network            = ni.network
         subnetwork         = ni.subnetwork
+        subnetwork_project = ni.subnetwork_project
         nic_type           = ni.nic_type
         stack_type         = ni.stack_type
         network_ip         = ni.network_ip
@@ -138,6 +139,7 @@ locals {
       {
         network            = var.network_self_link
         subnetwork         = var.subnetwork_self_link
+        subnetwork_project = null
         nic_type           = null
         stack_type         = null
         network_ip         = ""
@@ -182,11 +184,12 @@ module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 14.0"
 
-  name_prefix = local.name_prefix
-  project_id  = var.project_id
-  region      = var.region
-  network     = local.network_interfaces[0].network
-  subnetwork  = local.network_interfaces[0].subnetwork
+  name_prefix        = local.name_prefix
+  project_id         = var.project_id
+  region             = var.region
+  network            = local.network_interfaces[0].network
+  subnetwork         = local.network_interfaces[0].subnetwork
+  subnetwork_project = local.network_interfaces[0].subnetwork_project
 
   additional_networks = [
     for network_interface in slice(local.network_interfaces, 1, length(local.network_interfaces)) : {
