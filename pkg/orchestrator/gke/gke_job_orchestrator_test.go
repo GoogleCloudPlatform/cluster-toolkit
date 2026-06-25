@@ -487,6 +487,8 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"privileged: true",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "24"`,
+		`cpu: "2"`,
+		`memory: "8Gi"`,
 		"kill -SIGTERM $PID",
 	}
 
