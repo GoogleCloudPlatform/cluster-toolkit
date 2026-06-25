@@ -162,6 +162,10 @@ spec:
                 value: grpc://$(PATHWAYS_HEAD):29000
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.Env }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               command:
               - "/bin/bash"
               - "-c"
@@ -183,6 +187,7 @@ spec:
                 echo "GCluster End: $(date)"
                 exit $EXIT_CODE
 {{- if .VolumeMountsYAML }}
+              volumeMounts:
 {{.VolumeMountsYAML}}
 {{- end }}
             {{- end}}
