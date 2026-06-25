@@ -15,7 +15,7 @@
 test_name: gke-managed-lustre
 deployment_name: gke-ml-{{ build }}
 region: us-central1
-zone: us-central1-c
+zone: us-central1-a
 lustre_instance_id: "{{ deployment_name }}-lstr"
 size_gib: 36000
 per_unit_storage_throughput: 500

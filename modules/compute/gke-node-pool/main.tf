@@ -537,6 +537,22 @@ module "kubectl_apply" {
   ]) : []
 }
 
+module "dranet_template_apply" {
+  source     = "../../management/kubectl-apply"
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = local.enable_dranet_actual ? [
+    {
+      source = "${path.module}/resource-claim-template.yaml.tftpl"
+      template_vars = {
+        device_class_name = var.dranet_device_class_name
+        allocation_mode   = var.dranet_allocation_mode
+      }
+    }
+  ] : []
+}
+
 check "dranet_requirements" {
   assert {
     condition     = var.enable_dranet == true ? (local.is_dranet_compatible && local.is_dranet_supported_machine && local.is_dataplane_v2_enabled) : true

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,9 +41,9 @@ import (
 var templatesFS embed.FS
 
 // defaultKueueVersion is the fallback version of Kueue to install.
-// ATTENTION: If you update this version, please also update the corresponding
-// default version in modules/management/kubectl-apply/variables.tf.
-const defaultKueueVersion = "v0.17.1"
+// ATTENTION: For cluster creation the corresponding default version
+// is in modules/management/kubectl-apply/variables.tf.
+const defaultKueueVersion = "v0.15.2"
 const defaultJobSetVersion = "v0.10.1"
 
 func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
@@ -93,9 +94,12 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 	}
 
 	if needReinstall {
-		isDynamicSlicing, _ := g.checkDynamicSlicingViaGKE(clusterName, clusterLocation)
-		if isDynamicSlicing {
+		if g.checkDynamicSlicingViaGKE() {
 			return fmt.Errorf("automatic Kueue installation blocked: we detected that cluster %s is set up for Dynamic-slicing (found 'PROVISION_ONLY' in the node pool's placementPolicy). Wiping Kueue would corrupt your custom topology configurations. Please install Kueue and the required custom CRDs manually", clusterName)
+		}
+
+		if err := g.checkKueueInstallPermissions(version); err != nil {
+			return err
 		}
 
 		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
@@ -108,18 +112,17 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 }
 
 func (g *GKEOrchestrator) ensurePriorityClassesInstalled() error {
-	priorityClassesInstalled, err := g.arePriorityClassesInstalled()
+	hasUserClasses, err := g.hasUserPriorityClasses()
 	if err != nil {
 		return err
 	}
 
-	if !priorityClassesInstalled {
-		logging.Info("Required PriorityClasses not found. Installing them...")
-		return g.installPriorityClasses()
+	if hasUserClasses {
+		return nil // Skip installation entirely
 	}
 
-	logging.Info("The required PriorityClasses are already installed.")
-	return nil
+	logging.Info("No user-defined PriorityClasses found. Installing defaults...")
+	return g.installPriorityClasses()
 }
 
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
@@ -223,17 +226,28 @@ func (g *GKEOrchestrator) GetKueueVersion() (string, error) {
 	return version, nil
 }
 
-func (g *GKEOrchestrator) arePriorityClassesInstalled() (bool, error) {
-	args := []string{"get", "priorityclass"}
-	args = append(args, orchestrator.ValidPriorityClasses...)
-	args = append(args, "-o", "name")
-
-	res := g.executor.ExecuteCommand("kubectl", args...)
+func (g *GKEOrchestrator) getClusterPriorityClasses() ([]string, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "priorityclass", "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
-		logging.Info("One or more PriorityClasses not found.")
-		return false, nil
+		return nil, fmt.Errorf("failed to list priority classes: %s", res.Stderr)
 	}
-	return true, nil
+	return strings.Fields(res.Stdout), nil
+}
+
+func (g *GKEOrchestrator) hasUserPriorityClasses() (bool, error) {
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		return false, err
+	}
+
+	for _, name := range existing {
+		if strings.HasPrefix(name, "system-") || strings.HasPrefix(name, "gke-") {
+			continue
+		}
+		logging.Info("Pre-existing PriorityClass '%s' found. Skipping default PriorityClass installation.", name)
+		return true, nil
+	}
+	return false, nil
 }
 
 func (g *GKEOrchestrator) installKueue(version string) error {
@@ -278,8 +292,14 @@ func (g *GKEOrchestrator) installPriorityClasses() error {
 func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
 	logging.Info("Installing Kueue resources (ClusterQueue, LocalQueue)...")
 
-	if err := g.installPriorityClasses(); err != nil {
+	hasUserClasses, err := g.hasUserPriorityClasses()
+	if err != nil {
 		return err
+	}
+	if !hasUserClasses {
+		if err := g.installPriorityClasses(); err != nil {
+			return err
+		}
 	}
 
 	// Install ClusterQueue
@@ -312,18 +332,144 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	return nil
 }
 
+func (g *GKEOrchestrator) isResourceActive(staticAmount int, napLimitKey string) bool {
+	return staticAmount > 0 || (g.napEnabled && g.napLimits[napLimitKey] > 0)
+}
+
+func (g *GKEOrchestrator) isAccelActive(staticAmount int, napLimitKey string, fname string, flavorSub string) bool {
+	if staticAmount > 0 {
+		return true
+	}
+	return g.napEnabled && g.napLimits[napLimitKey] > 0 && strings.Contains(strings.ToLower(fname), flavorSub)
+}
+
+func (g *GKEOrchestrator) calculateCoveredResources() (map[string]bool, map[string]bool) {
+	mainMap := make(map[string]bool)
+	pathwaysMap := make(map[string]bool)
+
+	for fname, fc := range g.capacity.Flavors {
+		if fname == "pathways-flavor" {
+			if g.isResourceActive(fc.CPUs, "cpu") {
+				pathwaysMap["cpu"] = true
+			}
+			if g.isResourceActive(fc.MemoryGi, "memory") {
+				pathwaysMap["memory"] = true
+			}
+		} else {
+			if g.isResourceActive(fc.CPUs, "cpu") {
+				mainMap["cpu"] = true
+			}
+			if g.isResourceActive(fc.MemoryGi, "memory") {
+				mainMap["memory"] = true
+			}
+			if g.isAccelActive(fc.GPUs, "nvidia.com/gpu", fname, "nvidia") {
+				mainMap["nvidia.com/gpu"] = true
+			}
+			if g.isAccelActive(fc.TPUs, "google.com/tpu", fname, "tpu") {
+				mainMap["google.com/tpu"] = true
+			}
+		}
+	}
+	return mainMap, pathwaysMap
+}
+
+func isTPUFlavor(fname string) bool {
+	lower := strings.ToLower(fname)
+	return strings.Contains(lower, "tpu") || strings.Contains(lower, "ct")
+}
+
+func isGPUFlavor(fname string) bool {
+	return strings.Contains(strings.ToLower(fname), "nvidia")
+}
+
+func (g *GKEOrchestrator) getNAPNominalQuota(resName string, fname string) (interface{}, bool) {
+	if !g.napEnabled {
+		return nil, false
+	}
+	lookupKey := resName
+	if resName == "nvidia.com/gpu" || resName == "google.com/tpu" {
+		specificKey := strings.TrimPrefix(fname, "flavor-")
+		if _, ok := g.napLimits[specificKey]; ok {
+			lookupKey = specificKey
+		}
+	}
+	limit, ok := g.napLimits[lookupKey]
+	if !ok {
+		return nil, false
+	}
+	// Only apply TPU/GPU limit to matching flavors
+	if resName == "google.com/tpu" && !isTPUFlavor(fname) {
+		return 0, true
+	}
+	if resName == "nvidia.com/gpu" && !isGPUFlavor(fname) {
+		return 0, true
+	}
+	if resName == "memory" {
+		return fmt.Sprintf("%dG", limit), true // limit is in GB in GKE describe
+	}
+	return limit, true
+}
+
+func getStaticNominalQuota(resName string, fc FlavorCapacity) interface{} {
+	switch resName {
+	case "cpu":
+		return fc.CPUs
+	case "memory":
+		return fmt.Sprintf("%dGi", fc.MemoryGi)
+	case "nvidia.com/gpu":
+		return fc.GPUs
+	case "google.com/tpu":
+		return fc.TPUs
+	default:
+		return 0
+	}
+}
+
+func (g *GKEOrchestrator) getNominalQuota(resName string, fc FlavorCapacity, fname string) interface{} {
+	if val, ok := g.getNAPNominalQuota(resName, fname); ok {
+		return val
+	}
+	return getStaticNominalQuota(resName, fc)
+}
+
 func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
+	mainCoveredResourcesMap, pathwaysCoveredResourcesMap := g.calculateCoveredResources()
+
+	// Pass 2: Build flavor lists with matched resources
 	var mainFlavors []map[string]interface{}
-	mainCoveredResourcesMap := make(map[string]bool)
-
 	var pathwaysFlavors []map[string]interface{}
-	pathwaysCoveredResourcesMap := make(map[string]bool)
 
-	for name, fc := range g.capacity.Flavors {
-		resources, isPathways := g.buildFlavorResources(name, fc, mainCoveredResourcesMap, pathwaysCoveredResourcesMap)
+	var fnames []string
+	for fname := range g.capacity.Flavors {
+		fnames = append(fnames, fname)
+	}
+	sort.Strings(fnames)
+
+	for _, fname := range fnames {
+		fc := g.capacity.Flavors[fname]
+		isPathways := (fname == "pathways-flavor")
+		var resources []map[string]interface{}
+
+		coveredMap := mainCoveredResourcesMap
+		if isPathways {
+			coveredMap = pathwaysCoveredResourcesMap
+		}
+
+		for res := range coveredMap {
+			resources = append(resources, map[string]interface{}{
+				"name":         res,
+				"nominalQuota": g.getNominalQuota(res, fc, fname),
+			})
+		}
+
 		if len(resources) > 0 {
+			// Sort resources alphabetically by name
+			sort.Slice(resources, func(i, j int) bool {
+				return resources[i]["name"].(string) < resources[j]["name"].(string)
+			})
+
 			flavor := map[string]interface{}{
-				"name":      name,
+				"name":      fname,
 				"resources": resources,
 			}
 			if isPathways {
@@ -379,43 +525,6 @@ func (g *GKEOrchestrator) renderClusterQueue(name string) ([]byte, error) {
 	}
 
 	return cqBytes, nil
-}
-
-func (g *GKEOrchestrator) buildFlavorResources(name string, fc FlavorCapacity, mainCovered, pathwaysCovered map[string]bool) ([]map[string]interface{}, bool) {
-	var resources []map[string]interface{}
-	isPathways := (name == "pathways-flavor")
-
-	if fc.CPUs > 0 {
-		if isPathways {
-			pathwaysCovered["cpu"] = true
-		} else {
-			mainCovered["cpu"] = true
-		}
-		resources = append(resources, map[string]interface{}{"name": "cpu", "nominalQuota": fc.CPUs})
-	}
-	if fc.MemoryGi > 0 {
-		if isPathways {
-			pathwaysCovered["memory"] = true
-		} else {
-			mainCovered["memory"] = true
-		}
-		resources = append(resources, map[string]interface{}{"name": "memory", "nominalQuota": fmt.Sprintf("%dGi", fc.MemoryGi)})
-	}
-	if fc.GPUs > 0 {
-		mainCovered["nvidia.com/gpu"] = true
-		resources = append(resources, map[string]interface{}{"name": "nvidia.com/gpu", "nominalQuota": fc.GPUs})
-	}
-	if fc.TPUs > 0 {
-		mainCovered["google.com/tpu"] = true
-		resources = append(resources, map[string]interface{}{"name": "google.com/tpu", "nominalQuota": fc.TPUs})
-	}
-
-	// Sort resources alphabetically by name
-	sort.Slice(resources, func(i, j int) bool {
-		return resources[i]["name"].(string) < resources[j]["name"].(string)
-	})
-
-	return resources, isPathways
 }
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {
@@ -521,7 +630,11 @@ func parseVersion(v string) (int, int, int) {
 		minor, _ = strconv.Atoi(parts[1])
 	}
 	if len(parts) > 2 {
-		patch, _ = strconv.Atoi(parts[2])
+		patchStr := parts[2]
+		// Strip pre-release and build metadata
+		patchStr = strings.Split(patchStr, "-")[0]
+		patchStr = strings.Split(patchStr, "+")[0]
+		patch, _ = strconv.Atoi(patchStr)
 	}
 	return major, minor, patch
 }
@@ -858,8 +971,14 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 	validators := []func() error{
 		g.checkClusterConnectivity,
 		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
-		func() error { return g.ensurePriorityClassesInstalled() },
 		g.checkAndInstallJobSetCRD,
+	}
+
+	if job.PriorityClassName != "" {
+		validators = append(validators,
+			func() error { return g.ensurePriorityClassesInstalled() },
+			func() error { return g.validatePriorityClass(job.PriorityClassName) },
+		)
 	}
 
 	for _, validate := range validators {
@@ -882,24 +1001,51 @@ func (g *GKEOrchestrator) checkClusterConnectivity() error {
 	return nil
 }
 
-func (g *GKEOrchestrator) checkDynamicSlicingViaGKE(clusterName, clusterLocation string) (bool, error) {
-	poolName := os.Getenv("GKE_NODE_POOL_NAME")
-	if poolName == "" {
-		return false, nil
-	}
-
-	result := g.executor.ExecuteCommand("gcloud", "container", "node-pools", "describe", poolName, "--cluster="+clusterName, "--location="+clusterLocation, "--format=json(placementPolicy)")
-	if result.ExitCode != 0 {
-		return false, fmt.Errorf("failed to describe node pool: %s", result.Stderr)
-	}
-
-	var policy map[string]interface{}
-	if err := json.Unmarshal([]byte(result.Stdout), &policy); err == nil {
-		if placement, ok := policy["placementPolicy"].(map[string]interface{}); ok {
-			if mode, ok := placement["acceleratorTopologyMode"].(string); ok && mode == "PROVISION_ONLY" {
-				return true, nil
+func (g *GKEOrchestrator) checkDynamicSlicingViaGKE() bool {
+	for _, np := range g.clusterDesc.NodePools {
+		if np.PlacementPolicy != nil {
+			mode := np.PlacementPolicy.AcceleratorTopologyMode
+			if mode == "PROVISION_ONLY" {
+				return true
 			}
 		}
 	}
-	return false, nil
+	return false
+}
+
+func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
+	logging.Info("Verifying cluster permissions for Kueue installation...")
+	checks := []struct {
+		verb     string
+		resource string
+	}{
+		{"create", "namespaces"},
+		{"create", "customresourcedefinitions.apiextensions.k8s.io"},
+		{"create", "clusterroles.rbac.authorization.k8s.io"},
+		{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
+	}
+
+	for _, c := range checks {
+		res := g.executor.ExecuteCommand("kubectl", "auth", "can-i", c.verb, c.resource)
+		if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) != "yes" {
+			return fmt.Errorf("unable to re-install kueue to version %s, this could be a permission issue. Please contact your cluster administrator for updating KUEUE settings", version)
+		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) validatePriorityClass(requestedPriority string) error {
+	if requestedPriority == "" {
+		return nil
+	}
+
+	existing, err := g.getClusterPriorityClasses()
+	if err != nil {
+		return err
+	}
+
+	if !slices.Contains(existing, requestedPriority) {
+		return fmt.Errorf("priority class %q does not exist in the cluster. Available priority classes are: %v", requestedPriority, existing)
+	}
+	return nil
 }

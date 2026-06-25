@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"strings"
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
@@ -358,7 +359,7 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				ComputeType: tt.acceleratorType,
 			}
 
-			_, _, err := orc.resolveHardwareRequirements(job)
+			_, _, _, err := orc.resolveHardwareRequirements(job)
 
 			if tt.wantErr {
 				if err == nil {
@@ -373,6 +374,453 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				}
 				if tt.wantTopology != "" && job.Topology != tt.wantTopology {
 					t.Errorf("Expected job.Topology %q, got %q", tt.wantTopology, job.Topology)
+				}
+			}
+		})
+	}
+}
+
+func TestVerifyStaticSlicingActive(t *testing.T) {
+	tests := []struct {
+		name           string
+		machineType    string
+		requestedTopo  string
+		mockResponses  map[string][]shell.CommandResult
+		nodePools      []gkeJobNodePool
+		wantActive     bool
+		wantErr        bool
+		verifyCacheHit bool
+	}{
+		{
+			name:          "Non-TPU machine type",
+			machineType:   "n2-standard-8",
+			requestedTopo: "2x2",
+			wantActive:    false,
+		},
+		{
+			name:          "TPU v4 (3D Torus) bypasses static sub-slicing",
+			machineType:   "ct4p-hightpu-4t",
+			requestedTopo: "2x2x1",
+			wantActive:    false,
+		},
+		{
+			name:          "TPU v5p (3D Torus) bypasses static sub-slicing",
+			machineType:   "ct5p-hightpu-4t",
+			requestedTopo: "2x2x2",
+			wantActive:    false,
+		},
+		{
+			name:          "No Kueue topologies configured",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 1, Stderr: "NotFound"},
+				},
+			},
+			wantActive: false,
+		},
+		{
+			name:          "Empty topologies configured",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[]}`},
+				},
+			},
+			wantActive: false,
+		},
+		{
+			name:          "Static sub-slicing active (requested shape fits physical)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive:     true,
+			verifyCacheHit: true,
+		},
+		{
+			name:          "Full-slice topology matches physical (Still TAS active)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "4x4",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive: true,
+		},
+		{
+			name:          "Requested shape too large for physical",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "8x8",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: "4x4\n"},
+				},
+			},
+			wantActive: false,
+		},
+		{
+			name:          "Static sub-slicing active (discovered from scaled-to-0 node pool)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "tpu-pool-4x4",
+					Config: gkeNodePoolConfig{
+						MachineType: "ct6e-standard-8t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						TpuTopology: "4x4",
+					},
+				},
+			},
+			wantActive: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tt.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			if len(tt.nodePools) > 0 {
+				orc.clusterDesc.NodePools = tt.nodePools
+			}
+
+			job := &orchestrator.JobDefinition{
+				MachineType: tt.machineType,
+				Topology:    tt.requestedTopo,
+			}
+
+			got, err := orc.verifyStaticSlicingActive(job)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("verifyStaticSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantActive {
+				t.Errorf("verifyStaticSlicingActive() = %v, want %v", got, tt.wantActive)
+			}
+
+			if tt.verifyCacheHit && err == nil && got == tt.wantActive {
+				// Clear mock executor to ensure subsequent call is satisfied entirely from cache
+				orc.executor = NewMockExecutor(nil)
+				got2, err2 := orc.verifyStaticSlicingActive(job)
+				if err2 != nil || got2 != tt.wantActive {
+					t.Errorf("cache hit failed: got %v, err %v", got2, err2)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name               string
+		napEnabled         bool
+		gkeNapProvisioning string
+		scheduler          string
+		topology           string
+		computeType        string
+		machineType        string
+		dynamicSlicing     bool
+		mockResponses      map[string][]shell.CommandResult
+		wantErr            bool
+		expectedErrMatch   string
+	}{
+		{
+			name:        "NAP Cluster - Standard TPU allowed",
+			napEnabled:  true,
+			computeType: "v6e-8",
+			wantErr:     false,
+		},
+		{
+			name:               "NAP Cluster - TPU Dynamic Slicing disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "tpu7x-128",
+			machineType:        "tpu7x-standard-4t",
+			topology:           "4x4x8",
+			dynamicSlicing:     true,
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "4x4x8\n"}},
+			},
+			wantErr:          true,
+			expectedErrMatch: "TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads",
+		},
+		{
+			name:               "NAP Cluster - TPU Static Sub-slicing disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "v6e-8",
+			machineType:        "v6e-standard-8t",
+			topology:           "2x4",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"topologies":["4x8"]}}]}`}},
+			},
+			wantErr:          true,
+			expectedErrMatch: "TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads",
+		},
+		{
+			name:               "NAP Cluster - DWS Flex Scheduler disallowed",
+			napEnabled:         true,
+			gkeNapProvisioning: "spot",
+			computeType:        "v6e-8",
+			scheduler:          "gke.io/tpu-provisioning-request",
+			wantErr:            true,
+			expectedErrMatch:   "TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockResponses := tt.mockResponses
+			if mockResponses == nil {
+				mockResponses = make(map[string][]shell.CommandResult)
+			}
+			// Add default mocks for topology discovery if not provided
+			if _, ok := mockResponses["kubectl get resourceflavors"]; !ok {
+				mockResponses["kubectl get resourceflavors"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+			}
+			if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
+				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "4x8\n"}, {ExitCode: 0, Stdout: "4x8\n"}}
+			}
+
+			orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+			orc.napEnabled = tt.napEnabled
+			orc.projectID = "mock-project"
+
+			if tt.dynamicSlicing {
+				orc.dynamicSlicingCache = map[string]bool{
+					tt.machineType:                     true,
+					tt.computeType:                     true,
+					tt.computeType + ":" + tt.topology: true,
+					tt.machineType + ":" + tt.topology: true,
+				}
+			}
+
+			// Populate a node pool so the ambiguous shorthands 'v6e' and 'tpu7x' can be resolved
+			orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
+				Config: gkeNodePoolConfig{MachineType: "ct6e-standard-8t"},
+			})
+			orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
+				Config: gkeNodePoolConfig{MachineType: "tpu7x-standard-4t"},
+			})
+
+			job := &orchestrator.JobDefinition{
+				ComputeType:        tt.computeType,
+				MachineType:        tt.machineType,
+				Topology:           tt.topology,
+				GKEScheduler:       tt.scheduler,
+				GKENAPProvisioning: tt.gkeNapProvisioning,
+			}
+
+			_, _, _, err := orc.resolveHardwareRequirements(job)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.expectedErrMatch) {
+					t.Errorf("expected error to contain %q, got: %v", tt.expectedErrMatch, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateConsumptionForStaticCluster(t *testing.T) {
+	tests := []struct {
+		name        string
+		napEnabled  bool
+		napLimits   map[string]int64
+		nodePools   []gkeJobNodePool
+		job         orchestrator.JobDefinition
+		wantErr     bool
+		expectedErr string
+	}{
+		{
+			name:       "Static Cluster - Explicit on-demand flag fails",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "Static Cluster - Empty string consumption model",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "Static Cluster - Consumption model flag set to spot",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"spot\", --gke-nap-reservation \"\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "Static Cluster - Reservation name flag set",
+			napEnabled: false,
+			job: orchestrator.JobDefinition{
+				GKENAPProvisioning: "on-demand",
+				GKENAPReservation:  "my-res",
+			},
+			wantErr:     true,
+			expectedErr: "GKE NAP provisioning options (--gke-nap-provisioning \"on-demand\", --gke-nap-reservation \"my-res\") are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled",
+		},
+		{
+			name:       "NAP Cluster - Machine type in NAP limits",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t", // TPU
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, but matches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "spot",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - Machine type not in limits, and mismatches static pool",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			nodePools: []gkeJobNodePool{
+				{
+					Config: gkeNodePoolConfig{
+						MachineType: "n2-standard-4",
+						Labels: map[string]string{
+							"cloud.google.com/gke-provisioning": "standard",
+						},
+					},
+				},
+			},
+			job: orchestrator.JobDefinition{
+				ComputeType:        "n2-standard-4",
+				MachineType:        "n2-standard-4",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - Machine type covered by generic TPU limit fallback",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"google.com/tpu": 100,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct6e-standard-8t",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "NAP Cluster - Machine type with unknown GPU accelerator fails fast",
+			napEnabled: true,
+			napLimits:  map[string]int64{},
+			job: orchestrator.JobDefinition{
+				MachineType:        "my-unknown-gpu-machine",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(nil)
+			orc.napEnabled = tt.napEnabled
+			orc.napLimits = tt.napLimits
+			orc.clusterDesc.NodePools = tt.nodePools
+			orc.machineCapCache = map[string]MachineTypeCap{
+				"n2-standard-4:": {
+					GuestCpus: 4,
+					MemoryMb:  16000,
+				},
+				"my-unknown-gpu-machine:": {
+					GuestCpus: 8,
+					MemoryMb:  32000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "unknown-gpu",
+						},
+					},
+				},
+			}
+
+			err := orc.validateConsumptionForStaticCluster(&tt.job)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.expectedErr) {
+					t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
 				}
 			}
 		})

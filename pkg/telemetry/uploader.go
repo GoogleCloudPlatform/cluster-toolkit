@@ -34,7 +34,7 @@ func Flush(payload LogRequest) {
 	}
 
 	client := &http.Client{
-		Timeout: timeout10Sec,
+		Timeout: uploadTimeout,
 	}
 	u, _ := url.Parse(clearcutProdURL)
 	params := url.Values{}

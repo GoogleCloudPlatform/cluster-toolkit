@@ -82,12 +82,14 @@ type JobDefinition struct {
 	UseParallelContainers bool
 	Timeout               string
 	PriorityClassName     string
+	GKENAPProvisioning    string
+	GKENAPReservation     string
 
 	// Pathways-specific fields
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
-	Volumes []VolumeDefinition
+	RawMounts []string
 
 	Verbose bool
 }

@@ -17,7 +17,9 @@ package job
 import (
 	"bytes"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -218,6 +220,38 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 	}
 }
 
+func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+		},
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "a-very-long-workload-name-that-exceeds-28-characters",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing long workload name, but got nil")
+	}
+
+	expectedErr := "cannot exceed 28 characters"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got: %v", expectedErr, err)
+	}
+}
+
 func resetSubmitCmdFlags() {
 	imageName = ""
 	baseImage = ""
@@ -248,95 +282,8 @@ func resetSubmitCmdFlags() {
 	priorityClassName = "medium"
 	isPathwaysJob = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
-}
-
-func TestParseVolumeFlag_PVC(t *testing.T) {
-	got, err := parseVolumeFlag([]string{"my-pvc:/mnt/data"})
-	if err != nil {
-		t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 volume, got %d", len(got))
-	}
-	if got[0].Type != "pvc" || got[0].MountPath != "/mnt/data" || got[0].ReadOnly != true {
-		t.Errorf("unexpected volume definition: %+v", got[0])
-	}
-}
-
-func TestParseVolumeFlag_GCS(t *testing.T) {
-	tests := []struct {
-		name     string
-		vStr     string
-		readOnly bool
-	}{
-		{"Valid GCS Fuse", "gs://my-bucket:/mnt/gcs", true},
-		{"Valid GCS Fuse with ro", "gs://my-bucket:/mnt/gcs:ro", true},
-		{"Valid GCS Fuse with rw", "gs://my-bucket:/mnt/gcs:rw", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseVolumeFlag([]string{tt.vStr})
-			if err != nil {
-				t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
-			}
-			if len(got) != 1 {
-				t.Fatalf("expected 1 volume, got %d", len(got))
-			}
-			if got[0].Type != "gcsfuse" || got[0].MountPath != "/mnt/gcs" || got[0].ReadOnly != tt.readOnly {
-				t.Errorf("unexpected volume definition: %+v", got[0])
-			}
-		})
-	}
-}
-
-func TestParseVolumeFlag_HostPath(t *testing.T) {
-	got, err := parseVolumeFlag([]string{"/home/user/data:/mnt/host"})
-	if err != nil {
-		t.Fatalf("parseVolumeFlag() unexpected error = %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 volume, got %d", len(got))
-	}
-	if got[0].Type != "hostPath" || got[0].MountPath != "/mnt/host" || got[0].ReadOnly != true {
-		t.Errorf("unexpected volume definition: %+v", got[0])
-	}
-}
-
-func TestParseVolumeFlag_Invalid(t *testing.T) {
-	tests := []struct {
-		name  string
-		vStrs []string
-	}{
-		{
-			name:  "Invalid mode",
-			vStrs: []string{"gs://my-bucket:/mnt/gcs:invalid"},
-		},
-		{
-			name:  "Duplicate source",
-			vStrs: []string{"gs://my-bucket:/mnt/gcs1", "gs://my-bucket:/mnt/gcs2"},
-		},
-		{
-			name:  "Duplicate destination",
-			vStrs: []string{"gs://my-bucket1:/mnt/gcs", "gs://my-bucket2:/mnt/gcs"},
-		},
-		{
-			name:  "Invalid Format (No separator)",
-			vStrs: []string{"invalid-format"},
-		},
-		{
-			name:  "Invalid Format (Missing destination for URI)",
-			vStrs: []string{"gs://my-bucket"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseVolumeFlag(tt.vStrs)
-			if err == nil {
-				t.Fatalf("parseVolumeFlag() expected error, got nil")
-			}
-		})
-	}
+	gkeNapProvisioning = ""
+	gkeNapReservation = ""
 }
 
 type mockOrchestrator struct {
@@ -476,5 +423,291 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "failed to determine user identity") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "invalid-model",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing invalid provisioning model, but got nil")
+	}
+
+	expectedErr := "invalid value \"invalid-model\" for --gke-nap-provisioning"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "reservation",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing reservation model without reservation name, but got nil")
+	}
+
+	expectedErr := "--gke-nap-reservation is required when --gke-nap-provisioning=reservation"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
+	resetSubmitCmdFlags()
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "consumption-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--gke-nap-provisioning", "spot",
+		"--gke-nap-reservation", "my-reservation",
+	)
+
+	if err == nil {
+		t.Fatalf("expected error when passing reservation name with spot model, but got nil")
+	}
+
+	expectedErr := "--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation"
+	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	}
+}
+
+func TestSubmitCmd_DryRunMissingDir_Approved(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	missingDirPath := filepath.Join(tmpDir, "non-existent-sub-dir", "manifest.yaml")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = oldPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
+
+	resetSubmitCmdFlags()
+
+	_, err = executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-missing-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", missingDirPath,
+	)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Dir(missingDirPath)); err != nil {
+		t.Errorf("expected directory %q to exist, got error: %v", filepath.Dir(missingDirPath), err)
+	}
+
+	if _, err := os.Stat(missingDirPath); err != nil {
+		t.Errorf("expected file %q to exist, got error: %v", missingDirPath, err)
+	}
+}
+
+func TestSubmitCmd_DryRunMissingDir_Rejected(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	missingDirPath := filepath.Join(tmpDir, "non-existent-sub-dir", "manifest.yaml")
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	oldPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = oldPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return false }
+
+	resetSubmitCmdFlags()
+
+	output, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-missing-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", missingDirPath,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "directory \"" + filepath.Dir(missingDirPath) + "\" does not exist"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v, output: %s", expectedErr, err, output)
+	}
+
+	if _, err := os.Stat(filepath.Dir(missingDirPath)); !os.IsNotExist(err) {
+		t.Errorf("expected directory %q to not exist, but it does", filepath.Dir(missingDirPath))
+	}
+}
+
+func TestSubmitCmd_DryRunIsDir_Existing(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gcluster-submit-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	resetSubmitCmdFlags()
+
+	_, err = executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", tmpDir,
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "must be a file path, not a directory path"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_DryRunIsDir_TrailingSlash(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
+
+	resetSubmitCmdFlags()
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "dry-run-dir-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--dry-run-out", "/some/random/dir/path/",
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "must be a file path, not a directory path"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
 	}
 }

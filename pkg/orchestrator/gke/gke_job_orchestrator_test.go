@@ -81,6 +81,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		machineCapCache:          make(map[string]MachineTypeCap),
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
+		staticSlicingCache:       make(map[string]bool),
 	}
 }
 
@@ -243,11 +244,11 @@ func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 				{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 			}
 
-			profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 			var manifest string
 			if err == nil {
 				var opts ManifestOptions
-				opts, err = orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+				opts, err = orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 				if err == nil {
 					manifest, err = orc.GenerateGKEManifest(opts, profile)
 				}
@@ -300,18 +301,18 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		CommandToRun:    "echo hello",
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
-		Volumes: []orchestrator.VolumeDefinition{
-			{Name: "vol-0", Source: "gs://my-bucket", MountPath: "/data", Type: "gcsfuse"},
-			{Name: "vol-1", Source: "/host/path", MountPath: "/host", Type: "hostPath"},
-			{Name: "vol-2", Source: "my-pvc", MountPath: "/pvc", Type: "pvc"},
+		RawMounts: []string{
+			"gs://my-bucket:/data",
+			"/host/path:/host",
+			"my-pvc:/pvc",
 		},
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -454,11 +455,11 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing)
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("generatePathwaysManifest failed: %v", err)
 	}
@@ -993,7 +994,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			wantResult: false,
 		},
 		{
-			name: "Failure - TPU7x Dynamic-slicing requested topology under 4x4x4",
+			name: "Success - TPU7x Dynamic-slicing requested subslice topology (2x2x1)",
 			opts: ManifestOptions{
 				ClusterName:     "test-cluster",
 				ClusterLocation: "us-central1-a",
@@ -1017,7 +1018,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 				},
 			},
 			wantResult: true,
-			wantErr:    true,
+			wantErr:    false,
 		},
 		{
 			name: "Failure - TPU7x Dynamic-slicing requested topology 2x4x8 (product 64 but a < 4)",
@@ -1549,12 +1550,12 @@ func TestGenerateGKEManifest_DynamicVmsPerSlice(t *testing.T) {
 		NodesPerSlice:   0,
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
 
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("prepareManifestOptions failed: %v", err)
 	}
@@ -1600,12 +1601,12 @@ func TestGenerateGKEManifest_RespectUserNumNodes(t *testing.T) {
 		NodesPerSlice:   32,     // Explicitly set to 32 (representing --num-nodes)
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
 
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
@@ -1650,12 +1651,12 @@ func TestGenerateGKEManifest_ParallelContainers(t *testing.T) {
 		UseParallelContainers: true,    // Enable parallel containers
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
 
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
@@ -1821,11 +1822,11 @@ func TestGPUTopologyAwareScheduling(t *testing.T) {
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "nvidia-tesla-a100"}},
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
@@ -1958,7 +1959,7 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 		},
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
@@ -1968,7 +1969,7 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 		t.Fatalf("Expected resolveHardwareRequirements to flag isDynamicSlicing as true")
 	}
 
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing)
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("PrepareManifestOptions failed: %v", err)
 	}
@@ -2038,7 +2039,7 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 		},
 	}
 
-	profile, isDynamicSlicing, err := orc.resolveHardwareRequirements(&job)
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
 	if err != nil {
 		t.Fatalf("resolveHardwareRequirements failed: %v", err)
 	}
@@ -2046,7 +2047,7 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 		t.Fatalf("Expected isDynamicSlicing to be true")
 	}
 
-	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing)
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
 	if err != nil {
 		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 	}
@@ -2065,5 +2066,196 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q\nManifest: %s", substr, manifest)
 		}
+	}
+}
+
+func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "test-tas-v6e-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "v6e-8",
+		Topology:        "2x2",
+		ClusterLocation: "us-central1-a",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}, {ExitCode: 0, Stdout: ""}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}, {ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get nodes":                             {{ExitCode: 0, Stdout: "4x4"}, {ExitCode: 0, Stdout: "4x4"}},
+		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
+	}
+
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-pool",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu-v6e-slice",
+			},
+		},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	if isDynamicSlicing {
+		t.Fatalf("Expected isDynamicSlicing to be false for v6e")
+	}
+	if !isStaticSlicing {
+		t.Fatalf("Expected resolveHardwareRequirements to flag isStaticSlicing as true")
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Because static sub-slicing is true:
+	// 1. NodeSelector MUST NOT include the topology strictly (Fix A)
+	if strings.Contains(manifest, "cloud.google.com/gke-tpu-topology: 2x2") {
+		t.Errorf("Expected manifest to NOT contain strict nodeSelector topology, but it was found\nManifest: %s", manifest)
+	}
+
+	// 2. Kueue TAS annotations MUST be injected with slice-based format (Fix B)
+	if !strings.Contains(manifest, "kueue.x-k8s.io/podset-required-topology: cloud.google.com/gke-tpu-slice-2x2-id") {
+		t.Errorf("Expected manifest to contain kueue TAS slice-based annotation, but it was missing or incorrect\nManifest: %s", manifest)
+	}
+	if !strings.Contains(manifest, "cloud.google.com/gke-tpu-slice-topology: 2x2") {
+		t.Errorf("Expected manifest to contain gke-tpu-slice-topology annotation, but it was missing\nManifest: %s", manifest)
+	}
+}
+
+func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	// Mock JSON with specific limit (nvidia-l4: 16) and generic limit (nvidia.com/gpu: 4).
+	// The order doesn't matter now since we compute generic limits in a second pass.
+	mockDescribeOutput := `{
+		"locations": ["us-central1-a"],
+		"nodePools": [],
+		"autoscaling": {
+			"enableNodeAutoprovisioning": true,
+			"resourceLimits": [
+				{
+					"resourceType": "nvidia-l4",
+					"maximum": "16"
+				},
+				{
+					"resourceType": "nvidia.com/gpu",
+					"maximum": "4"
+				}
+			]
+		}
+	}`
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{
+				ExitCode: 0,
+				Stdout:   mockDescribeOutput,
+			},
+		},
+	}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	job := &orchestrator.JobDefinition{
+		ProjectID:       "my-project",
+		ClusterName:     "my-cluster",
+		ClusterLocation: "us-central1-a",
+	}
+
+	err := orc.populateClusterMetadata(job)
+	if err != nil {
+		t.Fatalf("populateClusterMetadata failed: %v", err)
+	}
+
+	// The generic limit "nvidia.com/gpu" must be the MAXIMUM of specific limits (16), NOT overwritten by the lower generic limit (4)
+	expectedGPULimit := int64(16)
+	if limit := orc.napLimits["nvidia.com/gpu"]; limit != expectedGPULimit {
+		t.Errorf("expected napLimits[nvidia.com/gpu] to be %d, got %d", expectedGPULimit, limit)
+	}
+}
+
+func TestPopulateNAPFlavors(t *testing.T) {
+	tests := []struct {
+		name        string
+		napLimits   map[string]int64
+		wantFlavors map[string]FlavorCapacity
+		wantErr     bool
+	}{
+		{
+			name: "Skip cpu and memory, populate generic tpu and model specific gpu",
+			napLimits: map[string]int64{
+				"cpu":            100,
+				"memory":         1024,
+				"google.com/tpu": 4,
+				"nvidia-l4":      8,
+			},
+			wantFlavors: map[string]FlavorCapacity{
+				"flavor-tpu-generic": {
+					NodeLabels: nil,
+				},
+				"flavor-nvidia-l4": {
+					NodeLabels: map[string]string{
+						"cloud.google.com/gke-accelerator": "nvidia-l4",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Unknown accelerator label returns error",
+			napLimits: map[string]int64{
+				"unknown-gpu": 2,
+			},
+			wantFlavors: nil,
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				napEnabled: true,
+				napLimits:  tt.napLimits,
+			}
+			flavors := make(map[string]FlavorCapacity)
+			err := orc.populateNAPFlavors(flavors)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("populateNAPFlavors() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if len(flavors) != len(tt.wantFlavors) {
+				t.Errorf("expected %d flavors, got %d", len(tt.wantFlavors), len(flavors))
+			}
+			for fName, expectedCapacity := range tt.wantFlavors {
+				gotCapacity, ok := flavors[fName]
+				if !ok {
+					t.Errorf("missing expected flavor %s", fName)
+					continue
+				}
+				if len(gotCapacity.NodeLabels) != len(expectedCapacity.NodeLabels) {
+					t.Errorf("expected %d node labels, got %d", len(expectedCapacity.NodeLabels), len(gotCapacity.NodeLabels))
+				}
+				for k, v := range expectedCapacity.NodeLabels {
+					if gotCapacity.NodeLabels[k] != v {
+						t.Errorf("expected label %s=%s, got %s", k, v, gotCapacity.NodeLabels[k])
+					}
+				}
+			}
+		})
 	}
 }

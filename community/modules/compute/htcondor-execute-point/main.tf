@@ -115,6 +115,41 @@ locals {
   )
 
   name_prefix = "${var.deployment_name}-${var.name_prefix}-ep"
+
+  # Handle backward compatibility for network configuration
+  # If var.network_interfaces is provided, use it directly.
+  # Otherwise, fall back to the older vars var.network_self_link and var.subnetwork_self_link
+  network_interfaces = (
+    length(var.network_interfaces) > 0
+    ? [
+      for ni in var.network_interfaces : {
+        network            = ni.network
+        subnetwork         = ni.subnetwork
+        subnetwork_project = ni.subnetwork_project
+        nic_type           = ni.nic_type
+        stack_type         = ni.stack_type
+        network_ip         = ni.network_ip
+        queue_count        = ni.queue_count
+        access_config      = ni.access_config
+        ipv6_access_config = ni.ipv6_access_config
+        alias_ip_range     = ni.alias_ip_range
+      }
+    ]
+    : [
+      {
+        network            = var.network_self_link
+        subnetwork         = var.subnetwork_self_link
+        subnetwork_project = null
+        nic_type           = null
+        stack_type         = null
+        network_ip         = ""
+        queue_count        = null
+        access_config      = []
+        ipv6_access_config = []
+        alias_ip_range     = []
+      }
+    ]
+  )
 }
 
 data "google_compute_zones" "available" {
@@ -147,12 +182,30 @@ module "startup_script" {
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 12.1"
+  version = "~> 14.0"
 
-  name_prefix = local.name_prefix
-  project_id  = var.project_id
-  network     = var.network_self_link
-  subnetwork  = var.subnetwork_self_link
+  name_prefix        = local.name_prefix
+  project_id         = var.project_id
+  region             = var.region
+  network            = local.network_interfaces[0].network
+  subnetwork         = local.network_interfaces[0].subnetwork
+  subnetwork_project = local.network_interfaces[0].subnetwork_project
+
+  additional_networks = [
+    for network_interface in slice(local.network_interfaces, 1, length(local.network_interfaces)) : {
+      network            = network_interface.network
+      subnetwork         = network_interface.subnetwork
+      subnetwork_project = network_interface.subnetwork != null ? coalesce(network_interface.subnetwork_project, var.project_id) : null
+      nic_type           = network_interface.nic_type
+      stack_type         = network_interface.stack_type
+      network_ip         = network_interface.network_ip
+      queue_count        = network_interface.queue_count
+      access_config      = network_interface.access_config
+      ipv6_access_config = network_interface.ipv6_access_config
+      alias_ip_range     = network_interface.alias_ip_range
+    }
+  ]
+
   service_account = {
     email  = var.execute_point_service_account_email
     scopes = var.service_account_scopes
@@ -175,7 +228,7 @@ module "execute_point_instance_template" {
 
 module "mig" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "~> 12.1"
+  version = "~> 14.0"
 
   project_id                       = var.project_id
   region                           = var.region

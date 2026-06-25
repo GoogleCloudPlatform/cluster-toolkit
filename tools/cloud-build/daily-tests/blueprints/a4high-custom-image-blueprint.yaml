@@ -238,7 +238,7 @@ deployment_groups:
           echo "Checking host /etc/hostname status..."
           if [ ! -f /etc/hostname ]; then
             echo "Host /etc/hostname not found! Generating dynamically..."
-            hostname | tee /etc/hostname
+            hostname -s | tee /etc/hostname
             echo "Host /etc/hostname written successfully."
           else
             echo "Host /etc/hostname already exists."

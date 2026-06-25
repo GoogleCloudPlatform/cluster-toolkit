@@ -376,7 +376,7 @@ func ResolveTopologyForChips(computeType string, machineType string) (string, er
 		}
 	} else if matchesTPUFamily(machineType, valid3DTPUFamilies) {
 		isMultipleOf64 := totalChips >= 64 && totalChips%64 == 0
-		if !(isPowerOf2 || isMultipleOf64) {
+		if !isPowerOf2 && !isMultipleOf64 {
 			return "", fmt.Errorf("invalid size %d in compute-type %q. Valid sizes are powers of 2, or multiples of 64", totalChips, computeType)
 		}
 		if shape, exists := common3DTopologies[totalChips]; exists {
@@ -436,11 +436,11 @@ func isValid3DDimension(x int) bool {
 }
 
 // Validate3DTopology validates the 3D topology dimensions for a given machine type.
-// If superSlicingCheck is true, it skips the common 3D shapes check and strictly validates
-// that each dimension is a multiple of 4 and >= 4.
-func Validate3DTopology(topology string, machineType string, superSlicingCheck bool) error {
+// If dynamicSlicingCheck is true, it validates that the topology is either a valid subslice
+// (2x2x1, 2x2x2, 2x2x4, 2x4x4) or a valid superslice (dimensions are multiples of 4 and >= 4).
+func Validate3DTopology(topology string, machineType string, dynamicSlicingCheck bool) error {
 
-	if !superSlicingCheck && valid3DShapes[topology] {
+	if !dynamicSlicingCheck && valid3DShapes[topology] {
 		return nil
 	}
 
@@ -452,23 +452,13 @@ func Validate3DTopology(topology string, machineType string, superSlicingCheck b
 	b, _ := strconv.Atoi(dims[1])
 	c, _ := strconv.Atoi(dims[2])
 
-	if !isValid3DDimension(a) || !isValid3DDimension(b) || !isValid3DDimension(c) {
-		return fmt.Errorf("topology %s dimensions must be >= 4 and multiples of 4 (unless it is a common base topology)", topology)
+	if err := validateDimensions(topology, a, b, c, dynamicSlicingCheck); err != nil {
+		return err
 	}
 
-	maxCubes := 0
-	found := false
-
-	for prefix, constraints := range tpu3DConstraintsMap {
-		if strings.HasPrefix(machineType, prefix) {
-			maxCubes = constraints.maxCubes
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("unknown 3D TPU family for machine type %s", machineType)
+	maxCubes, err := getMaxCubes(machineType)
+	if err != nil {
+		return err
 	}
 
 	cubes := (a / 4) * (b / 4) * (c / 4)
@@ -476,11 +466,35 @@ func Validate3DTopology(topology string, machineType string, superSlicingCheck b
 		return fmt.Errorf("topology %s exceeds max cubes limit of %d (current: %d)", topology, maxCubes, cubes)
 	}
 
-	if !(a <= b && b <= c) {
+	if (a > b || b > c) && topology != "2x2x1" {
 		return fmt.Errorf("topology %s dimensions must be in non-decreasing order (A <= B <= C)", topology)
 	}
 
 	return nil
+}
+
+func validateDimensions(topology string, a, b, c int, dynamicSlicingCheck bool) error {
+	if dynamicSlicingCheck {
+		isSubSlice := (topology == "2x2x1" || topology == "2x2x2" || topology == "2x2x4" || topology == "2x4x4")
+		isSuperSlice := (isValid3DDimension(a) && isValid3DDimension(b) && isValid3DDimension(c))
+		if !isSubSlice && !isSuperSlice {
+			return fmt.Errorf("topology %s is not valid for dynamic slicing. It must be a valid subslice (2x2x1, 2x2x2, 2x2x4, 2x4x4) or superslice (dimensions >= 4 and multiples of 4)", topology)
+		}
+	} else {
+		if !isValid3DDimension(a) || !isValid3DDimension(b) || !isValid3DDimension(c) {
+			return fmt.Errorf("topology %s dimensions must be >= 4 and multiples of 4 (unless it is a common base topology)", topology)
+		}
+	}
+	return nil
+}
+
+func getMaxCubes(machineType string) (int, error) {
+	for prefix, constraints := range tpu3DConstraintsMap {
+		if strings.HasPrefix(machineType, prefix) {
+			return constraints.maxCubes, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown 3D TPU family for machine type %s", machineType)
 }
 
 // CheckTopologyContainment returns true if the requested topology fits within the container topology.
@@ -505,4 +519,20 @@ func CheckTopologyContainment(requested, container string, accelType string) (bo
 	}
 
 	return true, nil
+}
+
+// Is3DTorusTPU returns true if the machine type belongs to a 3D Torus TPU family (v4 or v5p)
+// where static sub-slicing coordinate labeling is unsupported by GKE.
+func Is3DTorusTPU(machineType string) bool {
+	lower := strings.ToLower(machineType)
+	// Filter out tpu7x (v7) which uses its own dynamic coordinates/partition scheme.
+	if strings.Contains(lower, "tpu7") {
+		return false
+	}
+	for _, family := range []string{"v4", "v5p", "ct4p", "ct5p"} {
+		if strings.Contains(lower, family) {
+			return true
+		}
+	}
+	return false
 }

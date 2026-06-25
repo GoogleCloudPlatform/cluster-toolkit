@@ -125,6 +125,12 @@ locals {
     pvc.storage_type == "gcs"
   ])
 
+  default_resource_claims = anytrue(var.enable_dranet) ? [{ name = "rdma", resource_claim_template_name = "default-rdma" }] : []
+  default_claims          = anytrue(var.enable_dranet) ? [{ name = "rdma" }] : []
+
+  resource_claims_actual = length(var.resource_claims) > 0 ? var.resource_claims : local.default_resource_claims
+  claims_actual          = length(var.claims) > 0 ? var.claims : local.default_claims
+
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
@@ -154,6 +160,8 @@ locals {
       memory_request       = local.memory_request_string
       ephemeral_request    = local.ephemeral_request_string
       gcs_annotation       = local.any_gcs
+      resource_claims      = local.resource_claims_actual
+      claims               = local.claims_actual
     }
   )
 
@@ -178,4 +186,5 @@ resource "local_file" "job_template" {
       error_message = "When using GCS, a kubernetes service account with workload identity is required. gke-cluster module will perform this setup when var.configure_workload_identity_sa is set to true."
     }
   }
+
 }

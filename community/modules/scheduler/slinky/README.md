@@ -167,6 +167,7 @@ No modules.
 
 | Name | Description |
 | ---- | ----------- |
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the cluster and run basic Slurm commands. |
 | <a name="output_slurm_namespace"></a> [slurm\_namespace](#output\_slurm\_namespace) | namespace for the slurm chart |
 | <a name="output_slurm_operator_namespace"></a> [slurm\_operator\_namespace](#output\_slurm\_operator\_namespace) | namespace for the slinky operator chart |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

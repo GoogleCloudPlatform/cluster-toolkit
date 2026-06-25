@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -22,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"strings"
 
+	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
 	"k8s.io/client-go/dynamic"
 )
@@ -77,7 +79,10 @@ type GKEOrchestrator struct {
 	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
+	napEnabled                  bool
+	napLimits                   map[string]int64
 	dynamicSlicingCache         map[string]bool
+	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
 }
 
@@ -168,9 +173,28 @@ type ManifestOptions struct {
 	VolumeMountsYAML              string
 	GCSFuseEnabled                bool
 	IsDynamicSlicing              bool
+	IsStaticSlicing               bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool
+	AdditionalManifests           []string
+}
+
+// StorageManager handles parsing and validation of storage mounts.
+type StorageManager struct {
+	orchestrator    *GKEOrchestrator
+	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
+	filestoreClient filestoreClient
+	instancesCache  []*filestorepb.Instance
+}
+
+// MountInfo represents parsed volume mount options
+type MountInfo struct {
+	Name      string
+	Source    string
+	MountPath string
+	Type      string
+	ReadOnly  bool
 }
 
 type FlavorCapacity struct {
@@ -225,6 +249,7 @@ type gkeAutoscaling struct {
 type gkePlacementPolicy struct {
 	AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
 	Type                    string `json:"type"`
+	TpuTopology             string `json:"tpuTopology"`
 }
 
 type gkeJobNodePool struct {
@@ -235,9 +260,20 @@ type gkeJobNodePool struct {
 	PlacementPolicy  *gkePlacementPolicy `json:"placementPolicy,omitempty"`
 }
 
+type gkeResourceLimit struct {
+	ResourceType string `json:"resourceType"`
+	Maximum      int64  `json:"maximum,string"`
+}
+
+type gkeClusterAutoscaling struct {
+	EnableNodeAutoprovisioning bool               `json:"enableNodeAutoprovisioning"`
+	ResourceLimits             []gkeResourceLimit `json:"resourceLimits"`
+}
+
 type gkeCluster struct {
-	Locations []string         `json:"locations"`
-	NodePools []gkeJobNodePool `json:"nodePools"`
+	Locations   []string              `json:"locations"`
+	NodePools   []gkeJobNodePool      `json:"nodePools"`
+	Autoscaling gkeClusterAutoscaling `json:"autoscaling"`
 }
 
 // Types for JobSet status unmarshaling

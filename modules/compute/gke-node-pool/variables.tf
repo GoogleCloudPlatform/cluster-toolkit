@@ -504,8 +504,8 @@ variable "enable_numa_aware_scheduling" {
 
 variable "enable_dranet" {
   type        = bool
-  default     = null
-  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). If null, automatically enabled for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster."
+  default     = false
+  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). When set to true, this enables the driver for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster."
 }
 
 variable "autoscaling_min_node_count" {
@@ -548,4 +548,16 @@ variable "machine_configs" {
   description = "Definition of GCE machine types and counts"
   type        = any
   default     = {}
+}
+
+variable "dranet_device_class_name" {
+  type        = string
+  default     = "mrdma.google.com"
+  description = "DRA device class name. Default is mrdma.google.com (RDMA). Set to netdev.google.com for non-RDMA machines."
+}
+
+variable "dranet_allocation_mode" {
+  type        = string
+  default     = "All"
+  description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
 }
