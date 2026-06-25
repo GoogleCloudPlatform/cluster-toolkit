@@ -55,6 +55,9 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
+{{- if .PriorityClassName }}
+            priorityClassName: {{.PriorityClassName}}
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
@@ -69,6 +72,7 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29000
               args:
@@ -81,6 +85,11 @@ spec:
               {{- range .ProxyArgsList }}
               - {{.}}
               {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -90,6 +99,7 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29001
               - containerPort: 29002
@@ -131,13 +141,47 @@ spec:
             containers:
             - name: workload-container
               image: {{.FullImageName}}
+              imagePullPolicy: Always
+              securityContext:
+                privileged: true
+              resources:
+                limits:
+                  cpu: "24"
+                  memory: "100Gi"
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: JAX_PLATFORMS
+                value: proxy
+              - name: XCLOUD_ENVIRONMENT
+                value: GCP
+              - name: JAX_BACKEND_TARGET
+                value: grpc://$(PATHWAYS_HEAD):29000
+              - name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS
+                value: "grpc_insecure_override"
+              - name: TEST_UNDECLARED_OUTPUTS_DIR
+                value: "/tmp"
+              - name: IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS
+                value: "true"
               command:
               - "/bin/bash"
               - "-c"
               - |
-                {{.CommandToRun}}
-{{- if .VolumeMountsYAML }}
+                echo "GCluster Start: $(date)"
+                _sigterm() (kill -SIGTERM $! 2>/dev/null;)
+                trap _sigterm SIGTERM
+                ({{.CommandToRun}}) & PID=$!
+                while kill -0 $PID 2>/dev/null; do sleep 5; done
+                wait $PID
+                EXIT_CODE=$?
+                echo "GCluster End: $(date)"
+                exit $EXIT_CODE
               volumeMounts:
+                - mountPath: /tmp
+                  name: shared-tmp
+{{- if .VolumeMountsYAML }}
 {{.VolumeMountsYAML}}
 {{- end }}
             {{- end}}
@@ -154,6 +198,9 @@ spec:
   - name: worker
     replicas: {{.NumSlices}}
     template:
+      metadata:
+        annotations:
+          alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool
       spec:
         completionMode: Indexed
         parallelism: {{.NodesPerSlice}}
@@ -194,6 +241,7 @@ spec:
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29005
               - containerPort: 29006

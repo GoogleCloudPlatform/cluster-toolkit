@@ -484,6 +484,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`cpu: "8"`,
 		`memory: "32Gi"`,
 		"restartStrategy: Recreate",
+		"privileged: true",
+		"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS",
+		"IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS",
+		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
+		`cpu: "24"`,
+		"_sigterm() (kill -SIGTERM $! 2>/dev/null;)",
 	}
 
 	for _, substr := range expectedSubstrs {
