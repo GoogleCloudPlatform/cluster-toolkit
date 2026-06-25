@@ -72,7 +72,6 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
-              imagePullPolicy: Always
               ports:
               - containerPort: 29000
               args:
@@ -99,7 +98,6 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
-              imagePullPolicy: Always
               ports:
               - containerPort: 29001
               - containerPort: 29002
@@ -243,7 +241,6 @@ spec:
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
-              imagePullPolicy: Always
               ports:
               - containerPort: 29005
               - containerPort: 29006
