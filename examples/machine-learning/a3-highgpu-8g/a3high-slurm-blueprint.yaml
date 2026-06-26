@@ -191,10 +191,10 @@ deployment_groups:
               package_filename: /tmp/{{ package_url | basename }}
               nvidia_packages:
               - cuda-toolkit-12-8
-              - nvidia-dkms-570-server-open
-              - nvidia-driver-570-server-open
+              - nvidia-dkms-580-server-open
+              - nvidia-driver-580-server-open
               - datacenter-gpu-manager
-              - libnvidia-nscq-570
+              - libnvidia-nscq-580
               - nvidia-container-toolkit
             tasks:
             - name: Download NVIDIA repository package
