@@ -34,7 +34,9 @@ endif
 
 gcluster: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg gcluster.go -type f)
 	$(info **************** building gcluster ************************)
+	@if [ "$(GO_VERSION_CHECK)" != "yes" ]; then go mod edit -go=1.24.0; fi
 	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)' -X 'main.gitIsOfficial=$(GIT_IS_OFFICIAL)' -X 'main.installationMode=$(INSTALLATION_MODE)'" gcluster.go
+	@if [ "$(GO_VERSION_CHECK)" != "yes" ]; then git checkout go.mod; fi
 	@ln -sf gcluster ghpc
 
 ghpc: gcluster
@@ -100,9 +102,11 @@ ci-tests: warn-go-missing
 
 test-engine: warn-go-missing
 	$(info **************** vetting go code **********************)
+	@if [ "$(GO_VERSION_CHECK)" != "yes" ]; then go mod edit -go=1.24.0; fi
 	go vet $(ENG)
 	$(info **************** running gcluster unit tests **************)
 	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
+	@if [ "$(GO_VERSION_CHECK)" != "yes" ]; then git checkout go.mod; fi
 
 ifeq (, $(shell which pre-commit))
 check-pre-commit:
