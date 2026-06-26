@@ -113,13 +113,15 @@ variable "nodeset" {
     min_cpu_platform         = optional(string)
     network_tier             = optional(string, "STANDARD")
     network_storage = optional(list(object({
-      server_ip             = string
-      remote_mount          = string
-      local_mount           = string
-      fs_type               = string
-      mount_options         = string
-      client_install_runner = optional(map(string))
-      mount_runner          = optional(map(string))
+      server_ip               = string
+      remote_mount            = string
+      local_mount             = string
+      local_mount_owner       = optional(string)
+      local_mount_permissions = optional(string)
+      fs_type                 = string
+      mount_options           = string
+      client_install_runner   = optional(map(string))
+      mount_runner            = optional(map(string))
     })), [])
     on_host_maintenance   = optional(string)
     preemptible           = optional(bool, false)
@@ -205,11 +207,13 @@ variable "nodeset_tpu" {
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
     network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
+      server_ip               = string
+      remote_mount            = string
+      local_mount             = string
+      local_mount_owner       = optional(string)
+      local_mount_permissions = optional(string)
+      fs_type                 = string
+      mount_options           = string
     })), [])
     subnetwork = string
     service_account = optional(object({
@@ -295,13 +299,15 @@ variable "suspend_timeout" {
 variable "network_storage" {
   description = "DEPRECATED"
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string)
-    mount_runner          = map(string)
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
+    client_install_runner   = map(string)
+    mount_runner            = map(string)
   }))
   default = []
   validation {
