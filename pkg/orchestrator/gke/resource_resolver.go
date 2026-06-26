@@ -48,6 +48,32 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
 
+// getZonesForMachineType finds all candidate zones hosting the specified machineType in the cluster's node pools.
+func (g *GKEOrchestrator) getZonesForMachineType(machineType string) []string {
+	seen := make(map[string]struct{})
+	for _, np := range g.clusterDesc.NodePools {
+		// Filter node pools that match the target machine type.
+		if np.Config.MachineType != machineType {
+			continue
+		}
+		// If the node pool doesn't define custom locations, it inherits cluster-wide locations.
+		locs := np.Locations
+		if len(locs) == 0 {
+			locs = g.clusterZones
+		}
+		for _, loc := range locs {
+			seen[loc] = struct{}{}
+		}
+	}
+
+	// Return a deduplicated slice of all matched zones.
+	var zones []string
+	for loc := range seen {
+		zones = append(zones, loc)
+	}
+	return zones
+}
+
 func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
 
 	cacheKey := machineType + ":" + zone
@@ -60,8 +86,18 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 	isRegion := len(strings.Split(zone, "-")) < 3
 	zonesToTry := []string{zone}
 
-	if isRegion && len(g.clusterZones) > 0 {
-		zonesToTry = g.clusterZones
+	if isRegion {
+		npZones := g.getZonesForMachineType(machineType)
+		if len(npZones) > 0 {
+			zonesToTry = npZones
+		} else {
+			if !g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning {
+				return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: no node pool matching machine type found and GKE Node Auto-Provisioning is disabled", machineType)
+			}
+			if len(g.clusterZones) > 0 {
+				zonesToTry = g.clusterZones
+			}
+		}
 	}
 
 	var lastErr error

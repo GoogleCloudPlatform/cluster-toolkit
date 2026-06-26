@@ -55,6 +55,9 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
+{{- if .PriorityClassName }}
+            priorityClassName: {{.PriorityClassName}}
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
@@ -81,6 +84,13 @@ spec:
               {{- range .ProxyArgsList }}
               - {{.}}
               {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -117,6 +127,8 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: TPU_SKIP_MDS_QUERY
                 value: "true"
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -124,20 +136,53 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
-              volumeMounts:
-              - mountPath: /tmp
-                name: shared-tmp
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
               image: {{.FullImageName}}
+              securityContext:
+                privileged: true
+              resources:
+                limits:
+                  cpu: "24"
+                  memory: "100Gi"
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: JAX_PLATFORMS
+                value: proxy
+              - name: XCLOUD_ENVIRONMENT
+                value: GCP
+              - name: JAX_BACKEND_TARGET
+                value: grpc://$(PATHWAYS_HEAD):29000
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
               command:
               - "/bin/bash"
               - "-c"
               - |
-                {{.CommandToRun}}
+                echo "GCluster Start: $(date)"
+                _sigterm() {
+                  if [ -n "$PID" ]; then
+                    kill -SIGTERM $PID 2>/dev/null
+                    wait $PID
+                  fi
+                  exit 143
+                }
+                trap _sigterm SIGTERM
+                (
+                  {{.CommandToRun}}
+                ) & PID=$!
+                wait $PID
+                EXIT_CODE=$?
+                echo "GCluster End: $(date)"
+                exit $EXIT_CODE
 {{- if .VolumeMountsYAML }}
-              volumeMounts:
 {{.VolumeMountsYAML}}
 {{- end }}
             {{- end}}
@@ -146,14 +191,13 @@ spec:
               image: {{.Pathways.ColocatedPythonSidecarImage}}
             {{- end}}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
 {{.VolumesYAML}}
   - name: worker
     replicas: {{.NumSlices}}
     template:
+      metadata:
+        annotations:
+          alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool
       spec:
         completionMode: Indexed
         parallelism: {{.NodesPerSlice}}
@@ -241,15 +285,10 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
 {{.ResourcesString}}
-              volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
 {{.VolumesYAML}}
 {{- if .NodeSelector }}
             nodeSelector:

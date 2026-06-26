@@ -35,6 +35,7 @@ vars:
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)
+  disk_size_gb: 100
   enable_login_public_ips: true
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd

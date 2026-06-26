@@ -21,6 +21,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/validators"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -65,13 +66,15 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 			}
 		})
 	}
-	doDeploy(deplRoot)
+	skipSecurity, _ := cmd.Flags().GetBool("skip-gke-security-check")
+	doDeploy(deplRoot, skipSecurity)
 }
 
-func doDeploy(deplRoot string) {
+func doDeploy(deplRoot string, skipSecurity bool) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
+	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
