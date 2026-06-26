@@ -464,19 +464,6 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
-      - type: shell
-        destination: fix_metadata_route.sh
-        content: |
-          #!/bin/bash
-          # Ensure metadata server traffic always goes through nic0 gateway
-          # This prevents DNS and metadata failures when secondary NICs are brought up.
-          DEFAULT_GW=`ip route show default | awk '{print $3}' | head -n1`
-          if [ -n "$DEFAULT_GW" ]; then
-            echo "Pinning metadata server (169.254.169.254) via gateway $DEFAULT_GW"
-            ip route replace 169.254.169.254 via $DEFAULT_GW
-          else
-            echo "Warning: No default gateway found to pin metadata server"
-          fi
       - $(gcs_checkpoints.client_install_runner)
       - $(gcs_checkpoints.mount_runner)
       - $(gcs_training_data.client_install_runner)
