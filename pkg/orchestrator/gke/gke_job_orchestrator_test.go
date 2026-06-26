@@ -485,6 +485,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`cpu: "8"`,
 		`memory: "32Gi"`,
 		"restartStrategy: Recreate",
+		"privileged: true",
+		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
+		`cpu: "24"`,
+		`cpu: "2"`,
+		`memory: "8Gi"`,
+		"kill -SIGTERM $PID",
 	}
 
 	for _, substr := range expectedSubstrs {
