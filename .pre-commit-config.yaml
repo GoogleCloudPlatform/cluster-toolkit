@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.108.0
+  rev: v1.86.0
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -143,16 +143,16 @@ repos:
 #   hooks:
 #   - id: go-critic
 - repo: https://github.com/golangci/golangci-lint
-  rev: v2.12.2
+  rev: v2.4.0
   hooks:
   - id: golangci-lint
 - repo: https://github.com/adrienverge/yamllint
-  rev: v1.38.0
+  rev: v1.34.0
   hooks:
   - id: yamllint
     args: [-c=.yamllint, --no-warnings]
 - repo: https://github.com/jackdewinter/pymarkdown
-  rev: v0.9.38
+  rev: v0.9.17
   hooks:
   - id: pymarkdown
     # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules
@@ -174,11 +174,11 @@ repos:
   - id: shfmt
     exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v6.0.0
+  rev: v4.5.0
   hooks:
   - id: end-of-file-fixer
 - repo: https://github.com/codespell-project/codespell
-  rev: v2.4.2
+  rev: v2.2.6
   hooks:
   - id: codespell
     exclude: requirements.txt$|/js/|go.sum$|cluster-toolkit-writers.json$
