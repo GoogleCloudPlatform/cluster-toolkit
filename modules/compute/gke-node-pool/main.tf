@@ -106,6 +106,7 @@ resource "google_container_node_pool" "node_pool" {
   name           = (max(var.num_node_pools, var.num_slices) == 1) ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
+  version        = var.gke_version
 
   node_count = var.static_node_count
   # Per-zone limits (min_node_count/max_node_count) are required to workaround a
@@ -153,17 +154,19 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb     = var.disk_size_gb
-    disk_type        = var.disk_type
-    resource_labels  = local.labels
-    labels           = local.kubernetes_labels
-    service_account  = var.service_account_email
-    oauth_scopes     = var.service_account_scopes
-    machine_type     = var.machine_type
-    spot             = var.spot
-    image_type       = var.image_type
-    flex_start       = var.enable_flex_start
-    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    resource_labels             = local.labels
+    labels                      = local.kubernetes_labels
+    service_account             = var.service_account_email
+    oauth_scopes                = var.service_account_scopes
+    machine_type                = var.machine_type
+    spot                        = var.spot
+    image_type                  = var.image_type
+    flex_start                  = var.enable_flex_start
+    max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    enable_confidential_storage = var.enable_confidential_storage
+    boot_disk_kms_key           = var.boot_disk_kms_key
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -221,6 +224,15 @@ resource "google_container_node_pool" "node_pool" {
       enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
+
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
+
 
     dynamic "gcfs_config" {
       for_each = var.enable_gcfs ? [1] : []
@@ -450,13 +462,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
     precondition {
-      condition = !(
-        var.enable_flex_start &&
-        try(var.placement_policy.type == "COMPACT", false) &&
-        !module.tpu.is_tpu &&
-        !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type))
-      )
+      condition     = !(var.enable_flex_start && try(var.placement_policy.type == "COMPACT", false) && !module.tpu.is_tpu && !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type)))
       error_message = "Compact placement with DWS Flex start is only supported for A3 Ultra, A4, and H4D machine types."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.boot_disk_kms_key != null && var.boot_disk_kms_key != "")
+      error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
+      error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
     }
   }
 }
