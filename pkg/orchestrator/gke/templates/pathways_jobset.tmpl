@@ -41,7 +41,7 @@ spec:
         backoffLimit: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -60,7 +60,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if not .Pathways.Headless}}
             initContainers:
@@ -74,7 +74,7 @@ spec:
               args:
               - --server_port=29000
               - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
               {{- if gt .Pathways.ElasticSlices 0}}
               - --num_elastic_slices={{.Pathways.ElasticSlices}}
               {{- end}}
@@ -95,10 +95,10 @@ spec:
               - containerPort: 29002
               args:
               - --server_port=29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
               - --node_type=resource_manager
               - --instance_count={{.NumSlices}}
-              - --instance_type={{.PathwaysInstanceType}}
+              - --instance_type="{{.PathwaysInstanceType}}"
               {{- range .ServerArgsList }}
               - {{.}}
               {{- end }}
@@ -138,7 +138,7 @@ spec:
                 {{.CommandToRun}}
 {{- if .VolumeMountsYAML }}
               volumeMounts:
-{{.VolumeMountsYAML}}
+{{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
@@ -150,7 +150,7 @@ spec:
               hostPath:
                 path: /tmp
                 type: DirectoryOrCreate
-{{.VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -161,7 +161,7 @@ spec:
         backoffLimit: {{.WorkerBackoffLimit}}
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
@@ -185,7 +185,7 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if .PriorityClassName }}
             priorityClassName: {{.PriorityClassName}}
@@ -202,7 +202,7 @@ spec:
               args:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
-                - --gcs_scratch_location={{.Pathways.GCSLocation}}
+                - --gcs_scratch_location="{{.Pathways.GCSLocation}}"
                 {{- range .WorkerArgsList }}
                 - {{.}}
                 {{- end }}
@@ -241,7 +241,7 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-{{.ResourcesString}}
+{{(StructuralData .ResourcesString)}}
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
@@ -250,16 +250,16 @@ spec:
               hostPath:
                 path: /tmp
                 type: DirectoryOrCreate
-{{.VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
 {{- if .NodeSelector }}
             nodeSelector:
-{{.NodeSelector}}
+{{(StructuralData .NodeSelector)}}
 {{- end }}
 {{- if .Affinity }}
             affinity:
-{{.Affinity}}
+{{(StructuralData .Affinity)}}
 {{- end }}
 {{- if .Tolerations }}
             tolerations:
-{{.Tolerations}}
+{{(StructuralData .Tolerations)}}
 {{- end }}

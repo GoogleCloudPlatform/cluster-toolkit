@@ -7,7 +7,7 @@ metadata:
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
 {{- if .ExclusiveTopologyAnnotation }}
   annotations:
-    {{.ExclusiveTopologyAnnotation}}
+    {{(StructuralData .ExclusiveTopologyAnnotation)}}
 {{- end }}
 spec:
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
@@ -27,7 +27,7 @@ spec:
           backoffLimit: 0
 {{- if .PodFailurePolicy }}
           podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
           template:
             metadata:
@@ -36,7 +36,7 @@ spec:
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
               annotations:
 {{- if .TopologyAnnotation }}
-{{.TopologyAnnotation}}
+{{(StructuralData .TopologyAnnotation)}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
                 gke-gcsfuse/volumes: "true"
@@ -52,7 +52,7 @@ spec:
               schedulerName: {{.SchedulerName}}
 {{- end }}
 {{- if .SchedulingGates }}
-{{.SchedulingGates}}
+{{(StructuralData .SchedulingGates)}}
 {{- end }}
 {{- if .PriorityClassName }}
               priorityClassName: {{.PriorityClassName}}
@@ -66,7 +66,7 @@ spec:
                 {{- range $.Command }}
                 - {{ printf "%q" . }}
                 {{- end }}
-{{ .ResourcesYAML }}
+{{(StructuralData .ResourcesYAML)}}
                 env:
                 {{- if $.Verbose }}
                 {{- if $.IsTPU }}
@@ -85,28 +85,28 @@ spec:
                 {{- end }}
 {{- if $.VolumeMountsYAML }}
                 volumeMounts:
-{{ $.VolumeMountsYAML }}
+{{(StructuralData $.VolumeMountsYAML)}}
 {{- end }}
               {{- end }}
 {{- if .VolumesYAML }}
               volumes:
-{{.VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
 {{- end }}
 {{- if .NodeSelector }}
               nodeSelector:
-{{.NodeSelector}}
+{{(StructuralData .NodeSelector)}}
 {{- end }}
 {{- if .Affinity }}
               affinity:
-{{.Affinity}}
+{{(StructuralData .Affinity)}}
 {{- end }}
 {{- if .Tolerations }}
               tolerations:
-{{.Tolerations}}
+{{(StructuralData .Tolerations)}}
 {{- end }}
 {{- if .ImagePullSecrets }}
               imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if .ServiceAccountName }}
               serviceAccountName: {{.ServiceAccountName}}

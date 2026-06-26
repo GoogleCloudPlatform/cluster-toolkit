@@ -471,19 +471,19 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	defer os.Remove("gcluster_pathways_manifest.yaml")
 
 	expectedSubstrs := []string{
-		"name: pathways-test",
-		"replicas: 2",
-		"image: proxy:latest",
-		"--gcs_scratch_location=gs://my-bucket",
-		"cloud.google.com/gke-nodepool: pathways-np",
-		"completionMode: Indexed",
-		"alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname",
-		"MEGASCALE_GRPC_ENABLE_XOR_TRACER",
+		`name: "pathways-test"`,
+		`replicas: 2`,
+		`image: "proxy:latest"`,
+		`"--gcs_scratch_location=gs://my-bucket"`,
+		`cloud.google.com/gke-nodepool: "pathways-np"`,
+		`completionMode: "Indexed"`,
+		`alpha.jobset.sigs.k8s.io/exclusive-topology: "kubernetes.io/hostname"`,
+		`"MEGASCALE_GRPC_ENABLE_XOR_TRACER"`,
 		`cpu: "16"`,
 		`memory: "100Gi"`,
 		`cpu: "8"`,
 		`memory: "32Gi"`,
-		"restartStrategy: Recreate",
+		`restartStrategy: "Recreate"`,
 	}
 
 	for _, substr := range expectedSubstrs {
