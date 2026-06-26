@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -1269,8 +1270,23 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		Pathways:                      opts.Pathways,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
-		IsTPU:                         isTPU,
-		IsGPU:                         isGPU,
+		Env: func() []struct{ Name, Value string } {
+			if len(opts.Env) == 0 {
+				return nil
+			}
+			envKeys := make([]string, 0, len(opts.Env))
+			for k := range opts.Env {
+				envKeys = append(envKeys, k)
+			}
+			slices.Sort(envKeys)
+			res := make([]struct{ Name, Value string }, len(envKeys))
+			for i, k := range envKeys {
+				res[i] = struct{ Name, Value string }{Name: k, Value: opts.Env[k]}
+			}
+			return res
+		}(),
+		IsTPU: isTPU,
+		IsGPU: isGPU,
 	}
 }
 

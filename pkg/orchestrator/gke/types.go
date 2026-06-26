@@ -177,6 +177,7 @@ type ManifestOptions struct {
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	Verbose                       bool
+	Env                           map[string]string
 	AdditionalManifests           []string
 }
 
@@ -335,6 +336,7 @@ type jobSetTemplateData struct {
 	Pathways                      orchestrator.PathwaysJobDefinition
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
+	Env                           []struct{ Name, Value string }
 	IsTPU                         bool
 	IsGPU                         bool
 }
