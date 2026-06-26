@@ -1,7 +1,7 @@
 # PREAMBLE
 MIN_PACKER_VERSION=1.15.3 # for building images
 MIN_TERRAFORM_VERSION=1.12.2 # for deploying modules
-MIN_GOLANG_VERSION=1.24 # for building gcluster
+MIN_GOLANG_VERSION=1.26 # for building gcluster
 
 .PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
@@ -69,8 +69,8 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
 	go install github.com/google/addlicense@latest
-	go install mvdan.cc/sh/v3/cmd/shfmt@v3.12.0
-	go install golang.org/x/tools/cmd/goimports@v0.42.0
+	go install mvdan.cc/sh/v3/cmd/shfmt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
