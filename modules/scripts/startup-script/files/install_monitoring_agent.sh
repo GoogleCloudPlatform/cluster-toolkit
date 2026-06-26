@@ -14,13 +14,15 @@
 # limitations under the License.
 set -e -o pipefail
 
-LEGACY_MONITORING_PACKAGE='stackdriver-agent'
-LEGACY_MONITORING_SCRIPT_URL='https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh'
-LEGACY_LOGGING_PACKAGE='google-fluentd'
-LEGACY_LOGGING_SCRIPT_URL='https://dl.google.com/cloudagents/add-logging-agent-repo.sh'
+# Dynamic directory lookup to find vendored local scripts
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+LEGACY_MONITORING_SCRIPT="${SCRIPT_DIR}/add-monitoring-agent-repo.sh"
+LEGACY_LOGGING_SCRIPT="${SCRIPT_DIR}/add-logging-agent-repo.sh"
+OPSAGENT_SCRIPT="${SCRIPT_DIR}/add-google-cloud-ops-agent-repo.sh"
 
+LEGACY_MONITORING_PACKAGE='stackdriver-agent'
+LEGACY_LOGGING_PACKAGE='google-fluentd'
 OPSAGENT_PACKAGE='google-cloud-ops-agent'
-OPSAGENT_SCRIPT_URL='https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh'
 
 ops_or_legacy="${1:-legacy}"
 
@@ -50,9 +52,10 @@ handle_debian() {
 	}
 
 	install_with_retry() {
-		MAX_RETRY=50
+		MAX_RETRY=5
 		RETRY=0
-		until [ ${RETRY} -eq ${MAX_RETRY} ] || curl -s "${1}" | bash -s -- --also-install; do
+		# REMEDIATION: Execute the vendored local script instead of piping from curl
+		until [ ${RETRY} -eq ${MAX_RETRY} ] || bash "${1}" --also-install; do
 			RETRY=$((RETRY + 1))
 			echo "WARNING: Installation of ${1} failed on try ${RETRY} of ${MAX_RETRY}"
 			sleep 5
@@ -64,12 +67,12 @@ handle_debian() {
 	}
 
 	install_opsagent() {
-		install_with_retry "${OPSAGENT_SCRIPT_URL}"
+		install_with_retry "${OPSAGENT_SCRIPT}"
 	}
 
 	install_stackdriver_agent() {
-		install_with_retry "${LEGACY_MONITORING_SCRIPT_URL}"
-		install_with_retry "${LEGACY_LOGGING_SCRIPT_URL}"
+		install_with_retry "${LEGACY_MONITORING_SCRIPT}"
+		install_with_retry "${LEGACY_LOGGING_SCRIPT}"
 		service stackdriver-agent start
 		service google-fluentd start
 	}
@@ -96,12 +99,14 @@ handle_redhat() {
 	}
 
 	install_opsagent() {
-		curl -s "${OPSAGENT_SCRIPT_URL}" | bash -s -- --also-install
+		# REMEDIATION: Execute the vendored local script instead of piping from curl
+		bash "${OPSAGENT_SCRIPT}" --also-install
 	}
 
 	install_stackdriver_agent() {
-		curl -sS "${LEGACY_MONITORING_SCRIPT_URL}" | bash -s -- --also-install
-		curl -sS "${LEGACY_LOGGING_SCRIPT_URL}" | bash -s -- --also-install
+		# REMEDIATION: Execute the vendored local scripts instead of piping from curl
+		bash "${LEGACY_MONITORING_SCRIPT}" --also-install
+		bash "${LEGACY_LOGGING_SCRIPT}" --also-install
 		service stackdriver-agent start
 		service google-fluentd start
 	}
