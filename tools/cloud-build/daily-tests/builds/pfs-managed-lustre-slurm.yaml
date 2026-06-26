@@ -14,9 +14,9 @@
 
 ---
 tags:
-- m.managed-lustre
 - m.vpc
 - m.private-service-access
+- m.managed-lustre
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
@@ -26,14 +26,14 @@ tags:
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 14400s  # 4hr
+timeout: 7200s
+
 steps:
-# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
   name: gcr.io/cloud-builders/gcloud
   script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/pfs-managed-lustre-slurm.yaml"
 
-- id: managed-lustre-slurm
+- id: pfs-managed-lustre-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -47,10 +47,20 @@ steps:
     bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    BLUEPRINT="examples/pfs-managed-lustre-slurm.yaml"
-    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    EXAMPLE_BP=examples/pfs-managed-lustre-slurm.yaml
+
+    bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
+
+    # 1. Run the script execution
+    python3 tools/fix_vpc_name.py "$${EXAMPLE_BP}" "${_TEST_PREFIX}"
+
+    # 2. Use isolated flags cleanly
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="use_fixed_vpc=true" \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID}" \
+      --extra-vars="build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/pfs-managed-lustre-slurm.yml"
   secretEnv: ['GCLUSTER_GCS_PATH']
 availableSecrets:
