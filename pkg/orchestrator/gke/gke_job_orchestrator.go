@@ -1141,7 +1141,6 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
-// TODO Use a map
 var machineFamilyToLabelMap = map[string]string{
 	"g2-standard":   "nvidia-l4",
 	"a3-highgpu":    "nvidia-h100-80gb",
@@ -1169,12 +1168,6 @@ var machineFamilyToLabelMap = map[string]string{
 // TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
 func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) string {
 	resolvedLower := strings.ToLower(acceleratorType)
-
-	// Fallback for direct values
-	switch resolvedLower {
-	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5-lite-podslice":
-		return acceleratorType
-	}
 
 	parts := strings.Split(resolvedLower, "-")
 
