@@ -36,7 +36,7 @@ import (
 	"github.com/otiai10/copy"
 )
 
-// strings that get re-used throughout this package and others
+// strings that get reused throughout this package and others
 const (
 	HiddenGhpcDirName        = ".ghpc"
 	ArtifactsDirName         = "artifacts"

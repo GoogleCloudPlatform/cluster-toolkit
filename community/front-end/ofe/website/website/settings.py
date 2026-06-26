@@ -87,7 +87,7 @@ MEDIA_ROOT = "/opt/gcluster/cluster-toolkit/community/front-end/ofe/website/star
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Here we generate a secret key only on the webserver.  It is re-used if the
+# Here we generate a secret key only on the webserver.  It is reused if the
 # FrontEnd is stopped and restarted, to ensure existing cookies still work, etc.
 if os.path.isfile(".secret_key"):
     with open(".secret_key", "r") as f:

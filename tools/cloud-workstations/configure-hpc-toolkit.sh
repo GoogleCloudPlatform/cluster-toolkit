@@ -24,7 +24,7 @@ if [ ! -d "$HOME/hpc-toolkit" ]; then
 	pre-commit install
 fi
 
-# Run only on initial bootup
+# Run only on initial boot-up
 FLAG="$HOME/.firstboot"
 if [[ ! -f $FLAG ]]; then
 	# Set path for go binaries

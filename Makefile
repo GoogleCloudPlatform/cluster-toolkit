@@ -1,7 +1,7 @@
 # PREAMBLE
 MIN_PACKER_VERSION=1.15.3 # for building images
 MIN_TERRAFORM_VERSION=1.12.2 # for deploying modules
-MIN_GOLANG_VERSION=1.24 # for building gcluster
+MIN_GOLANG_VERSION=1.26 # for building gcluster
 
 .PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \

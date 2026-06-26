@@ -952,7 +952,7 @@ class ClusterPartition(models.Model):
     enable_node_reuse = models.BooleanField(
         default=True,
         help_text=(
-            "Enable nodes to be re-used for multiple jobs. (Disabled "
+            "Enable nodes to be reused for multiple jobs. (Disabled "
             "when Placement Groups are used.)"
         ),
     )
