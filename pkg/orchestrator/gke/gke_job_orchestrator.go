@@ -1141,7 +1141,6 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
-// TODO Use a map
 var machineFamilyToLabelMap = map[string]string{
 	"g2-standard":   "nvidia-l4",
 	"a3-highgpu":    "nvidia-h100-80gb",
