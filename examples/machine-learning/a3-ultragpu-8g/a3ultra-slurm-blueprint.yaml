@@ -24,24 +24,17 @@ vars:
   region: # supply region
   zone: # supply zone
   a3u_cluster_size: # supply cluster size
+  instance_image:
+    project: advanced-compute-images
+    family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
   # Image settings
-  base_image:
-    project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
-  image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.12.1
   # Cluster env settings
   net0_range: 192.168.0.0/19
   net1_range: 192.168.64.0/18
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
   local_ssd_mountpoint: /mnt/localssd
-  instance_image:
-    project: $(vars.project_id)
-    family: $(vars.deployment_name)-u24
-  disk_size_gb: 100
-  nccl_gib_version: 1.1.0
-  libnccl_version: 2.27.5-1+cuda12.9
+  disk_size_gb: 300
   base_network_name: $(vars.deployment_name)
 
   #Provisioning models (set to true or fill in reservation name, pick only one)
@@ -64,220 +57,6 @@ vars:
   per_unit_storage_throughput: 500
 
 deployment_groups:
-- group: image-env
-  modules:
-  - id: slurm-image-network
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.base_network_name)-net
-
-  - id: slurm-build-script
-    source: modules/scripts/startup-script
-    settings:
-      install_ansible: true
-      enable_gpu_network_wait_online: true
-      docker:
-        enabled: true
-        world_writable: true
-      runners:
-      - type: data
-        destination: /etc/apt/preferences.d/block-broken-nvidia-container
-        content: |
-          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
-          Pin: version 1.17.7-1
-          Pin-Priority: 100
-
-      # The following holds NVIDIA software that was already installed on the
-      # accelerator base image to be the same driver version. This reduces the
-      # risk of a driver version mismatch.
-      # Additional packages are held by:
-      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
-      - type: ansible-local
-        destination: hold-nvidia-packages.yml
-        content: |
-          ---
-          - name: Hold nvidia packages
-            hosts: all
-            become: true
-            vars:
-              nvidia_packages_to_hold:
-              - libnvidia-cfg1-*-server
-              - libnvidia-compute-*-server
-              - libnvidia-nscq-*
-              - nvidia-compute-utils-*-server
-              - nvidia-fabricmanager-*
-              - nvidia-utils-*-server
-              - nvidia-imex-*
-            tasks:
-            - name: Hold nvidia packages
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - hold
-                - "{{ item }}"
-              loop: "{{ nvidia_packages_to_hold }}"
-
-      - type: data
-        destination: /var/tmp/slurm_vars.json
-        content: |
-          {
-            "reboot": false,
-            "install_cuda": false,
-            "install_gcsfuse": true,
-            "install_lustre": false,
-            "install_managed_lustre": true,
-            "install_ompi": true,
-            "allow_kernel_upgrades": false,
-            "monitoring_agent": "cloud-ops",
-          }
-      - type: shell
-        destination: install_slurm.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
-              -i localhost, --limit localhost --connection=local \
-              -e @/var/tmp/slurm_vars.json \
-              ansible/playbook.yml
-      # this duplicates the ulimits configuration of the HPC VM Image
-      - type: data
-        destination: /etc/security/limits.d/99-unlimited.conf
-        content: |
-          * - memlock unlimited
-          * - nproc unlimited
-          * - stack unlimited
-          * - nofile 1048576
-          * - cpu unlimited
-          * - rtprio unlimited
-
-      - type: ansible-local
-        destination: install_cuda_and_dcgm.yml
-        content: |
-          ---
-          - name: Install and Configure CUDA 13 / DCGM
-            hosts: all
-            become: true
-            vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
-              nvidia_packages:
-                - cuda-toolkit-13-0
-                - datacenter-gpu-manager-4-cuda13
-                - datacenter-gpu-manager-4-dev
-                - datacenter-gpu-manager-4-core
-            tasks:
-              - name: Install NVIDIA repository keyring
-                ansible.builtin.apt:
-                  deb: "{{ cuda_repo_url }}"
-                  state: present
-
-              - name: Update apt cache
-                ansible.builtin.apt:
-                  update_cache: yes
-
-              - name: Install NVIDIA packages
-                ansible.builtin.apt:
-                  name: "{{ item }}"
-                  state: present
-                  allow_downgrade: yes
-                loop: "{{ nvidia_packages }}"
-
-              - name: Freeze NVIDIA packages
-                ansible.builtin.dpkg_selections:
-                  name: "{{ item }}"
-                  selection: hold
-                loop: "{{ nvidia_packages }}"
-
-              - name: Create nvidia-persistenced override directory
-                ansible.builtin.file:
-                  path: /etc/systemd/system/nvidia-persistenced.service.d
-                  state: directory
-                  owner: root
-                  group: root
-                  mode: 0o755
-
-              - name: Configure nvidia-persistenced override
-                ansible.builtin.copy:
-                  dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
-                  owner: root
-                  group: root
-                  mode: 0o644
-                  content: |
-                    [Service]
-                    ExecStart=
-                    ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
-                notify: Reload SystemD
-
-            handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
-
-            post_tasks:
-              - name: Disable NVIDIA services by default (Slurm starts them on boot)
-                ansible.builtin.service:
-                  name: "{{ item }}"
-                  state: stopped
-                  enabled: false
-                loop:
-                  - nvidia-dcgm.service
-                  - nvidia-persistenced.service
-
-      - type: ansible-local
-        destination: install_ibverbs_utils.yml
-        content: |
-          ---
-          - name: Install ibverbs-utils
-            hosts: all
-            become: true
-            tasks:
-            - name: Install Linux Modules Extra
-              ansible.builtin.package:
-                name:
-                - ibverbs-utils
-                state: present
-      - type: data
-        destination: /etc/enroot/enroot.conf
-        content: |
-          ENROOT_CONFIG_PATH ${HOME}/.enroot
-
-- group: image
-  modules:
-  - id: slurm-a3ultra-image
-    source: modules/packer/custom-image
-    kind: packer
-    settings:
-      disk_size: $(vars.disk_size_gb)
-      machine_type: $(vars.image_build_machine_type)
-      source_image: $(vars.base_image.image)
-      source_image_project_id: [$(vars.base_image.project)]
-      image_family: $(vars.instance_image.family)
-      omit_external_ip: false
-
-      # Unattended upgrades are disabled in this blueprint so that software does not
-      # get updated daily and lead to potential instability in the cluster environment.
-      #
-      # Unattended Upgrades installs available security updates from the Ubuntu
-      # security pocket for installed packages daily by default. Administrators who
-      # disable this feature assume all responsibility for manually reviewing and
-      # patching their systems against vulnerabilities.
-      #
-      # To enable unattended upgrades, please remove this section.
-      metadata:
-        user-data: |
-          #cloud-config
-          create_hostname_file: true
-          write_files:
-          - path: /etc/apt/apt.conf.d/20auto-upgrades
-            permissions: '0644'
-            owner: root
-            content: |
-              APT::Periodic::Update-Package-Lists "0";
-              APT::Periodic::Unattended-Upgrade "0";
-    use:
-    - slurm-image-network
-    - slurm-build-script
 
 - group: cluster-env
   modules:
@@ -433,6 +212,7 @@ deployment_groups:
   - id: a3ultra_startup
     source: modules/scripts/startup-script
     settings:
+      install_ansible: true
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
@@ -473,92 +253,54 @@ deployment_groups:
           if [ ! -f /etc/hostname ]; then
             hostname > /etc/hostname
           fi
-      # Install NCCL
       - type: ansible-local
-        destination: install_nccl.yml
+        destination: install_cuda_and_dcgm.yml
         content: |
           ---
-          - name: Install nccl
+          - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
             tasks:
-            - name: Update apt cache
-              ansible.builtin.apt:
-                update_cache: yes
-            - name: Install Linux Modules Extra
-              ansible.builtin.package:
-                name:
-                - "libnccl2=$(vars.libnccl_version)"
-                - "libnccl-dev=$(vars.libnccl_version)"
-                state: present
-      # Install NCCL-GIB Plugin
-      - type: ansible-local
-        destination: install_nccl_gib.yml
-        content: |
-          ---
-          - name: Install Google NCCL-GIB Plugin
-            hosts: all
-            become: true
-            tasks:
-            - name: Add artifact registry gpg key
-              ansible.builtin.apt_key:
-                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
-                state: present
-            - name: Add artifact registry gpg key
-              ansible.builtin.apt_key:
-                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-                state: present
-            - name: Install Apt Transport AR Apt Repo
-              apt_repository:
-                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
-                state: present
-            - name: Install AR transport
-              ansible.builtin.apt:
-                name: "apt-transport-artifact-registry"
-                update_cache: true
-            - name: Install Google NCCL-GIB Plugin
-              apt_repository:
-                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
-                state: present
-            - name: Install NCCL-GIB Plugin
-              ansible.builtin.apt:
-                name: "nccl-gib=$(vars.nccl_gib_version)"
-                update_cache: true
-            - name: Freeze NCCL GIB Plugin
-              ansible.builtin.dpkg_selections:
-                name: "nccl-gib"
-                selection: hold
-      # --------------------------------------------------------------------------
-      # Environment Configuration
-      # --------------------------------------------------------------------------
-      - type: ansible-local
-        destination: configure_nccl_env.yml
-        name: Ensure NCCL/gIB environment script is sourced for all users
-        content: |
-          ---
-          - name: Configure NCCL/gIB environment
-            hosts: all
-            become: true
-            tasks:
-            - name: Deploy /etc/profile.d/nccl-gib.sh
-              ansible.builtin.copy:
-                dest: /etc/profile.d/nccl-gib.sh
-                content: |
-                  # Load NCCL/gIB environment
-                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
-                    source /usr/local/gib/scripts/set_nccl_env.sh
-                  fi
+              - name: Download CUDA runfile
+                ansible.builtin.get_url:
+                  url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run
+                  dest: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  mode: '0755'
 
-                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
-                  if [ -d "/usr/local/gib/lib64" ]; then
-                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-                  fi
-                mode: '0644'
-            handlers:
-              - name: Reload SystemD
-                ansible.builtin.systemd:
-                  daemon_reload: true
+              - name: Install CUDA toolkit via runfile
+                ansible.builtin.command:
+                  cmd: /tmp/cuda_13.0.0_580.65.06_linux.run --silent --toolkit
 
+              - name: Remove CUDA runfile
+                ansible.builtin.file:
+                  path: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  state: absent
+
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install DCGM packages
+                ansible.builtin.apt:
+                  name:
+                    - datacenter-gpu-manager-4-cuda13
+                    - datacenter-gpu-manager-4-dev
+                    - datacenter-gpu-manager-4-core
+                  state: present
+
+              - name: Freeze DCGM packages
+                ansible.builtin.dpkg_selections:
+                  name: "{{ item }}"
+                  selection: hold
+                loop:
+                  - datacenter-gpu-manager-4-cuda13
+                  - datacenter-gpu-manager-4-dev
+                  - datacenter-gpu-manager-4-core
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -679,6 +421,26 @@ deployment_groups:
     settings:
       runners:
       - type: shell
+        destination: restart_nfs.sh
+        content: |
+          #!/bin/bash
+          # Restart NFS server after mounting Lustre to /home to ensure the export correctly reflects the new mount point.
+          systemctl restart nfs-server || systemctl restart nfs-kernel-server
+      - type: shell
+        destination: ensure_mnt_localssd_permissions.sh
+        content: |
+          #!/bin/bash
+          mkdir -p /mnt/localssd
+          chmod 1777 /mnt/localssd
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: shell
         destination: stage_scripts.sh
         content: |
           #!/bin/bash
@@ -714,3 +476,4 @@ deployment_groups:
       machine_type: n2-standard-80
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
+      compute_startup_scripts_timeout: 1800
