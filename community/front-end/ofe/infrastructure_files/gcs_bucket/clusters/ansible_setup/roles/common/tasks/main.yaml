@@ -27,12 +27,18 @@
 
 - name: Use Modules
   ansible.builtin.copy:
+    src: zz-modules.sh
     dest: /etc/profile.d/zz-modules.sh
-    content: |
-      module use /opt/cluster/modulefiles
     owner: root
     mode: 0755
-    force: False
+  when: ansible_distribution in ['CentOS', 'Rocky']
+
+- name: Use Modules for C shells
+  ansible.builtin.copy:
+    src: zz-modules-csh
+    dest: /etc/profile.d/zz-modules.csh
+    owner: root
+    mode: 0755
   when: ansible_distribution in ['CentOS', 'Rocky']
 
 - name: Enable su to OS Login
