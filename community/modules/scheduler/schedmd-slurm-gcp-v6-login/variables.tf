@@ -135,6 +135,7 @@ variable "additional_networks" {
       network_tier = string
     })), [])
     network            = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     queue_count        = optional(number)
@@ -143,6 +144,14 @@ variable "additional_networks" {
     subnetwork_project = optional(string)
   }))
   nullable = false
+  validation {
+    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null || nic.network_attachment != null)])
+    error_message = "Either subnetwork or network_attachment is required for additional_networks, neither is provided."
+  }
+  validation {
+    condition     = !anytrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.network_attachment != null)])
+    error_message = "Either subnetwork or network_attachment is required for additional_networks, both are provided."
+  }
 }
 
 variable "advanced_machine_features" {

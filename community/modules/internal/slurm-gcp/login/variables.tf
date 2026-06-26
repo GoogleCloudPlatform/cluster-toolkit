@@ -78,6 +78,7 @@ variable "login_nodes" {
         network_tier = string
       })), [])
       network            = optional(string)
+      network_attachment = optional(string)
       network_ip         = optional(string, "")
       nic_type           = optional(string)
       queue_count        = optional(number)

@@ -167,6 +167,7 @@ func TestNetworkStorage(t *testing.T) {
 }
 
 func TestAdditionalNetworks(t *testing.T) {
+	// Standard additional networks configuration (used by GKE modules which do not support PSC interfaces)
 	want := modulereader.NormalizeType(`list(object({
 		network            = string
 		subnetwork         = string
@@ -188,10 +189,34 @@ func TestAdditionalNetworks(t *testing.T) {
 		}))
 	  }))`)
 
+	// PSC-enabled additional networks configuration (used by Slurm modules)
+	// which supports PSC interfaces via the optional network_attachment field.
+	wantPSC := modulereader.NormalizeType(`list(object({
+		network            = string
+		subnetwork         = string
+		subnetwork_project = string
+		network_ip         = string
+		network_attachment = string
+		nic_type           = string
+		stack_type         = string
+		queue_count        = number
+		access_config = list(object({
+		  nat_ip       = string
+		  network_tier = string
+		}))
+		ipv6_access_config = list(object({
+		  network_tier = string
+		}))
+		alias_ip_range = list(object({
+		  ip_cidr_range         = string
+		  subnetwork_range_name = string
+		}))
+	  }))`)
+
 	for p, ty := range queryInputFields("additional_networks", t) {
 		got := typeexpr.TypeString(ty)
-		if got != want {
-			t.Errorf("%s has unexpected type expected, got:\n%#v\nwant:\n%#v", p, got, want)
+		if got != want && got != wantPSC {
+			t.Errorf("%s has unexpected type expected, got:\n%#v", p, got)
 		}
 	}
 }
