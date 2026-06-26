@@ -1237,3 +1237,34 @@ func worker(version string, jobs <-chan string, results chan<- string, wg *sync.
 		cancel() // Release the context resources
 	}
 }
+
+func GetKeyFromBlueprint(key string, bp Blueprint) string {
+	val, err := bp.Eval(GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
+}
+
+// GetEvaluatedString safely gets and evaluates a setting from a module within a blueprint.
+func GetEvaluatedString(key string, m *Module, bp *Blueprint) string {
+	val := m.Settings.Get(key)
+	if val.IsNull() {
+		return ""
+	}
+
+	// Evaluate the expression using the blueprint's evaluation context
+	evaluatedVal, err := bp.Eval(val)
+	if err != nil {
+		return ""
+	}
+
+	// Ensure the evaluated result is a string and not null
+	if evaluatedVal.Type() == cty.String && !evaluatedVal.IsNull() {
+		return evaluatedVal.AsString()
+	}
+	return ""
+}
