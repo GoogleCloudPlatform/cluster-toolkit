@@ -24,6 +24,11 @@ output "network_ids" {
   value       = module.vpcs[*].network_id
 }
 
+output "network_project_ids" {
+  description = "Project IDs of the new VPC networks"
+  value       = module.vpcs[*].network_project_id
+}
+
 output "network_self_links" {
   description = "Self link of the new VPC network"
   value       = module.vpcs[*].network_self_link
@@ -37,6 +42,11 @@ output "additional_networks" {
 output "subnetwork_names" {
   description = "Names of the subnetwork created in each network"
   value       = module.vpcs[*].subnetwork_name
+}
+
+output "subnetwork_project_ids" {
+  description = "Project IDs of the subnetworks"
+  value       = module.vpcs[*].subnetwork_project_id
 }
 
 output "subnetwork_self_links" {

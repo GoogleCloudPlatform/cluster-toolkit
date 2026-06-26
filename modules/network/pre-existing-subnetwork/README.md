@@ -90,5 +90,6 @@ No modules.
 | <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Full subnetwork object in the primary region |
 | <a name="output_subnetwork_address"></a> [subnetwork\_address](#output\_subnetwork\_address) | Subnetwork IP range in the primary region |
 | <a name="output_subnetwork_name"></a> [subnetwork\_name](#output\_subnetwork\_name) | Name of the subnetwork in the primary region |
+| <a name="output_subnetwork_project_id"></a> [subnetwork\_project\_id](#output\_subnetwork\_project\_id) | Project ID of the subnetwork |
 | <a name="output_subnetwork_self_link"></a> [subnetwork\_self\_link](#output\_subnetwork\_self\_link) | Subnetwork self-link in the primary region |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
