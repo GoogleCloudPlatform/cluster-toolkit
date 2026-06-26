@@ -47,6 +47,9 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
+  # The GCP Project ID hosting the shared reservation. Leave empty if reservation is in project_id.
+  reservation_project: ""
+
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
   gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
@@ -247,6 +250,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
+          project: $(vars.reservation_project)
       enable_dranet: true
       num_node_pools: $(vars.num_node_pools)
     outputs: [instructions]

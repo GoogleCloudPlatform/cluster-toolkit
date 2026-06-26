@@ -44,6 +44,9 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
+  # The GCP Project ID hosting the shared reservation. Leave empty if reservation is in project_id.
+  reservation_project: ""
+
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
   system_nodepool_machine_type: e2-standard-16
   system_node_pool_disk_size_gb: 200
@@ -247,6 +250,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
+          project: $(vars.reservation_project)
       kubernetes_labels:
         cloud.google.com/gke-networking-dra-driver: "true"
         cloud.google.com/gke-dpv2-unified-cni: "cni-migration"
