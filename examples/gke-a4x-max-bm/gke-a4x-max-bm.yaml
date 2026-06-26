@@ -41,11 +41,13 @@ vars:
   # The number of node pools (num_slices) to be created
   num_node_pools:
 
-  # The name of the compute engine reservation of A4X-Max nodes in the form of
-  # <project>/<reservation-name>
+  # The name of the compute engine reservation of A4X-Max nodes.
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
+
+  # The GCP Project ID hosting the shared reservation. Leave empty if reservation is in project_id.
+  reservation_project: ""
 
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
   system_nodepool_machine_type: e2-standard-16
@@ -251,6 +253,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
+          project: $(vars.reservation_project)
       kubernetes_labels:
         cloud.google.com/gke-networking-dra-driver: "true"
         cloud.google.com/gke-dpv2-unified-cni: "cni-migration"
