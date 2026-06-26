@@ -15,7 +15,7 @@
 */
 
 variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
+  description = "Project ID containing the VPC network. Typically the deployment project, but for Shared VPC configurations set this to the host project ID."
   type        = string
 }
 
