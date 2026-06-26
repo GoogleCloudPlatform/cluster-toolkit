@@ -38,8 +38,7 @@ vars:
   # The number of nodes to be created
   static_node_count:
 
-  # The name of the compute engine reservation of A4X-Max nodes in the form of
-  # <project>/<reservation-name>
+  # The name of the compute engine reservation of A4X-Max nodes.
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:

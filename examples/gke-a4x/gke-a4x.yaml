@@ -41,8 +41,7 @@ vars:
   # The number of node pools (num_slices) to be created
   num_node_pools:
 
-  # The name of the compute engine reservation of A4X nodes in the form of
-  # <project>/<reservation-name>
+  # The name of the compute engine reservation of A4X nodes.
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
