@@ -41,7 +41,7 @@ vars:
   net1_range: 192.168.64.0/19
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
-  disk_size_gb: 200 # It is recommended to have at least 100 GB per node.
+  disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
   local_ssd_mountpoint: /mnt/localssd
   nccl_plugin_version: v1.0.6
   instance_image:
