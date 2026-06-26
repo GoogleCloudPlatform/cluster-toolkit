@@ -162,7 +162,7 @@ module "nodeset_cleanup_tpu" {
   ]
 }
 
-resource "google_storage_bucket_object" "parition_config" {
+resource "google_storage_bucket_object" "partition_config" {
   for_each = { for p in var.partitions : p.partition_name => p }
 
   bucket         = module.slurm_files.bucket_name
@@ -174,4 +174,9 @@ resource "google_storage_bucket_object" "parition_config" {
 moved {
   from = module.slurm_files.google_storage_bucket_object.parition_config
   to   = google_storage_bucket_object.parition_config
+}
+
+moved {
+  from = google_storage_bucket_object.parition_config
+  to   = google_storage_bucket_object.partition_config
 }
