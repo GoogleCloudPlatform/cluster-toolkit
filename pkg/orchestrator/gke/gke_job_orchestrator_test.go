@@ -447,11 +447,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	}
 	mockExec := NewMockExecutor(mockResponses)
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
