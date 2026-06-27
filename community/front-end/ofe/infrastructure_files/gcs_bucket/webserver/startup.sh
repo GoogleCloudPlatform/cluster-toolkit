@@ -109,10 +109,7 @@ install_sqlite
 
 python3.12 -m ensurepip --upgrade
 
-pip3.12 install google-api-python-client \
-	google-cloud-secret-manager \
-	google.cloud.pubsub \
-	pyyaml httplib2
+pip3.12 install --require-hashes -r "$(dirname "$0")/requirements.txt"
 
 # Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
@@ -227,7 +224,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/cluster-toolkit/community/front-end/ofe/requirements.txt
+  pip install --require-hashes -r /opt/gcluster/cluster-toolkit/community/front-end/ofe/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
