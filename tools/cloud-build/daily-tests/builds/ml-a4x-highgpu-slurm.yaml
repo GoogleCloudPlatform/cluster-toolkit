@@ -59,6 +59,7 @@ steps:
 
     bash tools/add_ttl_label.sh $${BLUEPRINT}
     python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
+    sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
