@@ -53,7 +53,7 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: $(vars.built_image_family)
-  a4x_max_reservation_name: projects/cloud-hypercomp-dev/reservations/nvidia-gb300-xh7pkm5rzkfgy
+  a4x_max_reservation_name: ""
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
 
