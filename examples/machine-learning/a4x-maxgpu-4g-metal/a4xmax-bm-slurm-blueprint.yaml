@@ -41,9 +41,6 @@ vars:
   psa_address: 10.10.0.0
   psa_range: 10.10.0.0/16
   prefix_length: 16
-  
-  # To use filestore, uncomment the following and the homefs module in cluster-env:
-  # filestore_ip_range: 10.1.3.0/24
 
   # Cluster Settings
   disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
@@ -597,7 +594,6 @@ deployment_groups:
           set -e -x
           export PATH=$PATH:/usr/sbin:/sbin
           echo "Configuring LNet for eth0 early..."
-          
           # Wait for eth0 to have an IP address
           for i in {1..30}; do
               IP=\$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
@@ -608,13 +604,11 @@ deployment_groups:
               echo "Waiting for eth0 to get an IP..."
               sleep 1
           done
-          
           if [ -z "\$IP" ]; then
               echo "ERROR: eth0 did not get an IP in 30 seconds"
               ip addr
               exit 1
           fi
-          
           if command -v lnetctl >/dev/null 2>&1; then
               # Unconfigure if already configured
               if sudo lnetctl net show 2>/dev/null | grep -q "tcp"; then
