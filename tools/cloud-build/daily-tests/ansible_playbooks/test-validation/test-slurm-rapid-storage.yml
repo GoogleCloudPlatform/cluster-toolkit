@@ -61,24 +61,12 @@
     if ! command -v fio >/dev/null 2>&1; then
       if command -v apt-get >/dev/null 2>&1; then
         apt-get update -y && apt-get install -y fio
-      elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
-        # Fix BDB0091 DB_VERSION_MISMATCH: Database environment version mismatch
-        rm -f /var/lib/rpm/__db*
-        rpm --rebuilddb
-        if command -v dnf >/dev/null 2>&1; then
-          dnf install -y fio
-        else
-          yum install -y fio
-        fi
+      elif command -v yum >/dev/null 2>&1; then
+        yum install -y fio
+      elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y fio
       fi
     fi
-  become: true
-
-- name: Warm up Anywhere Cache
-  ansible.builtin.shell: |
-    fio --name=warmup --filename="{{ gcs_bucket_local_mount }}/fio" --filesize=1G --ioengine=sync --direct=1 --bs=1M --rw=read --numjobs=1
-  args:
-    chdir: "{{ gcs_bucket_local_mount }}"
   become: true
 
 - name: Run FIO test
