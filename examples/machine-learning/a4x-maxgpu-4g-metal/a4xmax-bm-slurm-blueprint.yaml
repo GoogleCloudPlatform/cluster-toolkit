@@ -928,10 +928,10 @@ deployment_groups:
     - gcs_bucket
     settings:
       enable_controller_public_ips: true
-      disk_type: pd-balanced
-      machine_type: t2a-standard-2
+      disk_type: hyperdisk-balanced
+      machine_type: c4a-highcpu-16
       controller_state_disk:
-        type: pd-balanced # Override the default pd-ssd
+        type: hyperdisk-balanced # Override the default pd-ssd
         size: 50
       metadata:
         user-data: |
