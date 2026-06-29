@@ -285,6 +285,9 @@ func resetSubmitCmdFlags() {
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
+	pathwaysProxyEnv = nil
+	pathwaysServerEnv = nil
+	pathwaysWorkerEnv = nil
 }
 
 type mockOrchestrator struct {
@@ -779,6 +782,97 @@ func TestSubmitCmd_InvalidEnvFormat_Fails(t *testing.T) {
 		"--location", "test-location",
 		"--project", "test-project",
 		"--env", "INVALID_ENV",
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "invalid environment variable format"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_PathwaysEnv_Success(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	resetSubmitCmdFlags()
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-gcs-location", "gs://foo",
+		"--name", "pathways-env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--pathways-proxy-env", "PROXY_VAR=value",
+		"--pathways-server-env", "SERVER_VAR=foo=bar",
+		"--pathways-worker-env", "WORKER_VAR=baz",
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_PathwaysEnv_InvalidFormat_Fails(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	resetSubmitCmdFlags()
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-gcs-location", "gs://foo",
+		"--name", "pathways-env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--pathways-server-env", "INVALID_ENV",
 	)
 
 	if err == nil {

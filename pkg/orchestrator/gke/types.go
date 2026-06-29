@@ -297,6 +297,14 @@ type ContainerData struct {
 	ResourcesYAML string
 }
 
+// EnvVar represents a custom environment variable key-value pair.
+type EnvVar struct {
+	// Name is the environment variable key.
+	Name string
+	// Value is the environment variable value.
+	Value string
+}
+
 type jobSetTemplateData struct {
 	WorkloadName                  string
 	ClusterName                   string
@@ -336,7 +344,10 @@ type jobSetTemplateData struct {
 	Pathways                      orchestrator.PathwaysJobDefinition
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
-	Env                           []struct{ Name, Value string }
+	Env                           []EnvVar
+	PathwaysProxyEnv              []EnvVar
+	PathwaysServerEnv             []EnvVar
+	PathwaysWorkerEnv             []EnvVar
 	IsTPU                         bool
 	IsGPU                         bool
 }

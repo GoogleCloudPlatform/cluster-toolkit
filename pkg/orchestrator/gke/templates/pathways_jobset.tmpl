@@ -91,6 +91,10 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -129,6 +133,10 @@ spec:
                 value: "true"
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysServerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -292,6 +300,10 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysWorkerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
 {{.ResourcesString}}
             volumes:
 {{.VolumesYAML}}

@@ -1270,24 +1270,29 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		Pathways:                      opts.Pathways,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
-		Env: func() []struct{ Name, Value string } {
-			if len(opts.Env) == 0 {
-				return nil
-			}
-			envKeys := make([]string, 0, len(opts.Env))
-			for k := range opts.Env {
-				envKeys = append(envKeys, k)
-			}
-			slices.Sort(envKeys)
-			res := make([]struct{ Name, Value string }, len(envKeys))
-			for i, k := range envKeys {
-				res[i] = struct{ Name, Value string }{Name: k, Value: opts.Env[k]}
-			}
-			return res
-		}(),
-		IsTPU: isTPU,
-		IsGPU: isGPU,
+		Env:                           sortedEnvVars(opts.Env),
+		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
+		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
+		IsTPU:                         isTPU,
+		IsGPU:                         isGPU,
 	}
+}
+
+func sortedEnvVars(envMap map[string]string) []EnvVar {
+	if len(envMap) == 0 {
+		return nil
+	}
+	envKeys := make([]string, 0, len(envMap))
+	for k := range envMap {
+		envKeys = append(envKeys, k)
+	}
+	slices.Sort(envKeys)
+	res := make([]EnvVar, len(envKeys))
+	for i, k := range envKeys {
+		res[i] = EnvVar{Name: k, Value: envMap[k]}
+	}
+	return res
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
