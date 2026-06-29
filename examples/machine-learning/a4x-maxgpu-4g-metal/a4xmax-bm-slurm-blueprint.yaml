@@ -38,7 +38,10 @@ vars:
   # Cluster env settings
   net0_range: 10.1.1.0/24
   net1_range: 10.1.2.0/24
+  psa_address: 10.10.0.0
   psa_range: 10.10.0.0/16
+  prefix_length: 16
+  
   # To use filestore, uncomment the following and the homefs module in cluster-env:
   # filestore_ip_range: 10.1.3.0/24
 
@@ -464,8 +467,8 @@ deployment_groups:
     source: modules/network/private-service-access
     use: [a4x-max-slurm-net-0]
     settings:
-      address: 10.10.0.0
-      prefix_length: 16
+      address: $(vars.psa_address)
+      prefix_length: $(vars.prefix_length)
 
   - id: homefs
     source: modules/file-system/managed-lustre
