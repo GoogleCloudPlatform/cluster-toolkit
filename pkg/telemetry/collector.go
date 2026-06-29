@@ -242,11 +242,11 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	return getKeyFromBlueprint("region", bp)
+	return config.GetKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	return getKeyFromBlueprint("zone", bp)
+	return config.GetKeyFromBlueprint("zone", bp)
 }
 
 // getModules returns a comma-separated string of sanitized module names.

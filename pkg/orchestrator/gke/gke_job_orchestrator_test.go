@@ -447,11 +447,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	}
 	mockExec := NewMockExecutor(mockResponses)
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
@@ -484,6 +485,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`cpu: "8"`,
 		`memory: "32Gi"`,
 		"restartStrategy: Recreate",
+		"privileged: true",
+		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
+		`cpu: "24"`,
+		`cpu: "2"`,
+		`memory: "8Gi"`,
+		"kill -SIGTERM $PID",
 	}
 
 	for _, substr := range expectedSubstrs {
@@ -2255,6 +2262,51 @@ func TestPopulateNAPFlavors(t *testing.T) {
 						t.Errorf("expected label %s=%s, got %s", k, v, gotCapacity.NodeLabels[k])
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestGenerateGKENodeSelectorLabel(t *testing.T) {
+	orc := &GKEOrchestrator{}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Mapped families (2 parts)
+		{"g2-standard-48", "nvidia-l4"},
+		{"a3-highgpu-8g", "nvidia-h100-80gb"},
+		{"a2-highgpu-1g", "nvidia-tesla-a100"},
+		{"g4-standard-4", "nvidia-rtx-pro-6000"},
+		{"ct6e-standard-8t", "tpu-v6e-slice"},
+
+		// Mapped families (1 part)
+		{"v6e-standard", "tpu-v6e-slice"},
+		{"v5litepod-slice", "tpu-v5-lite-podslice"},
+		{"v4-podslice", "tpu-v4-podslice"},
+		{"l4-standard", "nvidia-l4"},
+
+		// Old switch fallbacks (unmapped directly, but should return as is)
+		{"nvidia-tesla-a100", "nvidia-tesla-a100"},
+		{"tpu-v4-podslice", "tpu-v4-podslice"},
+		{"tpu-v6e-slice", "tpu-v6e-slice"},
+		{"tpu-v5p-slice", "tpu-v5p-slice"},
+		{"tpu-v5-lite-podslice", "tpu-v5-lite-podslice"},
+
+		// Unmapped values
+		{"unknown-accelerator", "unknown-accelerator"},
+		{"h100", "h100"},
+
+		// Case insensitivity
+		{"G2-STANDARD-48", "nvidia-l4"},
+		{"NVIDIA-TESLA-A100", "NVIDIA-TESLA-A100"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := orc.GenerateGKENodeSelectorLabel(tc.input)
+			if got != tc.want {
+				t.Errorf("GenerateGKENodeSelectorLabel(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}
