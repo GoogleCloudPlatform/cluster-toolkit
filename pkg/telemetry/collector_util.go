@@ -156,7 +156,7 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	}
 	// 2. If no explicit setting, try defaults
 	for _, key := range machineTypeSettings {
-		if t := extractDefaultSetting[string](key, m); t != "" {
+		if t, found := extractDefaultSetting[string](key, m); found && t != "" {
 			return t
 		}
 	}
@@ -179,107 +179,137 @@ func extractExplicitStringSetting(key string, m config.Module, bp config.Bluepri
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
 		return unmarkedKey.AsString()
 	}
-
 	return ""
 }
+func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
+	counts := make(map[string]int)
+	topMachineType := getMachineTypeFromModule(m, bp)
+	inlineFound := false
 
-// extractDefaultStringSetting attempts to get the given key string value from the module's defaults, with a timeout.
-func extractDefaultStringSetting(key string, m config.Module) string {
-	if m.Source == "" {
-		return ""
-	}
-
-	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
-	}
-
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return ""
-	}
-
-	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
-	go func() {
-		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
-		resCh <- result{mi: mi, err: err}
-	}()
-
-	select {
-	case res := <-resCh:
-		if res.err != nil {
-			return ""
+	// Process complex inline iterables (Slurm V6)
+	for _, key := range []string{"nodeset", "nodeset_tpu", "partition"} {
+		if processInlineKey(m, bp, key, topMachineType, counts) {
+			inlineFound = true
 		}
-		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				// Verify the default is a string (protects against complex types)
-				if mType, ok := input.Default.(string); ok {
-					return mType
-				}
+	}
+
+	if inlineFound {
+		return counts
+	}
+
+	// Fallback to standard top-level extraction
+	if topMachineType != "" {
+		if count, found := getTopLevelNodeCount(m, bp); found {
+			counts[topMachineType] += count
+		}
+	}
+	return counts
+}
+
+// processInlineKey evaluates a specific key for iterable structures and processes its items.
+func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int) bool {
+	if !m.Settings.Has(key) {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get(key))
+	if err != nil {
+		return false
+	}
+	unmarked, _ := val.Unmark()
+	if !unmarked.IsKnown() || unmarked.IsNull() {
+		return false
+	}
+
+	ty := unmarked.Type()
+	if !ty.IsListType() && !ty.IsTupleType() && !ty.IsSetType() {
+		return false
+	}
+
+	for _, item := range unmarked.AsValueSlice() {
+		processInlineItem(item, topMachineType, counts)
+	}
+	return true
+}
+
+// processInlineItem extracts machine types and counts from an individual map/object in an inline list.
+func processInlineItem(item cty.Value, topMachineType string, counts map[string]int) {
+	item, _ = item.Unmark()
+	ty := item.Type()
+
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return
+	}
+
+	inlineMType := extractStringFromCtyMap(item, machineTypeSettings)
+	if inlineMType == "" {
+		inlineMType = topMachineType
+	}
+
+	if count, found := extractIntFromCtyMap(item, staticNodeCountSettings); found && inlineMType != "" {
+		counts[inlineMType] += count
+	}
+}
+
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint) (int, bool) {
+	for _, key := range staticNodeCountSettings {
+		if count, found := extractExplicitIntSetting(key, m, bp); found {
+			return count, true
+		}
+	}
+	for _, key := range staticNodeCountSettings {
+		if count, found := extractDefaultSetting[int](key, m); found {
+			return count, true
+		}
+	}
+	return 0, false
+}
+
+func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
+	for k, v := range val.AsValueMap() {
+		if slices.Contains(targetKeys, k) {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
+				return v.AsString()
 			}
 		}
-	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
-
 	return ""
 }
 
-func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
-	total := 0
-	keysToCheck := append(staticNodeCountSettings, staticNodeCountInlineKeys...)
-
-	// 1. Try explicit settings first
-	for _, key := range keysToCheck {
-		if count, found := extractExplicitIntSetting(key, m, bp); found {
-			total += count
+func extractIntFromCtyMap(val cty.Value, targetKeys []string) (int, bool) {
+	for k, v := range val.AsValueMap() {
+		if slices.Contains(targetKeys, k) {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
+				out, _ := v.AsBigFloat().Int64()
+				return int(out), true
+			}
+			return 0, true
 		}
 	}
-	if total > 0 {
-		return total
-	}
-	// 2. If no explicit setting, try defaults
-	for _, key := range staticNodeCountSettings {
-		if t := extractDefaultSetting[int](key, m); t != 0 {
-			return t
-		}
-	}
-	return 0
+	return 0, false
 }
 
-// extractExplicitIntSetting attempts to get the given key int value if explicitly defined in the module's settings.
+// extractExplicitIntSetting attempts to get the given key int value if explicitly defined.
+// It returns the int value, and a boolean indicating if the setting was found.
 func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) (int, bool) {
 	if !m.Settings.Has(key) {
 		return 0, false
 	}
-
 	keyValue := m.Settings.Get(key)
-	// Evaluate the value to resolve expressions like $(vars.key)
 	evaluatedKey, err := bp.Eval(keyValue)
 	if err != nil {
 		return 0, false
 	}
-
-	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() {
-		if unmarkedKey.Type() == cty.Number {
-			out, _ := unmarkedKey.AsBigFloat().Int64()
-			return int(out), true
-		}
-
-		// If it's a complex iterable type (e.g., list of objects), recursively search for nested node counts.
-		// This is required as Slurm V6 Partitions can define nodesets inline as a list of objects (nodeset or nodeset_tpu). We need to sum up these inline counts without extracting their individual nested machine types.
-		return sumTargetIntSettings(unmarkedKey, staticNodeCountSettings), true
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.Number {
+		out, _ := unmarkedKey.AsBigFloat().Int64()
+		return int(out), true
 	}
-
-	return 0, true
+	return 0, true // Value exists but is unknown, return safely without fallback
 }
 
 // sumTargetIntSettings traverses cty values recursively summing any target keys it finds.
@@ -334,11 +364,11 @@ func extractNumberValue(v cty.Value) int {
 }
 
 // extractDefaultSetting attempts to get a default setting from the module's source variables.
-func extractDefaultSetting[T any](key string, m config.Module) T {
+func extractDefaultSetting[T any](key string, m config.Module) (T, bool) {
 	var zero T
 	kindStr, valid := isValidModuleKind(m)
 	if !valid {
-		return zero
+		return zero, false
 	}
 
 	resCh := make(chan result, 1)
@@ -350,17 +380,17 @@ func extractDefaultSetting[T any](key string, m config.Module) T {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return zero
+			return zero, false
 		}
 		for _, input := range res.mi.Inputs {
 			if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
-				return val
+				return val, true
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	return zero
+	return zero, false
 }
 
 // isValidModuleKind checks if the module has a valid source and returns its kind.

@@ -273,13 +273,16 @@ func getStaticNodeCount(bp config.Blueprint) string {
 	countsByMachineType := make(map[string]int)
 
 	for _, m := range config.GetAllBpModules(&bp) {
-		mType := getMachineTypeFromModule(m, bp)
-		if mType != "" {
-			count := getStaticNodeCountFromModule(m, bp)
+		moduleCounts := getModuleNodeCounts(m, bp)
+		for mType, count := range moduleCounts {
 			if count > 0 {
 				countsByMachineType[mType] += count
 			}
 		}
+	}
+
+	if len(countsByMachineType) == 0 {
+		return ""
 	}
 
 	counts, err := json.Marshal(countsByMachineType)
