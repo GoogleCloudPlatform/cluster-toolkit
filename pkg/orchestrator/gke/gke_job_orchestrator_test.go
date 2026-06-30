@@ -2459,3 +2459,21 @@ func TestBuildTopologyAnnotation_NativeGCESubSlice(t *testing.T) {
 		t.Errorf("expected native GCE subblock annotation, got %q", ann)
 	}
 }
+
+func TestBuildTopologyAnnotation_ZeroPoolChipsFallback(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get topologies.kueue.x-k8s.io -o jsonpath={range .items[*].spec.levels[*]}{.nodeLabel}{\"\\n\"}{end}": {
+			{ExitCode: 0, Stdout: "cloud.google.com/gce-topology-block\ncloud.google.com/gce-topology-subblock\n"},
+		},
+		"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+			{ExitCode: 0, Stdout: ""},
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: NewMockExecutor(mockResponses),
+	}
+	ann := orc.buildTopologyAnnotation("2x4", "ct6e-standard-4t", 1, 2, true)
+	if !strings.Contains(ann, "cloud.google.com/gce-topology-block") {
+		t.Errorf("expected fallback to native GCE block annotation when poolChips is 0, got %q", ann)
+	}
+}

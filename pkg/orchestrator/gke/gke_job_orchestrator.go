@@ -1895,7 +1895,10 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType s
 				if strings.HasPrefix(key, "kueue.x-k8s.io/podset-") && strings.HasSuffix(key, "-required-topology") {
 					requestedChips := calculateChipsFromTopology(topology)
 					poolChips := g.getMaxDiscoveredTopologyChips(machineType)
-					if poolChips > 0 && requestedChips < poolChips {
+					if poolChips == 0 {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-block"
+						logging.Warn("Dynamic Topology Detection: failed to discover physical pool topology. Defaulting to cloud.google.com/gce-topology-block.")
+					} else if requestedChips < poolChips {
 						topologyAnnotation[key] = "cloud.google.com/gce-topology-subblock"
 						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-subblock for sub-slicing (%d < %d chips).", requestedChips, poolChips)
 					} else {
