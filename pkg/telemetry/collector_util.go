@@ -267,7 +267,7 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if !unmarkedKey.IsNull() {
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() {
 		if unmarkedKey.Type() == cty.Number {
 			out, _ := unmarkedKey.AsBigFloat().Int64()
 			return int(out)
@@ -325,29 +325,22 @@ func sumSliceOrSet(val cty.Value, targetKeys []string) int {
 // extractNumberValue safely unwraps a cty value and returns it as an integer if it is a number.
 func extractNumberValue(v cty.Value) int {
 	v, _ = v.Unmark()
-	if !v.IsNull() && v.Type() == cty.Number {
+	if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
 		out, _ := v.AsBigFloat().Int64()
 		return int(out)
 	}
 	return 0
 }
+
+// extractDefaultSetting attempts to get a default setting from the module's source variables.
 func extractDefaultSetting[T any](key string, m config.Module) T {
 	var zero T
-	if m.Source == "" {
-		return zero
-	}
-
-	kindStr := m.Kind.String()
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
-	}
-
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+	kindStr, valid := isValidModuleKind(m)
+	if !valid {
 		return zero
 	}
 
 	resCh := make(chan result, 1)
-
 	go func() {
 		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
 		resCh <- result{mi: mi, err: err}
@@ -359,16 +352,50 @@ func extractDefaultSetting[T any](key string, m config.Module) T {
 			return zero
 		}
 		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				if val, ok := input.Default.(T); ok {
-					return val
-				}
+			if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
+				return val
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
 	}
 
 	return zero
+}
+
+// isValidModuleKind checks if the module has a valid source and returns its kind.
+func isValidModuleKind(m config.Module) (string, bool) {
+	if m.Source == "" {
+		return "", false
+	}
+	kindStr := m.Kind.String()
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return "", false
+	}
+	return kindStr, true
+}
+
+// parseDefaultValue matches the input key and safely casts the default value.
+func parseDefaultValue[T any](inputName string, inputDefault any, key string) (T, bool) {
+	var zero T
+	if inputName == key && inputDefault != nil {
+		switch v := inputDefault.(type) {
+		case T:
+			return v, true
+		case float64:
+			// Safely cast float64 to int if T is int
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		case float32:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		}
+	}
+	return zero, false
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
