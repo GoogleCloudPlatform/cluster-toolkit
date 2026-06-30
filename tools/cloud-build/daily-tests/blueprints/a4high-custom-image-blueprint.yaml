@@ -235,13 +235,14 @@ deployment_groups:
         destination: write_hostname.sh
         content: |
           #!/bin/bash
-          echo "Checking host /etc/hostname status..."
-          if [ ! -f /etc/hostname ]; then
-            echo "Host /etc/hostname not found! Generating dynamically..."
-            hostname -s | tee /etc/hostname
-            echo "Host /etc/hostname written successfully."
+          set -e
+          VM_NAME=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name)
+          if [ -n "$VM_NAME" ]; then
+            echo "Setting hostname to $VM_NAME"
+            hostname "$VM_NAME"
+            echo "$VM_NAME" > /etc/hostname
           else
-            echo "Host /etc/hostname already exists."
+            echo "ERROR: Failed to retrieve VM name from metadata server"
           fi
       - type: shell
         destination: install-cuda-toolkit.sh
@@ -396,10 +397,57 @@ deployment_groups:
       enable_login_public_ips: true
       machine_type: n2-standard-8
 
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: fix_hostname.sh
+        content: |
+          #!/bin/bash
+          set -e
+          VM_NAME=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name)
+          if [ -n "$VM_NAME" ]; then
+            echo "Setting hostname to $VM_NAME"
+            hostname "$VM_NAME"
+            echo "$VM_NAME" > /etc/hostname
+          else
+            echo "ERROR: Failed to retrieve VM name from metadata server"
+          fi
+
   - id: controller_startup
     source: modules/scripts/startup-script
     settings:
       runners:
+      - type: shell
+        destination: fix_hostname.sh
+        content: |
+          #!/bin/bash
+          set -e
+          echo "Ensuring local hostname is correct..."
+          VM_NAME=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name)
+          if [ -n "$VM_NAME" ]; then
+            echo "Setting hostname to $VM_NAME"
+            hostname "$VM_NAME"
+            echo "$VM_NAME" > /etc/hostname
+          else
+            echo "ERROR: Failed to retrieve VM name from metadata server"
+          fi
+
+          echo "Ensuring local hostname is resolvable to internal IP..."
+          FQDN=`hostname -f || hostname`
+          SHORT=`hostname -s || hostname`
+          INTERNAL_IP=`curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip`
+          if [ -n "$INTERNAL_IP" ]; then
+            if ! grep -q "$SHORT" /etc/hosts; then
+              echo "$INTERNAL_IP $FQDN $SHORT" >> /etc/hosts
+              echo "Added $INTERNAL_IP $FQDN $SHORT to /etc/hosts"
+            else
+              echo "Hostname $SHORT already in /etc/hosts"
+            fi
+          else
+            echo "ERROR: Could not determine internal IP from metadata"
+          fi
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -447,4 +495,5 @@ deployment_groups:
       disk_size_gb: 300
       machine_type: n2-standard-80
       controller_startup_script: $(controller_startup.startup_script)
+      login_startup_script: $(login_startup.startup_script)
       enable_external_prolog_epilog: true
