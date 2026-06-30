@@ -41,11 +41,13 @@ vars:
   # The number of node pools (num_slices) to be created
   num_node_pools:
 
-  # The name of the compute engine reservation of A4X nodes in the form of
-  # <project>/<reservation-name>
+  # The name of the compute engine reservation of A4X nodes.
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
+
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project_id: $(vars.project_id)
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
@@ -247,6 +249,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
+          project: $(vars.reservation_project_id)
       enable_dranet: true
       num_node_pools: $(vars.num_node_pools)
     outputs: [instructions]
