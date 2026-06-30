@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 
@@ -266,10 +265,10 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint) (int, bool) {
 	}
 	return 0, false
 }
-
 func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
-	for k, v := range val.AsValueMap() {
-		if slices.Contains(targetKeys, k) {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
 				return v.AsString()
@@ -280,8 +279,9 @@ func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 }
 
 func extractIntFromCtyMap(val cty.Value, targetKeys []string) (int, bool) {
-	for k, v := range val.AsValueMap() {
-		if slices.Contains(targetKeys, k) {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
 				out, _ := v.AsBigFloat().Int64()
@@ -310,57 +310,6 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 		return int(out), true
 	}
 	return 0, true // Value exists but is unknown, return safely without fallback
-}
-
-// sumTargetIntSettings traverses cty values recursively summing any target keys it finds.
-func sumTargetIntSettings(val cty.Value, targetKeys []string) int {
-	if !val.IsKnown() || val.IsNull() {
-		return 0
-	}
-
-	val, _ = val.Unmark()
-	ty := val.Type()
-
-	if ty.IsObjectType() || ty.IsMapType() {
-		return sumMapOrObject(val, targetKeys)
-	}
-	if ty.IsListType() || ty.IsTupleType() || ty.IsSetType() {
-		return sumSliceOrSet(val, targetKeys)
-	}
-
-	return 0
-}
-
-// sumMapOrObject iterates through a cty Object or Map and searches for target keys.
-func sumMapOrObject(val cty.Value, targetKeys []string) int {
-	total := 0
-	for k, v := range val.AsValueMap() {
-		if slices.Contains(targetKeys, k) {
-			total += extractNumberValue(v)
-		} else {
-			total += sumTargetIntSettings(v, targetKeys)
-		}
-	}
-	return total
-}
-
-// sumSliceOrSet iterates through a cty List, Tuple, or Set and recursively checks elements.
-func sumSliceOrSet(val cty.Value, targetKeys []string) int {
-	total := 0
-	for _, v := range val.AsValueSlice() {
-		total += sumTargetIntSettings(v, targetKeys)
-	}
-	return total
-}
-
-// extractNumberValue safely unwraps a cty value and returns it as an integer if it is a number.
-func extractNumberValue(v cty.Value) int {
-	v, _ = v.Unmark()
-	if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
-		out, _ := v.AsBigFloat().Int64()
-		return int(out)
-	}
-	return 0
 }
 
 // extractDefaultSetting attempts to get a default setting from the module's source variables.
