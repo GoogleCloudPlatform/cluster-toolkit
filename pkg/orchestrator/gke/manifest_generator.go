@@ -166,6 +166,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		PriorityClassName:             job.PriorityClassName,
 		Topology:                      schedOpts.Topology,
 		Verbose:                       job.Verbose,
+		Env:                           job.Env,
 	}
 
 	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {

@@ -33,6 +33,11 @@ type PathwaysJobDefinition struct {
 	ServerArgs string // Default: ""
 	WorkerArgs string // Default: ""
 
+	// Custom Environment Variables for Pathways components
+	ProxyEnv  map[string]string
+	ServerEnv map[string]string
+	WorkerEnv map[string]string
+
 	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
 
@@ -90,6 +95,7 @@ type JobDefinition struct {
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
 	RawMounts []string
+	Env       map[string]string
 
 	Verbose bool
 }

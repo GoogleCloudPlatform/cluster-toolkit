@@ -67,7 +67,12 @@ spec:
                 - {{ printf "%q" . }}
                 {{- end }}
 {{ .ResourcesYAML }}
+                {{- if or $.Env (and $.Verbose (or $.IsTPU $.IsGPU)) }}
                 env:
+                {{- range $.Env }}
+                - name: {{ .Name }}
+                  value: {{ printf "%q" .Value }}
+                {{- end }}
                 {{- if $.Verbose }}
                 {{- if $.IsTPU }}
                 - name: TPU_STDERR_LOG_LEVEL
@@ -81,6 +86,7 @@ spec:
                 {{- else if $.IsGPU }}
                 - name: NCCL_DEBUG
                   value: "INFO"
+                {{- end }}
                 {{- end }}
                 {{- end }}
 {{- if $.VolumeMountsYAML }}
