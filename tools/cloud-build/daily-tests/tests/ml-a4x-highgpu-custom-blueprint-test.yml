@@ -40,7 +40,7 @@ custom_vars:
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
-  a4x_reservation_name: "nvidia-gb200-uyrez5en64cu7"
+  a4x_reservation_name: "nvidia-gb200-jlr31fm12d525"
   a4x_cluster_size: 2
   instance_image_project: "{{ instance_image_project }}"
   instance_image_family: "{{ instance_image_family}}"

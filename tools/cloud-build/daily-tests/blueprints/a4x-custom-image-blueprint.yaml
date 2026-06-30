@@ -330,24 +330,6 @@ deployment_groups:
     settings:
       runners:
       - type: shell
-        destination: fix_hostname.sh
-        content: |
-          #!/bin/bash
-          echo "Ensuring local hostname is resolvable to internal IP..."
-          FQDN=`curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/hostname`
-          SHORT=`hostname -s || hostname`
-          INTERNAL_IP=`curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip`
-          if [ -n "$INTERNAL_IP" ] && [ -n "$FQDN" ]; then
-            if ! grep -q "$FQDN" /etc/hosts; then
-              echo "$INTERNAL_IP $FQDN $SHORT" >> /etc/hosts
-              echo "Added $INTERNAL_IP $FQDN $SHORT to /etc/hosts"
-            else
-              echo "FQDN $FQDN already in /etc/hosts"
-            fi
-          else
-            echo "ERROR: Could not determine internal IP or FQDN from metadata"
-          fi
-      - type: shell
         destination: ensure_mnt_localssd_permissions.sh
         content: |
           #!/bin/bash
