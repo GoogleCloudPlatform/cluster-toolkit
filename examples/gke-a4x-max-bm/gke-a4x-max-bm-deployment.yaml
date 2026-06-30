@@ -47,4 +47,4 @@ vars:
   reservation:
 
   # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
-  reservation_project:
+  reservation_project_id:

@@ -47,7 +47,7 @@ vars:
   reservation:
 
   # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
-  reservation_project: $(vars.project_id)
+  reservation_project_id: $(vars.project_id)
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
