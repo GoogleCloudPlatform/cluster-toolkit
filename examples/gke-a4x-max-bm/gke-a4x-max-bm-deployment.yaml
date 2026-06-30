@@ -51,4 +51,3 @@ vars:
 
   # The number of node pools (num_slices) to be created
   num_node_pools:
-
