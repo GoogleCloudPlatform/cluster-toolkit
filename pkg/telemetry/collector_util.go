@@ -41,6 +41,11 @@ import (
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
+type result struct {
+	mi  modulereader.ModuleInfo
+	err error
+}
+
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
@@ -152,8 +157,25 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
-// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
-func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
+	// 1. Try explicit settings first
+	for _, key := range machineTypeSettings {
+		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			return t
+		}
+	}
+	// 2. If no explicit setting, try defaults
+	for _, key := range machineTypeSettings {
+		if t := extractDefaultStringSetting(key, m); t != "" {
+			return t
+		}
+	}
+
+	return ""
+}
+
+// extractExplicitStringSetting attempts to get the given key string value if explicitly defined in the module's settings.
+func extractExplicitStringSetting(key string, m config.Module, bp config.Blueprint) string {
 	if !m.Settings.Has(key) {
 		return ""
 	}
@@ -174,8 +196,8 @@ func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module
 	return ""
 }
 
-// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
-func extractDefaultMachineType(key string, m config.Module) string {
+// extractDefaultStringSetting attempts to get the given key string value from the module's defaults, with a timeout.
+func extractDefaultStringSetting(key string, m config.Module) string {
 	if m.Source == "" {
 		return ""
 	}
@@ -191,10 +213,6 @@ func extractDefaultMachineType(key string, m config.Module) string {
 		return ""
 	}
 
-	type result struct {
-		mi  modulereader.ModuleInfo
-		err error
-	}
 	resCh := make(chan result, 1)
 
 	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
@@ -221,6 +239,90 @@ func extractDefaultMachineType(key string, m config.Module) string {
 	}
 
 	return ""
+}
+
+func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
+	// 1. Try explicit settings first
+	for _, key := range staticNodeCountSettings {
+		if t := extractExplicitIntSetting(key, m, bp); t != 0 {
+			return t
+		}
+	}
+	// 2. If no explicit setting, try defaults
+	for _, key := range staticNodeCountSettings {
+		if t := extractDefaultIntSetting(key, m); t != 0 {
+			return t
+		}
+	}
+	return 0
+}
+
+// extractExplicitIntSetting attempts to get the given key int value if explicitly defined in the module's settings.
+func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) int {
+	if !m.Settings.Has(key) {
+		return 0
+	}
+
+	keyValue := m.Settings.Get(key)
+	// Evaluate the value to resolve expressions like $(vars.key)
+	evaluatedKey, err := bp.Eval(keyValue)
+	if err != nil {
+		return 0
+	}
+
+	// Some module outputs or references carry cty marks, so we unmark them safely before use.
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.Number {
+		out, _ := unmarkedKey.AsBigFloat().Int64()
+		return int(out)
+	}
+
+	return 0
+}
+
+// extractDefaultIntSetting attempts to get the given key int value from the module's defaults, with a timeout.
+func extractDefaultIntSetting(key string, m config.Module) int {
+	if m.Source == "" {
+		return 0
+	}
+
+	kindStr := m.Kind.String()
+	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+
+	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return 0
+	}
+
+	resCh := make(chan result, 1)
+
+	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
+	go func() {
+		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
+		resCh <- result{mi: mi, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		if res.err != nil {
+			return 0
+		}
+		for _, input := range res.mi.Inputs {
+			if input.Name == key && input.Default != nil {
+				// Verify the default is an int (protects against complex types)
+				if val, ok := input.Default.(int); ok {
+					return val
+				}
+			}
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Timeout reached: gracefully return empty string to prevent blocking
+	}
+
+	return 0
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.

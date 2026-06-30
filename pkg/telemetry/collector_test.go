@@ -60,6 +60,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
+		STATIC_NODE_COUNT,
 		OS_NAME,
 		OS_VERSION,
 		TERRAFORM_VERSION,
@@ -104,7 +105,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
+										"machine_type":   cty.StringVal("c2-standard-8"),
+										"instance_count": cty.NumberIntVal(1),
 									}),
 								},
 							},
@@ -119,6 +121,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				REGION:            "us-central1",
 				ZONE:              "us-central1-a",
 				MACHINE_TYPE:      "c2-standard-8",
+				STATIC_NODE_COUNT: `"c2-standard-8":1`,
 				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
 				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
@@ -149,6 +152,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
 				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
 				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
+				STATIC_NODE_COUNT: "",
 				INSTALLATION_MODE: BINARY,
 			},
 		},
@@ -552,6 +556,62 @@ func TestGetCmdFlags(t *testing.T) {
 
 			if actual != tt.expected {
 				t.Errorf("getCmdFlags() = %q, want %q", actual, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		setupBp  func() config.Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region",
+			key:  "region",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Valid zone",
+			key:  "zone",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Missing key",
+			key:  "zone",
+			setupBp: func() config.Blueprint {
+				return config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := getKeyFromBlueprint(tt.key, bp)
+
+			if actual != tt.expected {
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
 			}
 		})
 	}
@@ -1704,5 +1764,157 @@ func TestCheckGcloudConfigForInternalUser_MissingFiles(t *testing.T) {
 	result := checkGcloudConfigForInternalUser()
 	if result {
 		t.Errorf("Expected checkGcloudConfigForInternalUser to return false when config files are missing")
+	}
+}
+
+// TestGetStaticNodeCount verifies that static node counts are correctly extracted from the blueprint.
+func TestGetStaticNodeCount(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		want string
+	}{
+		{
+			name: "Extracts instance_count for compute node",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":   cty.StringVal("c2-standard-8"),
+									"instance_count": cty.NumberIntVal(3),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"c2-standard-8":3`,
+		},
+		{
+			name: "Extracts node_count_static for slurm nodeset",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("c2-standard-60"),
+									"node_count_static": cty.NumberIntVal(5),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"c2-standard-60":5`,
+		},
+		{
+			name: "Extracts static_node_count for gke node pool",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("e2-standard-16"),
+									"static_node_count": cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"e2-standard-16":2`,
+		},
+		{
+			name: "Aggregates same machine types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":   cty.StringVal("g4"),
+									"instance_count": cty.NumberIntVal(1),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("g4"),
+									"static_node_count": cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"g4":3`,
+		},
+		{
+			name: "Combines different machine types and sorts them",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":   cty.StringVal("g4"),
+									"instance_count": cty.NumberIntVal(3),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("a3u"),
+									"static_node_count": cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"a3u":2,"g4":3`,
+		},
+		{
+			name: "Ignores modules with no counts",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-8"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getStaticNodeCount(tc.bp)
+			if got != tc.want {
+				t.Errorf("getStaticNodeCount() = %q; want %q", got, tc.want)
+			}
+		})
 	}
 }

@@ -16,7 +16,9 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
 	"path/filepath"
 	"runtime"
@@ -34,6 +36,11 @@ var (
 		"machine_type",                  // Usual setting for specifying machine type.
 		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
 		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
+	staticNodeCountSettings = []string{
+		"static_node_count", // Used in GKE node pool. If set, autoscaling will be disabled. Defaults to 0.
+		"node_count_static", // Standalone Slurm V6 CPU and TPU nodesets use 'node_count_static'. Defaults to 0.
+		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
 	}
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
@@ -69,6 +76,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
+	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCount(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -215,22 +223,7 @@ func getMachineType(bp config.Blueprint) string {
 
 	for _, m := range config.GetAllBpModules(&bp) {
 		var mType string
-		// 1. Try explicit settings first
-		for _, key := range machineTypeSettings {
-			if t := extractExplicitMachineType(bp, key, m); t != "" {
-				mType = t
-				break
-			}
-		}
-		// 2. If no explicit setting, try defaults
-		if mType == "" {
-			for _, key := range machineTypeSettings {
-				if t := extractDefaultMachineType(key, m); t != "" {
-					mType = t
-					break
-				}
-			}
-		}
+		mType = getMachineTypeFromModule(m, bp)
 
 		if mType != "" && !seen[mType] {
 			machineTypes = append(machineTypes, mType)
@@ -242,11 +235,11 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	return config.GetKeyFromBlueprint("region", bp)
+	return getKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	return config.GetKeyFromBlueprint("zone", bp)
+	return getKeyFromBlueprint("zone", bp)
 }
 
 // getModules returns a comma-separated string of sanitized module names.
@@ -274,6 +267,30 @@ func getModules(modulesList []string) string {
 	}
 
 	return strings.Join(sanitizedModules, ",")
+}
+
+func getStaticNodeCount(bp config.Blueprint) string {
+	countsByMachineType := make(map[string]int)
+
+	for _, m := range config.GetAllBpModules(&bp) {
+		mType := getMachineTypeFromModule(m, bp)
+		logging.Info("mType: %v", mType)
+		if mType != "" {
+			count := getStaticNodeCountFromModule(m, bp)
+			logging.Info("count: %v", count)
+
+			if count > 0 {
+				countsByMachineType[mType] += count
+			}
+		}
+	}
+
+	counts, err := json.Marshal(countsByMachineType)
+	if err != nil || len(countsByMachineType) == 0 {
+		return ""
+	}
+
+	return strings.Trim(string(counts), "{}")
 }
 
 func getOSName() string {
