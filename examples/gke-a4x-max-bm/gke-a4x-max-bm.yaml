@@ -43,8 +43,8 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
-  # The GCP Project ID hosting the shared reservation. Leave empty if reservation is in project_id.
-  reservation_project: ""
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project: $(vars.project_id)
 
   compute_nodepool_machine_type: a4x-maxgpu-4g-metal
   system_nodepool_machine_type: e2-standard-16

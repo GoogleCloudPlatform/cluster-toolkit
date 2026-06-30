@@ -46,5 +46,8 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project:
+
   # The number of node pools (num_slices) to be created
   num_node_pools:

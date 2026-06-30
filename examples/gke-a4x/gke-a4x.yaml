@@ -46,8 +46,8 @@ vars:
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
 
-  # The GCP Project ID hosting the shared reservation. Leave empty if reservation is in project_id.
-  reservation_project: ""
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project: $(vars.project_id)
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
