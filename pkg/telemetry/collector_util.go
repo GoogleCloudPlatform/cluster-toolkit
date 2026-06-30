@@ -146,17 +146,6 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	return "false"
 }
 
-func getKeyFromBlueprint(key string, bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef(key).AsValue())
-	if err == nil {
-		v, _ := val.Unmark()
-		if !v.IsNull() && v.Type() == cty.String {
-			return v.AsString()
-		}
-	}
-	return ""
-}
-
 func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	// 1. Try explicit settings first
 	for _, key := range machineTypeSettings {

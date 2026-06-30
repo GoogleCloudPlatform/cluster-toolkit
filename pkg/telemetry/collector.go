@@ -90,7 +90,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	project_id := getKeyFromBlueprint("project_id", c.blueprint)
+	project_id := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
@@ -235,11 +235,11 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	return getKeyFromBlueprint("region", bp)
+	return config.GetKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	return getKeyFromBlueprint("zone", bp)
+	return config.GetKeyFromBlueprint("zone", bp)
 }
 
 // getModules returns a comma-separated string of sanitized module names.
