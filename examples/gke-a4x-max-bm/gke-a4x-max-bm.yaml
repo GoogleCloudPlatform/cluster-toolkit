@@ -249,7 +249,7 @@ deployment_groups:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
         - name: $(vars.reservation)
-          project: $(vars.reservation_project)
+          project: $(vars.reservation_project_id)
       kubernetes_labels:
         cloud.google.com/gke-networking-dra-driver: "true"
         cloud.google.com/gke-dpv2-unified-cni: "cni-migration"
