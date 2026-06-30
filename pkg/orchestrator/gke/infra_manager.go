@@ -313,7 +313,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	}
 
 	// Install LocalQueue
-	localQueueTmpl, err := yamltemplate.ParseFS(templatesFS, "templates/local_queue.tmpl")
+	localQueueTmpl, err := yamltemplate.New("local_queue.tmpl").ParseFS(templatesFS, "templates/local_queue.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
 	}
