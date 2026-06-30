@@ -18,8 +18,6 @@
 # Script for resizing managed instance group (MIG) cluster size based
 # on the number of jobs in the Condor Queue.
 
-from absl import app
-from absl import flags
 from collections import OrderedDict
 from datetime import datetime
 from pprint import pprint
@@ -27,9 +25,7 @@ from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
 
 import argparse
-import os
 import math
-import time
 import htcondor
 import classad
 
@@ -222,7 +218,7 @@ class AutoScaler:
             exit()
         last_negotiation_cycle_time = negotiator_ad[0].get(LAST_CYCLE_ATTRIBUTE)
         if not last_negotiation_cycle_time:
-            print(f"The negotiator has not yet started a match cycle. Exiting auto-scaling.")
+            print("The negotiator has not yet started a match cycle. Exiting auto-scaling.")
             exit()
 
         print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
@@ -267,8 +263,8 @@ class AutoScaler:
 
         # Find VMs that are idle (no dynamic slots created from partitionable
         # slots) in the MIG handled by this autoscaler
-        filter_idle_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots==0")
-        filter_claimed_vms = classad.ExprTree(f"PartitionableSlot && NumDynamicSlots>0")
+        filter_idle_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots==0")
+        filter_claimed_vms = classad.ExprTree("PartitionableSlot && NumDynamicSlots>0")
         filter_mig = classad.ExprTree(f"regexp(\".*/{self.instance_group_manager}$\", CloudCreatedBy)")
         # A full list of Machine (StartD) ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html

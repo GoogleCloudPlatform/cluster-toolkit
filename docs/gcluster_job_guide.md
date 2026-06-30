@@ -202,6 +202,21 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
   --mount "lustre-pvc:/data"
 ```
 
+### 4.5 Example: Submit Job with Custom Environment Variables
+
+You can pass custom environment variables to the container using the `--env` flag:
+
+```bash
+./gcluster job submit \
+  --name my-env-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --env "TRAINING_EPOCHS=10" \
+  --env "DEBUG=true"
+```
+
 ## 5. Verify the Job
 
 Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
@@ -259,29 +274,41 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
   --node-constraint "cloud.google.com/gke-nodepool=my-custom-nodepool"
 ```
 
-**Example 2: Target Multiple Topologies (Dynamic Routing)**
-Use a pipe separator (`|`) in `--node-constraint` to specify multiple allowed values for a constraint. This generates a `nodeAffinity` block instead of a strict `nodeSelector`, allowing the workload to fall back to other pools if the preferred one is full.
+**Example 2: Target Multiple Node Pools (Fallback Scheduling)**
+Use a pipe separator (`|`) in `--node-constraint` to specify multiple allowed values for standard constraints. This generates a `nodeAffinity` block instead of a strict `nodeSelector`, allowing the workload to schedule on any of the specified pools.
 
 ```bash
 ./gcluster job submit \
   --name my-fallback-job \
   --command "python app.py" \
-  --compute-type v6e-4 \
-  --node-constraint "cloud.google.com/gke-tpu-topology=2x2|4x4"
+  --compute-type c2-standard-60 \
+  --node-constraint "cloud.google.com/gke-nodepool=nodepool-a|nodepool-b"
 ```
 
 > [!CAUTION]
-> **Dynamic Slicing Interaction:**
+> **TPU Topology Constraints (GKE Warden Limitation):**
 >
-> When using GKE Dynamic Slicing, be careful setting topology constraints in `--node-constraint`.
+> GKE clusters run a validating webhook (GKE Warden) that rejects any pod template where the affinity list for `cloud.google.com/gke-tpu-topology` contains **more than one unique value**.
 >
-> GKE labels nodes with their *physical* pool topology (e.g., `4x4`). If you request a smaller slice (e.g., `2x2`) via `--topology`, GKE handles the placement via annotations automatically.
+> Consequently, passing multiple values separated by a pipe for TPU topology (e.g., `"2x2|4x4"`) is **strictly blocked** by `gcluster` client-side validation to avoid GKE admission rejection.
 >
-> However, if you also pass `--node-constraint "cloud.google.com/gke-tpu-topology=2x2"`, you are forcing strict Node Affinity. The scheduler will only look for nodes physically labeled `2x2` and will **refuse to schedule** on the `4x4` pool, defeating Dynamic Slicing.
->
-> To avoid this, either omit the topology from `--node-constraint` when using Dynamic Slicing, or explicitly include the larger pool topologies in the pipe-separated list (e.g., `"2x2|4x4"`).
+> **Best Practice (Queue-Based Fallback):**
+> If you leave `--node-constraint` empty for TPU topology, GKE Kueue's `tryNextFlavor` cascading mechanism takes over automatically. Kueue will dynamically attempt to admit and schedule the job across all compatible resource pools (flavors) configured in the queue, mutating the pod template to target the single correct physical topology at admission time.
 
-**Example 3: Use Placement Policy**
+**Example 3: TPU Sub-Slicing**
+If you want to schedule a job with a smaller TPU topology on a node pool with larger TPU slices (e.g., running a logical `2x2` workload on a physical `4x4` node pool):
+* Specify the logical slice size in the `--topology` flag: `--topology 2x2` (or let it auto-discover from shorthand labels like `--compute-type v6e-4`)
+* Specify the single physical topology size of the target node pool in `--node-constraint`: `--node-constraint "cloud.google.com/gke-tpu-topology=4x4"`
+
+```bash
+./gcluster job submit \
+  --name my-subslicing-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --node-constraint "cloud.google.com/gke-tpu-topology=4x4"
+```
+
+**Example 4: Use Placement Policy**
 Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact placement to reduce latency).
 
 ```bash
@@ -293,7 +320,7 @@ Use `--placement-policy` to specify a GCE Placement Policy (e.g., for compact pl
 
 *(Note: requires a `PlacementPolicy` resource named `compact-placement` to exist on the cluster)*
 
-**Example 4: Pod Failure Policy**
+**Example 5: Pod Failure Policy**
 Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (these do not count against the `restarts` budget).
 
 ```bash
@@ -303,7 +330,7 @@ Use `--restart-on-exit-codes` to specify retriable exit codes at the pod level (
   --restart-on-exit-codes 1,137
 ```
 
-**Example 5: Private Registry & Service Account**
+**Example 6: Private Registry & Service Account**
 Use `--image-pull-secret` and `--service-account` for secure jobs.
 
 ```bash
@@ -314,7 +341,7 @@ Use `--image-pull-secret` and `--service-account` for secure jobs.
   --service-account "my-workload-sa"
 ```
 
-**Example 6: Explicit Kueue Queue Selection**
+**Example 7: Explicit Kueue Queue Selection**
 Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 ```bash
@@ -329,7 +356,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 
 (Note: You would need to ensure a Kueue `LocalQueue` named `my-local-queue` is configured on your cluster.)
 
-### Example 7: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
+### Example 8: Targeting Provisioning Models (Spot/Reservation) on GKE NAP Clusters
 
 > [!NOTE]
 > The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are supported **only** on GKE clusters with Node Auto-Provisioning (NAP) enabled. They cannot be used on static GKE clusters where NAP is disabled, and doing so will result in an immediate pre-flight validation error.
@@ -1026,6 +1053,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>:<dest>[:<mode>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
+| `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |
@@ -1049,6 +1077,9 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |
 | `--pathways-server-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-rm`. |
 | `--pathways-worker-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-worker`. |
+| `--pathways-proxy-env` | `stringArray` | Custom environment variables injected specifically into the Pathways proxy container (KEY=VALUE). |
+| `--pathways-server-env` | `stringArray` | Custom environment variables injected specifically into the Pathways server container (KEY=VALUE). |
+| `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). |
 | `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
 

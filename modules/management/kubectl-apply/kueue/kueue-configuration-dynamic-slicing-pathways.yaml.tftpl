@@ -48,16 +48,20 @@ spec:
   admissionChecks:
   - dynamic-slicing-ac
   resourceGroups:
-  - coveredResources: ["google.com/tpu"]
+  - coveredResources: ["google.com/tpu", "cpu", "memory"]
     flavors:
     - name: "tpu-flavor"
       resources:
       - name: "google.com/tpu"
         nominalQuota: ${tpu_quota}
-  - coveredResources: ["cpu", "memory"]
-    flavors:
+      - name: "cpu"
+        nominalQuota: ${tpu_flavor_cpu_quota} # High default to avoid limiting TPU pods by CPU
+      - name: "memory"
+        nominalQuota: ${tpu_flavor_memory_quota} # High default to avoid limiting TPU pods by Memory
     - name: pathways-flavor
       resources:
+      - name: "google.com/tpu"
+        nominalQuota: "0"
       - name: cpu
         nominalQuota: ${pathways_cpu_quota}
       - name: memory

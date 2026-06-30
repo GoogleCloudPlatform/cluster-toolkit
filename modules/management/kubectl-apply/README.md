@@ -75,6 +75,24 @@ The `config_path` field in `kueue` installation accepts a template file, too. Yo
         install: true
 ```
 
+### TPU Flavor Quotas Override (Pathways active)
+
+When Pathways is active, the TPU worker pods request both TPU and CPU/Memory resources. To prevent Kueue from blocking these pods, the default configuration uses high "unlimited" defaults (`999999` and `999999T`) for CPU and Memory quotas on the TPU flavor.
+
+If you want to enforce strict capacity sharing on the TPU pool, you can override these defaults by specifying `tpu_flavor_cpu_quota` and `tpu_flavor_memory_quota` inside `config_template_vars`:
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        config_template_vars:
+          tpu_flavor_cpu_quota: 1024
+          tpu_flavor_memory_quota: "4096G"
+```
+
 You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.17.1](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
 
 ```yaml

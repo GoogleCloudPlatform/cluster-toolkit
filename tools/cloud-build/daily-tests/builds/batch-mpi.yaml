@@ -35,6 +35,14 @@ availableSecrets:
     env: SPACK_CACHE_WRF
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
+    env: 'TRIAGE_GCS_BUCKET'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-project-number/versions/latest
+    env: 'TRIAGE_PROJECT_NUMBER'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-invoker-sa/versions/latest
+    env: 'TRIAGE_INVOKER_SA'
+  - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
+    env: 'TRIAGE_CLOUD_RUN_URL'
 
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
@@ -47,9 +55,10 @@ steps:
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
+  - "BUILD_ID=$BUILD_ID"
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  secretEnv: ['SPACK_CACHE_WRF', 'GCLUSTER_GCS_PATH']
+  secretEnv: ['SPACK_CACHE_WRF', 'GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
   args:
   - -c
   - |
@@ -72,5 +81,9 @@ steps:
     echo '      timeout: 10800'                                   >> $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml" \
+      --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
+      --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
+      --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
+      --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
