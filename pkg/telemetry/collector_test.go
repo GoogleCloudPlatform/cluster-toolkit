@@ -1719,111 +1719,51 @@ func TestGetStaticNodeCount(t *testing.T) {
 		want string
 	}{
 		{
-			name: "Extracts instance_count for compute node",
+			name: "Same machine types across different node pools",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
 						Name: config.GroupName("primary"),
 						Modules: []config.Module{
 							{
-								ID: config.ModuleID("compute_node"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type":   cty.StringVal("c2-standard-8"),
-									"instance_count": cty.NumberIntVal(3),
-								}),
-							},
-						},
-					},
-				},
-			},
-			want: `"c2-standard-8":3`,
-		},
-		{
-			name: "Extracts node_count_static for slurm nodeset",
-			bp: config.Blueprint{
-				Groups: []config.Group{
-					{
-						Name: config.GroupName("primary"),
-						Modules: []config.Module{
-							{
-								ID: config.ModuleID("compute_node"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type":      cty.StringVal("c2-standard-60"),
-									"node_count_static": cty.NumberIntVal(5),
-								}),
-							},
-						},
-					},
-				},
-			},
-			want: `"c2-standard-60":5`,
-		},
-		{
-			name: "Extracts static_node_count for gke node pool",
-			bp: config.Blueprint{
-				Groups: []config.Group{
-					{
-						Name: config.GroupName("primary"),
-						Modules: []config.Module{
-							{
-								ID: config.ModuleID("compute_node"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type":      cty.StringVal("e2-standard-16"),
-									"static_node_count": cty.NumberIntVal(2),
-								}),
-							},
-						},
-					},
-				},
-			},
-			want: `"e2-standard-16":2`,
-		},
-		{
-			name: "Aggregates same machine types",
-			bp: config.Blueprint{
-				Groups: []config.Group{
-					{
-						Name: config.GroupName("primary"),
-						Modules: []config.Module{
-							{
-								ID: config.ModuleID("node1"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type":   cty.StringVal("g4"),
-									"instance_count": cty.NumberIntVal(1),
-								}),
-							},
-							{
-								ID: config.ModuleID("node2"),
+								ID: config.ModuleID("pool1"),
 								Settings: config.NewDict(map[string]cty.Value{
 									"machine_type":      cty.StringVal("g4"),
 									"static_node_count": cty.NumberIntVal(2),
 								}),
 							},
+							{
+								ID: config.ModuleID("pool2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("g4"),
+									"static_node_count": cty.NumberIntVal(4),
+								}),
+							},
 						},
 					},
 				},
 			},
-			want: `"g4":3`,
+			want: `"g4":6`,
 		},
 		{
-			name: "Combines different machine types and sorts them",
+			name: "Different machine types are sorted deterministically and sum properly across GKE/slurm equivalents",
 			bp: config.Blueprint{
 				Groups: []config.Group{
 					{
 						Name: config.GroupName("primary"),
 						Modules: []config.Module{
 							{
-								ID: config.ModuleID("node1"),
+								ID: config.ModuleID("gke_pool"),
 								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type":   cty.StringVal("g4"),
-									"instance_count": cty.NumberIntVal(3),
+									"machine_type":      cty.StringVal("g4"),
+									"static_node_count": cty.NumberIntVal(3),
 								}),
 							},
 							{
-								ID: config.ModuleID("node2"),
+								ID: config.ModuleID("slurm_pool"),
 								Settings: config.NewDict(map[string]cty.Value{
 									"machine_type":      cty.StringVal("a3u"),
-									"static_node_count": cty.NumberIntVal(2),
+									"node_count_static": cty.NumberIntVal(2),
 								}),
 							},
 						},
@@ -1831,6 +1771,57 @@ func TestGetStaticNodeCount(t *testing.T) {
 				},
 			},
 			want: `"a3u":2,"g4":3`,
+		},
+		{
+			name: "Extracts multiple inline node sets for slurm v6 partition",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm_partition"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("a2-highgpu-1g"),
+									"nodeset": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"node_count_static": cty.NumberIntVal(2),
+										}),
+										cty.ObjectVal(map[string]cty.Value{
+											"node_count_static": cty.NumberIntVal(3),
+										}),
+									}),
+									"nodeset_tpu": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"node_count_static": cty.NumberIntVal(4),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"a2-highgpu-1g":9`,
+		},
+		{
+			name: "Returns nothing if no machine type is defined",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("no_machine_type"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"instance_count": cty.NumberIntVal(3),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: ``,
 		},
 		{
 			name: "Ignores modules with no counts",

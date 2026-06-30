@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -231,12 +232,17 @@ func extractDefaultStringSetting(key string, m config.Module) string {
 }
 
 func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
+	total := 0
+
 	// 1. Try explicit settings first
 	for _, key := range staticNodeCountSettings {
-		if t := extractExplicitIntSetting(key, m, bp); t != 0 {
-			return t
-		}
+		total += extractExplicitIntSetting(key, m, bp)
 	}
+
+	if total > 0 {
+		return total
+	}
+
 	// 2. If no explicit setting, try defaults
 	for _, key := range staticNodeCountSettings {
 		if t := extractDefaultIntSetting(key, m); t != 0 {
@@ -261,11 +267,68 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.Number {
-		out, _ := unmarkedKey.AsBigFloat().Int64()
-		return int(out)
+	if !unmarkedKey.IsNull() {
+		if unmarkedKey.Type() == cty.Number {
+			out, _ := unmarkedKey.AsBigFloat().Int64()
+			return int(out)
+		}
+
+		// If it's a complex iterable type (e.g., list of objects), recursively search for nested node counts.
+		// This is required as Slurm V6 Partitions can define nodesets inline as a list of objects (nodeset or nodeset_tpu). We need to sum up these inline counts without extracting their individual nested machine types.
+		return sumTargetIntSettings(unmarkedKey, staticNodeCountSettings)
 	}
 
+	return 0
+}
+
+// sumTargetIntSettings traverses cty values recursively summing any target keys it finds.
+func sumTargetIntSettings(val cty.Value, targetKeys []string) int {
+	if !val.IsKnown() || val.IsNull() {
+		return 0
+	}
+
+	val, _ = val.Unmark()
+	ty := val.Type()
+
+	if ty.IsObjectType() || ty.IsMapType() {
+		return sumMapOrObject(val, targetKeys)
+	}
+	if ty.IsListType() || ty.IsTupleType() || ty.IsSetType() {
+		return sumSliceOrSet(val, targetKeys)
+	}
+
+	return 0
+}
+
+// sumMapOrObject iterates through a cty Object or Map and searches for target keys.
+func sumMapOrObject(val cty.Value, targetKeys []string) int {
+	total := 0
+	for k, v := range val.AsValueMap() {
+		if slices.Contains(targetKeys, k) {
+			total += extractNumberValue(v)
+		} else {
+			total += sumTargetIntSettings(v, targetKeys)
+		}
+	}
+	return total
+}
+
+// sumSliceOrSet iterates through a cty List, Tuple, or Set and recursively checks elements.
+func sumSliceOrSet(val cty.Value, targetKeys []string) int {
+	total := 0
+	for _, v := range val.AsValueSlice() {
+		total += sumTargetIntSettings(v, targetKeys)
+	}
+	return total
+}
+
+// extractNumberValue safely unwraps a cty value and returns it as an integer if it is a number.
+func extractNumberValue(v cty.Value) int {
+	v, _ = v.Unmark()
+	if !v.IsNull() && v.Type() == cty.Number {
+		out, _ := v.AsBigFloat().Int64()
+		return int(out)
+	}
 	return 0
 }
 
