@@ -154,10 +154,8 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 		}
 	}
 	// 2. If no explicit setting, try defaults
-	for _, key := range machineTypeSettings {
-		if t, found := extractDefaultSetting[string](key, m); found && t != "" {
-			return t
-		}
+	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
+		return t
 	}
 
 	return ""
@@ -258,13 +256,12 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint) (int, bool) {
 			return count, true
 		}
 	}
-	for _, key := range staticNodeCountSettings {
-		if count, found := extractDefaultSetting[int](key, m); found {
-			return count, true
-		}
+	if count, found := extractDefaultSetting[int](staticNodeCountSettings, m); found {
+		return count, true
 	}
 	return 0, false
 }
+
 func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 	valMap := val.AsValueMap()
 	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
@@ -313,7 +310,7 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 }
 
 // extractDefaultSetting attempts to get a default setting from the module's source variables.
-func extractDefaultSetting[T any](key string, m config.Module) (T, bool) {
+func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
 	var zero T
 	kindStr, valid := isValidModuleKind(m)
 	if !valid {
@@ -331,9 +328,12 @@ func extractDefaultSetting[T any](key string, m config.Module) (T, bool) {
 		if res.err != nil {
 			return zero, false
 		}
-		for _, input := range res.mi.Inputs {
-			if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
-				return val, true
+		// Iterate over keys to maintain precedence order
+		for _, key := range keys {
+			for _, input := range res.mi.Inputs {
+				if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
+					return val, true
+				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
