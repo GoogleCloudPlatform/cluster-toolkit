@@ -96,6 +96,11 @@ func addJsonOutputFlag(c *cobra.Command) *cobra.Command {
 	return c
 }
 
+func addGkeVulnerabilitiesCheckFlag(c *cobra.Command) *cobra.Command {
+	c.Flags().Bool("skip-gke-security-check", false, "Bypass dynamic GKE version security vulnerability check")
+	return c
+}
+
 var flagSkipGroups []string
 var flagOnlyGroups []string
 

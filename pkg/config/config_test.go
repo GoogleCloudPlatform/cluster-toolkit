@@ -1411,3 +1411,59 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 		})
 	}
 }
+
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		setupBp  func() Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region",
+			key:  "region",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Valid zone",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Missing key",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := GetKeyFromBlueprint(tt.key, bp)
+
+			if actual != tt.expected {
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
+			}
+		})
+	}
+}

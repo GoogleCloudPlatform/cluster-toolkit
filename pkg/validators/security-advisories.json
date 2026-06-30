@@ -1,0 +1,37 @@
+{
+    "advisories": [
+      {
+        "cve": "CVE-2026-31431",
+        "name": "Copy Fail",
+        "affected_images": ["COS_CONTAINERD"],
+        "status": "PATCHED",
+        "patched_versions": {
+          "v1.36": "v1.36.0-gke.1555000",
+          "v1.35": "v1.35.3-gke.1943000",
+          "v1.34": "v1.34.7-gke.1292000",
+          "v1.33": "v1.33.11-gke.1132000",
+          "v1.32": "v1.32.13-gke.1446000",
+          "v1.31": "v1.31.14-gke.1846000",
+          "v1.30": "v1.30.14-gke.2439000"
+        },
+        "link": "https://cloud.google.com/kubernetes-engine/security-bulletins#gcp-2026-026"
+      },
+      {
+        "cve": "CVE-2026-43284",
+        "name": "Dirty Frag",
+        "affected_images": ["COS_CONTAINERD"],
+        "status": "PENDING",
+        "patched_versions": {},
+        "link": "https://cloud.google.com/kubernetes-engine/security-bulletins#gcp-2026-030"
+      },
+      {
+        "cve": "CVE-2026-46300",
+        "name": "Fragnesia",
+        "affected_images": ["UBUNTU_CONTAINERD"],
+        "status": "PENDING",
+        "patched_versions": {},
+        "link": "https://cloud.google.com/kubernetes-engine/security-bulletins#gcp-2026-033"
+      }
+    ]
+  }
+  

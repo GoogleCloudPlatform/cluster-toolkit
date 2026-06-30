@@ -19,6 +19,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
 	"time"
 
@@ -70,6 +72,12 @@ var (
 
 	gkeNapProvisioning string
 	gkeNapReservation  string
+
+	envVars           []string
+	pathwaysProxyEnv  []string
+	pathwaysServerEnv []string
+	pathwaysWorkerEnv []string
+	validEnvKeyRegex  = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
 )
 
 var SubmitCmd = &cobra.Command{
@@ -104,6 +112,12 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
+		for _, envs := range [][]string{envVars, pathwaysProxyEnv, pathwaysServerEnv, pathwaysWorkerEnv} {
+			if err := validateEnvFlags(envs); err != nil {
+				return err
+			}
+		}
+
 		priorityClassName = strings.ToLower(priorityClassName)
 
 		return nil
@@ -121,6 +135,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -157,6 +172,9 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
@@ -197,6 +215,10 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 
+	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
+	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
+	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
 		BaseImage:                     baseImage,
@@ -232,10 +254,42 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
 		RawMounts:                     volumeStr,
+		Env:                           parseEnvFlags(envVars),
 		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
+}
+
+func parseEnvFlags(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
+	}
+	res := make(map[string]string)
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			res[parts[0]] = parts[1]
+		}
+	}
+	return res
+}
+
+func validateEnvFlags(envs []string) error {
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid environment variable format: %q. Must be in KEY=VALUE format", env)
+		}
+		key := parts[0]
+		if key == "" {
+			return fmt.Errorf("invalid environment variable key in %q: key cannot be empty", env)
+		}
+		if !validEnvKeyRegex.MatchString(key) {
+			return fmt.Errorf("invalid environment variable name: %q. Must conform to POSIX environment variable naming rules (letters, numbers, and underscores, cannot start with a digit)", key)
+		}
+	}
+	return nil
 }
 
 func parseDurationToSeconds(dStr string, flagName string) (int, error) {
@@ -259,7 +313,7 @@ func validatePathwaysFlags() error {
 		}
 	} else {
 		// Check if any pathways-specific flag is set without --pathways
-		if pathways != (orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) {
+		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
 			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 		}
 	}

@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -1141,7 +1142,6 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
-// TODO Use a map
 var machineFamilyToLabelMap = map[string]string{
 	"g2-standard":   "nvidia-l4",
 	"a3-highgpu":    "nvidia-h100-80gb",
@@ -1169,12 +1169,6 @@ var machineFamilyToLabelMap = map[string]string{
 // TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
 func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) string {
 	resolvedLower := strings.ToLower(acceleratorType)
-
-	// Fallback for direct values
-	switch resolvedLower {
-	case "nvidia-tesla-a100", "tpu-v4-podslice", "tpu-v6e-slice", "tpu-v5p-slice", "tpu-v5-lite-podslice":
-		return acceleratorType
-	}
 
 	parts := strings.Split(resolvedLower, "-")
 
@@ -1276,9 +1270,29 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		Pathways:                      opts.Pathways,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
+		Env:                           sortedEnvVars(opts.Env),
+		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
+		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
 	}
+}
+
+func sortedEnvVars(envMap map[string]string) []EnvVar {
+	if len(envMap) == 0 {
+		return nil
+	}
+	envKeys := make([]string, 0, len(envMap))
+	for k := range envMap {
+		envKeys = append(envKeys, k)
+	}
+	slices.Sort(envKeys)
+	res := make([]EnvVar, len(envKeys))
+	for i, k := range envKeys {
+		res[i] = EnvVar{Name: k, Value: envMap[k]}
+	}
+	return res
 }
 
 func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
