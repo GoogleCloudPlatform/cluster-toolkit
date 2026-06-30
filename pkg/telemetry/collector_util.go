@@ -233,16 +233,17 @@ func extractDefaultStringSetting(key string, m config.Module) string {
 
 func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
 	total := 0
+	keysToCheck := append(staticNodeCountSettings, staticNodeCountInlineKeys...)
 
 	// 1. Try explicit settings first
-	for _, key := range staticNodeCountSettings {
-		total += extractExplicitIntSetting(key, m, bp)
+	for _, key := range keysToCheck {
+		if count, found := extractExplicitIntSetting(key, m, bp); found {
+			total += count
+		}
 	}
-
 	if total > 0 {
 		return total
 	}
-
 	// 2. If no explicit setting, try defaults
 	for _, key := range staticNodeCountSettings {
 		if t := extractDefaultSetting[int](key, m); t != 0 {
@@ -253,16 +254,16 @@ func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
 }
 
 // extractExplicitIntSetting attempts to get the given key int value if explicitly defined in the module's settings.
-func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) int {
+func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) (int, bool) {
 	if !m.Settings.Has(key) {
-		return 0
+		return 0, false
 	}
 
 	keyValue := m.Settings.Get(key)
 	// Evaluate the value to resolve expressions like $(vars.key)
 	evaluatedKey, err := bp.Eval(keyValue)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
@@ -270,15 +271,15 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() {
 		if unmarkedKey.Type() == cty.Number {
 			out, _ := unmarkedKey.AsBigFloat().Int64()
-			return int(out)
+			return int(out), true
 		}
 
 		// If it's a complex iterable type (e.g., list of objects), recursively search for nested node counts.
 		// This is required as Slurm V6 Partitions can define nodesets inline as a list of objects (nodeset or nodeset_tpu). We need to sum up these inline counts without extracting their individual nested machine types.
-		return sumTargetIntSettings(unmarkedKey, staticNodeCountSettings)
+		return sumTargetIntSettings(unmarkedKey, staticNodeCountSettings), true
 	}
 
-	return 0
+	return 0, true
 }
 
 // sumTargetIntSettings traverses cty values recursively summing any target keys it finds.
