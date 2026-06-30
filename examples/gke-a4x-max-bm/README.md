@@ -157,7 +157,7 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
            spec:
              containers:
              - name: mpi-launcher
-               image: mpioperator/tensorflow-benchmarks:latest
+               image: mpioperator/mpi-pi:v0.8.0-openmpi
                command:
                - mpirun
                - --allow-run-as-root
@@ -173,7 +173,7 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
            spec:
              containers:
              - name: mpi-worker
-               image: mpioperator/tensorflow-benchmarks:latest
+               image: mpioperator/mpi-pi:v0.8.0-openmpi
    ```
 
    Submit the job and inspect launcher logs:
