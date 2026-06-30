@@ -156,7 +156,7 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	}
 	// 2. If no explicit setting, try defaults
 	for _, key := range machineTypeSettings {
-		if t := extractDefaultStringSetting(key, m); t != "" {
+		if t := extractDefaultSetting[string](key, m); t != "" {
 			return t
 		}
 	}
@@ -245,7 +245,7 @@ func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
 
 	// 2. If no explicit setting, try defaults
 	for _, key := range staticNodeCountSettings {
-		if t := extractDefaultIntSetting(key, m); t != 0 {
+		if t := extractDefaultSetting[int](key, m); t != 0 {
 			return t
 		}
 	}
@@ -331,27 +331,23 @@ func extractNumberValue(v cty.Value) int {
 	}
 	return 0
 }
-
-// extractDefaultIntSetting attempts to get the given key int value from the module's defaults, with a timeout.
-func extractDefaultIntSetting(key string, m config.Module) int {
+func extractDefaultSetting[T any](key string, m config.Module) T {
+	var zero T
 	if m.Source == "" {
-		return 0
+		return zero
 	}
 
 	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
 	if kindStr == "" {
 		kindStr = config.TerraformKind.String()
 	}
 
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
 	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return 0
+		return zero
 	}
 
 	resCh := make(chan result, 1)
 
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
 	go func() {
 		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
 		resCh <- result{mi: mi, err: err}
@@ -360,21 +356,19 @@ func extractDefaultIntSetting(key string, m config.Module) int {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return 0
+			return zero
 		}
 		for _, input := range res.mi.Inputs {
 			if input.Name == key && input.Default != nil {
-				// Verify the default is an int (protects against complex types)
-				if val, ok := input.Default.(int); ok {
+				if val, ok := input.Default.(T); ok {
 					return val
 				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
 
-	return 0
+	return zero
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
