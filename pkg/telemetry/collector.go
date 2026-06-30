@@ -281,10 +281,6 @@ func getStaticNodeCount(bp config.Blueprint) string {
 		}
 	}
 
-	if len(countsByMachineType) == 0 {
-		return ""
-	}
-
 	counts, err := json.Marshal(countsByMachineType)
 	if err != nil || len(countsByMachineType) == 0 {
 		return ""
