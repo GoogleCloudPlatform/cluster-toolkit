@@ -189,7 +189,7 @@ func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
 	inlineFound := false
 
 	// Process complex inline iterables (Slurm V6)
-	for _, key := range []string{"nodeset", "nodeset_tpu", "partition"} {
+	for _, key := range staticNodeCountInlineKeys {
 		if processInlineKey(m, bp, key, topMachineType, counts) {
 			inlineFound = true
 		}
