@@ -41,6 +41,16 @@ def modify_vpcs(blueprint_path, prefix):
             if primary_network_id:
                 break
 
+    # Fallback: if no filestore/lustre is found, use the first VPC module as primary
+    if not primary_network_id and data and 'deployment_groups' in data:
+        for group in data['deployment_groups']:
+            for module in group.get('modules', []):
+                if 'modules/network/vpc' in module.get('source', ''):
+                    primary_network_id = module.get('id')
+                    break
+            if primary_network_id:
+                break
+
     print(f"Identified primary network (used by filestore): {primary_network_id}")
 
     vpc_count = 1 # Start other VPCs from 1
