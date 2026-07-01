@@ -24,14 +24,16 @@ def classify_gcp_error(error_code: str, error_message: str) -> tuple[Action, str
     Returns: (Action Enum, Normalized Reason String)
     """
     msg_lower = error_message.lower()
+    code_lower = error_code.lower()
     
     # 1. Quota Errors -> Transient (active usage limits), require REQUEUE
-    if "quotaexceeded" in error_code.lower() or "quotaexceeded" in msg_lower or ("quota" in msg_lower and "exceeded" in msg_lower) or error_code == "QUOTA_EXCEEDED":
+    if (("quota" in code_lower and "exceeded" in code_lower) or 
+        ("quota" in msg_lower and "exceeded" in msg_lower)):
         return Action.REQUEUE, f"GCP Quota Exceeded: {error_message}"
         
     # 2. Capacity Errors -> Transient, require REQUEUE
-    capacity_codes = ["ZONE_RESOURCE_POOL_EXHAUSTED", "VM_MIN_COUNT_NOT_REACHED", "INSUFFICIENT_RESOURCE_CAPACITY"]
-    if any(code in error_code for code in capacity_codes) or "sufficient capacity" in msg_lower:
+    capacity_codes = ["zone_resource_pool_exhausted", "vm_min_count_not_reached", "insufficient_resource_capacity"]
+    if any(code in code_lower for code in capacity_codes) or "sufficient capacity" in msg_lower:
         return Action.REQUEUE, f"GCP Capacity Exhausted: {error_message}"
         
     # 3. Default fallback
