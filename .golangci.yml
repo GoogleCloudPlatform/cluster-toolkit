@@ -1,0 +1,59 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # checks for unchecked errors
+    - govet         # standard go vet checks
+    - ineffassign   # detects ineffectual assignments
+    - staticcheck   # advanced static analysis
+    - unused        # checks for unused constants, variables, functions, and types
+
+    - revive        # highly configurable, extensible linter (successor to golint)
+    - goconst       # finds repeated strings that could be constants
+    - gocritic      # checks for bugs, performance and style issues
+    - gocyclo       # checks cyclomatic complexity of functions
+
+linters-settings:
+  gocyclo:
+    min-complexity: 13  # Aligned with the project's pre-commit go-cyclo threshold
+  
+  revive:
+    rules:
+      - name: exported
+        disabled: true  # Can be enabled later to enforce public API documentation
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+        disabled: true
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - ifElseChain
+      - singleCaseSwitch
+
+issues:
+  exclude-rules:
+    # Relax linting rules slightly for test files to reduce noise
+    - path: _test\.go
+      linters:
+        - errcheck
+        - goconst
+        - gocritic
