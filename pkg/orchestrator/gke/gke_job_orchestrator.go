@@ -1741,7 +1741,29 @@ func (g *GKEOrchestrator) addAcceleratorLabel(nodeSelector map[string]string, ac
 	}
 }
 
-func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, schedOpts SchedulingOptions, isGPU bool, isCPUMachine bool) error {
+func (g *GKEOrchestrator) getPhysicalPoolTopology(machineType string) string {
+	if g == nil {
+		return ""
+	}
+	accelLabel := g.GenerateGKENodeSelectorLabel(machineType)
+	output, err := g.queryDiscoveredTopologies(accelLabel, machineType)
+	if err == nil && output != "" {
+		topologies := g.parseTopologies(output)
+		maxChips := 0
+		maxTopo := ""
+		for t := range topologies {
+			c := calculateChipsFromTopology(t)
+			if c > maxChips {
+				maxChips = c
+				maxTopo = t
+			}
+		}
+		return maxTopo
+	}
+	return ""
+}
+
+func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, schedOpts SchedulingOptions, isGPU bool, isCPUMachine bool, machineType string) error {
 	if schedOpts.Topology != "" {
 		if isGPU || isCPUMachine {
 			return fmt.Errorf("topology is not allowed for GPU and CPU jobs")
@@ -1750,6 +1772,11 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 			_, hasFallback := schedOpts.NodeAffinityLabels[tpuTopologyLabel]
 			if !hasFallback {
 				nodeSelector[tpuTopologyLabel] = schedOpts.Topology
+			}
+		} else if schedOpts.IsStaticSlicing {
+			physTopo := g.getPhysicalPoolTopology(machineType)
+			if physTopo != "" {
+				nodeSelector[tpuTopologyLabel] = physTopo
 			}
 		}
 	}
@@ -1790,7 +1817,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 
 	g.addAcceleratorLabel(nodeSelector, accelLabel, isCPUMachine, job.MachineType)
 
-	if err := g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine); err != nil {
+	if err := g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine, job.MachineType); err != nil {
 		return "", err
 	}
 
@@ -1819,10 +1846,71 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 	return "", nil
 }
 
+func (g *GKEOrchestrator) hasNativeGCETopologyMode(machineType string) bool {
+	if g == nil || g.executor == nil {
+		return false
+	}
+	res := g.executor.ExecuteCommand("kubectl", "get", "topologies.kueue.x-k8s.io", "-o", "jsonpath={range .items[*].spec.levels[*]}{.nodeLabel}{\"\\n\"}{end}")
+	if res.ExitCode == 0 {
+		if strings.Contains(res.Stdout, "cloud.google.com/gce-topology-block") || strings.Contains(res.Stdout, "cloud.google.com/gce-topology-subblock") {
+			return true
+		}
+	}
+	accelLabel := g.GenerateGKENodeSelectorLabel(machineType)
+	if accelLabel != "" {
+		selector := fmt.Sprintf("cloud.google.com/gke-tpu-accelerator=%s", accelLabel)
+		res = g.executor.ExecuteCommand("kubectl", "get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gce-topology-block}{\"\\n\"}{end}", "-l", selector)
+		if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) getMaxDiscoveredTopologyChips(machineType string) int {
+	if g == nil {
+		return 0
+	}
+	accelLabel := g.GenerateGKENodeSelectorLabel(machineType)
+	output, err := g.queryDiscoveredTopologies(accelLabel, machineType)
+	maxChips := 0
+	if err == nil && output != "" {
+		topologies := g.parseTopologies(output)
+		for t := range topologies {
+			c := calculateChipsFromTopology(t)
+			if c > maxChips {
+				maxChips = c
+			}
+		}
+	}
+	return maxChips
+}
+
 func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType string, numSlices int, nodesPerSlice int, isSubSlicing bool) string {
 	var topologyAnnotation map[string]string
 	if isSubSlicing {
 		topologyAnnotation = GetTopologyAnnotation(topology, machineType, numSlices, nodesPerSlice)
+		if g != nil && g.hasNativeGCETopologyMode(machineType) {
+			for key := range topologyAnnotation {
+				if strings.HasPrefix(key, "kueue.x-k8s.io/podset-") && strings.HasSuffix(key, "-required-topology") {
+					requestedChips := calculateChipsFromTopology(topology)
+					poolChips := g.getMaxDiscoveredTopologyChips(machineType)
+					if poolChips == 0 {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-block"
+						logging.Warn("Dynamic Topology Detection: failed to discover physical pool topology. Defaulting to cloud.google.com/gce-topology-block.")
+					} else if requestedChips <= 8 {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-host"
+						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-host for 8-chip sub-slicing (%d chips).", requestedChips)
+					} else if requestedChips < poolChips {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-subblock"
+						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-subblock for sub-slicing (%d < %d chips).", requestedChips, poolChips)
+					} else {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-block"
+						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-block for full-slice/multi-slice (%d >= %d chips).", requestedChips, poolChips)
+					}
+				}
+			}
+		}
 	} else if topology != "" {
 		topologyAnnotation = map[string]string{
 			"cloud.google.com/gke-tpu-slice-topology": topology,

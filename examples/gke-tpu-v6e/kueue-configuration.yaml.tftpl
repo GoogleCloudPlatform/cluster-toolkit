@@ -13,10 +13,22 @@
 # limitations under the License.
 
 apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: tpuv6e-topology
+spec:
+  levels:
+  - nodeLabel: cloud.google.com/gce-topology-block
+  - nodeLabel: cloud.google.com/gce-topology-subblock
+  - nodeLabel: cloud.google.com/gce-topology-host
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: ResourceFlavor
 metadata:
   name: "tpuv6e-flavor"
 spec:
+  topologyName: tpuv6e-topology
   nodeLabels:
     cloud.google.com/gke-tpu-accelerator: ${accelerator_type}
   tolerations:
@@ -29,6 +41,9 @@ kind: ClusterQueue
 metadata:
   name: "cluster-queue"
 spec:
+  preemption:
+    reclaimWithinCohort: Never
+    withinClusterQueue: LowerPriority
   namespaceSelector: {}
   resourceGroups:
   - coveredResources: ["google.com/tpu"]

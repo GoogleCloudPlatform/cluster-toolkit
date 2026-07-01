@@ -2418,3 +2418,80 @@ func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestAddTopologyLabel_StaticSubSlicing(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+			{ExitCode: 0, Stdout: "4x8\n"},
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: NewMockExecutor(mockResponses),
+	}
+	schedOpts := SchedulingOptions{
+		Topology:        "2x4",
+		IsStaticSlicing: true,
+	}
+	nodeSelector := make(map[string]string)
+	err := orc.addTopologyLabel(nodeSelector, schedOpts, false, false, "ct6e-standard-4t")
+	if err != nil {
+		t.Fatalf("addTopologyLabel() returned unexpected error: %v", err)
+	}
+	if got := nodeSelector[tpuTopologyLabel]; got != "4x8" {
+		t.Errorf("expected physical pool topology '4x8' in nodeSelector, got %q", got)
+	}
+}
+
+func TestBuildTopologyAnnotation_NativeGCEHostSlice(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get topologies.kueue.x-k8s.io -o jsonpath={range .items[*].spec.levels[*]}{.nodeLabel}{\"\\n\"}{end}": {
+			{ExitCode: 0, Stdout: "cloud.google.com/gce-topology-block\ncloud.google.com/gce-topology-subblock\n"},
+		},
+		"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+			{ExitCode: 0, Stdout: "4x8\n"},
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: NewMockExecutor(mockResponses),
+	}
+	ann := orc.buildTopologyAnnotation("2x4", "ct6e-standard-4t", 1, 2, true)
+	if !strings.Contains(ann, "cloud.google.com/gce-topology-host") {
+		t.Errorf("expected native GCE host annotation for 8-chip job, got %q", ann)
+	}
+}
+
+func TestBuildTopologyAnnotation_NativeGCESubSlice(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get topologies.kueue.x-k8s.io -o jsonpath={range .items[*].spec.levels[*]}{.nodeLabel}{\"\\n\"}{end}": {
+			{ExitCode: 0, Stdout: "cloud.google.com/gce-topology-block\ncloud.google.com/gce-topology-subblock\n"},
+		},
+		"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+			{ExitCode: 0, Stdout: "4x8\n"},
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: NewMockExecutor(mockResponses),
+	}
+	ann := orc.buildTopologyAnnotation("4x4", "ct6e-standard-4t", 1, 4, true)
+	if !strings.Contains(ann, "cloud.google.com/gce-topology-subblock") {
+		t.Errorf("expected native GCE subblock annotation for 16-chip job, got %q", ann)
+	}
+}
+
+func TestBuildTopologyAnnotation_ZeroPoolChipsFallback(t *testing.T) {
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get topologies.kueue.x-k8s.io -o jsonpath={range .items[*].spec.levels[*]}{.nodeLabel}{\"\\n\"}{end}": {
+			{ExitCode: 0, Stdout: "cloud.google.com/gce-topology-block\ncloud.google.com/gce-topology-subblock\n"},
+		},
+		"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+			{ExitCode: 0, Stdout: ""},
+		},
+	}
+	orc := &GKEOrchestrator{
+		executor: NewMockExecutor(mockResponses),
+	}
+	ann := orc.buildTopologyAnnotation("2x4", "ct6e-standard-4t", 1, 2, true)
+	if !strings.Contains(ann, "cloud.google.com/gce-topology-block") {
+		t.Errorf("expected fallback to native GCE block annotation when poolChips is 0, got %q", ann)
+	}
+}
