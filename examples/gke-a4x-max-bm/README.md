@@ -120,6 +120,70 @@ This section describes how to run [NCCL/gIB](https://docs.cloud.google.com/ai-hy
     kubectl logs $(kubectl get pods -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}' | grep nccl-all-worker-0-0)
     ```
 
+### Install and Run MPI Operator on GKE Cluster
+
+The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
+
+1. **Deploy MPI Operator (v0.8.0):**
+
+   ```bash
+   kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
+   ```
+
+2. **Verify Installation:**
+
+   ```bash
+   kubectl get crd | grep mpijob
+   kubectl get pods -n mpi-operator
+   ```
+
+3. **Run a Sample MPIJob Test:**
+   Create a test manifest `sample-mpijob.yaml`:
+
+   ```yaml
+   apiVersion: kubeflow.org/v2beta1
+   kind: MPIJob
+   metadata:
+     name: sample-mpi-job
+     namespace: default
+   spec:
+     slotsPerWorker: 1
+     runPolicy:
+       cleanPodPolicy: Running
+     mpiReplicaSpecs:
+       Launcher:
+         replicas: 1
+         template:
+           spec:
+             containers:
+             - name: mpi-launcher
+               image: mpioperator/mpi-pi:v0.8.0-openmpi
+               command:
+               - mpirun
+               - --allow-run-as-root
+               - -n
+               - "2"
+               - --hostfile
+               - /etc/mpi/hostfile
+               - echo
+               - "Hello World from MPI worker!"
+       Worker:
+         replicas: 2
+         template:
+           spec:
+             containers:
+             - name: mpi-worker
+               image: mpioperator/mpi-pi:v0.8.0-openmpi
+   ```
+
+   Submit the job and inspect launcher logs:
+
+   ```bash
+   kubectl apply -f sample-mpijob.yaml
+   kubectl logs -l training.kubeflow.org/job-role=launcher
+   kubectl delete -f sample-mpijob.yaml
+   ```
+
 ### Clean up resources created by Cluster Toolkit
 
 To avoid recurring charges for the resources used, clean up the resources provisioned by Cluster Toolkit, including the VPC networks and GKE cluster:
