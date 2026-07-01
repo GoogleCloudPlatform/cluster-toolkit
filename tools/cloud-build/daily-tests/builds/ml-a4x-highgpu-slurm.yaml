@@ -58,8 +58,6 @@ steps:
 
     BLUEPRINT="/workspace/examples/machine-learning/a4x-highgpu-4g/a4xhigh-slurm-blueprint.yaml"
 
-    bash tools/add_ttl_label.sh $${BLUEPRINT}
-    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
     sed -i '/- id: private_service_access/,/use: \[a4x-slurm-net-0\]/d' $${BLUEPRINT}
@@ -70,6 +68,8 @@ steps:
     sed -i '/lustre_instance_id:/d' $${BLUEPRINT}
     sed -i '/lustre_size_gib:/d' $${BLUEPRINT}
     sed -i '/per_unit_storage_throughput:/d' $${BLUEPRINT}
+    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    python3 tools/fix_vpc_name.py $${BLUEPRINT} "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --extra-vars="test_prefix=${_TEST_PREFIX} use_fixed_vpc=true" \
       --user=sa_106486320838376751393 \
