@@ -169,8 +169,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				EXIT_CODE:         "1",
-				ERROR_TYPE:        ErrTypePermissionDenied,
+				EXIT_CODE:  "1",
+				ERROR_TYPE: ErrTypePermissionDenied,
 			},
 		},
 	}
@@ -1725,5 +1725,87 @@ func TestCheckGcloudConfigForInternalUser_MissingFiles(t *testing.T) {
 	result := checkGcloudConfigForInternalUser()
 	if result {
 		t.Errorf("Expected checkGcloudConfigForInternalUser to return false when config files are missing")
+	}
+}
+
+func TestGetErrorType(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{
+			name:     "Nil Error",
+			err:      nil,
+			expected: "",
+		},
+		{
+			name:     "Permission Denied",
+			err:      os.ErrPermission,
+			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "File Not Exist",
+			err:      os.ErrNotExist,
+			expected: ErrTypeFileNotFound,
+		},
+		{
+			name:     "Context Deadline Exceeded",
+			err:      context.DeadlineExceeded,
+			expected: ErrTypeTimeout,
+		},
+		{
+			name:     "Context Canceled",
+			err:      context.Canceled,
+			expected: ErrTypeCanceled,
+		},
+		{
+			name:     "Text Match Validation",
+			err:      errors.New("some invalid configuration provided"),
+			expected: ErrTypeValidation,
+		},
+		{
+			name:     "Text Match Network",
+			err:      errors.New("failed to dial tcp: connection refused"),
+			expected: ErrTypeNetwork,
+		},
+		{
+			name:     "Text Match Permission",
+			err:      errors.New("server responded with 403 forbidden"),
+			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "Text Match Not Found",
+			err:      errors.New("resource not found"),
+			expected: ErrTypeFileNotFound,
+		},
+		{
+			name:     "Unknown Error",
+			err:      errors.New("something went entirely wrong"),
+			expected: ErrTypeUnknown,
+		},
+		{
+			name:     "Text Match Quota",
+			err:      errors.New("google api error: quota exceeded for c2-standard-8"),
+			expected: ErrTypeQuotaExceeded,
+		},
+		{
+			name:     "Text Match Auth",
+			err:      errors.New("unauthorized request to remote server"),
+			expected: ErrTypeAuthentication,
+		},
+		{
+			name:     "Text Match Provisioning",
+			err:      errors.New("deployment failed to finish"),
+			expected: ErrTypeProvisioning,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getErrorType(tt.err); got != tt.expected {
+				t.Errorf("getErrorType() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }

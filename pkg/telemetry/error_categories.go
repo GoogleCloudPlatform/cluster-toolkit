@@ -16,10 +16,7 @@ package telemetry
 
 import (
 	"context"
-	"errors"
-	"net"
 	"os"
-	"strings"
 )
 
 const (
@@ -70,37 +67,4 @@ var substringMatchers = []struct {
 	{"connection refused", ErrTypeNetwork},
 	{"dial tcp", ErrTypeNetwork},
 	{"connection reset", ErrTypeNetwork},
-}
-
-// categorizeError maps an error to a broad, PII-safe category.
-func categorizeError(err error) string {
-	if err == nil {
-		return ""
-	}
-
-	// 1. Standard Go error checks
-	for _, m := range exactMatchers {
-		if errors.Is(err, m.target) {
-			return m.category
-		}
-	}
-
-	// 2. Check for networking/timeout errors specifically
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return ErrTypeTimeout
-		}
-		return ErrTypeNetwork
-	}
-
-	// 3. Fallback string matching on safe keywords
-	errMsg := strings.ToLower(err.Error())
-	for _, m := range substringMatchers {
-		if strings.Contains(errMsg, m.substring) {
-			return m.category
-		}
-	}
-
-	return ErrTypeUnknown
 }
