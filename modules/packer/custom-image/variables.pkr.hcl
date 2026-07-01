@@ -62,6 +62,12 @@ variable "subnetwork_name" {
   type        = string
 }
 
+variable "subnetwork_project_id" {
+  description = "Project ID of the subnetwork"
+  type        = string
+  default     = null
+}
+
 variable "omit_external_ip" {
   description = "Provision the image building VM without a public IP address"
   type        = bool

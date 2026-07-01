@@ -24,6 +24,11 @@ output "network_id" {
   value       = data.google_compute_network.vpc.id
 }
 
+output "network_project_id" {
+  description = "Project ID of the existing VPC network"
+  value       = data.google_compute_network.vpc.project
+}
+
 output "network_self_link" {
   description = "Self link of the existing VPC network"
   value       = data.google_compute_network.vpc.self_link
@@ -37,6 +42,11 @@ output "subnetwork" {
 output "subnetwork_name" {
   description = "Name of the subnetwork in the primary region"
   value       = data.google_compute_subnetwork.primary_subnetwork.name
+}
+
+output "subnetwork_project_id" {
+  description = "Project ID of the subnetwork in the primary region"
+  value       = data.google_compute_subnetwork.primary_subnetwork.project
 }
 
 output "subnetwork_self_link" {

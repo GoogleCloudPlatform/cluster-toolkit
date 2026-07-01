@@ -26,6 +26,12 @@ output "network_id" {
   depends_on  = [module.vpc, module.cloud_router]
 }
 
+output "network_project_id" {
+  description = "Project ID of the new VPC network"
+  value       = module.vpc.project_id
+  depends_on  = [module.vpc, module.cloud_router]
+}
+
 output "network_self_link" {
   description = "Self link of the new VPC network"
   value       = module.vpc.network_self_link
@@ -47,6 +53,12 @@ output "subnetwork" {
 output "subnetwork_name" {
   description = "Name of the primary subnetwork"
   value       = local.output_primary_subnetwork_name
+  depends_on  = [module.vpc, module.cloud_router]
+}
+
+output "subnetwork_project_id" {
+  description = "Project ID of the primary subnetwork"
+  value       = module.vpc.project_id
   depends_on  = [module.vpc, module.cloud_router]
 }
 

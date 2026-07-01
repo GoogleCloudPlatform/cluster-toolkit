@@ -26,6 +26,12 @@ output "network_id" {
   depends_on  = [module.vpc]
 }
 
+output "network_project_id" {
+  description = "Project ID of the new VPC network"
+  value       = module.vpc.project_id
+  depends_on  = [module.vpc]
+}
+
 output "network_self_link" {
   description = "Self link of the new VPC network"
   value       = module.vpc.network_self_link
@@ -35,6 +41,12 @@ output "network_self_link" {
 output "subnetworks" {
   description = "Full list of subnetwork objects belonging to the new VPC network"
   value       = module.vpc.subnets
+  depends_on  = [module.vpc]
+}
+
+output "subnetwork_project_id" {
+  description = "Project ID of the primary subnetwork"
+  value       = module.vpc.project_id
   depends_on  = [module.vpc]
 }
 
