@@ -78,9 +78,9 @@ variable "size_gib" {
 }
 
 variable "per_unit_storage_throughput" {
-  description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000."
+  description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. If enable_dynamic_tier is false, this defaults to 500."
   type        = number
-  default     = 500
+  default     = null
 }
 
 variable "labels" {
@@ -134,4 +134,10 @@ variable "kms_key" {
   description = "The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project_id>/locations/<location>/keyRings/<key_ring>/cryptoKeys/<key_name>"
   type        = string
   default     = null
+}
+
+variable "enable_dynamic_tier" {
+  description = "Set to true to enable Dynamic Tier for the Lustre instance."
+  type        = bool
+  default     = false
 }
