@@ -107,6 +107,20 @@ type parsedReservation struct {
 	Subblock string
 }
 
+func resolveFallbackName(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	// If it has reservationBlocks, the name is the one before it
+	for i, part := range parts {
+		if part == "reservationBlocks" && i > 0 {
+			return parts[i-1]
+		}
+	}
+	// Fallback to last element
+	return parts[len(parts)-1]
+}
+
 func parseReservationURI(resName string) parsedReservation {
 	resName = strings.TrimSuffix(resName, "/")
 	var parsed parsedReservation
@@ -117,39 +131,23 @@ func parseReservationURI(resName string) parsedReservation {
 
 	parts := strings.Split(resName, "/")
 	for i := 0; i < len(parts); i++ {
+		if i+1 >= len(parts) {
+			continue
+		}
 		switch parts[i] {
 		case "projects":
-			if i+1 < len(parts) {
-				parsed.Project = parts[i+1]
-			}
+			parsed.Project = parts[i+1]
 		case "reservations":
-			if i+1 < len(parts) {
-				parsed.Name = parts[i+1]
-			}
+			parsed.Name = parts[i+1]
 		case "reservationBlocks":
-			if i+1 < len(parts) {
-				parsed.Block = parts[i+1]
-			}
+			parsed.Block = parts[i+1]
 		case "reservationSubBlocks":
-			if i+1 < len(parts) {
-				parsed.Subblock = parts[i+1]
-			}
+			parsed.Subblock = parts[i+1]
 		}
 	}
 
-	// Fallback for name if "reservations" was not found in the path but it has slashes
-	if parsed.Name == "" && len(parts) > 0 {
-		// If it has reservationBlocks, the name is the one before it
-		for i, part := range parts {
-			if part == "reservationBlocks" && i > 0 {
-				parsed.Name = parts[i-1]
-				break
-			}
-		}
-		// If still empty, fallback to last element
-		if parsed.Name == "" {
-			parsed.Name = parts[len(parts)-1]
-		}
+	if parsed.Name == "" {
+		parsed.Name = resolveFallbackName(parts)
 	}
 
 	return parsed
