@@ -27,7 +27,9 @@ spec:
     image: mayadata/fio
     command: ["/bin/ash", "-c", "--"]
     args:
-    - |
+    - |      
+      set -e
+      fio --name=warmup --filename=/data/fio --filesize=1G --ioengine=sync --direct=1 --bs=1M --rw=read --numjobs=1
       fio --name=read_latency_test --filename=/data/fio --filesize=1G --time_based=1 --ramp_time=10s --runtime=1m --ioengine=libaio --direct=1 --verify=0 --randrepeat=0 --bs=4K --iodepth=1 --rw=randread --disable_slat=1 --disable_clat=1 --lat_percentiles=1 --numjobs=1 --output-format=json
     volumeMounts:
     - name: fio-bucket
