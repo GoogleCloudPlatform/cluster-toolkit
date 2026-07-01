@@ -32,7 +32,7 @@ const (
 	ErrTypeUnknown          = "Unknown"
 )
 
-var exactMatchers = []struct {
+var exactErrMatchers = []struct {
 	target   error
 	category string
 }{
@@ -42,7 +42,7 @@ var exactMatchers = []struct {
 	{context.Canceled, ErrTypeCanceled},
 }
 
-var substringMatchers = []struct {
+var substringErrMatchers = []struct {
 	substring string
 	category  string
 }{

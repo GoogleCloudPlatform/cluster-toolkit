@@ -346,7 +346,7 @@ func getErrorType(err error) string {
 	}
 
 	// Standard Go error checks
-	for _, m := range exactMatchers {
+	for _, m := range exactErrMatchers {
 		if errors.Is(err, m.target) {
 			return m.category
 		}
@@ -363,7 +363,7 @@ func getErrorType(err error) string {
 
 	// Fallback string matching on safe keywords
 	errMsg := strings.ToLower(err.Error())
-	for _, m := range substringMatchers {
+	for _, m := range substringErrMatchers {
 		if strings.Contains(errMsg, m.substring) {
 			return m.category
 		}
