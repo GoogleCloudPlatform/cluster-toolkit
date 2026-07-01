@@ -15,6 +15,7 @@
 package logging
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -32,7 +33,7 @@ var (
 	infolog      *log.Logger
 	errorlog     *log.Logger
 	fatallog     *log.Logger
-	FatalHook    func(exitCode int) // FatalHook allows registering a callback to run before the program exits on a fatal error.
+	FatalHook    func(exitCode int, err error) // FatalHook allows registering a callback to run before the program exits on a fatal error.
 	Exit         = os.Exit
 	TsColor      = color.New(color.FgMagenta)
 	WarningColor = color.New(color.FgYellow)
@@ -87,6 +88,6 @@ func ExitWithCode(exitCode int, f string, a ...any) {
 
 	// Execute the hook if it is registered
 	if FatalHook != nil {
-		FatalHook(exitCode)
+		FatalHook(exitCode, errors.New(msg))
 	}
 }

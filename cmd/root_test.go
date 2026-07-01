@@ -392,7 +392,7 @@ func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
 			defer wg.Done()
 			// This simulates multiple goroutines hitting logging.Fatal concurrently,
 			// or a recursive logging.Fatal call inside the collector.
-			logging.FatalHook(1)
+			logging.FatalHook(1, nil)
 		}()
 	}
 

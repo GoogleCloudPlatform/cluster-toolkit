@@ -29,8 +29,48 @@ const (
 	ErrTypeNetwork          = "NetworkError"
 	ErrTypeTimeout          = "TimeoutError"
 	ErrTypeCanceled         = "CanceledError"
+	ErrTypeQuotaExceeded    = "QuotaExceeded"
+	ErrTypeAuthentication   = "AuthenticationFailed"
+	ErrTypeProvisioning     = "ProvisioningFailed"
 	ErrTypeUnknown          = "Unknown"
 )
+
+var exactMatchers = []struct {
+	target   error
+	category string
+}{
+	{os.ErrPermission, ErrTypePermissionDenied},
+	{os.ErrNotExist, ErrTypeFileNotFound},
+	{context.DeadlineExceeded, ErrTypeTimeout},
+	{context.Canceled, ErrTypeCanceled},
+}
+
+var substringMatchers = []struct {
+	substring string
+	category  string
+}{
+	{"quota exceeded", ErrTypeQuotaExceeded},
+	{"limit exceeded", ErrTypeQuotaExceeded},
+	{"unauthorized", ErrTypeAuthentication},
+	{"not authenticated", ErrTypeAuthentication},
+	{"requires authentication", ErrTypeAuthentication},
+	{"failed to provision", ErrTypeProvisioning},
+	{"deployment failed", ErrTypeProvisioning},
+	{"permission denied", ErrTypePermissionDenied},
+	{"403 forbidden", ErrTypePermissionDenied},
+	{"access denied", ErrTypePermissionDenied},
+	{"not found", ErrTypeFileNotFound},
+	{"404", ErrTypeFileNotFound},
+	{"validation failed", ErrTypeValidation},
+	{"invalid", ErrTypeValidation},
+	{"malformed", ErrTypeValidation},
+	{"timeout", ErrTypeTimeout},
+	{"deadline", ErrTypeTimeout},
+	{"network", ErrTypeNetwork},
+	{"connection refused", ErrTypeNetwork},
+	{"dial tcp", ErrTypeNetwork},
+	{"connection reset", ErrTypeNetwork},
+}
 
 // categorizeError maps an error to a broad, PII-safe category.
 func categorizeError(err error) string {
@@ -38,21 +78,14 @@ func categorizeError(err error) string {
 		return ""
 	}
 
-	// Standard Go error checks
-	if errors.Is(err, os.ErrPermission) {
-		return ErrTypePermissionDenied
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return ErrTypeFileNotFound
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return ErrTypeTimeout
-	}
-	if errors.Is(err, context.Canceled) {
-		return ErrTypeCanceled
+	// 1. Standard Go error checks
+	for _, m := range exactMatchers {
+		if errors.Is(err, m.target) {
+			return m.category
+		}
 	}
 
-	// Check for networking/timeout errors specifically
+	// 2. Check for networking/timeout errors specifically
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		if netErr.Timeout() {
@@ -61,22 +94,12 @@ func categorizeError(err error) string {
 		return ErrTypeNetwork
 	}
 
-	// Fallback string matching on safe keywords
+	// 3. Fallback string matching on safe keywords
 	errMsg := strings.ToLower(err.Error())
-	if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "403 forbidden") || strings.Contains(errMsg, "access denied") {
-		return ErrTypePermissionDenied
-	}
-	if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "404") {
-		return ErrTypeFileNotFound
-	}
-	if strings.Contains(errMsg, "validation failed") || strings.Contains(errMsg, "invalid") || strings.Contains(errMsg, "malformed") {
-		return ErrTypeValidation
-	}
-	if strings.Contains(errMsg, "timeout") {
-		return ErrTypeTimeout
-	}
-	if strings.Contains(errMsg, "network") || strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "dial tcp") {
-		return ErrTypeNetwork
+	for _, m := range substringMatchers {
+		if strings.Contains(errMsg, m.substring) {
+			return m.category
+		}
 	}
 
 	return ErrTypeUnknown

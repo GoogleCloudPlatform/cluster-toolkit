@@ -81,11 +81,11 @@ func init() {
 			userConfigExists = true
 
 			// Register the fatal hook to flush telemetry on hard failures
-			logging.FatalHook = func(exitCode int) {
+			logging.FatalHook = func(exitCode int, e error) {
 				// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
 				if telemetryFlushed.CompareAndSwap(false, true) {
 					if config.IsTelemetryEnabled() && telemetryCollector != nil {
-						telemetryCollector.Execute(exitCode, nil)
+						telemetryCollector.Execute(exitCode, e)
 					}
 				}
 			}
