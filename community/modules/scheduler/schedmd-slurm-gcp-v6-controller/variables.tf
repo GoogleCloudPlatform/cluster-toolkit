@@ -150,6 +150,7 @@ variable "login_nodes" {
         network_tier = string
       })), [])
       network            = optional(string)
+      network_attachment = optional(string)
       network_ip         = optional(string, "")
       nic_type           = optional(string)
       queue_count        = optional(number)
@@ -307,25 +308,26 @@ variable "nodeset" {
     source_image         = optional(string)
     subnetwork_self_link = string
     additional_networks = optional(list(object({
-      network            = string
-      subnetwork         = string
-      subnetwork_project = string
-      network_ip         = string
-      nic_type           = string
-      stack_type         = string
-      queue_count        = number
-      access_config = list(object({
+      network            = optional(string)
+      subnetwork         = optional(string)
+      subnetwork_project = optional(string)
+      network_attachment = optional(string)
+      network_ip         = optional(string)
+      nic_type           = optional(string)
+      stack_type         = optional(string)
+      queue_count        = optional(number)
+      access_config = optional(list(object({
         nat_ip       = string
         network_tier = string
-      }))
-      ipv6_access_config = list(object({
+      })), [])
+      ipv6_access_config = optional(list(object({
         network_tier = string
-      }))
-      alias_ip_range = list(object({
+      })), [])
+      alias_ip_range = optional(list(object({
         ip_cidr_range         = string
         subnetwork_range_name = string
-      }))
-    })))
+      })), [])
+    })), [])
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string

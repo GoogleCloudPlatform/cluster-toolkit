@@ -190,6 +190,7 @@ resource "google_compute_instance_from_template" "controller" {
       network            = network_interface.value.network
       subnetwork         = network_interface.value.subnetwork
       subnetwork_project = network_interface.value.subnetwork_project
+      network_attachment = network_interface.value.network_attachment
       network_ip         = network_interface.value.network_ip
       nic_type           = network_interface.value.nic_type
       stack_type         = network_interface.value.stack_type

@@ -492,8 +492,9 @@ variable "additional_networks" {
   default     = []
   type = list(object({
     network            = optional(string)
-    subnetwork         = string
+    subnetwork         = optional(string)
     subnetwork_project = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     stack_type         = optional(string)
@@ -510,6 +511,14 @@ variable "additional_networks" {
       subnetwork_range_name = string
     })), [])
   }))
+  validation {
+    condition     = alltrue([for nic in var.additional_networks : (nic.subnetwork != null || nic.network_attachment != null)])
+    error_message = "Either subnetwork or network_attachment is required for additional_networks, neither is provided."
+  }
+  validation {
+    condition     = !anytrue([for nic in var.additional_networks : (nic.subnetwork != null && nic.network_attachment != null)])
+    error_message = "Either subnetwork or network_attachment is required for additional_networks, both are provided."
+  }
 }
 
 variable "access_config" {
