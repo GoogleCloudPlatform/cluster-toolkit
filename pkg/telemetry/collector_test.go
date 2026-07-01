@@ -172,7 +172,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode)
+			c.CollectMetrics(tt.errorCode, nil)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
@@ -321,7 +321,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	rootCmd.AddCommand(childCmd)
 
 	c := NewCollector(childCmd, nil, SOURCE)
-	c.CollectMetrics(0)
+	c.CollectMetrics(0, nil)
 
 	event := c.BuildConcordEvent()
 

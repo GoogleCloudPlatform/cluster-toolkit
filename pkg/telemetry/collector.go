@@ -53,7 +53,7 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 }
 
 // Main function for collecting Telemetry metrics.
-func (c *Collector) CollectMetrics(errorCode int) {
+func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -75,6 +75,9 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
+	if err != nil {
+		c.metadata[ERROR_TYPE] = categorizeError(err)
+	}
 }
 
 // Method to collect Concord metrics and build event.

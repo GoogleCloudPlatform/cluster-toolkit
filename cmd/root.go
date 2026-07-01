@@ -85,7 +85,7 @@ func init() {
 				// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
 				if telemetryFlushed.CompareAndSwap(false, true) {
 					if config.IsTelemetryEnabled() && telemetryCollector != nil {
-						telemetryCollector.Execute(exitCode)
+						telemetryCollector.Execute(exitCode, nil)
 					}
 				}
 			}
@@ -149,7 +149,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 	// Ensure telemetry is executed exactly once on normal exits to prevent recurrency
 	if telemetryFlushed.CompareAndSwap(false, true) {
 		if config.IsTelemetryEnabled() && userConfigExists {
-			telemetryCollector.Execute(exitCode)
+			telemetryCollector.Execute(exitCode, err)
 		}
 	}
 
