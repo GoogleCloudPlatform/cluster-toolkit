@@ -41,6 +41,11 @@ import (
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
+type result struct {
+	mi  modulereader.ModuleInfo
+	err error
+}
+
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
@@ -141,19 +146,23 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	return "false"
 }
 
-func getKeyFromBlueprint(key string, bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef(key).AsValue())
-	if err == nil {
-		v, _ := val.Unmark()
-		if !v.IsNull() && v.Type() == cty.String {
-			return v.AsString()
+func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
+	// 1. Try explicit settings first
+	for _, key := range machineTypeSettings {
+		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			return t
 		}
 	}
+	// 2. If no explicit setting, try defaults
+	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
+		return t
+	}
+
 	return ""
 }
 
-// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
-func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+// extractExplicitStringSetting attempts to get the given key string value if explicitly defined in the module's settings.
+func extractExplicitStringSetting(key string, m config.Module, bp config.Blueprint) string {
 	if !m.Settings.Has(key) {
 		return ""
 	}
@@ -167,37 +176,151 @@ func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
 		return unmarkedKey.AsString()
 	}
+	return ""
+}
+func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
+	counts := make(map[string]int)
+	topMachineType := getMachineTypeFromModule(m, bp)
+	inlineFound := false
 
+	// Process complex inline iterables (Slurm V6)
+	for _, key := range staticNodeCountInlineKeys {
+		if processInlineKey(m, bp, key, topMachineType, counts) {
+			inlineFound = true
+		}
+	}
+
+	if inlineFound {
+		return counts
+	}
+
+	// Fallback to standard top-level extraction
+	if topMachineType != "" {
+		if count, found := getTopLevelNodeCount(m, bp); found {
+			counts[topMachineType] += count
+		}
+	}
+	return counts
+}
+
+// processInlineKey evaluates a specific key for iterable structures and processes its items.
+func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int) bool {
+	if !m.Settings.Has(key) {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get(key))
+	if err != nil {
+		return false
+	}
+	unmarked, _ := val.Unmark()
+	if !unmarked.IsKnown() || unmarked.IsNull() {
+		return false
+	}
+
+	ty := unmarked.Type()
+	if !ty.IsListType() && !ty.IsTupleType() && !ty.IsSetType() {
+		return false
+	}
+
+	for _, item := range unmarked.AsValueSlice() {
+		processInlineItem(item, topMachineType, counts)
+	}
+	return true
+}
+
+// processInlineItem extracts machine types and counts from an individual map/object in an inline list.
+func processInlineItem(item cty.Value, topMachineType string, counts map[string]int) {
+	item, _ = item.Unmark()
+	if !item.IsKnown() || item.IsNull() {
+		return
+	}
+	ty := item.Type()
+
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return
+	}
+
+	inlineMType := extractStringFromCtyMap(item, machineTypeSettings)
+	if inlineMType == "" {
+		inlineMType = topMachineType
+	}
+
+	if count, found := extractIntFromCtyMap(item, staticNodeCountSettings); found && inlineMType != "" {
+		counts[inlineMType] += count
+	}
+}
+
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint) (int, bool) {
+	for _, key := range staticNodeCountSettings {
+		if count, found := extractExplicitIntSetting(key, m, bp); found {
+			return count, true
+		}
+	}
+	if count, found := extractDefaultSetting[int](staticNodeCountSettings, m); found {
+		return count, true
+	}
+	return 0, false
+}
+
+func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
+				return v.AsString()
+			}
+		}
+	}
 	return ""
 }
 
-// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
-func extractDefaultMachineType(key string, m config.Module) string {
-	if m.Source == "" {
-		return ""
+func extractIntFromCtyMap(val cty.Value, targetKeys []string) (int, bool) {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
+				out, _ := v.AsBigFloat().Int64()
+				return int(out), true
+			}
+			return 0, true
+		}
+	}
+	return 0, false
+}
+
+// extractExplicitIntSetting attempts to get the given key int value if explicitly defined.
+// It returns the int value, and a boolean indicating if the setting was found.
+func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) (int, bool) {
+	if !m.Settings.Has(key) {
+		return 0, false
+	}
+	keyValue := m.Settings.Get(key)
+	evaluatedKey, err := bp.Eval(keyValue)
+	if err != nil {
+		return 0, false
+	}
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.Number {
+		out, _ := unmarkedKey.AsBigFloat().Int64()
+		return int(out), true
+	}
+	return 0, true // Value exists but is unknown, return safely without fallback
+}
+
+// extractDefaultSetting attempts to get a default setting from the module's source variables.
+func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
+	var zero T
+	kindStr, valid := isValidModuleKind(m)
+	if !valid {
+		return zero, false
 	}
 
-	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
-	}
-
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return ""
-	}
-
-	type result struct {
-		mi  modulereader.ModuleInfo
-		err error
-	}
 	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
 	go func() {
 		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
 		resCh <- result{mi: mi, err: err}
@@ -206,21 +329,60 @@ func extractDefaultMachineType(key string, m config.Module) string {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return ""
+			return zero, false
 		}
-		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				// Verify the default is a string (protects against complex types)
-				if mType, ok := input.Default.(string); ok {
-					return mType
+		// Iterate over keys to maintain precedence order
+		for _, key := range keys {
+			for _, input := range res.mi.Inputs {
+				if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
+					return val, true
 				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
 
-	return ""
+	return zero, false
+}
+
+// isValidModuleKind checks if the module has a valid source and returns its kind.
+func isValidModuleKind(m config.Module) (string, bool) {
+	if m.Source == "" {
+		return "", false
+	}
+	kindStr := m.Kind.String()
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return "", false
+	}
+	return kindStr, true
+}
+
+// parseDefaultValue matches the input key and safely casts the default value.
+func parseDefaultValue[T any](inputName string, inputDefault any, key string) (T, bool) {
+	var zero T
+	if inputName == key && inputDefault != nil {
+		switch v := inputDefault.(type) {
+		case T:
+			return v, true
+		case int64:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		case float64:
+			// Safely cast float64 to int if T is int
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		case float32:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		}
+	}
+	return zero, false
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.

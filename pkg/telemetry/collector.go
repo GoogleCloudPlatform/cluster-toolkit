@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"path/filepath"
@@ -35,6 +36,12 @@ var (
 		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
 		"system_node_pool_machine_type", // For gke-cluster system node pools.
 	}
+	staticNodeCountSettings = []string{
+		"static_node_count", // Used in GKE node pool. If set, autoscaling will be disabled. Defaults to 0.
+		"node_count_static", // Standalone Slurm V6 CPU and TPU nodesets use 'node_count_static'. Defaults to 0.
+		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
+	}
+	staticNodeCountInlineKeys  = []string{"nodeset", "nodeset_tpu", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -69,6 +76,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
+	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCount(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -82,7 +90,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	project_id := getKeyFromBlueprint("project_id", c.blueprint)
+	project_id := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
@@ -215,22 +223,7 @@ func getMachineType(bp config.Blueprint) string {
 
 	for _, m := range config.GetAllBpModules(&bp) {
 		var mType string
-		// 1. Try explicit settings first
-		for _, key := range machineTypeSettings {
-			if t := extractExplicitMachineType(bp, key, m); t != "" {
-				mType = t
-				break
-			}
-		}
-		// 2. If no explicit setting, try defaults
-		if mType == "" {
-			for _, key := range machineTypeSettings {
-				if t := extractDefaultMachineType(key, m); t != "" {
-					mType = t
-					break
-				}
-			}
-		}
+		mType = getMachineTypeFromModule(m, bp)
 
 		if mType != "" && !seen[mType] {
 			machineTypes = append(machineTypes, mType)
@@ -274,6 +267,27 @@ func getModules(modulesList []string) string {
 	}
 
 	return strings.Join(sanitizedModules, ",")
+}
+
+func getStaticNodeCount(bp config.Blueprint) string {
+	countsByMachineType := make(map[string]int)
+
+	for _, m := range config.GetAllBpModules(&bp) {
+		moduleCounts := getModuleNodeCounts(m, bp)
+		for mType, count := range moduleCounts {
+			if count > 0 {
+				countsByMachineType[mType] += count
+			}
+		}
+	}
+
+	counts, err := json.Marshal(countsByMachineType)
+	if err != nil || len(countsByMachineType) == 0 {
+		return ""
+	}
+
+	// Trimming the curly braces safely extracts our exact format `"g4-standard-48":3,"a3-ultragpu-8g":2`
+	return strings.Trim(string(counts), "{}")
 }
 
 func getOSName() string {
