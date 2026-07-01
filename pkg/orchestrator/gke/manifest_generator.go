@@ -121,12 +121,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		IsStaticSlicing:    isStaticSlicing,
 	}
 
-	parts := strings.Split(originalAccelType, "-")
-	instanceType := parts[0]
-
 	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
 	// derive the Pathways short platform key to avoid duplicating mapping tables.
-	gkeLabel := g.GenerateGKENodeSelectorLabel(instanceType)
+	gkeLabel := g.GenerateGKENodeSelectorLabel(originalAccelType)
 	// Normalize GKE node selector labels to match JAX/Pathways platform keys:
 	// 1. Map GKE "v5-lite" (TPU v5e) to JAX standard "v5e" (deriving tpuv5e)
 	// 2. Map GKE "v5p" (TPU v5p) to JAX standard "v5" (deriving tpuv5)
