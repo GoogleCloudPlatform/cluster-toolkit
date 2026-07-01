@@ -77,6 +77,21 @@ func TestCategorizeError(t *testing.T) {
 			err:      errors.New("something went entirely wrong"),
 			expected: ErrTypeUnknown,
 		},
+		{
+			name:     "Text Match Quota",
+			err:      errors.New("google api error: quota exceeded for c2-standard-8"),
+			expected: ErrTypeQuotaExceeded,
+		},
+		{
+			name:     "Text Match Auth",
+			err:      errors.New("unauthorized request to remote server"),
+			expected: ErrTypeAuthentication,
+		},
+		{
+			name:     "Text Match Provisioning",
+			err:      errors.New("deployment failed to finish"),
+			expected: ErrTypeProvisioning,
+		},
 	}
 
 	for _, tt := range tests {
