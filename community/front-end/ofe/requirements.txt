@@ -103,4 +103,4 @@ virtualenv==21.5.1
 wrapt==2.2.2
 xmltodict==1.0.4
 yq==3.4.3
-zipp==3.23.1
+zipp==4.1.0
