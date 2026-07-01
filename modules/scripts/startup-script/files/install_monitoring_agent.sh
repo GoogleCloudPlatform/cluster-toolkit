@@ -22,7 +22,7 @@ LEGACY_LOGGING_SCRIPT_URL='https://dl.google.com/cloudagents/add-logging-agent-r
 OPSAGENT_PACKAGE='google-cloud-ops-agent'
 OPSAGENT_SCRIPT_URL='https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh'
 
-ops_or_legacy="${1:-legacy}"
+ops_or_legacy="${1:-ops}"
 
 fail() {
 	echo >&2 "[$(date +'%Y-%m-%dT%H:%M:%S%z')] $*"
@@ -108,6 +108,47 @@ handle_redhat() {
 }
 
 main() {
+	if [ -f /etc/os-release ]; then
+		. /etc/os-release
+		local os_id="${ID:-}"
+		local os_version="${VERSION_ID:-}"
+
+		if [[ -z "${os_id}" ]]; then
+			if [[ "${NAME}" == *"Rocky"* ]]; then
+				os_id="rocky"
+			elif [[ "${NAME}" == *"Red Hat"* ]] || [[ "${NAME}" == *"RHEL"* ]]; then
+				os_id="rhel"
+			elif [[ "${NAME}" == *"Ubuntu"* ]]; then
+				os_id="ubuntu"
+			elif [[ "${NAME}" == *"Debian"* ]]; then
+				os_id="debian"
+			fi
+		fi
+
+		local major_version="${os_version%%.*}"
+		local legacy_unsupported=false
+
+		if [[ "${os_id}" == "rocky" || "${os_id}" == "rhel" || "${os_id}" == "centos" ]]; then
+			if [[ -n "${major_version}" && "${major_version}" -ge 9 ]]; then
+				legacy_unsupported=true
+			fi
+		elif [[ "${os_id}" == "ubuntu" ]]; then
+			if [[ -n "${major_version}" && "${major_version}" -ge 24 ]]; then
+				legacy_unsupported=true
+			fi
+		elif [[ "${os_id}" == "debian" ]]; then
+			if [[ -n "${major_version}" && "${major_version}" -ge 12 ]]; then
+				legacy_unsupported=true
+			fi
+		fi
+
+		if [[ "${legacy_unsupported}" == "true" && "${ops_or_legacy}" == "legacy" ]]; then
+			echo "WARNING: Legacy stackdriver-agent is not supported on ${NAME} ${os_version}."
+			echo "Automatically falling back to installing Google Cloud Ops Agent instead."
+			ops_or_legacy="ops"
+		fi
+	fi
+
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
 		handle_redhat
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
