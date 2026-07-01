@@ -29,6 +29,32 @@ fail() {
 	exit 1
 }
 
+install_opsagent_shared() {
+	local install_func="$1"
+	local tmp_dir
+	tmp_dir=$(mktemp -d /tmp/add-ops-agent-repo.XXXXXXXX)
+	chmod 700 "${tmp_dir}"
+	local tmp_script="${tmp_dir}/add-google-cloud-ops-agent-repo.sh"
+
+	local MAX_RETRY=50
+	local RETRY=0
+	until [ ${RETRY} -eq ${MAX_RETRY} ] || {
+		curl -fsS -o "${tmp_script}" "${OPSAGENT_SCRIPT_URL}" &&
+			bash "${tmp_script}" &&
+			"$install_func"
+	}; do
+		RETRY=$((RETRY + 1))
+		echo >&2 "WARNING: Installation of ${OPSAGENT_PACKAGE} failed on try ${RETRY} of ${MAX_RETRY}"
+		sleep 5
+	done
+
+	rm -rf "${tmp_dir}"
+
+	if [ $RETRY -eq $MAX_RETRY ]; then
+		fail "Installation of ${OPSAGENT_PACKAGE} was not successful after ${MAX_RETRY} attempts."
+	fi
+}
+
 handle_debian() {
 	is_legacy_monitoring_installed() {
 		dpkg-query --show --showformat 'dpkg-query: ${Package} is installed\n' ${LEGACY_MONITORING_PACKAGE} |
@@ -64,7 +90,10 @@ handle_debian() {
 	}
 
 	install_opsagent() {
-		install_with_retry "${OPSAGENT_SCRIPT_URL}"
+		debian_install() {
+			apt-get update && apt-get install -y "${OPSAGENT_PACKAGE}"
+		}
+		install_opsagent_shared debian_install
 	}
 
 	install_stackdriver_agent() {
@@ -96,7 +125,10 @@ handle_redhat() {
 	}
 
 	install_opsagent() {
-		curl -s "${OPSAGENT_SCRIPT_URL}" | bash -s -- --also-install
+		redhat_install() {
+			yum install -y "${OPSAGENT_PACKAGE}"
+		}
+		install_opsagent_shared redhat_install
 	}
 
 	install_stackdriver_agent() {
