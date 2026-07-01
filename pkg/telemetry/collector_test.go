@@ -71,6 +71,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	tests := []struct {
 		name             string
 		errorCode        int
+		err              error
 		installationMode string
 		setupCmd         func(cmd *cobra.Command) // Hook to configure the command
 		setupCollector   func(c *Collector)       // Hook to mock internal collector state
@@ -79,6 +80,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		{
 			name:             "Success exit code",
 			errorCode:        0,
+			err:              nil,
 			installationMode: SOURCE,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
@@ -128,6 +130,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		{
 			name:             "Failure exit code with missing region, zone, and machine type",
 			errorCode:        1,
+			err:              nil,
 			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
@@ -152,6 +155,24 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				INSTALLATION_MODE: BINARY,
 			},
 		},
+		{
+			name:             "Failure exit code with error",
+			errorCode:        1,
+			err:              errors.New("permission denied error"),
+			installationMode: SOURCE,
+			setupCmd: func(cmd *cobra.Command) {
+			},
+			setupCollector: func(c *Collector) {
+				c.blueprint = config.Blueprint{
+					Vars:   config.NewDict(map[string]cty.Value{}),
+					Groups: []config.Group{},
+				}
+			},
+			expectedValues: map[string]string{
+				EXIT_CODE:         "1",
+				ERROR_TYPE:        ErrTypePermissionDenied,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -172,7 +193,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode, nil)
+			c.CollectMetrics(tt.errorCode, tt.err)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
