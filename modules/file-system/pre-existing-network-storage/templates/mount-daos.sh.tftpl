@@ -61,7 +61,6 @@ chown daos_agent:daos_agent /var/log/daos_agent
 
 # Mount parallelstore instance to client vm.
 mkdir -p "${local_mount}"
-chmod 777 "${local_mount}"
 
 # Mount container for multi-user.
 fuse_config=/etc/fuse.conf
@@ -107,4 +106,10 @@ systemctl enable "$${service_name}"
 systemctl start "$${service_name}"
 # --- End: Add systemd service creation ---
 
+%{if local_mount_owner != ""}
+chown "${local_mount_owner}" "${local_mount}"
+%{endif}
+%{if local_mount_permissions != ""}
+chmod "${local_mount_permissions}" "${local_mount}"
+%{endif}
 exit 0
