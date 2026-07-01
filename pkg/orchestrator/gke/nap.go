@@ -30,22 +30,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	resolvedType := config.ResolveMachineType(machineType)
 
 	if config.IsTPU(resolvedType) {
-		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
-		if limit, exists := g.napLimits[key]; exists {
-			return limit > 0, nil
-		}
-		// Fallback to generic TPU limit ONLY if no specific TPU limits are configured.
-		hasSpecificTPULimits := false
-		for k := range g.napLimits {
-			if isSpecificTPUKey(k) {
-				hasSpecificTPULimits = true
-				break
-			}
-		}
-		if hasSpecificTPULimits {
-			return false, nil
-		}
-		return g.napLimits["google.com/tpu"] > 0, nil
+		return g.validateTPUNAPLimit(resolvedType)
 	}
 
 	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
@@ -53,31 +38,54 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 		return false, err
 	}
 	if len(cap.Accelerators) > 0 {
-		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
-		if strings.EqualFold(key, resolvedType) {
-			key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
-		}
-		if !isKnownGKEAccelerator(key) {
-			return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
-		}
-		if limit, exists := g.napLimits[key]; exists {
-			return limit > 0, nil
-		}
-		// Fallback to generic GPU limit ONLY if no specific GPU limits are configured.
-		hasSpecificGPULimits := false
-		for k := range g.napLimits {
-			if isSpecificGPUKey(k) {
-				hasSpecificGPULimits = true
-				break
-			}
-		}
-		if hasSpecificGPULimits {
-			return false, nil
-		}
-		return g.napLimits["nvidia.com/gpu"] > 0, nil
+		return g.validateGPUNAPLimit(resolvedType, cap)
 	}
 
 	return g.napLimits["cpu"] > 0, nil
+}
+
+func (g *GKEOrchestrator) validateTPUNAPLimit(resolvedType string) (bool, error) {
+	key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+	if limit, exists := g.napLimits[key]; exists {
+		return limit > 0, nil
+	}
+	// Fallback to generic TPU limit ONLY if no specific TPU limits are configured.
+	hasSpecificTPULimits := false
+	for k := range g.napLimits {
+		if isSpecificTPUKey(k) {
+			hasSpecificTPULimits = true
+			break
+		}
+	}
+	if hasSpecificTPULimits {
+		return false, nil
+	}
+	return g.napLimits["google.com/tpu"] > 0, nil
+}
+
+func (g *GKEOrchestrator) validateGPUNAPLimit(resolvedType string, cap MachineTypeCap) (bool, error) {
+	key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+	if strings.EqualFold(key, resolvedType) {
+		key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
+	}
+	if !isKnownGKEAccelerator(key) {
+		return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
+	}
+	if limit, exists := g.napLimits[key]; exists {
+		return limit > 0, nil
+	}
+	// Fallback to generic GPU limit ONLY if no specific GPU limits are configured.
+	hasSpecificGPULimits := false
+	for k := range g.napLimits {
+		if isSpecificGPUKey(k) {
+			hasSpecificGPULimits = true
+			break
+		}
+	}
+	if hasSpecificGPULimits {
+		return false, nil
+	}
+	return g.napLimits["nvidia.com/gpu"] > 0, nil
 }
 
 func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
@@ -155,11 +163,11 @@ func extractShortReservationName(resName string) string {
 }
 
 func isSpecificGPUKey(key string) bool {
-	return strings.HasPrefix(key, "nvidia-") && key != "nvidia.com/gpu"
+	return strings.HasPrefix(key, "nvidia-")
 }
 
 func isSpecificTPUKey(key string) bool {
-	return (strings.HasPrefix(key, "tpu-") || strings.HasPrefix(key, "ct")) && key != "google.com/tpu"
+	return strings.HasPrefix(key, "tpu-")
 }
 
 func isKnownGKEAccelerator(key string) bool {

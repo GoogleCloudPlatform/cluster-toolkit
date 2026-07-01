@@ -784,6 +784,46 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 			wantErr:     true,
 			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
 		},
+		{
+			name:       "NAP Cluster - TPU: Specific limit configured, requesting different TPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice":  8,
+				"google.com/tpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct5lp-hightpu-4t", // TPU v5e (tpu-v5-lite-podslice)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Specific limit configured, requesting different GPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia-h100-mega-80gb": 8,
+				"nvidia.com/gpu":        8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12", // L4 GPU (nvidia-l4)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Generic limit only, requesting GPU (Should Pass)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia.com/gpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -807,6 +847,19 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 						{
 							Count: 1,
 							Type:  "unknown-gpu",
+						},
+					},
+				},
+				"g2-standard-12:": {
+					GuestCpus: 12,
+					MemoryMb:  48000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "nvidia-l4",
 						},
 					},
 				},
