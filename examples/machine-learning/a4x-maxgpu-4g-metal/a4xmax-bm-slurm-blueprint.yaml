@@ -38,8 +38,9 @@ vars:
   # Cluster env settings
   net0_range: 10.1.1.0/24
   net1_range: 10.1.2.0/24
-  # To use filestore, uncomment the following and the homefs module in cluster-env:
-  # filestore_ip_range: 10.1.3.0/24
+  psa_address: 10.10.0.0
+  psa_range: 10.10.0.0/16
+  prefix_length: 16
 
   # Cluster Settings
   disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
@@ -49,9 +50,23 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: $(vars.built_image_family)
-  a4x_max_reservation_name: "" # supply reservation name
+  a4x_max_reservation_name: ""
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
+
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 18000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
 
 deployment_groups:
 - group: image-env
@@ -154,7 +169,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
-            "install_managed_lustre": false
+            "install_managed_lustre": true
           }
       - type: shell
         destination: setup_asapd_lite_service.sh
@@ -319,12 +334,13 @@ deployment_groups:
           # remove
           rm -rf mft-4.34.0-145-aarch64-deb
 
-          export DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
           BASE_URL=https://linux.mellanox.com/public/repo/doca
-          DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
+          DOCA_SUFFIX=latest/ubuntu24.04/arm64-sbsa/
           DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
-          curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
-          echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
+          # Download both old Mellanox key and new NVIDIA DOCA key (required for 'latest' repository signature verification)
+          curl -fsSL $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.gpg
+          curl -fsSL -o /etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg $BASE_URL/public_keys/nvidia-doca-debian-gpg-public-key.gpg
+          echo "deb [signed-by=/etc/apt/trusted.gpg.d/nvidia-doca-debian-gpg-public-key.gpg] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
           sudo apt-get update
           sudo apt-get -y install doca-ofed
       - type: data
@@ -349,12 +365,12 @@ deployment_groups:
           echo "Enabling openibd service..."
           sudo systemctl enable openibd
       - type: shell
-        destination: stop_packer_early.sh
+        destination: configure_lnet_image.sh
         content: |
           #!/bin/bash
-          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
-          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
-          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
+          set -e -x
+          echo "Configuring LNet to use eth0 in the image..."
+          echo 'options lnet networks="tcp(eth0)"' | sudo tee /etc/modprobe.d/lnet.conf
 
 - group: image
   modules:
@@ -369,6 +385,27 @@ deployment_groups:
       source_image_project_id: [$(vars.build_from_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
+      metadata:
+        # Needed in Ubuntu 24.04 for enroot, not required on VMs using this image
+        # Unattended upgrades are disabled in this blueprint so that software does not
+        # get updated daily and lead to potential instability in the cluster environment.
+        #
+        # Unattended Upgrades installs available security updates from the Ubuntu
+        # security pocket for installed packages daily by default. Administrators who
+        # disable this feature assume all responsibility for manually reviewing and
+        # patching their systems against vulnerabilities.
+        #
+        # To enable unattended upgrades, please remove this section.
+        user-data: |
+          #cloud-config
+          create_hostname_file: true
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
     use:
     - a4x-max-slurm-image-net
     - slurm-build-script
@@ -390,7 +427,7 @@ deployment_groups:
         ipv6_access_type: INTERNAL
       firewall_rules:
       - name: $(vars.deployment_name)-internal-0
-        ranges: [$(vars.net0_range)]
+        ranges: [$(vars.net0_range), $(vars.psa_range)]
         allow:
         - protocol: tcp
         - protocol: udp
@@ -423,20 +460,26 @@ deployment_groups:
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce-metal
       subnetworks_template: null
 
-  # - id: homefs
-  #   source: modules/file-system/filestore
-  #   use:
-  #   - a4x-max-slurm-net-0
-  #   settings:
-  #     filestore_tier: HIGH_SCALE_SSD
-  #     size_gb: 10240
-  #     local_mount: /home
-  #     reserved_ip_range: $(vars.filestore_ip_range)
-  #     deletion_protection:
-  #       enabled: true
-  #       reason: Avoid data loss
-  #   outputs:
-  #   - network_storage
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [a4x-max-slurm-net-0]
+    settings:
+      address: $(vars.psa_address)
+      prefix_length: $(vars.prefix_length)
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - a4x-max-slurm-net-0
+    - private_service_access
+    settings:
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: /home
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+    outputs:
+    - network_storage
 
   # The following four modules create and mount a Cloud Storage Bucket with
   # gcsfuse.  They are optional but recommended for many use cases.
@@ -544,6 +587,44 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - type: shell
+        destination: configure_lnet_early.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          export PATH=$PATH:/usr/sbin:/sbin
+          echo "Configuring LNet for eth0 early..."
+          # Wait for eth0 to have an IP address
+          for i in {1..30}; do
+              IP=\$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+              if [ -n "\$IP" ]; then
+                  echo "eth0 has IP: \$IP"
+                  break
+              fi
+              echo "Waiting for eth0 to get an IP..."
+              sleep 1
+          done
+          if [ -z "\$IP" ]; then
+              echo "ERROR: eth0 did not get an IP in 30 seconds"
+              ip addr
+              exit 1
+          fi
+          if command -v lnetctl >/dev/null 2>&1; then
+              # Unconfigure if already configured
+              if sudo lnetctl net show 2>/dev/null | grep -q "tcp"; then
+                  echo "LNet already configured. Unconfiguring..."
+                  sudo lnetctl lnet unconfigure || echo "Unconfigure failed (might be busy)"
+              fi
+              sudo lnetctl lnet configure
+              if ! sudo lnetctl net show 2>/dev/null | grep -q "eth0"; then
+                  sudo lnetctl net add --net tcp --if eth0
+              else
+                  echo "LNet already configured on eth0"
+              fi
+              sudo lnetctl net show
+          else
+              echo "lnetctl not found, skipping LNet configuration"
+          fi
       - $(gcs_checkpoints.client_install_runner)
       - $(gcs_checkpoints.mount_runner)
       - $(gcs_training_data.client_install_runner)
@@ -837,7 +918,7 @@ deployment_groups:
     - a4x_max_partition
     - a4x-max-slurm-net-0
     - slurm_login
-    # - homefs
+    - homefs
     - gcs_bucket
     settings:
       enable_controller_public_ips: true
@@ -846,71 +927,23 @@ deployment_groups:
       controller_state_disk:
         type: hyperdisk-balanced # Override the default pd-ssd
         size: 50
+      metadata:
+        user-data: |
+          #cloud-config
+          runcmd:
+          - |
+            INTERFACE=`ip route | grep default | awk '{print $5}' | head -n 1`
+            if [ -z "$INTERFACE" ]; then
+              INTERFACE=`ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -n 1`
+            fi
+            if [ -n "$INTERFACE" ]; then
+              echo "options lnet networks=\"tcp($INTERFACE)\"" | tee /etc/modprobe.d/lnet.conf
+            else
+              echo "ERROR: Could not detect primary interface"
+            fi
       instance_image_custom: true
       controller_startup_script: $(controller_startup.startup_script)
       cloud_parameters:
         prolog_flags: Alloc,DeferBatch,NoHold
         switch_type: switch/nvidia_imex
-      prolog_scripts:
-      - filename: 1_imex_prolog.sh
-        content: |
-          #!/usr/bin/env bash
-          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
-            exit 0
-          fi
-
-          activate_imex() {
-            set -ex
-
-            # Clean the config file in case the service gets started by accident
-            > /etc/nvidia-imex/nodes_config.cfg
-
-            NVIDIA_IMEX_START_TIMEOUT=80
-            IMEX_CONN_WAIT_TIMEOUT=70
-            NVIDIA_IMEX_STOP_TIMEOUT=15
-            IMEX_SERVER_PORT=1101
-            IMEX_CMD_PORT=1102
-
-            # clean up prev connection
-            set +e
-            timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
-            pkill -9 nvidia-imex
-            set -e
-
-            # update peer list
-            scontrol -a show node "${SLURM_NODELIST}" -o | sed 's/^.* NodeAddr=\([^ ]*\).*/\1/' > /etc/nvidia-imex/nodes_config.cfg
-
-            sed -i "s/SERVER_PORT.*/SERVER_PORT=${IMEX_SERVER_PORT}/" /etc/nvidia-imex/config.cfg
-
-            # enable imex-ctl on all nodes so you can query imex status with: nvidia-imex-ctl -a -q
-            sed -i "s/IMEX_CMD_PORT.*/IMEX_CMD_PORT=${IMEX_CMD_PORT}/" /etc/nvidia-imex/config.cfg
-            sed -i "s/IMEX_CMD_ENABLED.*/IMEX_CMD_ENABLED=1/" /etc/nvidia-imex/config.cfg
-
-            # set timeouts for start
-            sed -i "s/IMEX_CONN_WAIT_TIMEOUT.*/IMEX_CONN_WAIT_TIMEOUT=${IMEX_CONN_WAIT_TIMEOUT}/" /etc/nvidia-imex/config.cfg
-
-            timeout $NVIDIA_IMEX_START_TIMEOUT systemctl start nvidia-imex
-          }
-          activate_imex > "/var/log/slurm/imex_prolog_${SLURM_JOB_ID}.log" 2>&1
-      epilog_scripts:
-      - filename: 2_imex_epilog.sh
-        content: |
-          #!/usr/bin/env bash
-          set -ex
-
-          if ! systemctl list-unit-files --all | grep -Fq "nvidia-imex.service"; then
-            exit 0
-          fi
-
-          # Clean the config file in case the service gets started by accident
-          > /etc/nvidia-imex/nodes_config.cfg
-
-          NVIDIA_IMEX_STOP_TIMEOUT=30
-
-          # clean up connection
-          set +e
-
-          timeout $NVIDIA_IMEX_STOP_TIMEOUT systemctl stop nvidia-imex
-
-          pkill -9 nvidia-imex
-          set -e
+      enable_external_prolog_epilog: true
