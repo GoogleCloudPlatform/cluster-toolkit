@@ -368,7 +368,18 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
             reason = exc._get_reason() if hasattr(exc, "_get_reason") else str(exc) # type: ignore
-            action, admin_comment = error_handler.classify_gcp_error(reason, reason)
+            details = reason
+            err_details = getattr(exc, "error_details", None)
+            if err_details:
+                if isinstance(err_details, list):
+                    details = "; ".join(
+                        err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        for err in err_details
+                    )
+                else:
+                    details = str(err_details)
+            
+            action, admin_comment = error_handler.classify_gcp_error(reason, details)
             handle_resume_failure(grouped_nodes[ident].nodes, f"GCP Error: {reason}", resume_data, action, admin_comment)
 
     if log.isEnabledFor(logging.DEBUG):
