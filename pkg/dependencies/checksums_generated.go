@@ -19,7 +19,7 @@ package dependencies
 
 var (
 	TerraformVersion = "1.12.2"
-	PackerVersion    = "1.15.0"
+	PackerVersion    = "1.15.3"
 
 	ExpectedChecksums = map[string]string{
 		"terraform_darwin_amd64":  "c65aa74bed1dbb1c48ba4bbab11f08e7f7eeb54a422146561490275340468f19",
@@ -36,24 +36,24 @@ var (
 		"terraform_solaris_amd64": "2df462be97b21c61be3e82156f0d0f929808c2b9a9e2a1ce537bafcbbff61b80",
 		"terraform_windows_386":   "5503656530278ff63741fd74609e847e181969ee96dd76fb722e11da40e19063",
 		"terraform_windows_amd64": "0a1565ace9da37c2778868c2e97452d8fc25e40e530bafbbab97231e69b0a201",
-		"packer_darwin_amd64":     "a565b825aed17ac9a7c422b5ed22e6598dd42b9f705de161695853b1f5c6bd80",
-		"packer_darwin_arm64":     "ebd8eb03503627471f39b036ff5dbb24070d21518d59aa8cbf962386257d21a4",
-		"packer_freebsd_386":      "9ab4310d1d1048593278e4664591e7aa8f71d4bef9eda30e61d32323c14370cd",
-		"packer_freebsd_amd64":    "be0c525eb5c7db8ef6412da9d0e2a967389de8df50b072395917be86fa95e8d8",
-		"packer_freebsd_arm":      "bf9b885fde19be5cc4d70a68cc91ebdf3841d3e00c707f0e517a73ebd8a97297",
-		"packer_linux_386":        "13c1a0cc1112807a6900d14c83f6d3ce79f9474eeab7a09031aba01cb68665f5",
-		"packer_linux_amd64":      "2fd1149c5c6c7604ced64d7b56638af05f6b7ed3f6835182bc913ddaba1f16b8",
-		"packer_linux_arm":        "7d5ee19adc7659720f03363c27e914945204eadb633ad5a3c37a3719f20e6eee",
-		"packer_linux_arm64":      "1687f43bd120601f62e54b970b1cc06f83e95897357dc5c679b57ec9d2fb40a7",
-		"packer_linux_ppc64le":    "0002e0cb37e60945c0438786e6e15613866b3b40ced0ec519c85ae1cae6b6a7a",
-		"packer_netbsd_386":       "dc1ec730c6e37efdca36e2027a2414ab7ee6cf0380eff50f8466b4bf71a83ac2",
-		"packer_netbsd_amd64":     "596cde300e18cd8270f671941e49d713933e5fa1105d43f73a87cb62b2789f38",
-		"packer_netbsd_arm":       "1b4e5cd75aaa02c367c3f528b3e748cf4f5808fc40e7ba881efeefdea5ff0183",
-		"packer_openbsd_386":      "027b0ecb539c98e4012b64544a858dc9c5dd5cf492b8f269e42c42f02ffb12fd",
-		"packer_openbsd_amd64":    "8f8383b192d57af9d7dc2561ecd53c5d2bd448f4286ac07a48c34481c181212e",
-		"packer_openbsd_arm":      "b57a602160c82e26fb601896606339ec59034a8591311326cfeca69d3b886993",
-		"packer_solaris_amd64":    "26563bc9654df31cd0cc1665ced9602a650b99332b5114be1d9cb3d0eab23d86",
-		"packer_windows_386":      "d3cb7f62b5834080c4437208e0e4a40028b8eba9967b432daa5d3df9927306ab",
-		"packer_windows_amd64":    "5cf875e39b5d4ad552dd0e6f52a6e46c6d0b6b0ee1f8104824445892febe58c6",
+		"packer_darwin_amd64":     "7718bee4a580d7c486263f10a28d00db7e8c600af08102ae118592ee30a50892",
+		"packer_darwin_arm64":     "cca1601f2d187b084aa875183ae70e85521df0475fc0f61a7380e46df8980289",
+		"packer_freebsd_386":      "4a3ae19821d7bd81855510a702a4d6262c10f76a837c32130b07832fab71dee7",
+		"packer_freebsd_amd64":    "c07403daec93e0212075f8f517f69886f530f445f99fac315dd40a1824d564ea",
+		"packer_freebsd_arm":      "b9af5f166a4a112c83ebb8c2eda76062e9c029acf3d7da927adbad1aad5dc7a9",
+		"packer_linux_386":        "080c986c5e441197750ed1a6d5b398b558601218793b4bdcb16a040b9ecf0f05",
+		"packer_linux_amd64":      "9ed712c9a8f223c7985d7d21c6b65744bf1c66b8aca333232b96f5ae3fd9c90d",
+		"packer_linux_arm":        "ced0c4d91f2642affb8188459a167aafd7d62e660b59db9e7fa9bdcfdb895324",
+		"packer_linux_arm64":      "ebf06f8f30a7e3bc69fa33ac8a5dfffefd70187df4541cccc6ef3f325b8ae4f1",
+		"packer_linux_ppc64le":    "8efedaad3f21958bae164430d6cd8283059fe268798074bdd24b73127b8b7685",
+		"packer_netbsd_386":       "afaf8faf32fde44fc6c45f2d450ebc7450b69ee50cb0a2639d2c241389a9c445",
+		"packer_netbsd_amd64":     "aadaee8d1c3032ccc8fd073a55b2c6287e53f807168edf0b253d26284c61e9f3",
+		"packer_netbsd_arm":       "5618745fb8307ebb6258e3922207fa30027d72290ad56c62d4dbe18b18b0d559",
+		"packer_openbsd_386":      "4a553b05e44754c87399e9d3284fcd2fadb9db7be8ac415a7b995ea014b9cd1d",
+		"packer_openbsd_amd64":    "a03c67d0391c447c6694396b1b61ef41ad89da6d9d3d2a59903db602a8ebcc96",
+		"packer_openbsd_arm":      "63a704377eabff3329f1dd65801e4db820162ecac99414357334b39d8265b657",
+		"packer_solaris_amd64":    "d01931e1f1a47df741156ad9bc9251ab0c5672511c6b753e12603ae300a18e83",
+		"packer_windows_386":      "95422603cecbcb2afdb68e351d693f1d4c8de3a58de10674cb6864d9a041dd9d",
+		"packer_windows_amd64":    "f0a256f13f8217070309f690e15ba76d53667f72da8efbcd33179d41c883ebdd",
 	}
 )
