@@ -1898,6 +1898,9 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType s
 					if poolChips == 0 {
 						topologyAnnotation[key] = "cloud.google.com/gce-topology-block"
 						logging.Warn("Dynamic Topology Detection: failed to discover physical pool topology. Defaulting to cloud.google.com/gce-topology-block.")
+					} else if requestedChips <= 8 {
+						topologyAnnotation[key] = "cloud.google.com/gce-topology-host"
+						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-host for 8-chip sub-slicing (%d chips).", requestedChips)
 					} else if requestedChips < poolChips {
 						topologyAnnotation[key] = "cloud.google.com/gce-topology-subblock"
 						logging.Info("Dynamic Topology Detection: cluster uses native GCE levels. Injecting cloud.google.com/gce-topology-subblock for sub-slicing (%d < %d chips).", requestedChips, poolChips)
