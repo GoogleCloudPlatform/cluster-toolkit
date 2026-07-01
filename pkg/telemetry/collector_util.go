@@ -234,6 +234,9 @@ func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachi
 // processInlineItem extracts machine types and counts from an individual map/object in an inline list.
 func processInlineItem(item cty.Value, topMachineType string, counts map[string]int) {
 	item, _ = item.Unmark()
+	if !item.IsKnown() || item.IsNull() {
+		return
+	}
 	ty := item.Type()
 
 	if !ty.IsObjectType() && !ty.IsMapType() {
@@ -364,6 +367,10 @@ func parseDefaultValue[T any](inputName string, inputDefault any, key string) (T
 		switch v := inputDefault.(type) {
 		case T:
 			return v, true
+		case int64:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
 		case float64:
 			// Safely cast float64 to int if T is int
 			if _, isInt := any(zero).(int); isInt {
