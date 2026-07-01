@@ -1761,7 +1761,7 @@ func TestGetErrorType(t *testing.T) {
 		},
 		{
 			name:     "Text Match Validation",
-			err:      errors.New("some invalid configuration provided"),
+			err:      errors.New("invalid argument provided"),
 			expected: ErrTypeValidation,
 		},
 		{
@@ -1798,6 +1798,21 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Text Match Provisioning",
 			err:      errors.New("deployment failed to finish"),
 			expected: ErrTypeProvisioning,
+		},
+		{
+			name:     "Text Match Stockout",
+			err:      errors.New("A c2-standard-60 VM instance is currently unavailable"),
+			expected: ErrTypeStockout,
+		},
+		{
+			name:     "Text Match APIDisabled",
+			err:      errors.New("Cloud Filestore API has not been used in project 12345 before or it is disabled."),
+			expected: ErrTypeAPIDisabled,
+		},
+		{
+			name:     "Text Match ResourceAlreadyExists",
+			err:      errors.New("googleapi: Error 409: Resource already exists"),
+			expected: ErrTypeResourceExists,
 		},
 	}
 

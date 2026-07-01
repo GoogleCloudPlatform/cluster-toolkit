@@ -29,6 +29,9 @@ const (
 	ErrTypeQuotaExceeded    = "QuotaExceeded"
 	ErrTypeAuthentication   = "AuthenticationFailed"
 	ErrTypeProvisioning     = "ProvisioningFailed"
+	ErrTypeStockout         = "Stockout"
+	ErrTypeAPIDisabled      = "APIDisabled"
+	ErrTypeResourceExists   = "ResourceAlreadyExists"
 	ErrTypeUnknown          = "Unknown"
 )
 
@@ -57,13 +60,21 @@ var substringErrMatchers = []struct {
 	{"403 forbidden", ErrTypePermissionDenied},
 	{"access denied", ErrTypePermissionDenied},
 	{"not found", ErrTypeFileNotFound},
-	{"404", ErrTypeFileNotFound},
+	{"error 404", ErrTypeFileNotFound},
 	{"validation failed", ErrTypeValidation},
-	{"invalid", ErrTypeValidation},
-	{"malformed", ErrTypeValidation},
+	{"invalid argument", ErrTypeValidation},
+	{"invalid value", ErrTypeValidation},
+	{"instance is currently unavailable", ErrTypeStockout},
+	{"sufficient capacity", ErrTypeStockout},
+	{"enough resources available", ErrTypeStockout},
+	{"resource pool exhausted", ErrTypeStockout},
+	{"api is disabled", ErrTypeAPIDisabled},
+	{"has not been used in project", ErrTypeAPIDisabled},
+	{"enable the api", ErrTypeAPIDisabled},
+	{"already exists", ErrTypeResourceExists},
+	{"alreadyexists", ErrTypeResourceExists},
 	{"timeout", ErrTypeTimeout},
 	{"deadline", ErrTypeTimeout},
-	{"network", ErrTypeNetwork},
 	{"connection refused", ErrTypeNetwork},
 	{"dial tcp", ErrTypeNetwork},
 	{"connection reset", ErrTypeNetwork},
