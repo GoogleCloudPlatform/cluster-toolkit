@@ -12,9 +12,23 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
 
 1. **Deploy MPI Operator (v0.8.0):**
 
-   ```bash
-   kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
-   ```
+   * **Automated (During Cluster Creation via Blueprint YAML):** Include the MPI Operator manifest in `apply_manifests` under `kubectl-apply` in your blueprint YAML (`gke-a4x.yaml`):
+
+     ```yaml
+       - id: kubectl-apply
+         source: modules/management/kubectl-apply
+         use: [a4x-cluster]
+         settings:
+           apply_manifests:
+           - name: mpi-operator
+             source: https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
+     ```
+
+   * **Manual (After Cluster Deployment via `kubectl`):** Once the cluster is deployed, run the following command against your cluster:
+
+     ```bash
+     kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
+     ```
 
 2. **Verify Installation:**
 
