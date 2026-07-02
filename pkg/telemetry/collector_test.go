@@ -1814,6 +1814,11 @@ func TestGetErrorType(t *testing.T) {
 			err:      errors.New("googleapi: Error 409: Resource already exists"),
 			expected: ErrTypeResourceExists,
 		},
+		{
+			name:     "Capitalization Test",
+			err:      errors.New("PERMISSION DENIED TO ACCESS THIS RESOURCE"),
+			expected: ErrTypePermissionDenied,
+		},
 	}
 
 	for _, tt := range tests {
