@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
+	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 )
@@ -297,7 +298,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 		return err
 	}
 	defer os.Remove(f.Name())
-	wantsChange, err := planModule(tf, f.Name(), destroy)
+	wantsChange, err := planWithGkeRecovery(tf, f.Name(), destroy)
 	if err != nil {
 		return err
 	}
@@ -328,6 +329,21 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 	}
 
 	return nil
+}
+
+func planWithGkeRecovery(tf *tfexec.Terraform, planPath string, destroy bool) (bool, error) {
+	wantsChange, err := planModule(tf, planPath, destroy)
+	if err != nil {
+		if destroy && IsKubernetesUnreachableError(err) {
+			logging.Warn("GKE cluster is unreachable during destroy. Attempting to remove Kubernetes-related resources from state and retrying.")
+			if rmErr := RemoveKubernetesResourcesFromState(tf); rmErr != nil {
+				return false, fmt.Errorf("failed to clean unreachable Kubernetes resources from state: %w (original error: %v)", rmErr, err)
+			}
+			return planModule(tf, planPath, destroy)
+		}
+		return false, err
+	}
+	return wantsChange, nil
 }
 
 func getOutputs(tf *tfexec.Terraform, b ApplyBehavior, o OutputFormat) (map[string]cty.Value, error) {
@@ -501,4 +517,53 @@ func TfVersion() (string, error) {
 	}
 
 	return version.TerraformVersion, nil
+}
+
+// IsKubernetesUnreachableError returns true if the error indicates GKE is unreachable
+func IsKubernetesUnreachableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "dial tcp [::1]:80") ||
+		strings.Contains(msg, "Kubernetes cluster unreachable") ||
+		strings.Contains(msg, "failed to create kubernetes rest client") ||
+		strings.Contains(msg, "no configuration has been provided, try setting KUBERNETES_MASTER")
+}
+
+// RemoveKubernetesResourcesFromState removes all kubernetes/helm/kubectl provider resources from the state
+func RemoveKubernetesResourcesFromState(tf *tfexec.Terraform) error {
+	ctx := context.Background()
+	state, err := tf.Show(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to show state: %w", err)
+	}
+	if state == nil || state.Values == nil || state.Values.RootModule == nil {
+		return nil
+	}
+
+	resources := getResourcesRecursively(state.Values.RootModule)
+	for _, res := range resources {
+		if strings.HasPrefix(res.Type, "kubernetes_") ||
+			strings.HasPrefix(res.Type, "helm_") ||
+			strings.HasPrefix(res.Type, "kubectl_") {
+			logging.Info("GKE cluster unreachable: removing resource %s from state", res.Address)
+			if err := tf.StateRm(ctx, res.Address); err != nil {
+				logging.Error("failed to remove resource %s from state: %v", res.Address, err)
+			}
+		}
+	}
+	return nil
+}
+
+func getResourcesRecursively(module *tfjson.StateModule) []*tfjson.StateResource {
+	if module == nil {
+		return nil
+	}
+	var resources []*tfjson.StateResource
+	resources = append(resources, module.Resources...)
+	for _, child := range module.ChildModules {
+		resources = append(resources, getResourcesRecursively(child)...)
+	}
+	return resources
 }
