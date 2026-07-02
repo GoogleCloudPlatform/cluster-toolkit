@@ -222,8 +222,9 @@ deployment_groups:
             stack_type=null,
             access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
             ipv6_access_config=[],
-           }]
-         ))
+            alias_ip_range=[]
+          }]
+        ))
       enable_dranet: true
     outputs: [instructions]
 
