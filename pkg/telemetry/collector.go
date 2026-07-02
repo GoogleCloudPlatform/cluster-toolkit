@@ -78,7 +78,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
-	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCount(c.blueprint)
+	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCounts(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -272,7 +272,7 @@ func getModules(modulesList []string) string {
 	return strings.Join(sanitizedModules, ",")
 }
 
-func getStaticNodeCount(bp config.Blueprint) string {
+func getStaticNodeCounts(bp config.Blueprint) string {
 	countsByMachineType := make(map[string]int)
 
 	for _, m := range config.GetAllBpModules(&bp) {

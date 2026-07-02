@@ -1834,8 +1834,8 @@ func TestGetErrorType(t *testing.T) {
 	}
 }
 
-// TestGetStaticNodeCount verifies that static node counts are correctly extracted from the blueprint.
-func TestGetStaticNodeCount(t *testing.T) {
+// TestGetStaticNodeCounts verifies that static node counts are correctly extracted from the blueprint.
+func TestGetStaticNodeCounts(t *testing.T) {
 	tests := []struct {
 		name string
 		bp   config.Blueprint
@@ -2113,9 +2113,9 @@ func TestGetStaticNodeCount(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := getStaticNodeCount(tc.bp)
+			got := getStaticNodeCounts(tc.bp)
 			if got != tc.want {
-				t.Errorf("getStaticNodeCount() = %q; want %q", got, tc.want)
+				t.Errorf("getStaticNodeCounts() = %q; want %q", got, tc.want)
 			}
 		})
 	}
