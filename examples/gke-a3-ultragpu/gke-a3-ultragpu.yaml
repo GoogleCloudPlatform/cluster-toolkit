@@ -247,6 +247,7 @@ deployment_groups:
         $(concat(gke-a3-ultra-net-1.instance_additional_networks,
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
+      enable_dranet: true
     outputs: [instructions]
 
   - id: workload-manager-install

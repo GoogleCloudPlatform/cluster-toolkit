@@ -505,7 +505,7 @@ variable "enable_numa_aware_scheduling" {
 variable "enable_dranet" {
   type        = bool
   default     = false
-  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). When set to true, this enables the driver for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster."
+  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). CRITICAL: This MUST be set to true for multi-slice/multi-network TPU or GPU clusters to automatically configure host policy routing and prevent distributed collectives (such as JAX or NCCL) from hanging due to hypervisor-level asymmetric routing packet drops."
 }
 
 variable "autoscaling_min_node_count" {

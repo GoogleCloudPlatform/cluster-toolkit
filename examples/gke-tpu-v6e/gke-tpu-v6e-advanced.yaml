@@ -212,6 +212,7 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.v6e_node_pool_disk_size_gb)
       additional_networks: $(gke-tpu-v6e-net-1.instance_additional_networks)
+      enable_dranet: true
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
