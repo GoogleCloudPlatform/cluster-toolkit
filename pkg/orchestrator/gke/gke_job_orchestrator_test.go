@@ -2311,3 +2311,190 @@ func TestGenerateGKENodeSelectorLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateGKEManifest_CustomEnv(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "env-test-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "n2-standard-2",
+		ClusterLocation: "us-central1-a",
+		Env: map[string]string{
+			"MY_CUSTOM_VAR": "some-value",
+			"ANOTHER_VAR":   "another=value",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	expectedLines := []string{
+		`- name: MY_CUSTOM_VAR`,
+		`  value: "some-value"`,
+		`- name: ANOTHER_VAR`,
+		`  value: "another=value"`,
+	}
+	for _, line := range expectedLines {
+		if !strings.Contains(manifest, line) {
+			t.Errorf("manifest does not contain expected line %q. Got manifest:\n%s", line, manifest)
+		}
+	}
+}
+
+func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-env-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "tpu-v5-lite-podslice",
+		ClusterLocation: "us-central1-a",
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+		},
+		Env: map[string]string{
+			"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS": "grpc_insecure_override",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
+		"gcloud compute machine-types describe tpu-v5-lite-podslice --zone=us-central1-a --format=json":                         {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "tpu-v5-lite-podslice"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+
+	// The custom environment variables must be present only in the workload-container container spec
+	expectedLines := []string{
+		`- name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS`,
+		`  value: "grpc_insecure_override"`,
+	}
+	for _, line := range expectedLines {
+		count := strings.Count(manifest, line)
+		// We expect it to appear exactly once: in the workload-container
+		if count != 1 {
+			t.Errorf("expected line %q to appear exactly 1 time in manifest, got %d. Manifest:\n%s", line, count, manifest)
+		}
+	}
+}
+
+func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
+	setupMockMachineConfig(t)
+	tests := []struct {
+		computeType  string
+		topology     string
+		wantPlatform string
+	}{
+		{
+			computeType:  "tpu-v5-lite-podslice",
+			topology:     "16x16",
+			wantPlatform: "tpuv5e:16x16",
+		},
+		{
+			computeType:  "v5litepod",
+			topology:     "8x8",
+			wantPlatform: "tpuv5e:8x8",
+		},
+		{
+			computeType:  "tpu-v6e-slice",
+			topology:     "4x4",
+			wantPlatform: "tpuv6e:4x4",
+		},
+		{
+			computeType:  "v6e",
+			topology:     "4x4",
+			wantPlatform: "tpuv6e:4x4",
+		},
+		{
+			computeType:  "tpu-v5p-slice",
+			topology:     "2x2x2",
+			wantPlatform: "tpuv5:2x2x2",
+		},
+		{
+			computeType:  "v5p",
+			topology:     "2x2x2",
+			wantPlatform: "tpuv5:2x2x2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.computeType, func(t *testing.T) {
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-test-job",
+				CommandToRun:    "echo hello",
+				ComputeType:     tc.computeType,
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Topology:        tc.topology,
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
+				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
+			}
+
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Config: gkeNodePoolConfig{MachineType: tc.computeType}},
+			}
+
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+
+			opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+			if err != nil {
+				t.Fatalf("PrepareManifestOptions failed: %v", err)
+			}
+
+			if opts.PathwaysInstanceType != tc.wantPlatform {
+				t.Errorf("PathwaysInstanceType = %q, want %q", opts.PathwaysInstanceType, tc.wantPlatform)
+			}
+		})
+	}
+}

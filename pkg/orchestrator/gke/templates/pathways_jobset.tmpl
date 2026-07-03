@@ -91,6 +91,10 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -129,6 +133,10 @@ spec:
                 value: "true"
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysServerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -162,6 +170,10 @@ spec:
                 value: grpc://$(PATHWAYS_HEAD):29000
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.Env }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               command:
               - "/bin/bash"
               - "-c"
@@ -183,6 +195,7 @@ spec:
                 echo "GCluster End: $(date)"
                 exit $EXIT_CODE
 {{- if .VolumeMountsYAML }}
+              volumeMounts:
 {{.VolumeMountsYAML}}
 {{- end }}
             {{- end}}
@@ -287,6 +300,10 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysWorkerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
 {{.ResourcesString}}
             volumes:
 {{.VolumesYAML}}
