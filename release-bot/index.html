@@ -952,9 +952,13 @@
         .catch(err => console.error("Error toggling pause:", err));
     }
 
+    let isLaunching = false;
+
     function startAdhocRelease() {
+      if (isLaunching) return;
       if (!confirm("Are you sure you want to start a new adhoc release? This will initialize a new release candidate.")) return;
       
+      isLaunching = true;
       const btn = document.querySelector('.no-release-card button');
       const originalText = btn.innerText;
       btn.disabled = true;
@@ -967,6 +971,7 @@
             fetchState();
           } else {
             alert("Error: " + (data.error || "Failed to start release"));
+            isLaunching = false;
             btn.disabled = false;
             btn.innerText = originalText;
           }
@@ -974,6 +979,7 @@
         .catch(err => {
           console.error("Error starting adhoc release:", err);
           alert("Error launching release daemon.");
+          isLaunching = false;
           btn.disabled = false;
           btn.innerText = originalText;
         });
@@ -1029,11 +1035,13 @@
               document.getElementById('last-successful-release-date').innerText = 'N/A';
             }
             
-            // Reset "Start Adhoc Release" button state
-            const btn = document.querySelector('.no-release-card button');
-            if (btn) {
-              btn.disabled = false;
-              btn.innerText = "🚀 Start Adhoc Release";
+            // Reset "Start Adhoc Release" button state only if not currently launching
+            if (!isLaunching) {
+              const btn = document.querySelector('.no-release-card button');
+              if (btn) {
+                btn.disabled = false;
+                btn.innerText = "🚀 Start Adhoc Release";
+              }
             }
             
             // Update sidebar meta
@@ -1048,6 +1056,7 @@
           }
 
           // Active Release
+          isLaunching = false; // Reset launching flag once active release is successfully rendered
           document.getElementById('no-release-container').style.display = 'none';
           document.getElementById('active-release-container').style.display = 'block';
           
