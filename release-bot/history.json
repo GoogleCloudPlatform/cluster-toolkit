@@ -185,5 +185,26 @@
             "fixed": 0,
             "deprioritized": 1
         }
+    },
+    {
+        "release_id": "release-release-candidate-1783066687",
+        "created_at": "2026-07-03T08:18:02Z",
+        "merged_at": "2026-07-03T08:22:17Z",
+        "pr_number": 41,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [
+            {
+                "ticket_id": "530811908",
+                "title": "Incorrect version specified in configuration",
+                "priority": "P3",
+                "assignee": "agrawalkhushi",
+                "status": "ASSIGNED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 0,
+            "deprioritized": 1
+        }
     }
 ]
