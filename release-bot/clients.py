@@ -101,8 +101,12 @@ class GitHubClient:
 
     def convert_pr_to_active(self, pr_number):
         import subprocess
+        import os
         try:
-            subprocess.run(["gh", "pr", "ready", str(pr_number), "--repo", self.repo_name], check=True)
+            env = os.environ.copy()
+            if self.pat:
+                env["GH_TOKEN"] = self.pat
+            subprocess.run(["gh", "pr", "ready", str(pr_number), "--repo", self.repo_name], env=env, check=True)
             print(f"Converted PR {pr_number} from Draft to Active!")
             if self.repo:
                 pr = self.repo.get_pull(int(pr_number))
@@ -155,28 +159,44 @@ class GitHubClient:
             print(f"Error merging PR {pr_number}: {e}")
 
     def create_backport_pr(self, pr_number):
-        if not self.repo or not pr_number: return
+        if not self.repo or not pr_number: return None
         import subprocess
+        import os
         try:
-            # Simple backport by creating a PR from main -> develop
-            pr = self.repo.create_pull(
-                title=f"Backport Release to Develop",
-                body=f"Backporting release changes from PR {pr_number} to develop.",
-                head="main",
-                base="develop",
-                draft=False
-            )
-            print(f"Created Backport PR: {pr.html_url}")
+            # Check if backport PR already exists
+            existing_prs = self.repo.get_pulls(state='open', head=f"{self.repo_name.split('/')[0]}:main", base="develop")
+            if existing_prs.totalCount > 0:
+                pr = existing_prs[0]
+                print(f"Found existing Backport PR: {pr.html_url}")
+            else:
+                # Simple backport by creating a PR from main -> develop
+                pr = self.repo.create_pull(
+                    title=f"Backport Release to Develop",
+                    body=f"Backporting release changes from PR {pr_number} to develop.",
+                    head="main",
+                    base="develop",
+                    draft=False
+                )
+                print(f"Created Backport PR: {pr.html_url}")
             
             # Ensure it is ready for review
-            subprocess.run(["gh", "pr", "ready", str(pr.number), "--repo", self.repo_name])
+            env = os.environ.copy()
+            if self.pat:
+                env["GH_TOKEN"] = self.pat
+            subprocess.run(["gh", "pr", "ready", str(pr.number), "--repo", self.repo_name], env=env)
             
             # Enable auto-merge on approval without squashing
-            pr.enable_automerge(merge_method="merge")
-            print(f"Enabled auto-merge for Backport PR {pr.number}")
+            try:
+                pr.enable_automerge(merge_method="merge")
+                print(f"Enabled auto-merge for Backport PR {pr.number}")
+            except Exception as e:
+                print(f"Warning: Could not enable auto-merge for Backport PR {pr.number}: {e}")
+                
+            return pr.number
             
         except Exception as e:
             print(f"Error creating backport PR: {e}")
+            return None
 
 class OnCallClient:
     def fetch_on_call_from_api(self, rotation_name="cluster-toolkit"):

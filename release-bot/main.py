@@ -41,8 +41,10 @@ class ReleaseOrchestrator:
         elif current_state == "MERGE_AND_BACKPORT":
             self.handle_merge_and_backport()
         elif current_state == "DONE":
-            logging.info("Release complete. Resetting state back to INITIALIZATION.")
+            import sys
+            logging.info("Release complete. Resetting state back to INITIALIZATION and exiting.")
             self.state_manager.reset_state()
+            sys.exit(0)
         else:
             logging.error(f"Unknown state: {current_state}")
 
@@ -197,15 +199,32 @@ class ReleaseOrchestrator:
         state = self.state_manager.read_state()
         pr_number = state.get("pr_number")
         
-        # Merge rc PR
-        self.github.merge_pr(pr_number)
+        backport_pr_number = state.get("backport_pr_number")
+        on_call_github = state.get("on_call_github")
         
-        # Create backport PR
-        self.github.create_backport_pr(pr_number)
-        
-        self.chat.send_message("Release successfully merged and backported! 🎉")
-        
-        self.state_manager.set_current_state("DONE")
+        if not backport_pr_number:
+            # Merge rc PR
+            self.github.merge_pr(pr_number)
+            
+            # Create backport PR
+            backport_pr_number = self.github.create_backport_pr(pr_number)
+            if not backport_pr_number:
+                logging.error("Failed to create backport PR. Will retry.")
+                return
+            self.state_manager.update_state(backport_pr_number=backport_pr_number)
+            
+            # Assign reviewer
+            self.github.assign_reviewer(backport_pr_number, on_call_github)
+            
+        # Check if approved
+        if self.github.is_pr_approved(backport_pr_number):
+            logging.info(f"Backport PR {backport_pr_number} is approved! Auto-merging...")
+            self.github.merge_pr(backport_pr_number)
+            self.chat.send_message("Release successfully merged and backported! 🎉")
+            self.state_manager.set_current_state("DONE")
+        else:
+            logging.info(f"Waiting for backport PR {backport_pr_number} to be approved and merged...")
+            return
 
 
 def main():
