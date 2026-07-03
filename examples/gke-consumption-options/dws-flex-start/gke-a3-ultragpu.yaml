@@ -182,7 +182,6 @@ deployment_groups:
           }],
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
-      enable_dranet: true
     outputs: [instructions]
 
   - id: workload-manager-install

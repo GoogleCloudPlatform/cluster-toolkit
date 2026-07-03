@@ -219,7 +219,6 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       additional_networks: $(gke-tpu-7x-net-1.instance_additional_networks)
-      enable_dranet: true
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:

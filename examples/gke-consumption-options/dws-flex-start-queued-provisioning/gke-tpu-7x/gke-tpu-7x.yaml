@@ -226,7 +226,6 @@ deployment_groups:
             alias_ip_range=[]
           }]
         ))
-      enable_dranet: true
     outputs: [instructions]
 
   - id: workload-manager-install
