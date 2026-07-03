@@ -31,11 +31,6 @@ if ! type -P git 1>/dev/null; then
 	exit 1
 fi
 
-if ! type -P git-sed 1>/dev/null; then
-	echo "Must install git-extras package for git sed functionality"
-	exit 1
-fi
-
 if ! type -P gh 1>/dev/null; then
 	echo "Must install GitHub CLI tool for command line API access"
 	exit 1
@@ -104,7 +99,7 @@ echo "Creating new Toolkit release-candidate branch"
 git push -f -u "${REMOTE_NAME}" "${RC_BRANCH}"
 git switch -c "${V_BRANCH}" "${RC_BRANCH}"
 echo "converting old v${OLD_MAJOR}.${OLD_MINOR}.${OLD_PATCH} to new ${NEW_TAG}"
-git ls-files -z '*.go' '*versions.tf' | xargs -0 git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" -- || true
+git ls-files -z '*.go' '*versions.tf' | xargs -0 sed -i "s/v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}/${NEW_TAG}/g" || true
 echo "Release version ${NEW_VERSION} run ${BRANCH_SUFFIX}" > version.txt
 git add -u
 git add version.txt
