@@ -79,6 +79,7 @@
       font-weight: 700;
       background: linear-gradient(135deg, #a5b4fc, #6366f1);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -978,13 +979,43 @@
         });
     }
 
+    function stopRelease() {
+      if (!confirm("Are you sure you want to stop and abort this release completely? This will terminate the daemon and clear the active release state.")) return;
+      
+      fetch('/api/stop', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            fetchState();
+          } else {
+            alert("Error: " + (data.error || "Failed to stop release"));
+          }
+        })
+        .catch(err => console.error("Error stopping release:", err));
+    }
+
+    function resumeRelease() {
+      if (!confirm("Are you sure you want to resume the release from the manually closed step? This will reopen the GitHub Pull Request.")) return;
+      
+      fetch('/api/resume', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            fetchState();
+          } else {
+            alert("Error: " + (data.error || "Failed to resume release"));
+          }
+        })
+        .catch(err => console.error("Error resuming release:", err));
+    }
+
     function fetchState() {
       fetch('/api/state')
         .then(r => r.json())
         .then(data => {
           const { state, next_release_date, last_successful_release, last_successful_release_id } = data;
           
-          const isOngoing = state.CURRENT_STATE && state.CURRENT_STATE !== "DONE" && state.pr_number;
+          const isOngoing = state.CURRENT_STATE && state.CURRENT_STATE !== "DONE" && (state.pr_number || state.version_pr_number || state.CURRENT_STATE === "MANUALLY_CANCELLED");
           
           if (!isOngoing) {
             document.getElementById('no-release-container').style.display = 'block';
@@ -1013,25 +1044,45 @@
           document.getElementById('no-release-container').style.display = 'none';
           document.getElementById('active-release-container').style.display = 'block';
           
-          document.getElementById('active-release-title').innerText = `Active Release: ${state.rc_branch || 'release-candidate'}`;
-          
-          // Controls (Pause/Resume button)
-          const controlsDiv = document.getElementById('active-release-controls');
-          if (state.paused) {
-            controlsDiv.innerHTML = `<button class="control-btn btn-resume" onclick="togglePause()">Resume Release</button>`;
+          if (state.CURRENT_STATE === "MANUALLY_CANCELLED") {
+            document.getElementById('active-release-title').innerText = `Active Release: Manually Cancelled at Step: ${state.cancelled_from_state}`;
           } else {
-            controlsDiv.innerHTML = `<button class="control-btn btn-pause" onclick="togglePause()">Pause Release</button>`;
+            document.getElementById('active-release-title').innerText = `Active Release: ${state.rc_branch || 'release-candidate'}`;
           }
+          
+          // Controls (Pause/Resume/Stop buttons)
+          const controlsDiv = document.getElementById('active-release-controls');
+          let buttonsHtml = '';
+          if (state.CURRENT_STATE === "MANUALLY_CANCELLED") {
+            buttonsHtml = `
+              <button class="control-btn btn-resume" onclick="resumeRelease()">Resume Release</button>
+              <button class="control-btn" style="background-color:var(--danger); color:var(--text-primary);" onclick="stopRelease()">Stop/Abort</button>
+            `;
+          } else {
+            if (state.paused) {
+              buttonsHtml = `
+                <button class="control-btn btn-resume" onclick="togglePause()">Resume Release</button>
+                <button class="control-btn" style="background-color:var(--danger); color:var(--text-primary);" onclick="stopRelease()">Stop/Abort</button>
+              `;
+            } else {
+              buttonsHtml = `
+                <button class="control-btn btn-pause" onclick="togglePause()">Pause Release</button>
+                <button class="control-btn" style="background-color:var(--danger); color:var(--text-primary);" onclick="stopRelease()">Stop/Abort</button>
+              `;
+            }
+          }
+          controlsDiv.innerHTML = buttonsHtml;
 
           // Update sidebar meta
-          document.getElementById('meta-status').innerText = state.paused ? 'Paused' : 'Active';
-          document.getElementById('meta-status').style.color = state.paused ? 'var(--warning)' : 'var(--success)';
+          document.getElementById('meta-status').innerText = state.CURRENT_STATE === "MANUALLY_CANCELLED" ? "Cancelled" : (state.paused ? 'Paused' : 'Active');
+          document.getElementById('meta-status').style.color = state.CURRENT_STATE === "MANUALLY_CANCELLED" ? "var(--danger)" : (state.paused ? 'var(--warning)' : 'var(--success)');
           document.getElementById('meta-state').innerText = state.CURRENT_STATE;
           document.getElementById('meta-branch').innerText = state.rc_branch || 'N/A';
           
           const repo = "rahimkhan19/cluster-toolkit";
-          if (state.pr_number) {
-            document.getElementById('meta-pr').innerHTML = `<a href="https://github.com/${repo}/pull/${state.pr_number}" target="_blank">PR #${state.pr_number}</a>`;
+          const currentPRNum = state.pr_number || state.version_pr_number || state.backport_pr_number;
+          if (currentPRNum) {
+            document.getElementById('meta-pr').innerHTML = `<a href="https://github.com/${repo}/pull/${currentPRNum}" target="_blank">PR #${currentPRNum}</a>`;
           } else {
             document.getElementById('meta-pr').innerText = 'N/A';
           }
@@ -1048,7 +1099,8 @@
             "AWAITING_FINAL_REVIEW": 85,
             "MERGE_AND_BACKPORT": 95
           };
-          const percentage = stateProgress[state.CURRENT_STATE] || 0;
+          const displayState = state.CURRENT_STATE === "MANUALLY_CANCELLED" ? state.cancelled_from_state : state.CURRENT_STATE;
+          const percentage = stateProgress[displayState] || 0;
           document.getElementById('progress-bar-fill').style.width = `${percentage}%`;
           document.getElementById('progress-percentage-label').innerText = `${percentage}%`;
           document.getElementById('progress-percentage-text').innerText = `${percentage}%`;
@@ -1064,15 +1116,26 @@
             "MERGE_AND_BACKPORT": 5
           };
           
-          const activeIndex = stateToStepIndex[state.CURRENT_STATE] !== undefined ? stateToStepIndex[state.CURRENT_STATE] : -1;
+          const activeIndex = stateToStepIndex[displayState] !== undefined ? stateToStepIndex[displayState] : -1;
           
           steps.forEach((step, idx) => {
             const el = document.getElementById(`step-${step}`);
             el.classList.remove('completed', 'active');
+            
+            const dot = el.querySelector('.step-dot');
+            dot.style.borderColor = '';
+            dot.style.backgroundColor = '';
+            dot.style.color = '';
+            
             if (idx < activeIndex) {
               el.classList.add('completed');
             } else if (idx === activeIndex) {
               el.classList.add('active');
+              if (state.CURRENT_STATE === "MANUALLY_CANCELLED") {
+                dot.style.borderColor = 'var(--danger)';
+                dot.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                dot.style.color = 'var(--danger)';
+              }
             }
           });
 

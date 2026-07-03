@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from state_manager import StateManager
 from clients import (
     GitHubClient, OnCallClient, GeminiClient,
-    BuganizerClient, TestRunnerClient, ChatClient
+    BuganizerClient, TestRunnerClient, ChatClient, EmailClient
 )
 
 # Set up logging
@@ -37,6 +37,7 @@ class ReleaseOrchestrator:
         self.buganizer = BuganizerClient()
         self.test_runner = TestRunnerClient()
         self.chat = ChatClient()
+        self.email = EmailClient()
 
     def run_cycle(self):
         state = self.state_manager.read_state()
@@ -59,6 +60,8 @@ class ReleaseOrchestrator:
             self.handle_awaiting_final_review()
         elif current_state == "MERGE_AND_BACKPORT":
             self.handle_merge_and_backport()
+        elif current_state == "MANUALLY_CANCELLED":
+            self.handle_manually_cancelled()
         elif current_state == "DONE":
             import sys
             logging.info("Release complete. Archiving to history, resetting state back to INITIALIZATION, and exiting.")
@@ -72,6 +75,18 @@ class ReleaseOrchestrator:
         logging.info("State 0: Initialization & Version Bump")
         state = self.state_manager.read_state()
         
+        # Check if this is scheduled mode and we need to wait for release time
+        trigger_type = state.get("trigger_type")
+        if not trigger_type:
+            # Running as scheduled daemon
+            if not self.is_scheduled_release_time():
+                return
+            # Scheduled time reached! Set trigger type
+            self.state_manager.update_state(trigger_type="scheduled")
+            import time
+            self.state_manager.update_state(created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+            state = self.state_manager.read_state()
+
         version_pr_number = state.get("version_pr_number")
         
         if not version_pr_number:
@@ -80,6 +95,13 @@ class ReleaseOrchestrator:
                 logging.error("Failed to create the Version PR. Blocking progress.")
                 return # Block until fixed manually
             version_pr_number, rc_branch = result
+            
+            # Send Email notification upon release starting (both adhoc and scheduled)
+            self.email.send_email(
+                to_email="rahimkh@google.com",
+                subject="[ReleaseBot] Release Process Started",
+                body=f"Hi Rahim,\n\nThe release candidate process has been started.\n\nRelease Branch: {rc_branch}\nVersion PR: #{version_pr_number}\n\nYou can track the progress on the Control Plane dashboard at http://localhost:8000.\n\nBest regards,\nReleaseBot"
+            )
             
             # 2. Identify On-call
             on_call_info = self.on_call.get_current_on_call()
@@ -96,6 +118,13 @@ class ReleaseOrchestrator:
             )
             
         # 3. Wait for Merge
+        # Check if closed manually
+        if self.github.is_pr_closed(version_pr_number):
+            logging.warning(f"Version PR {version_pr_number} was manually closed/cancelled!")
+            self.state_manager.update_state(cancelled_from_state="INITIALIZATION")
+            self.state_manager.set_current_state("MANUALLY_CANCELLED")
+            return
+
         if not self.github.is_pr_merged(version_pr_number):
             if self.github.is_pr_approved(version_pr_number):
                 logging.info(f"Version PR {version_pr_number} is approved! Auto-merging...")
@@ -234,6 +263,13 @@ class ReleaseOrchestrator:
                 logging.info(f"Analyzed {len(new_comments)} new comment(s) via Gemini. No release-blocking bugs found. Ignoring.")
                 self.state_manager.update_state(seen_comments=len(comments))
         
+        # Check if closed manually
+        if self.github.is_pr_closed(pr_number):
+            logging.warning(f"Release PR {pr_number} was manually closed/cancelled!")
+            self.state_manager.update_state(cancelled_from_state="AWAITING_FINAL_REVIEW")
+            self.state_manager.set_current_state("MANUALLY_CANCELLED")
+            return
+
         # 4. Wait for real GitHub approval
         if self.github.is_pr_approved(pr_number):
             logging.info(f"PR {pr_number} has been officially APPROVED on GitHub!")
@@ -265,6 +301,13 @@ class ReleaseOrchestrator:
             # Assign reviewer
             self.github.assign_reviewer(backport_pr_number, on_call_github)
             
+        # Check if closed manually
+        if backport_pr_number and self.github.is_pr_closed(backport_pr_number):
+            logging.warning(f"Backport PR {backport_pr_number} was manually closed/cancelled!")
+            self.state_manager.update_state(cancelled_from_state="MERGE_AND_BACKPORT")
+            self.state_manager.set_current_state("MANUALLY_CANCELLED")
+            return
+
         # Check if approved
         if self.github.is_pr_approved(backport_pr_number):
             logging.info(f"Backport PR {backport_pr_number} is approved! Auto-merging...")
@@ -274,6 +317,38 @@ class ReleaseOrchestrator:
         else:
             logging.info(f"Waiting for backport PR {backport_pr_number} to be approved and merged...")
             return
+
+    def handle_manually_cancelled(self):
+        logging.info("State: MANUALLY_CANCELLED. Awaiting resume signal from Control Plane.")
+
+    def is_scheduled_release_time(self):
+        import datetime
+        now = datetime.datetime.utcnow()
+        is_tuesday = now.weekday() == 1
+        is_target_time = now.hour == 9 and now.minute == 30
+        is_frozen = self.is_date_frozen(now.date())
+        
+        logging.info(f"Checking scheduled release time. Tuesday: {is_tuesday}, Time matches 15:00 IST: {is_target_time}, Frozen: {is_frozen}")
+        if is_tuesday and is_target_time and not is_frozen:
+            return True
+        return False
+
+    def is_date_frozen(self, check_date):
+        import datetime
+        freezes = [
+            (datetime.date(2026, 4, 20), datetime.date(2026, 4, 24)),
+            (datetime.date(2026, 10, 16), datetime.date(2026, 10, 23)),
+            (datetime.date(2026, 11, 8), datetime.date(2026, 11, 10)),
+            (datetime.date(2026, 11, 20), datetime.date(2026, 12, 1)),
+            (datetime.date(2026, 12, 16), datetime.date(2026, 12, 18)),
+            (datetime.date(2026, 12, 18), datetime.date(2026, 12, 23)),
+            (datetime.date(2026, 12, 23), datetime.date(2027, 1, 2)),
+            (datetime.date(2027, 1, 3), datetime.date(2027, 1, 3))
+        ]
+        for start, end in freezes:
+            if check_date >= start and check_date <= end:
+                return True
+        return False
 
 
 def main():

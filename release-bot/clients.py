@@ -1,3 +1,17 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import os
 import requests
@@ -64,6 +78,26 @@ class GitHubClient:
             return pr.merged
         except Exception as e:
             print(f"Error checking if PR {pr_number} is merged: {e}")
+            return False
+
+    def is_pr_closed(self, pr_number):
+        if not self.repo or not pr_number: return False
+        try:
+            pr = self.repo.get_pull(int(pr_number))
+            return pr.state == "closed" and not pr.merged
+        except Exception as e:
+            print(f"Error checking if PR {pr_number} is closed: {e}")
+            return False
+
+    def reopen_pr(self, pr_number):
+        if not self.repo or not pr_number: return False
+        try:
+            pr = self.repo.get_pull(int(pr_number))
+            pr.edit(state="open")
+            print(f"Successfully reopened PR {pr_number}!")
+            return True
+        except Exception as e:
+            print(f"Error reopening PR {pr_number}: {e}")
             return False
 
     def open_draft_pr(self, head, base, title, body=""):
@@ -385,3 +419,23 @@ class ChatClient:
                 requests.post(self.webhook_url, json={"text": text}, timeout=5)
             except Exception as e:
                 print(f"Failed to send GChat message: {e}")
+
+class EmailClient:
+    def send_email(self, to_email, subject, body):
+        import smtplib
+        from email.mime.text import MIMEText
+        
+        print(f"[Email Notification] Sending email to {to_email}: Subject='{subject}'")
+        logging.info(f"Sending email to {to_email}...")
+        
+        try:
+            msg = MIMEText(body)
+            msg['Subject'] = subject
+            msg['From'] = 'release-bot@google.com'
+            msg['To'] = to_email
+            
+            with smtplib.SMTP('smtp-relay.gmail.com', 25) as server:
+                server.send_message(msg)
+            logging.info("Email sent successfully!")
+        except Exception as e:
+            logging.warning(f"Could not send email (using mock fallback): {e}")

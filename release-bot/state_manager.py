@@ -39,7 +39,9 @@ class StateManager:
             "pr_active_timestamp": None,
             "paused": False,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "merged_at": None
+            "merged_at": None,
+            "cancelled_from_state": None,
+            "trigger_type": None
         }
 
     def _ensure_state_file(self):

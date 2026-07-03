@@ -62,6 +62,10 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             self.handle_toggle_pause()
         elif path == "/api/start":
             self.handle_start_release()
+        elif path == "/api/stop":
+            self.handle_stop_release()
+        elif path == "/api/resume":
+            self.handle_resume_release()
         else:
             self.send_error(404, "Endpoint Not Found")
 
@@ -195,7 +199,8 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             "pr_active_timestamp": None,
             "paused": False,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "merged_at": None
+            "merged_at": None,
+            "trigger_type": "adhoc"
         }
         
         try:
@@ -211,16 +216,126 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
         try:
             # Run daemon with unbuffered python and redirect logs
             with open(log_file, "w") as f_log:
-                subprocess.Popen(
-                    ["python3", "-u", str(BASE_DIR / "main.py")],
+                proc = subprocess.Popen(
+                    [str(BASE_DIR / ".venv" / "bin" / "python3"), "-u", str(BASE_DIR / "main.py")],
                     stdout=f_log,
                     stderr=f_log,
                     cwd=str(BASE_DIR),
                     start_new_session=True
                 )
+            
+            # Save daemon PID to state.json
+            state = {}
+            if STATE_FILE.exists():
+                try:
+                    with open(STATE_FILE, "r") as f:
+                        state = json.load(f)
+                except Exception:
+                    pass
+            state["daemon_pid"] = proc.pid
+            with open(STATE_FILE, "w") as f:
+                json.dump(state, f, indent=4)
+                
             self.send_json({"success": True})
         except Exception as e:
             self.send_json({"success": False, "error": f"Failed to launch daemon: {e}"})
+
+    def handle_stop_release(self):
+        state = {}
+        if STATE_FILE.exists():
+            try:
+                with open(STATE_FILE, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+                
+        # 1. Terminate daemon process if running
+        pid = state.get("daemon_pid")
+        if pid:
+            import os
+            import signal
+            try:
+                os.kill(pid, signal.SIGTERM)
+                print(f"Terminated daemon process {pid}")
+            except Exception as e:
+                print(f"Could not terminate daemon process {pid}: {e}")
+                
+        # 2. Reset state file
+        try:
+            default_state = {
+                "CURRENT_STATE": "INITIALIZATION",
+                "pr_number": None,
+                "rc_branch": None,
+                "version_branch": None,
+                "bugs": [],
+                "bugs_details": [],
+                "test_run_ids": [],
+                "test_retries": 0,
+                "on_call_ldap": None,
+                "on_call_github": None,
+                "pr_active_timestamp": None,
+                "paused": False,
+                "created_at": None,
+                "merged_at": None,
+                "cancelled_from_state": None,
+                "trigger_type": None
+            }
+            with open(STATE_FILE, "w") as f:
+                json.dump(default_state, f, indent=4)
+            self.send_json({"success": True})
+        except Exception as e:
+            self.send_error(500, f"Failed to reset state: {e}")
+
+    def handle_resume_release(self):
+        state = {}
+        if STATE_FILE.exists():
+            try:
+                with open(STATE_FILE, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+                
+        if state.get("CURRENT_STATE") != "MANUALLY_CANCELLED":
+            self.send_json({"success": False, "error": "Release is not in manually cancelled state."})
+            return
+            
+        # Reopen PR on Github
+        pr_number = state.get("pr_number") or state.get("version_pr_number") or state.get("backport_pr_number")
+        if pr_number:
+            from clients import GitHubClient
+            github = GitHubClient()
+            github.reopen_pr(pr_number)
+            
+        # Restore original state
+        original_state = state.get("cancelled_from_state") or "INITIALIZATION"
+        state["CURRENT_STATE"] = original_state
+        state["cancelled_from_state"] = None
+        
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(state, f, indent=4)
+        except Exception as e:
+            self.send_json({"success": False, "error": f"Failed to restore state: {e}"})
+            return
+            
+        # Restart daemon
+        import subprocess
+        log_file = BASE_DIR / "daemon.log"
+        try:
+            with open(log_file, "w") as f_log:
+                proc = subprocess.Popen(
+                    [str(BASE_DIR / ".venv" / "bin" / "python3"), "-u", str(BASE_DIR / "main.py")],
+                    stdout=f_log,
+                    stderr=f_log,
+                    cwd=str(BASE_DIR),
+                    start_new_session=True
+                )
+            state["daemon_pid"] = proc.pid
+            with open(STATE_FILE, "w") as f:
+                json.dump(state, f, indent=4)
+            self.send_json({"success": True})
+        except Exception as e:
+            self.send_json({"success": False, "error": f"Failed to restart daemon: {e}"})
 
     def send_json(self, data):
         content = json.dumps(data, indent=2).encode("utf-8")
