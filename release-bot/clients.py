@@ -24,7 +24,7 @@ from googleapiclient.discovery import build
 class GitHubClient:
     def __init__(self):
         self.pat = os.getenv("GITHUB_PAT")
-        self.repo_name = os.getenv("GITHUB_REPO", "rahimkh/cluster-toolkit")
+        self.repo_name = os.getenv("GITHUB_REPO", "rahimkhan19/cluster-toolkit")
         if self.pat and self.pat != "your_github_personal_access_token":
             self.g = Github(self.pat)
             try:
@@ -52,6 +52,11 @@ class GitHubClient:
             if self.pat:
                 env["GITHUB_TOKEN"] = self.pat
             env["BRANCH_SUFFIX"] = branch_suffix
+            
+            # Remove VS Code git askpass to avoid ECONNREFUSED errors during git operations
+            env.pop("GIT_ASKPASS", None)
+            env.pop("VSCODE_GIT_IPC_HANDLE", None)
+            
             result = subprocess.run(["bash", script_path], env=env, capture_output=True, text=True)
             if result.returncode != 0:
                 logging.error(f"Error running script (code {result.returncode}):\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}")
@@ -243,6 +248,8 @@ class GitHubClient:
             env = os.environ.copy()
             if self.pat:
                 env["GH_TOKEN"] = self.pat
+            env.pop("GIT_ASKPASS", None)
+            env.pop("VSCODE_GIT_IPC_HANDLE", None)
             print("Running inactive-pr-reminder.sh...")
             subprocess.run(["bash", script_path], env=env)
         except Exception as e:
@@ -273,8 +280,12 @@ class OnCallClient:
 
     def get_current_on_call(self):
         print("Fetching current on-call engineer from rotation...")
-        # Return your actual GitHub handle so it can assign the PR to you
-        return {"ldap": "neelgoyal", "github": "Neelabh94"}
+        ldap = self.fetch_on_call_from_api()
+        
+        # DEMO: Hardcode the GitHub handle to Neelabh94 so the PR assignment works for the demo
+        github_handle = "Neelabh94"
+            
+        return {"ldap": ldap, "github": github_handle}
 
 class GeminiClient:
     def __init__(self):

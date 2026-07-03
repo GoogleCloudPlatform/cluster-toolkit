@@ -15,6 +15,8 @@
 
 set -euo pipefail
 
+export GH_REPO="rahimkhan19/cluster-toolkit"
+
 # This script finds pull requests that have been inactive for a certain
 # period and posts reminders. It closes PRs that have been inactive for too long.
 
@@ -277,7 +279,7 @@ main() {
 
 	while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
 		echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
-		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
+		if pr_list_output=$(gh pr list --limit 10 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
 			break
 		fi
 

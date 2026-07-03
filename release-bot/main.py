@@ -357,7 +357,6 @@ def main():
     # 0. Demonstrate dynamic on-call fetching
     fetched_on_call = orchestrator.on_call.fetch_on_call_from_api()
     logging.info(f"API fetched current active on-call: {fetched_on_call}")
-    logging.info("Overriding with hardcoded demo LDAP (neelgoyal) for ticket assignment...")
     
     # Run once immediately
     orchestrator.run_cycle()

@@ -46,6 +46,9 @@ if ! gh auth status; then
 	exit 1
 fi
 
+# Configure git to use GitHub CLI as credential helper
+gh auth setup-git
+
 GITDIR=$(mktemp -d)
 trap 'rm -rf ${GITDIR}' EXIT
 
@@ -93,6 +96,9 @@ REMOTE_NAME=origin
 
 gh repo clone rahimkhan19/cluster-toolkit "${GITDIR}" -- --single-branch --branch develop --depth 1 --origin "${REMOTE_NAME}"
 cd "${GITDIR}"
+git remote set-url "${REMOTE_NAME}" "https://${GITHUB_TOKEN}@github.com/rahimkhan19/cluster-toolkit.git"
+git config user.name "Release Bot"
+git config user.email "release-bot@example.com"
 git switch -c "${RC_BRANCH}" develop
 echo "Creating new Toolkit release-candidate branch"
 git push -f -u "${REMOTE_NAME}" "${RC_BRANCH}"

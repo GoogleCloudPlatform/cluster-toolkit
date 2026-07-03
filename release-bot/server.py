@@ -16,6 +16,7 @@ import http.server
 import json
 import os
 import urllib.parse
+import sys
 from pathlib import Path
 
 # Resolve paths
@@ -217,7 +218,7 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             # Run daemon with unbuffered python and redirect logs
             with open(log_file, "w") as f_log:
                 proc = subprocess.Popen(
-                    [str(BASE_DIR / ".venv" / "bin" / "python3"), "-u", str(BASE_DIR / "main.py")],
+                    [sys.executable, "-u", str(BASE_DIR / "main.py")],
                     stdout=f_log,
                     stderr=f_log,
                     cwd=str(BASE_DIR),
@@ -324,7 +325,7 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
         try:
             with open(log_file, "w") as f_log:
                 proc = subprocess.Popen(
-                    [str(BASE_DIR / ".venv" / "bin" / "python3"), "-u", str(BASE_DIR / "main.py")],
+                    [sys.executable, "-u", str(BASE_DIR / "main.py")],
                     stdout=f_log,
                     stderr=f_log,
                     cwd=str(BASE_DIR),
