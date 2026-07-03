@@ -1,0 +1,231 @@
+import time
+import schedule
+import logging
+from dotenv import load_dotenv
+
+from state_manager import StateManager
+from clients import (
+    GitHubClient, OnCallClient, GeminiClient,
+    BuganizerClient, TestRunnerClient, ChatClient
+)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+load_dotenv()
+
+class ReleaseOrchestrator:
+    def __init__(self):
+        self.state_manager = StateManager()
+        self.github = GitHubClient()
+        self.on_call = OnCallClient()
+        self.gemini = GeminiClient()
+        self.buganizer = BuganizerClient()
+        self.test_runner = TestRunnerClient()
+        self.chat = ChatClient()
+
+    def run_cycle(self):
+        current_state = self.state_manager.get_current_state()
+        logging.info(f"Running cycle. Current State: {current_state}")
+
+        if current_state == "INITIALIZATION":
+            self.handle_initialization()
+        elif current_state == "TRIAGE":
+            self.handle_triage()
+        elif current_state == "AWAITING_BUG_FIXES":
+            self.handle_awaiting_bug_fixes()
+        elif current_state == "TEST_EXECUTION_AND_MONITORING":
+            self.handle_test_execution()
+        elif current_state == "AWAITING_FINAL_REVIEW":
+            self.handle_awaiting_final_review()
+        elif current_state == "MERGE_AND_BACKPORT":
+            self.handle_merge_and_backport()
+        elif current_state == "DONE":
+            logging.info("Release complete. Resetting state back to INITIALIZATION.")
+            self.state_manager.reset_state()
+        else:
+            logging.error(f"Unknown state: {current_state}")
+
+    def handle_initialization(self):
+        logging.info("State 0: Initialization & Version Bump")
+        state = self.state_manager.read_state()
+        
+        version_pr_number = state.get("version_pr_number")
+        
+        if not version_pr_number:
+            result = self.github.create_rc_and_version_branches()
+            if not result:
+                logging.error("Failed to create the Version PR. Blocking progress.")
+                return # Block until fixed manually
+            version_pr_number, rc_branch = result
+            
+            # 2. Identify On-call
+            on_call_info = self.on_call.get_current_on_call()
+            
+            if version_pr_number:
+                # Assign on-call to the version PR
+                self.github.assign_reviewer(version_pr_number, on_call_info['github'])
+                
+            self.state_manager.update_state(
+                version_pr_number=version_pr_number,
+                rc_branch=rc_branch,
+                on_call_ldap=on_call_info['ldap'],
+                on_call_github=on_call_info['github']
+            )
+            
+        # 3. Wait for Merge
+        if not self.github.is_pr_merged(version_pr_number):
+            if self.github.is_pr_approved(version_pr_number):
+                logging.info(f"Version PR {version_pr_number} is approved! Auto-merging...")
+                self.github.merge_pr(version_pr_number)
+            else:
+                logging.info(f"Waiting for version PR {version_pr_number} to be approved and merged...")
+            return # Block until merged
+            
+        logging.info(f"Version PR {version_pr_number} is merged! Opening main RC PR...")
+        # 4. Open main rc -> main PR in DRAFT MODE
+        state = self.state_manager.read_state()
+        rc_branch = state.get("rc_branch") or "release-candidate"
+        pr_number = self.github.open_draft_pr(rc_branch, "main", "Release Candidate")
+        self.state_manager.update_state(pr_number=pr_number)
+        
+        self.state_manager.set_current_state("TRIAGE")
+
+    def handle_triage(self):
+        logging.info("State 1: Triage (Draft Mode)")
+        pr_number = self.state_manager.read_state().get("pr_number")
+        
+        # 1. Fetch comments from draft PR
+        comments = self.github.get_pr_comments(pr_number)
+        
+        # 2. Extract actionable bugs via Gemini
+        bugs = self.gemini.triage_comments(comments, pr_number)
+        
+        # 3. Create Buganizer tickets
+        on_call_ldap = self.state_manager.read_state().get("on_call_ldap")
+        ticket_ids = []
+        for bug in bugs:
+            tid = self.buganizer.create_ticket(bug['title'], bug['description'], bug['priority'], assignee=on_call_ldap)
+            ticket_ids.append(tid)
+            
+        self.state_manager.update_state(
+            bugs=ticket_ids,
+            seen_comments=len(comments)
+        )
+        
+        # 4. Notify via GChat
+        if ticket_ids:
+            self.chat.send_message(f"Triage complete. Created tickets: {ticket_ids}. Blocked until resolved.")
+            
+        self.state_manager.set_current_state("AWAITING_BUG_FIXES")
+
+    def handle_awaiting_bug_fixes(self):
+        logging.info("State 2: Awaiting Bug Fixes")
+        tracked_bugs = self.state_manager.read_state().get("bugs", [])
+        
+        all_resolved = True
+        for ticket_id in tracked_bugs:
+            status = self.buganizer.get_ticket_status(ticket_id)
+            if status['status'].upper() not in ['CLOSED', 'FIXED', 'VERIFIED'] and status['priority'] in ['P0', 'P1']:
+                all_resolved = False
+                break
+                
+        if all_resolved:
+            logging.info("All blocking bugs resolved.")
+            self.state_manager.set_current_state("TEST_EXECUTION_AND_MONITORING")
+
+    def handle_test_execution(self):
+        logging.info("State 3: Test Execution and Monitoring")
+        pr_number = self.state_manager.read_state().get("pr_number")
+        run_id = self.test_runner.trigger_tests(pr_number)
+        
+        # Simulate polling the test runner...
+        status = self.test_runner.check_test_status(run_id)
+        if status == "SUCCESS":
+            self.state_manager.set_current_state("AWAITING_FINAL_REVIEW")
+        else:
+            self.chat.send_message(f"Tests failed! Logs: {self.test_runner.get_failure_logs(run_id)}")
+
+    def handle_awaiting_final_review(self):
+        logging.info("State 4: Awaiting Final Review")
+        state = self.state_manager.read_state()
+        pr_number = state.get("pr_number")
+        on_call_github = state.get("on_call_github")
+        on_call_ldap = state.get("on_call_ldap")
+        
+        # 1 & 2. Activate PR and Assign Reviewers (only once)
+        if not state.get("reviewer_assigned"):
+            self.github.convert_pr_to_active(pr_number)
+            self.github.assign_reviewer(pr_number, on_call_github)
+            self.state_manager.update_state(reviewer_assigned=True)
+        
+        # 3. Check for new comments that might block approval
+        comments = self.github.get_pr_comments(pr_number)
+        seen_comments = state.get("seen_comments", 0)
+        
+        if len(comments) > seen_comments:
+            new_comments = comments[seen_comments:]
+            bugs = self.gemini.triage_comments(new_comments, pr_number)
+            if bugs:
+                ticket_ids = state.get("bugs", [])
+                new_tickets = []
+                for bug in bugs:
+                    tid = self.buganizer.create_ticket(bug['title'], bug['description'], bug['priority'], assignee=on_call_ldap)
+                    ticket_ids.append(tid)
+                    new_tickets.append(tid)
+                
+                self.state_manager.update_state(bugs=ticket_ids, seen_comments=len(comments))
+                logging.info(f"New comments raised issues! Created tickets: {new_tickets}. Reverting to AWAITING_BUG_FIXES.")
+                self.chat.send_message(f"New review comments raised issues! Created tickets: {new_tickets}. Blocked until resolved.")
+                self.state_manager.set_current_state("AWAITING_BUG_FIXES")
+                return
+            else:
+                logging.info(f"Analyzed {len(new_comments)} new comment(s) via Gemini. No release-blocking bugs found. Ignoring.")
+                self.state_manager.update_state(seen_comments=len(comments))
+        
+        # 4. Wait for real GitHub approval
+        if self.github.is_pr_approved(pr_number):
+            logging.info(f"PR {pr_number} has been officially APPROVED on GitHub!")
+            self.chat.send_message(f"PR {pr_number} is approved and ready for merge.")
+            self.state_manager.set_current_state("MERGE_AND_BACKPORT")
+        else:
+            logging.info(f"PR {pr_number} is NOT approved yet. Waiting...")
+            # We stay in State 4 until the next poll cycle
+
+    def handle_merge_and_backport(self):
+        logging.info("State 5: Merge and Backport")
+        state = self.state_manager.read_state()
+        pr_number = state.get("pr_number")
+        
+        # Merge rc PR
+        self.github.merge_pr(pr_number)
+        
+        # Create backport PR
+        self.github.create_backport_pr(pr_number)
+        
+        self.chat.send_message("Release successfully merged and backported! 🎉")
+        
+        self.state_manager.set_current_state("DONE")
+
+
+def main():
+    orchestrator = ReleaseOrchestrator()
+    
+    # 0. Demonstrate dynamic on-call fetching
+    fetched_on_call = orchestrator.on_call.fetch_on_call_from_api()
+    logging.info(f"API fetched current active on-call: {fetched_on_call}")
+    logging.info("Overriding with hardcoded demo LDAP (neelgoyal) for ticket assignment...")
+    
+    # Run once immediately
+    orchestrator.run_cycle()
+    
+    # Then schedule every 2 seconds for the demo (instead of 5 minutes)
+    schedule.every(2).seconds.do(orchestrator.run_cycle)
+    
+    logging.info("Starting ReleaseBot polling daemon...")
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()

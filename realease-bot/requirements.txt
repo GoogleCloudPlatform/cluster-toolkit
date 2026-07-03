@@ -1,0 +1,9 @@
+PyGithub==2.3.0
+requests==2.31.0
+google-genai
+pyopenssl
+google-api-python-client
+google-auth
+google-auth-httplib2
+schedule==1.2.1
+python-dotenv==1.0.1
