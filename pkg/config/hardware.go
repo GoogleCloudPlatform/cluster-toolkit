@@ -149,6 +149,7 @@ func evalString(bp Blueprint, val cty.Value) (string, bool) {
 	return "", false
 }
 
+// ExtractTopology extracts the TPU topology string from the given module settings or placement policy.
 func ExtractTopology(bp Blueprint, mod *Module) (string, bool) {
 	if mod.Settings.Has("tpu_topology") {
 		if str, ok := evalString(bp, mod.Settings.Get("tpu_topology")); ok {

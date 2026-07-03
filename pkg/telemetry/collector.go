@@ -78,7 +78,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
-	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCounts(c.blueprint)
+	c.metadata[STATIC_NODE_COUNTS] = getStaticNodeCounts(c.blueprint)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()

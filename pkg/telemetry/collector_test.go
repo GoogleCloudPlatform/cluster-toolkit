@@ -60,7 +60,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
-		STATIC_NODE_COUNT,
+		STATIC_NODE_COUNTS,
 		OS_NAME,
 		OS_VERSION,
 		TERRAFORM_VERSION,
@@ -117,17 +117,17 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:      "true",
-				EXIT_CODE:         "0",
-				COMMAND_FLAGS:     "force,project",
-				REGION:            "us-central1",
-				ZONE:              "us-central1-a",
-				MACHINE_TYPE:      "c2-standard-8",
-				STATIC_NODE_COUNT: `"c2-standard-8":1`,
-				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
-				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
-				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
-				INSTALLATION_MODE: SOURCE,
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "0",
+				COMMAND_FLAGS:      "force,project",
+				REGION:             "us-central1",
+				ZONE:               "us-central1-a",
+				MACHINE_TYPE:       "c2-standard-8",
+				STATIC_NODE_COUNTS: `"c2-standard-8":1`,
+				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
+				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
+				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
+				INSTALLATION_MODE:  SOURCE,
 			},
 		},
 		{
@@ -146,17 +146,17 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:      "true",
-				EXIT_CODE:         "1",
-				COMMAND_FLAGS:     "",
-				REGION:            "",
-				ZONE:              "",
-				OS_NAME:           getOSName(),           // Verify OS info is still collected on failure
-				OS_VERSION:        getOSVersion(),        // Verify OS info is still collected on failure
-				TERRAFORM_VERSION: getTerraformVersion(), // Verify Terraform version is still collected on failure
-				MACHINE_TYPE:      "",                    // Verify empty machine type when no matching modules exist
-				STATIC_NODE_COUNT: "",
-				INSTALLATION_MODE: BINARY,
+				IS_TEST_DATA:       "true",
+				EXIT_CODE:          "1",
+				COMMAND_FLAGS:      "",
+				REGION:             "",
+				ZONE:               "",
+				OS_NAME:            getOSName(),           // Verify OS info is still collected on failure
+				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
+				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
+				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
+				STATIC_NODE_COUNTS: "",
+				INSTALLATION_MODE:  BINARY,
 			},
 		},
 		{
