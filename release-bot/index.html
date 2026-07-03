@@ -1029,6 +1029,13 @@
               document.getElementById('last-successful-release-date').innerText = 'N/A';
             }
             
+            // Reset "Start Adhoc Release" button state
+            const btn = document.querySelector('.no-release-card button');
+            if (btn) {
+              btn.disabled = false;
+              btn.innerText = "🚀 Start Adhoc Release";
+            }
+            
             // Update sidebar meta
             document.getElementById('meta-status').innerText = 'Inactive';
             document.getElementById('meta-status').style.color = 'var(--text-secondary)';
