@@ -289,7 +289,9 @@ class ReleaseOrchestrator:
         
         if not backport_pr_number:
             # Merge rc PR
-            self.github.merge_pr(pr_number)
+            if not self.github.merge_pr(pr_number):
+                logging.error(f"Failed to merge PR {pr_number}. Blocking backport creation.")
+                return
             
             # Create backport PR
             backport_pr_number = self.github.create_backport_pr(pr_number)
@@ -328,7 +330,7 @@ class ReleaseOrchestrator:
         is_target_time = now.hour == 9 and now.minute == 30
         is_frozen = self.is_date_frozen(now.date())
         
-        logging.info(f"Checking scheduled release time. Tuesday: {is_tuesday}, Time matches 15:00 IST: {is_target_time}, Frozen: {is_frozen}")
+        logging.info(f"Checking scheduled release time. Tuesday: {is_tuesday}, Time matches 9:30 UTC: {is_target_time}, Frozen: {is_frozen}")
         if is_tuesday and is_target_time and not is_frozen:
             return True
         return False

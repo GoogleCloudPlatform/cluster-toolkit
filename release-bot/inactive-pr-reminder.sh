@@ -38,14 +38,13 @@ TEAM_TO_TAG="@GoogleCloudPlatform/hpc-toolkit"
 get_approval_status() {
 	local pr_number=$1
 	local pr_json=$2
-	# echo "Checking approval status for PR #${pr_number}..." >&2 # Keep this line for basic info
-	local status_checks_json
-	status_checks_json=$(echo "$pr_json" | jq -c '.statusCheckRollup')
-	if echo "$status_checks_json" | jq -e '.[] | select(.name == "multi-approvers / multi-approvers" and .conclusion == "SUCCESS")' >/dev/null; then
+	local review_decision
+	review_decision=$(echo "$pr_json" | jq -r '.reviewDecision')
+	if [[ "$review_decision" == "APPROVED" ]]; then
 		echo "PR #${pr_number} has sufficient approvals." >&2
 		echo "0" # true
 	else
-		echo "PR #${pr_number} does not have sufficient approvals." >&2
+		echo "PR #${pr_number} does not have sufficient approvals (Decision: ${review_decision})." >&2
 		echo "1" # false
 	fi
 }
@@ -223,13 +222,6 @@ process_pr() {
 	')
 	echo "Found ${reminder_count} reminder(s) since last human activity for PR #${pr_number}."
 
-	local hour_reminder_count
-	hour_reminder_count=$(echo "$comments_json" | jq -r --arg since "$latest_activity_timestamp" '
-		map(select(.body | contains("<!-- PR_2_HOUR_REMINDER -->"))) |
-		map(select(.createdAt > $since)) |
-		length
-	')
-
 	# Logic:
 	# Day 7 -> Reminder 1
 	# Day 14 -> Reminder 2
@@ -250,7 +242,8 @@ process_pr() {
 		send_reminder "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" "$review_decision" "first"
 	elif ((inactive_seconds >= 30)); then
 		echo "PR inactive for 30s. Tagging oncall for demo."
-		local state_file="$(dirname "${BASH_SOURCE[0]}")/state.json"
+		local state_file
+		state_file="$(dirname "${BASH_SOURCE[0]}")/state.json"
 		local oncaller=""
 		if [[ -f "$state_file" ]]; then
 			oncaller=$(jq -r '.on_call_github // empty' "$state_file" 2>/dev/null)
@@ -259,7 +252,7 @@ process_pr() {
 			oncaller="Neelabh94"
 		fi
 		oncaller="@${oncaller}"
-		
+
 		if [[ "$approval_status_code" -eq 0 ]]; then
 			gh pr comment "$pr_number" --body "This PR is approved and has been inactive for 30 seconds. ${oncaller}, please merge it. <!-- PR_2_HOUR_REMINDER -->"
 		else
@@ -272,35 +265,47 @@ process_pr() {
 
 # --- Main Logic ---
 main() {
-	echo "Fetching all non-draft pull requests..."
-	local attempt_num=1
-	local -r MAX_ATTEMPTS=2
-	local -r SLEEP_DELAY=5
-
-	while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
-		echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
-		if pr_list_output=$(gh pr list --limit 10 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
-			break
-		fi
-
-		if [ "$attempt_num" -ge "$MAX_ATTEMPTS" ]; then
-			echo "Failed to fetch PR numbers after $MAX_ATTEMPTS attempts. Exiting." >&2
-			exit 1
-		else
-			echo "Failed to fetch PRs on attempt $attempt_num. Retrying in $SLEEP_DELAY seconds..." >&2
-			sleep "$SLEEP_DELAY"
-			attempt_num=$((attempt_num + 1))
-		fi
-	done
-
-	echo "$pr_list_output" |
-		jq -c '.[]' |
-		while read -r pr_json; do
+	local pr_num="${1:-}"
+	if [[ -n "$pr_num" ]]; then
+		echo "Checking specific PR #${pr_num}..."
+		local pr_json
+		if pr_json=$(gh pr view "$pr_num" --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
 			process_pr "$pr_json"
+		else
+			echo "Failed to fetch details for PR #${pr_num}" >&2
+			exit 1
+		fi
+	else
+		echo "Fetching all non-draft pull requests..."
+		local attempt_num=1
+		local -r MAX_ATTEMPTS=2
+		local -r SLEEP_DELAY=5
+
+		while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
+			echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
+			if pr_list_output=$(gh pr list --limit 10 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
+				break
+			fi
+
+			if [ "$attempt_num" -ge "$MAX_ATTEMPTS" ]; then
+				echo "Failed to fetch PR numbers after $MAX_ATTEMPTS attempts. Exiting." >&2
+				exit 1
+			else
+				echo "Failed to fetch PRs on attempt $attempt_num. Retrying in $SLEEP_DELAY seconds..." >&2
+				sleep "$SLEEP_DELAY"
+				attempt_num=$((attempt_num + 1))
+			fi
 		done
+
+		echo "$pr_list_output" |
+			jq -c '.[]' |
+			while read -r pr_json; do
+				process_pr "$pr_json"
+			done
+	fi
 
 	echo "---"
 	echo "All pull requests checked."
 }
 
-main
+main "$@"

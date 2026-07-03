@@ -672,7 +672,7 @@
     <div id="past-releases" class="tab-content active">
       <div class="filter-bar">
         <span class="filter-label">Filter Time Range:</span>
-        <select id="time-filter" onchange="loadHistory()">
+        <select id="time-filter" onchange="loadHistory(); loadAbortedHistory();">
           <option value="1">Last 1 Day</option>
           <option value="7">Last 1 Week</option>
           <option value="30" selected>Last 1 Month</option>
@@ -710,6 +710,15 @@
           <!-- Populated by JS -->
         </div>
       </div>
+
+      <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <h2 class="card-title" style="color: var(--danger);">Aborted Release Log</h2>
+        </div>
+        <div class="release-list" id="aborted-history-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
     </div>
 
     <!-- TAB 2: Current Release Status -->
@@ -729,7 +738,7 @@
 
               <div class="progress-section">
                 <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
-                  <span style="font-size:0.875rem; font-weight:600;">Overall Progress</span>
+                  <span style="font-size:0.875rem; font-weight:600;" id="progress-status-label">Overall Progress</span>
                   <span style="font-size:0.875rem; font-weight:600; color:var(--primary);" id="progress-percentage-label">0%</span>
                 </div>
                 <div class="progress-bar-container">
@@ -790,8 +799,8 @@
 
           <!-- No Ongoing Release Container -->
           <div id="no-release-container" class="card no-release-card">
-            <span class="no-release-icon">😴</span>
-            <h2 class="card-title" style="margin-bottom:0.5rem; font-size:1.5rem;">No Active Release</h2>
+            <span class="no-release-icon" id="no-release-icon">😴</span>
+            <h2 class="card-title" id="no-release-title" style="margin-bottom:0.5rem; font-size:1.5rem;">No Active Release</h2>
             <p style="color:var(--text-secondary); margin-bottom:1.5rem;" id="no-release-details">
               There is currently no release cycle in progress.
             </p>
@@ -831,7 +840,7 @@
                 <span class="meta-val" id="meta-branch">N/A</span>
               </div>
               <div class="meta-item">
-                <span class="meta-key">Release PR</span>
+                <span class="meta-key" id="meta-pr-label">Release PR</span>
                 <span class="meta-val" id="meta-pr">N/A</span>
               </div>
               <div class="meta-item">
@@ -922,6 +931,7 @@
       
       if (tabId === 'past-releases') {
         loadHistory();
+        loadAbortedHistory();
       } else if (tabId === 'current-release') {
         fetchState();
       } else if (tabId === 'schedule-calendar') {
@@ -964,6 +974,10 @@
       btn.disabled = true;
       btn.innerText = "Launching...";
       
+      document.getElementById('no-release-icon').innerText = "🚀";
+      document.getElementById('no-release-title').innerText = "Launching Release...";
+      document.getElementById('no-release-details').innerText = "Initializing release candidate branch, updating version, and opening PR on GitHub...";
+      
       fetch('/api/start', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
@@ -974,6 +988,9 @@
             isLaunching = false;
             btn.disabled = false;
             btn.innerText = originalText;
+            document.getElementById('no-release-icon').innerText = "😴";
+            document.getElementById('no-release-title').innerText = "No Active Release";
+            document.getElementById('no-release-details').innerText = "There is currently no release cycle in progress.";
           }
         })
         .catch(err => {
@@ -982,6 +999,9 @@
           isLaunching = false;
           btn.disabled = false;
           btn.innerText = originalText;
+          document.getElementById('no-release-icon').innerText = "😴";
+          document.getElementById('no-release-title').innerText = "No Active Release";
+          document.getElementById('no-release-details').innerText = "There is currently no release cycle in progress.";
         });
     }
 
@@ -1042,6 +1062,9 @@
                 btn.disabled = false;
                 btn.innerText = "🚀 Start Adhoc Release";
               }
+              document.getElementById('no-release-icon').innerText = "😴";
+              document.getElementById('no-release-title').innerText = "No Active Release";
+              document.getElementById('no-release-details').innerText = "There is currently no release cycle in progress.";
             }
             
             // Update sidebar meta
@@ -1096,7 +1119,21 @@
           document.getElementById('meta-branch').innerText = state.rc_branch || 'N/A';
           
           const repo = "rahimkhan19/cluster-toolkit";
-          const currentPRNum = state.pr_number || state.version_pr_number || state.backport_pr_number;
+          
+          let currentPRNum = state.pr_number;
+          let prLabel = "Release PR";
+          
+          const activeState = state.CURRENT_STATE === "MANUALLY_CANCELLED" ? state.cancelled_from_state : state.CURRENT_STATE;
+          
+          if (activeState === "INITIALIZATION") {
+            currentPRNum = state.version_pr_number;
+            prLabel = "Version PR";
+          } else if (activeState === "MERGE_AND_BACKPORT") {
+            currentPRNum = state.backport_pr_number || state.pr_number;
+            prLabel = state.backport_pr_number ? "Backport PR" : "Release PR";
+          }
+          
+          document.getElementById('meta-pr-label').innerText = prLabel;
           if (currentPRNum) {
             document.getElementById('meta-pr').innerHTML = `<a href="https://github.com/${repo}/pull/${currentPRNum}" target="_blank">PR #${currentPRNum}</a>`;
           } else {
@@ -1120,6 +1157,23 @@
           document.getElementById('progress-bar-fill').style.width = `${percentage}%`;
           document.getElementById('progress-percentage-label').innerText = `${percentage}%`;
           document.getElementById('progress-percentage-text').innerText = `${percentage}%`;
+
+          let progressStatus = "Overall Progress";
+          if (state.CURRENT_STATE === "MANUALLY_CANCELLED") {
+            progressStatus = `Stopped: Cancelled during ${state.cancelled_from_state || 'Release'}`;
+          } else if (state.paused) {
+            progressStatus = "Release Paused";
+          } else if (displayState === "INITIALIZATION") {
+            progressStatus = "Waiting on Version PR (Version to RC)";
+          } else if (["TRIAGE", "AWAITING_BUG_FIXES", "TEST_EXECUTION_AND_MONITORING", "AWAITING_FINAL_REVIEW"].includes(displayState)) {
+            progressStatus = "Waiting on Release PR (RC to main)";
+          } else if (displayState === "MERGE_AND_BACKPORT") {
+            progressStatus = "Waiting on Backport PR (main to develop)";
+          } else if (state.CURRENT_STATE === "DONE") {
+            progressStatus = "Release Completed Successfully!";
+          }
+          
+          document.getElementById('progress-status-label').innerText = progressStatus;
 
           // Step nodes highlighting
           const steps = ["INIT", "TRIAGE", "BUG", "TEST", "REVIEW", "MERGE"];
@@ -1285,6 +1339,77 @@
       }).join('');
     }
 
+    let allAbortedHistory = [];
+    function loadAbortedHistory() {
+      fetch('/api/aborted-history')
+        .then(r => r.json())
+        .then(data => {
+          allAbortedHistory = data;
+          renderAbortedHistory();
+        })
+        .catch(err => console.error("Error fetching aborted history:", err));
+    }
+
+    function renderAbortedHistory() {
+      const container = document.getElementById('aborted-history-list');
+      if (!container) return;
+      
+      const days = parseInt(document.getElementById('time-filter').value);
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+      
+      const filtered = allAbortedHistory.filter(h => {
+        const date = new Date(h.aborted_at);
+        return date >= cutoff;
+      });
+      filtered.sort((a, b) => new Date(b.aborted_at) - new Date(a.aborted_at));
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--text-secondary);">No aborted releases found in this range.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map((h, index) => {
+        const createdDate = h.created_at ? new Date(h.created_at).toLocaleString() : 'N/A';
+        const abortedDate = new Date(h.aborted_at).toLocaleString();
+        
+        let prLink = 'N/A';
+        if (h.pr_number) {
+          prLink = `<a href="https://github.com/rahimkhan19/cluster-toolkit/pull/${h.pr_number}" target="_blank">PR #${h.pr_number}</a>`;
+        }
+
+        return `
+          <div class="release-item" id="aborted-item-${index}">
+            <div class="release-item-header" onclick="toggleAbortedItem(${index})">
+              <span class="release-id-cell" style="color: var(--danger);">🛑 ${h.release_id}</span>
+              <span class="release-date-cell">Created: ${h.created_at ? new Date(h.created_at).toLocaleDateString() : 'N/A'}</span>
+              <span class="release-date-cell">Aborted: ${new Date(h.aborted_at).toLocaleDateString()}</span>
+              <span class="release-bugs-cell">
+                <span class="badge badge-rrc3">Aborted at ${h.last_state}</span>
+              </span>
+              <span class="expand-btn">&darr;</span>
+            </div>
+            <div class="release-item-details">
+              <div class="meta-list" style="grid-template-columns: 1fr 1fr; display: grid; gap: 1rem;">
+                <div><strong>Created:</strong> ${createdDate}</div>
+                <div><strong>Aborted:</strong> ${abortedDate}</div>
+                <div><strong>Last Active State:</strong> ${h.last_state}</div>
+                <div><strong>On-Call LDAP:</strong> ${h.on_call_ldap || 'N/A'}</div>
+                <div><strong>Release PR:</strong> ${prLink}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleAbortedItem(index) {
+      const item = document.getElementById(`aborted-item-${index}`);
+      if (item) {
+        item.classList.toggle('active');
+      }
+    }
+
     function toggleHistoryItem(index) {
       const item = document.getElementById(`history-item-${index}`);
       item.classList.toggle('expanded');
@@ -1429,6 +1554,7 @@
       
       // Load history
       loadHistory();
+      loadAbortedHistory();
       
       // Select appropriate tab initially
       switchTab('past-releases');

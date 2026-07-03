@@ -1,0 +1,50 @@
+[
+    {
+        "release_id": "release-release-candidate-1783072366",
+        "created_at": "2026-07-03T09:52:40Z",
+        "aborted_at": "2026-07-03T09:55:23Z",
+        "last_state": "INITIALIZATION",
+        "pr_number": 49,
+        "on_call_ldap": "agrawalkhushi"
+    },
+    {
+        "release_id": "unknown",
+        "created_at": "2026-07-03T10:04:36Z",
+        "aborted_at": "2026-07-03T10:06:57Z",
+        "last_state": "INITIALIZATION",
+        "pr_number": null,
+        "on_call_ldap": null
+    },
+    {
+        "release_id": "release-candidate-1783073232",
+        "created_at": "2026-07-03T10:07:06Z",
+        "aborted_at": "2026-07-03T10:12:12Z",
+        "last_state": "MERGE_AND_BACKPORT",
+        "pr_number": 57,
+        "on_call_ldap": "agrawalkhushi"
+    },
+    {
+        "release_id": "release-candidate-1783073565",
+        "created_at": "2026-07-03T10:12:39Z",
+        "aborted_at": "2026-07-03T10:18:11Z",
+        "last_state": "MERGE_AND_BACKPORT",
+        "pr_number": 60,
+        "on_call_ldap": "agrawalkhushi"
+    },
+    {
+        "release_id": "release-candidate-1783074792",
+        "created_at": "2026-07-03T10:33:06Z",
+        "aborted_at": "2026-07-03T10:35:47Z",
+        "last_state": "INITIALIZATION",
+        "pr_number": 65,
+        "on_call_ldap": "agrawalkhushi"
+    },
+    {
+        "release_id": "release-candidate-1783076758",
+        "created_at": "2026-07-03T11:05:51Z",
+        "aborted_at": "2026-07-03T11:07:58Z",
+        "last_state": "AWAITING_FINAL_REVIEW",
+        "pr_number": 73,
+        "on_call_ldap": "agrawalkhushi"
+    }
+]

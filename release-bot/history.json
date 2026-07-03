@@ -206,5 +206,115 @@
             "fixed": 0,
             "deprioritized": 1
         }
+    },
+    {
+        "release_id": "release-release-candidate-1783072558",
+        "created_at": "2026-07-03T09:55:53Z",
+        "merged_at": "2026-07-03T10:01:56Z",
+        "pr_number": 51,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [
+            {
+                "ticket_id": "530835824",
+                "title": "Incorrect Version Number in version.txt",
+                "priority": "P3",
+                "assignee": "agrawalkhushi",
+                "status": "ASSIGNED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 0,
+            "deprioritized": 1
+        }
+    },
+    {
+        "release_id": "release-unknown",
+        "created_at": "2026-07-03T10:01:56Z",
+        "merged_at": "2026-07-03T10:01:59Z",
+        "pr_number": null,
+        "on_call_ldap": null,
+        "bugs": [],
+        "bug_stats": {
+            "total": 0,
+            "fixed": 0,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-release-candidate-1783072952",
+        "created_at": "2026-07-03T10:02:27Z",
+        "merged_at": "2026-07-03T10:04:36Z",
+        "pr_number": 54,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [],
+        "bug_stats": {
+            "total": 0,
+            "fixed": 0,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1783073910",
+        "created_at": "2026-07-03T10:18:24Z",
+        "merged_at": "2026-07-03T10:22:54Z",
+        "pr_number": 63,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [
+            {
+                "ticket_id": "530843792",
+                "title": "Critical Security Vulnerability in Current Version",
+                "priority": "P3",
+                "assignee": "agrawalkhushi",
+                "status": "ASSIGNED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 0,
+            "deprioritized": 1
+        }
+    },
+    {
+        "release_id": "release-candidate-1783074968",
+        "created_at": "2026-07-03T10:36:02Z",
+        "merged_at": "2026-07-03T10:41:38Z",
+        "pr_number": 67,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [
+            {
+                "ticket_id": "530846797",
+                "title": "Critical Release Blocker Identified",
+                "priority": "P0",
+                "assignee": "agrawalkhushi",
+                "status": "FIXED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 1,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1783076488",
+        "created_at": "2026-07-03T11:01:22Z",
+        "merged_at": "2026-07-03T11:05:12Z",
+        "pr_number": 70,
+        "on_call_ldap": "agrawalkhushi",
+        "bugs": [
+            {
+                "ticket_id": "530854285",
+                "title": "Critical issue identified: Incorrect value or logic",
+                "priority": "P3",
+                "assignee": "agrawalkhushi",
+                "status": "ASSIGNED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 0,
+            "deprioritized": 1
+        }
     }
 ]

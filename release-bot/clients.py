@@ -105,6 +105,17 @@ class GitHubClient:
             print(f"Error reopening PR {pr_number}: {e}")
             return False
 
+    def close_pr(self, pr_number):
+        if not self.repo or not pr_number: return False
+        try:
+            pr = self.repo.get_pull(int(pr_number))
+            pr.edit(state="closed")
+            print(f"Successfully closed PR {pr_number}!")
+            return True
+        except Exception as e:
+            print(f"Error closing PR {pr_number}: {e}")
+            return False
+
     def open_draft_pr(self, head, base, title, body=""):
         if not self.repo: return 123
         try:
@@ -177,13 +188,13 @@ class GitHubClient:
             return False
 
     def merge_pr(self, pr_number):
-        if not self.repo or not pr_number: return
+        if not self.repo or not pr_number: return False
         import time
         try:
             pr = self.repo.get_pull(int(pr_number))
             if pr.merged:
                 print(f"PR {pr_number} is already merged!")
-                return
+                return True
             pr.merge(commit_title=f"Merge PR {pr_number}", merge_method="merge")
             print(f"Merged PR {pr_number}")
             
@@ -192,10 +203,12 @@ class GitHubClient:
                 pr.update()
                 if pr.merged:
                     print(f"Confirmed PR {pr_number} is merged!")
-                    return
+                    return True
                 time.sleep(2)
+            return False
         except Exception as e:
             print(f"Error merging PR {pr_number}: {e}")
+            return False
 
     def create_backport_pr(self, pr_number):
         if not self.repo or not pr_number: return None
@@ -240,7 +253,22 @@ class GitHubClient:
     def run_inactive_pr_reminder(self):
         import subprocess
         import os
+        import json
         try:
+            state_file = os.path.join(os.path.dirname(__file__), "state.json")
+            pr_number = None
+            if os.path.exists(state_file):
+                try:
+                    with open(state_file, 'r') as f:
+                        state = json.load(f)
+                        pr_number = state.get("pr_number") or state.get("version_pr_number") or state.get("backport_pr_number")
+                except Exception as e:
+                    print(f"Could not read state file inside reminder: {e}")
+            
+            if not pr_number:
+                print("No active PR in state.json. Skipping reminder check.")
+                return
+
             script_path = os.path.join(os.path.dirname(__file__), "inactive-pr-reminder.sh")
             if not os.path.exists(script_path):
                 print(f"Error: {script_path} not found.")
@@ -250,8 +278,8 @@ class GitHubClient:
                 env["GH_TOKEN"] = self.pat
             env.pop("GIT_ASKPASS", None)
             env.pop("VSCODE_GIT_IPC_HANDLE", None)
-            print("Running inactive-pr-reminder.sh...")
-            subprocess.run(["bash", script_path], env=env)
+            print(f"Running inactive-pr-reminder.sh for PR #{pr_number}...")
+            subprocess.run(["bash", script_path, str(pr_number)], env=env)
         except Exception as e:
             print(f"Error running inactive-pr-reminder.sh: {e}")
 
@@ -436,16 +464,20 @@ class EmailClient:
         import smtplib
         from email.mime.text import MIMEText
         
+        from email.utils import make_msgid, formatdate
+        
         print(f"[Email Notification] Sending email to {to_email}: Subject='{subject}'")
         logging.info(f"Sending email to {to_email}...")
         
         try:
             msg = MIMEText(body)
             msg['Subject'] = subject
-            msg['From'] = 'release-bot@google.com'
+            msg['From'] = 'release-bot@hpc-toolkit.internal'
             msg['To'] = to_email
+            msg['Message-ID'] = make_msgid()
+            msg['Date'] = formatdate(localtime=True)
             
-            with smtplib.SMTP('smtp-relay.gmail.com', 25) as server:
+            with smtplib.SMTP('smtp.google.com', 25) as server:
                 server.send_message(msg)
             logging.info("Email sent successfully!")
         except Exception as e:

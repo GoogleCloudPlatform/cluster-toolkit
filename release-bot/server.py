@@ -49,6 +49,8 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             self.handle_get_state()
         elif path == "/api/history":
             self.handle_get_history()
+        elif path == "/api/aborted-history":
+            self.handle_get_aborted_history()
         elif path == "/api/calendar":
             self.handle_get_calendar()
         elif path == "/" or path == "/index.html":
@@ -155,6 +157,17 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
                 pass
         self.send_json(history)
 
+    def handle_get_aborted_history(self):
+        aborted_file = BASE_DIR / "aborted_history.json"
+        history = []
+        if aborted_file.exists():
+            try:
+                with open(aborted_file, "r") as f:
+                    history = json.load(f)
+            except Exception:
+                pass
+        self.send_json(history)
+
     def handle_get_calendar(self):
         freezes = [
             {"name": "Spring Guard Window (RRC1)", "start": "2026-04-20", "end": "2026-04-24", "rrc": 1, "description": "Guarded - No feature releases."},
@@ -213,7 +226,11 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             "paused": False,
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "merged_at": None,
-            "trigger_type": "adhoc"
+            "trigger_type": "adhoc",
+            "version_pr_number": None,
+            "backport_pr_number": None,
+            "reviewer_assigned": False,
+            "seen_comments": 0
         }
         
         try:
@@ -273,7 +290,51 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 print(f"Could not terminate daemon process {pid}: {e}")
                 
-        # 2. Reset state file
+        # 2. Close open PRs on GitHub
+        version_pr = state.get("version_pr_number")
+        release_pr = state.get("pr_number")
+        backport_pr = state.get("backport_pr_number")
+        
+        if version_pr or release_pr or backport_pr:
+            try:
+                from clients import GitHubClient
+                github = GitHubClient()
+                if version_pr:
+                    github.close_pr(version_pr)
+                if release_pr:
+                    github.close_pr(release_pr)
+                if backport_pr:
+                    github.close_pr(backport_pr)
+            except Exception as e:
+                print(f"Error closing PRs: {e}")
+                
+        # 3. Save to aborted history
+        if state.get("rc_branch") or state.get("created_at"):
+            try:
+                aborted_file = BASE_DIR / "aborted_history.json"
+                aborted_history = []
+                if aborted_file.exists():
+                    try:
+                        with open(aborted_file, 'r') as f:
+                            aborted_history = json.load(f)
+                    except Exception:
+                        pass
+                import time
+                record = {
+                    "release_id": state.get('rc_branch') or 'unknown',
+                    "created_at": state.get("created_at"),
+                    "aborted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "last_state": state.get("CURRENT_STATE"),
+                    "pr_number": state.get("pr_number") or state.get("version_pr_number"),
+                    "on_call_ldap": state.get("on_call_ldap")
+                }
+                aborted_history.append(record)
+                with open(aborted_file, 'w') as f:
+                    json.dump(aborted_history, f, indent=4)
+            except Exception as e:
+                print(f"Failed to save aborted history: {e}")
+
+        # 4. Reset state file
         try:
             default_state = {
                 "CURRENT_STATE": "INITIALIZATION",
@@ -291,7 +352,11 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
                 "created_at": None,
                 "merged_at": None,
                 "cancelled_from_state": None,
-                "trigger_type": None
+                "trigger_type": None,
+                "version_pr_number": None,
+                "backport_pr_number": None,
+                "reviewer_assigned": False,
+                "seen_comments": 0
             }
             with open(STATE_FILE, "w") as f:
                 json.dump(default_state, f, indent=4)
@@ -312,15 +377,23 @@ class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
             self.send_json({"success": False, "error": "Release is not in manually cancelled state."})
             return
             
-        # Reopen PR on Github
-        pr_number = state.get("pr_number") or state.get("version_pr_number") or state.get("backport_pr_number")
+        # Restore original state
+        original_state = state.get("cancelled_from_state") or "INITIALIZATION"
+        
+        # Reopen PR on Github based on which state it was cancelled from
+        pr_number = None
+        if original_state == "INITIALIZATION":
+            pr_number = state.get("version_pr_number")
+        elif original_state == "MERGE_AND_BACKPORT":
+            pr_number = state.get("backport_pr_number")
+        else:
+            pr_number = state.get("pr_number")
+            
         if pr_number:
             from clients import GitHubClient
             github = GitHubClient()
             github.reopen_pr(pr_number)
             
-        # Restore original state
-        original_state = state.get("cancelled_from_state") or "INITIALIZATION"
         state["CURRENT_STATE"] = original_state
         state["cancelled_from_state"] = None
         

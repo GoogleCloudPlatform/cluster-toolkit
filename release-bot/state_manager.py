@@ -38,10 +38,14 @@ class StateManager:
             "on_call_github": None,
             "pr_active_timestamp": None,
             "paused": False,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "created_at": None,
             "merged_at": None,
             "cancelled_from_state": None,
-            "trigger_type": None
+            "trigger_type": None,
+            "version_pr_number": None,
+            "backport_pr_number": None,
+            "reviewer_assigned": False,
+            "seen_comments": 0
         }
 
     def _ensure_state_file(self):
@@ -94,7 +98,7 @@ class StateManager:
                 deprioritized_count += 1
                 
         record = {
-            "release_id": f"release-{state.get('rc_branch') or 'unknown'}",
+            "release_id": state.get('rc_branch') or 'unknown',
             "created_at": state.get("created_at"),
             "merged_at": state.get("merged_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "pr_number": state.get("pr_number"),
