@@ -24,6 +24,18 @@ BASE_DIR = Path(__file__).parent.resolve()
 STATE_FILE = BASE_DIR / "state.json"
 HISTORY_FILE = BASE_DIR / "history.json"
 
+# Load local .env file if present
+dotenv_path = BASE_DIR / ".env"
+if dotenv_path.exists():
+    with open(dotenv_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip()
+
 class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress logging to keep console output clean
