@@ -1,0 +1,168 @@
+[
+    {
+        "release_id": "release-candidate-1783011234",
+        "created_at": "2026-07-02T10:00:00Z",
+        "merged_at": "2026-07-02T16:45:00Z",
+        "pr_number": 5890,
+        "on_call_ldap": "neelgoyal",
+        "bugs": [
+            {
+                "ticket_id": "310001",
+                "title": "TPU topology verification failure on v6e",
+                "priority": "P0",
+                "assignee": "neelgoyal",
+                "status": "CLOSED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 1,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1782000000",
+        "created_at": "2026-06-25T09:15:00Z",
+        "merged_at": "2026-06-26T11:30:00Z",
+        "pr_number": 5882,
+        "on_call_ldap": "rahimkh",
+        "bugs": [
+            {
+                "ticket_id": "309281",
+                "title": "Lustre mount options parsing error",
+                "priority": "P0",
+                "assignee": "rahimkh",
+                "status": "CLOSED"
+            },
+            {
+                "ticket_id": "309282",
+                "title": "Minor typo in deployment guide markdown",
+                "priority": "P2",
+                "assignee": "rahimkh",
+                "status": "DEPRIORITIZED"
+            }
+        ],
+        "bug_stats": {
+            "total": 2,
+            "fixed": 1,
+            "deprioritized": 1
+        }
+    },
+    {
+        "release_id": "release-candidate-1781000000",
+        "created_at": "2026-06-18T08:30:00Z",
+        "merged_at": "2026-06-19T17:15:00Z",
+        "pr_number": 5871,
+        "on_call_ldap": "kadupoornima",
+        "bugs": [],
+        "bug_stats": {
+            "total": 0,
+            "fixed": 0,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1779000000",
+        "created_at": "2026-06-03T11:00:00Z",
+        "merged_at": "2026-06-04T15:20:00Z",
+        "pr_number": 5850,
+        "on_call_ldap": "neelgoyal",
+        "bugs": [
+            {
+                "ticket_id": "305101",
+                "title": "Incorrect Multi-NIC policy route interface binding",
+                "priority": "P1",
+                "assignee": "neelgoyal",
+                "status": "CLOSED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 1,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1771000000",
+        "created_at": "2026-04-02T10:00:00Z",
+        "merged_at": "2026-04-03T12:00:00Z",
+        "pr_number": 5712,
+        "on_call_ldap": "rahimkh",
+        "bugs": [
+            {
+                "ticket_id": "298101",
+                "title": "Kueue integration test flakiness under high stress",
+                "priority": "P1",
+                "assignee": "rahimkh",
+                "status": "CLOSED"
+            },
+            {
+                "ticket_id": "298102",
+                "title": "Console telemetry payload optimization",
+                "priority": "P1",
+                "assignee": "rahimkh",
+                "status": "DEPRIORITIZED"
+            }
+        ],
+        "bug_stats": {
+            "total": 2,
+            "fixed": 1,
+            "deprioritized": 1
+        }
+    },
+    {
+        "release_id": "release-candidate-1763000000",
+        "created_at": "2026-01-08T09:00:00Z",
+        "merged_at": "2026-01-09T14:00:00Z",
+        "pr_number": 5580,
+        "on_call_ldap": "neelgoyal",
+        "bugs": [],
+        "bug_stats": {
+            "total": 0,
+            "fixed": 0,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1751000000",
+        "created_at": "2025-07-10T10:00:00Z",
+        "merged_at": "2025-07-11T16:30:00Z",
+        "pr_number": 5120,
+        "on_call_ldap": "kadupoornima",
+        "bugs": [
+            {
+                "ticket_id": "210928",
+                "title": "Unreachable destroy handling hangs on cluster depletion",
+                "priority": "P0",
+                "assignee": "kadupoornima",
+                "status": "CLOSED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 1,
+            "deprioritized": 0
+        }
+    },
+    {
+        "release_id": "release-candidate-1721000000",
+        "created_at": "2024-07-15T09:00:00Z",
+        "merged_at": "2024-07-16T15:00:00Z",
+        "pr_number": 4200,
+        "on_call_ldap": "neelgoyal",
+        "bugs": [
+            {
+                "ticket_id": "100982",
+                "title": "Initial v4 TPU deployment recipe validation",
+                "priority": "P1",
+                "assignee": "neelgoyal",
+                "status": "CLOSED"
+            }
+        ],
+        "bug_stats": {
+            "total": 1,
+            "fixed": 1,
+            "deprioritized": 0
+        }
+    }
+]

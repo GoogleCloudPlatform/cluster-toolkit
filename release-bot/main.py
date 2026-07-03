@@ -1,3 +1,17 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import time
 import schedule
 import logging
@@ -25,7 +39,12 @@ class ReleaseOrchestrator:
         self.chat = ChatClient()
 
     def run_cycle(self):
-        current_state = self.state_manager.get_current_state()
+        state = self.state_manager.read_state()
+        if state.get("paused", False):
+            logging.info("ReleaseOrchestrator is currently PAUSED. Skipping cycle.")
+            return
+
+        current_state = state.get("CURRENT_STATE")
         logging.info(f"Running cycle. Current State: {current_state}")
 
         if current_state == "INITIALIZATION":
@@ -42,7 +61,8 @@ class ReleaseOrchestrator:
             self.handle_merge_and_backport()
         elif current_state == "DONE":
             import sys
-            logging.info("Release complete. Resetting state back to INITIALIZATION and exiting.")
+            logging.info("Release complete. Archiving to history, resetting state back to INITIALIZATION, and exiting.")
+            self.state_manager.archive_to_history()
             self.state_manager.reset_state()
             sys.exit(0)
         else:
@@ -106,12 +126,21 @@ class ReleaseOrchestrator:
         # 3. Create Buganizer tickets
         on_call_ldap = self.state_manager.read_state().get("on_call_ldap")
         ticket_ids = []
+        bugs_details = []
         for bug in bugs:
             tid = self.buganizer.create_ticket(bug['title'], bug['description'], bug['priority'], assignee=on_call_ldap)
             ticket_ids.append(tid)
+            bugs_details.append({
+                "ticket_id": tid,
+                "title": bug['title'],
+                "priority": bug['priority'],
+                "assignee": on_call_ldap,
+                "status": "NEW"
+            })
             
         self.state_manager.update_state(
             bugs=ticket_ids,
+            bugs_details=bugs_details,
             seen_comments=len(comments)
         )
         
@@ -123,15 +152,23 @@ class ReleaseOrchestrator:
 
     def handle_awaiting_bug_fixes(self):
         logging.info("State 2: Awaiting Bug Fixes")
-        tracked_bugs = self.state_manager.read_state().get("bugs", [])
+        state = self.state_manager.read_state()
+        bugs_details = state.get("bugs_details", [])
         
         all_resolved = True
-        for ticket_id in tracked_bugs:
-            status = self.buganizer.get_ticket_status(ticket_id)
-            if status['status'].upper() not in ['CLOSED', 'FIXED', 'VERIFIED'] and status['priority'] in ['P0', 'P1']:
+        updated_bugs = []
+        for bug in bugs_details:
+            tid = bug['ticket_id']
+            status_info = self.buganizer.get_ticket_status(tid)
+            bug['status'] = status_info['status']
+            bug['priority'] = status_info['priority']
+            updated_bugs.append(bug)
+            
+            if status_info['status'].upper() not in ['CLOSED', 'FIXED', 'VERIFIED'] and status_info['priority'] in ['P0', 'P1']:
                 all_resolved = False
-                break
                 
+        self.state_manager.update_state(bugs_details=updated_bugs)
+        
         if all_resolved:
             logging.info("All blocking bugs resolved.")
             self.state_manager.set_current_state("TEST_EXECUTION_AND_MONITORING")
@@ -170,13 +207,25 @@ class ReleaseOrchestrator:
             bugs = self.gemini.triage_comments(new_comments, pr_number)
             if bugs:
                 ticket_ids = state.get("bugs", [])
+                bugs_details = state.get("bugs_details", [])
                 new_tickets = []
                 for bug in bugs:
                     tid = self.buganizer.create_ticket(bug['title'], bug['description'], bug['priority'], assignee=on_call_ldap)
                     ticket_ids.append(tid)
                     new_tickets.append(tid)
+                    bugs_details.append({
+                        "ticket_id": tid,
+                        "title": bug['title'],
+                        "priority": bug['priority'],
+                        "assignee": on_call_ldap,
+                        "status": "NEW"
+                    })
                 
-                self.state_manager.update_state(bugs=ticket_ids, seen_comments=len(comments))
+                self.state_manager.update_state(
+                    bugs=ticket_ids,
+                    bugs_details=bugs_details,
+                    seen_comments=len(comments)
+                )
                 logging.info(f"New comments raised issues! Created tickets: {new_tickets}. Reverting to AWAITING_BUG_FIXES.")
                 self.chat.send_message(f"New review comments raised issues! Created tickets: {new_tickets}. Blocked until resolved.")
                 self.state_manager.set_current_state("AWAITING_BUG_FIXES")

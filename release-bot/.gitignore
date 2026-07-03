@@ -41,3 +41,7 @@ venv.bak/
 .idea/
 *.swp
 *.swo
+
+# Local ReleaseBot logs and virtualenvs
+daemon.log
+.venv/

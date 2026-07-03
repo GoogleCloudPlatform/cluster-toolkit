@@ -1,0 +1,242 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import http.server
+import json
+import os
+import urllib.parse
+from pathlib import Path
+
+# Resolve paths
+BASE_DIR = Path(__file__).parent.resolve()
+STATE_FILE = BASE_DIR / "state.json"
+HISTORY_FILE = BASE_DIR / "history.json"
+
+class ControlPlaneHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Suppress logging to keep console output clean
+        pass
+
+    def do_GET(self):
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        
+        if path == "/api/state":
+            self.handle_get_state()
+        elif path == "/api/history":
+            self.handle_get_history()
+        elif path == "/api/calendar":
+            self.handle_get_calendar()
+        elif path == "/" or path == "/index.html":
+            self.serve_file(BASE_DIR / "index.html", "text/html")
+        else:
+            # Try to serve static file from current directory
+            file_path = BASE_DIR / path.lstrip("/")
+            if file_path.is_file() and not file_path.name.endswith(".py") and not file_path.name.endswith(".json"):
+                ext = file_path.suffix
+                content_type = "text/plain"
+                if ext == ".html": content_type = "text/html"
+                elif ext == ".css": content_type = "text/css"
+                elif ext == ".js": content_type = "application/javascript"
+                elif ext == ".png": content_type = "image/png"
+                self.serve_file(file_path, content_type)
+            else:
+                self.send_error(404, "File Not Found")
+
+    def do_POST(self):
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        
+        if path == "/api/pause":
+            self.handle_toggle_pause()
+        elif path == "/api/start":
+            self.handle_start_release()
+        else:
+            self.send_error(404, "Endpoint Not Found")
+
+    def serve_file(self, path, content_type):
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self.send_error(500, f"Internal Server Error: {e}")
+
+    def handle_get_state(self):
+        state = {}
+        if STATE_FILE.exists():
+            try:
+                with open(STATE_FILE, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+        
+        # If no state file, supply defaults
+        if not state:
+            state = {
+                "CURRENT_STATE": "INITIALIZATION",
+                "pr_number": None,
+                "paused": False,
+                "bugs_details": []
+            }
+            
+        # Get last successful release from history
+        last_success = None
+        if HISTORY_FILE.exists():
+            try:
+                with open(HISTORY_FILE, "r") as f:
+                    history = json.load(f)
+                    if history:
+                        # Sort by merged_at descending
+                        history.sort(key=lambda x: x.get("merged_at", ""), reverse=True)
+                        last_success = history[0]
+            except Exception:
+                pass
+                
+        # Calculate next scheduled release
+        # Standard: next Tuesday (weekly)
+        import datetime
+        today = datetime.date.today()
+        # Find next Tuesday
+        days_ahead = 1 - today.weekday() # Monday is 0, Tuesday is 1
+        if days_ahead <= 0: # Target day has already happened this week
+            days_ahead += 7
+        next_tuesday = today + datetime.timedelta(days=days_ahead)
+        
+        response_data = {
+            "state": state,
+            "next_release_date": next_tuesday.strftime("%Y-%m-%d"),
+            "last_successful_release": last_success.get("merged_at") if last_success else None,
+            "last_successful_release_id": last_success.get("release_id") if last_success else None
+        }
+        
+        self.send_json(response_data)
+
+    def handle_get_history(self):
+        history = []
+        if HISTORY_FILE.exists():
+            try:
+                with open(HISTORY_FILE, "r") as f:
+                    history = json.load(f)
+            except Exception:
+                pass
+        self.send_json(history)
+
+    def handle_get_calendar(self):
+        freezes = [
+            {"name": "Spring Guard Window (RRC1)", "start": "2026-04-20", "end": "2026-04-24", "rrc": 1, "description": "Guarded - No feature releases."},
+            {"name": "Autumn Guard Window (RRC2)", "start": "2026-10-16", "end": "2026-10-23", "rrc": 2, "description": "Guarded - Light week."},
+            {"name": "Diwali Guard Window (RRC2)", "start": "2026-11-08", "end": "2026-11-10", "rrc": 2, "description": "Guarded - Light week."},
+            {"name": "Thanksgiving Freeze (RRC1)", "start": "2026-11-20", "end": "2026-12-01", "rrc": 1, "description": "Guarded - Thanksgiving / Cyber Week Freeze."},
+            {"name": "Pre-Holiday Guard (RRC1)", "start": "2026-12-16", "end": "2026-12-18", "rrc": 1, "description": "Guarded - Pre-Holiday Guard."},
+            {"name": "Winter Holiday Chilled (RRC2)", "start": "2026-12-18", "end": "2026-12-23", "rrc": 2, "description": "Chilled - Strict Emergency Only."},
+            {"name": "Winter Holiday Frozen (RRC3)", "start": "2026-12-23", "end": "2027-01-02", "rrc": 3, "description": "Frozen - TOTAL FREEZE."},
+            {"name": "Post-Holiday Guard (RRC1)", "start": "2027-01-03", "end": "2027-01-03", "rrc": 1, "description": "Guarded - Gradual unfreeze."}
+        ]
+        self.send_json(freezes)
+
+    def handle_toggle_pause(self):
+        state = {}
+        if STATE_FILE.exists():
+            try:
+                with open(STATE_FILE, "r") as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+                
+        if not state:
+            state = {
+                "CURRENT_STATE": "INITIALIZATION",
+                "pr_number": None,
+                "paused": False,
+                "bugs_details": []
+            }
+            
+        current_paused = state.get("paused", False)
+        state["paused"] = not current_paused
+        
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(state, f, indent=4)
+            self.send_json({"success": True, "paused": state["paused"]})
+        except Exception as e:
+            self.send_error(500, f"Failed to save state: {e}")
+
+    def handle_start_release(self):
+        # 1. Reset state to initialization
+        import time
+        initial_state = {
+            "CURRENT_STATE": "INITIALIZATION",
+            "pr_number": None,
+            "rc_branch": None,
+            "version_branch": None,
+            "bugs": [],
+            "bugs_details": [],
+            "test_run_ids": [],
+            "test_retries": 0,
+            "on_call_ldap": "neelgoyal",
+            "on_call_github": "Neelabh94",
+            "pr_active_timestamp": None,
+            "paused": False,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "merged_at": None
+        }
+        
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(initial_state, f, indent=4)
+        except Exception as e:
+            self.send_json({"success": False, "error": f"Failed to initialize state: {e}"})
+            return
+            
+        # 2. Start main.py in background
+        import subprocess
+        log_file = BASE_DIR / "daemon.log"
+        try:
+            # Run daemon with unbuffered python and redirect logs
+            with open(log_file, "w") as f_log:
+                subprocess.Popen(
+                    ["python3", "-u", str(BASE_DIR / "main.py")],
+                    stdout=f_log,
+                    stderr=f_log,
+                    cwd=str(BASE_DIR),
+                    start_new_session=True
+                )
+            self.send_json({"success": True})
+        except Exception as e:
+            self.send_json({"success": False, "error": f"Failed to launch daemon: {e}"})
+
+    def send_json(self, data):
+        content = json.dumps(data, indent=2).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(content)
+
+def run(server_class=http.server.HTTPServer, handler_class=ControlPlaneHandler):
+    port = int(os.environ.get("ANTIGRAVITY_SIDECAR_WEB_PORT", 8000))
+    server_address = ("", port)
+    httpd = server_class(server_address, handler_class)
+    print(f"Starting Control Plane Server on port {port}...")
+    httpd.serve_forever()
+
+if __name__ == "__main__":
+    run()

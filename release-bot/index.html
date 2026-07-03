@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 "Google LLC"
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ReleaseBot Control Plane 🚀</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --bg-dark: #0f172a;
+      --card-dark: #1e293b;
+      --border-dark: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --info: #3b82f6;
+      --glass: rgba(30, 41, 59, 0.7);
+      --font-outfit: 'Outfit', sans-serif;
+      --font-inter: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: var(--font-inter);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-dark);
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: var(--font-outfit);
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a5b4fc, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: var(--font-outfit);
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      color: var(--text-primary);
+      background: var(--primary);
+      border-color: var(--primary);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+    }
+
+    main {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards & Panels */
+    .card {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border-dark);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-title {
+      font-family: var(--font-outfit);
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    /* Tab 1: Past Releases */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .filter-label {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    select {
+      background: var(--card-dark);
+      border: 1px solid var(--border-dark);
+      color: var(--text-primary);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      outline: none;
+      cursor: pointer;
+      font-family: var(--font-outfit);
+    }
+
+    .history-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-widget {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-dark);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: var(--font-outfit);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-top: 0.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .release-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .release-item {
+      border: 1px solid var(--border-dark);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.01);
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .release-item:hover {
+      border-color: var(--primary);
+    }
+
+    .release-item-header {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr 0.5fr;
+      align-items: center;
+      cursor: pointer;
+      gap: 1rem;
+    }
+
+    .release-id-cell {
+      font-family: var(--font-outfit);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .release-date-cell {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .release-bugs-cell {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .badge-fixed { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .badge-deprioritized { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .badge-total { background: rgba(59, 130, 246, 0.2); color: var(--info); }
+    .badge-rrc0 { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .badge-rrc1 { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+    .badge-rrc2 { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+    .badge-rrc3 { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+
+    .expand-btn {
+      text-align: right;
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      transition: transform 0.3s;
+    }
+
+    .release-item.expanded .expand-btn {
+      transform: rotate(180deg);
+    }
+
+    .release-item-details {
+      display: none;
+      padding: 1rem;
+      border-top: 1px solid var(--border-dark);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .release-item.expanded .release-item-details {
+      display: block;
+    }
+
+    .bugs-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+    }
+
+    .bugs-table th, .bugs-table td {
+      text-align: left;
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border-dark);
+      font-size: 0.875rem;
+    }
+
+    .bugs-table th {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Tab 2: Current Release Status */
+    .status-dashboard {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 900px) {
+      .status-dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .status-main {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .no-release-card {
+      text-align: center;
+      padding: 3rem 2rem;
+    }
+
+    .no-release-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .control-btn {
+      background: var(--primary);
+      border: none;
+      color: var(--text-primary);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-outfit);
+      transition: background-color 0.2s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .control-btn:hover {
+      background: var(--primary-hover);
+    }
+
+    .control-btn:active {
+      transform: scale(0.98);
+    }
+
+    .control-btn.btn-pause {
+      background: var(--warning);
+      color: var(--bg-dark);
+    }
+
+    .control-btn.btn-pause:hover {
+      background: #d97706;
+    }
+
+    .control-btn.btn-resume {
+      background: var(--success);
+    }
+
+    .control-btn.btn-resume:hover {
+      background: #059669;
+    }
+
+    .progress-section {
+      margin-top: 1.5rem;
+    }
+
+    .progress-bar-container {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-dark);
+      height: 24px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--info));
+      width: 0%;
+      transition: width 0.5s ease-out;
+    }
+
+    .progress-percentage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+
+    .step-list {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 1.5rem;
+      position: relative;
+    }
+
+    .step-list::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--border-dark);
+      z-index: 0;
+    }
+
+    .step-node {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .step-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--card-dark);
+      border: 2px solid var(--border-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      transition: all 0.3s;
+    }
+
+    .step-node.completed .step-dot {
+      background: var(--success);
+      border-color: var(--success);
+      color: var(--bg-dark);
+    }
+
+    .step-node.active .step-dot {
+      background: var(--primary);
+      border-color: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      animation: glow 1.5s infinite;
+    }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 5px var(--primary); }
+      50% { box-shadow: 0 0 15px var(--primary); }
+    }
+
+    .step-label {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      max-width: 100px;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .step-node.active .step-label {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 0.5rem;
+    }
+
+    .meta-key {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .meta-val {
+      font-weight: 500;
+      font-size: 0.875rem;
+    }
+
+    a {
+      color: #818cf8;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    a:hover {
+      color: #c7d2fe;
+      text-decoration: underline;
+    }
+
+    /* Tab 3: Calendar */
+    .calendar-container {
+      display: grid;
+      grid-template-columns: 3fr 1.5fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 900px) {
+      .calendar-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .calendar-card {
+      padding: 1.5rem;
+    }
+
+    .calendar-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.5rem;
+      text-align: center;
+    }
+
+    .day-header {
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      padding: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    .calendar-day {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 0.4rem;
+      border: 1px solid var(--border-dark);
+      background: rgba(255, 255, 255, 0.01);
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .calendar-day:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--primary);
+    }
+
+    .calendar-day.empty {
+      visibility: hidden;
+      cursor: default;
+    }
+
+    .day-num {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .day-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin: 0 auto;
+    }
+
+    .day-indicator.rrc0 { background-color: var(--success); }
+    .day-indicator.rrc1 { background-color: var(--warning); }
+    .day-indicator.rrc2 { background-color: #f97316; }
+    .day-indicator.rrc3 { background-color: var(--danger); }
+
+    .calendar-day.selected {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: var(--primary);
+    }
+
+    .legend-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.875rem;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .detail-heading {
+      font-family: var(--font-outfit);
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .detail-body {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .detail-time {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span>ReleaseBot 🚀</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('past-releases')">Past Releases</button>
+      <button class="tab-btn" onclick="switchTab('current-release')">Current Release</button>
+      <button class="tab-btn" onclick="switchTab('schedule-calendar')">Schedule Calendar</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- TAB 1: Past Releases -->
+    <div id="past-releases" class="tab-content active">
+      <div class="filter-bar">
+        <span class="filter-label">Filter Time Range:</span>
+        <select id="time-filter" onchange="loadHistory()">
+          <option value="1">Last 1 Day</option>
+          <option value="7">Last 1 Week</option>
+          <option value="30" selected>Last 1 Month</option>
+          <option value="90">Last 3 Months</option>
+          <option value="180">Last 6 Months</option>
+          <option value="365">Last 1 Year</option>
+          <option value="730">Last 2 Years</option>
+        </select>
+      </div>
+
+      <div class="history-stats">
+        <div class="stat-widget">
+          <div class="stat-label">Releases Completed</div>
+          <div id="stat-total-releases" class="stat-value">0</div>
+        </div>
+        <div class="stat-widget">
+          <div class="stat-label">Bugs Triaged</div>
+          <div id="stat-total-bugs" class="stat-value">0</div>
+        </div>
+        <div class="stat-widget">
+          <div class="stat-label">Bugs Fixed</div>
+          <div id="stat-fixed-bugs" class="stat-value">0</div>
+        </div>
+        <div class="stat-widget">
+          <div class="stat-label">Bugs De-prioritized</div>
+          <div id="stat-deprioritized-bugs" class="stat-value">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Completed Release Log</h2>
+        </div>
+        <div class="release-list" id="release-history-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Current Release Status -->
+    <div id="current-release" class="tab-content">
+      <div class="status-dashboard">
+        <!-- Main panel -->
+        <div class="status-main">
+          <!-- Active Release Container -->
+          <div id="active-release-container" style="display: none;">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title" id="active-release-title">Active Release: release-candidate</h2>
+                <div id="active-release-controls">
+                  <!-- Pause/Resume button injected here -->
+                </div>
+              </div>
+
+              <div class="progress-section">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 0.5rem;">
+                  <span style="font-size:0.875rem; font-weight:600;">Overall Progress</span>
+                  <span style="font-size:0.875rem; font-weight:600; color:var(--primary);" id="progress-percentage-label">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                  <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                  <div class="progress-percentage" id="progress-percentage-text">0%</div>
+                </div>
+
+                <div class="step-list">
+                  <div class="step-node" id="step-INIT">
+                    <div class="step-dot">1</div>
+                    <span class="step-label">Initialization</span>
+                  </div>
+                  <div class="step-node" id="step-TRIAGE">
+                    <div class="step-dot">2</div>
+                    <span class="step-label">Triage</span>
+                  </div>
+                  <div class="step-node" id="step-BUG">
+                    <div class="step-dot">3</div>
+                    <span class="step-label">Bugs Resolving</span>
+                  </div>
+                  <div class="step-node" id="step-TEST">
+                    <div class="step-dot">4</div>
+                    <span class="step-label">CI/Testing</span>
+                  </div>
+                  <div class="step-node" id="step-REVIEW">
+                    <div class="step-dot">5</div>
+                    <span class="step-label">Final Approval</span>
+                  </div>
+                  <div class="step-node" id="step-MERGE">
+                    <div class="step-dot">6</div>
+                    <span class="step-label">Merge / Sync</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Bug Triage Section -->
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Release Blocking Bugs</h2>
+              </div>
+              <table class="bugs-table">
+                <thead>
+                  <tr>
+                    <th>Ticket ID</th>
+                    <th>Bug Description</th>
+                    <th>Priority</th>
+                    <th>Assignee</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="active-bugs-body">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- No Ongoing Release Container -->
+          <div id="no-release-container" class="card no-release-card">
+            <span class="no-release-icon">😴</span>
+            <h2 class="card-title" style="margin-bottom:0.5rem; font-size:1.5rem;">No Active Release</h2>
+            <p style="color:var(--text-secondary); margin-bottom:1.5rem;" id="no-release-details">
+              There is currently no release cycle in progress.
+            </p>
+            <div style="margin-bottom: 2rem;">
+              <button class="control-btn" onclick="startAdhocRelease()">🚀 Start Adhoc Release</button>
+            </div>
+            <div style="display:flex; justify-content:center; gap:2rem; border-top:1px solid var(--border-dark); padding-top:1.5rem;">
+              <div>
+                <div class="stat-label">Next Release Scheduled</div>
+                <div id="next-release-date" style="font-weight:600; color:var(--info); font-size:1.1rem; margin-top:0.25rem;">N/A</div>
+              </div>
+              <div>
+                <div class="stat-label">Last Successful Release</div>
+                <div id="last-successful-release-date" style="font-weight:600; color:var(--success); font-size:1.1rem; margin-top:0.25rem;">N/A</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar / Meta panel -->
+        <div class="status-sidebar">
+          <div class="card" style="height:100%;">
+            <div class="card-header">
+              <h2 class="card-title">Release Details</h2>
+            </div>
+            <div class="meta-list" id="active-meta-list">
+              <div class="meta-item">
+                <span class="meta-key">Status</span>
+                <span class="meta-val" id="meta-status">Inactive</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Current State</span>
+                <span class="meta-val" id="meta-state">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Release Branch</span>
+                <span class="meta-val" id="meta-branch">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Release PR</span>
+                <span class="meta-val" id="meta-pr">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">On-Call Assignee</span>
+                <span class="meta-val" id="meta-oncall">N/A</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-key">Created At</span>
+                <span class="meta-val" id="meta-created">N/A</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Schedule Calendar -->
+    <div id="schedule-calendar" class="tab-content">
+      <div class="calendar-container">
+        <!-- Calendar Grid Card -->
+        <div class="card calendar-card">
+          <div class="calendar-controls">
+            <button class="control-btn" style="padding:0.4rem 0.8rem;" onclick="changeMonth(-1)">&larr; Prev</button>
+            <h2 class="card-title" id="calendar-title" style="font-size:1.25rem;">July 2026</h2>
+            <button class="control-btn" style="padding:0.4rem 0.8rem;" onclick="changeMonth(1)">Next &rarr;</button>
+          </div>
+          <div class="calendar-grid">
+            <div class="day-header">Sun</div>
+            <div class="day-header">Mon</div>
+            <div class="day-header">Tue</div>
+            <div class="day-header">Wed</div>
+            <div class="day-header">Thu</div>
+            <div class="day-header">Fri</div>
+            <div class="day-header">Sat</div>
+          </div>
+          <div class="calendar-grid" id="calendar-days-container" style="margin-top:0.5rem;">
+            <!-- Days injected by JS -->
+          </div>
+        </div>
+
+        <!-- Calendar Info Panel -->
+        <div class="calendar-info-panel">
+          <div class="card" style="height:100%;">
+            <div class="card-header">
+              <h2 class="card-title">Schedule & RRC Status</h2>
+            </div>
+            <div id="selected-day-details">
+              <div class="detail-heading">Select a Day</div>
+              <div class="detail-body">Click on any calendar day to inspect scheduled events and RRC details.</div>
+            </div>
+            <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-dark); padding-top: 1rem;">
+              <h3 class="detail-heading" style="font-size:0.9rem;">RRC Legend</h3>
+              <div class="legend-list">
+                <div class="legend-item">
+                  <div class="legend-color rrc0"></div>
+                  <span><strong>RRC0 (Normal)</strong>: Active weekly release cycle</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-color rrc1"></div>
+                  <span><strong>RRC1 (Guarded)</strong>: Feature freeze / Guard window</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-color rrc2"></div>
+                  <span><strong>RRC2 (Chilled)</strong>: Emergency / Light week only</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-color rrc3"></div>
+                  <span><strong>RRC3 (Frozen)</strong>: TOTAL FREEZE - No deployments</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Tab switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.getAttribute('onclick').includes(tabId));
+      if (targetBtn) targetBtn.classList.add('active');
+      
+      document.getElementById(tabId).classList.add('active');
+      
+      if (tabId === 'past-releases') {
+        loadHistory();
+      } else if (tabId === 'current-release') {
+        fetchState();
+      } else if (tabId === 'schedule-calendar') {
+        renderCalendar();
+      }
+    }
+
+    // STATE MANAGEMENT: POLL /api/state
+    let statePollingInterval = null;
+    function startPollingState() {
+      fetchState();
+      statePollingInterval = setInterval(fetchState, 2000);
+    }
+
+    function stopPollingState() {
+      if (statePollingInterval) {
+        clearInterval(statePollingInterval);
+      }
+    }
+
+    // Toggle pause status
+    function togglePause() {
+      fetch('/api/pause', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          fetchState();
+        })
+        .catch(err => console.error("Error toggling pause:", err));
+    }
+
+    function startAdhocRelease() {
+      if (!confirm("Are you sure you want to start a new adhoc release? This will initialize a new release candidate.")) return;
+      
+      const btn = document.querySelector('.no-release-card button');
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = "Launching...";
+      
+      fetch('/api/start', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            fetchState();
+          } else {
+            alert("Error: " + (data.error || "Failed to start release"));
+            btn.disabled = false;
+            btn.innerText = originalText;
+          }
+        })
+        .catch(err => {
+          console.error("Error starting adhoc release:", err);
+          alert("Error launching release daemon.");
+          btn.disabled = false;
+          btn.innerText = originalText;
+        });
+    }
+
+    function fetchState() {
+      fetch('/api/state')
+        .then(r => r.json())
+        .then(data => {
+          const { state, next_release_date, last_successful_release, last_successful_release_id } = data;
+          
+          const isOngoing = state.CURRENT_STATE && state.CURRENT_STATE !== "DONE" && state.pr_number;
+          
+          if (!isOngoing) {
+            document.getElementById('no-release-container').style.display = 'block';
+            document.getElementById('active-release-container').style.display = 'none';
+            document.getElementById('next-release-date').innerText = next_release_date || 'N/A';
+            
+            if (last_successful_release) {
+              const formattedDate = new Date(last_successful_release).toLocaleDateString();
+              document.getElementById('last-successful-release-date').innerText = `${last_successful_release_id || 'Release'} (${formattedDate})`;
+            } else {
+              document.getElementById('last-successful-release-date').innerText = 'N/A';
+            }
+            
+            // Update sidebar meta
+            document.getElementById('meta-status').innerText = 'Inactive';
+            document.getElementById('meta-status').style.color = 'var(--text-secondary)';
+            document.getElementById('meta-state').innerText = 'N/A';
+            document.getElementById('meta-branch').innerText = 'N/A';
+            document.getElementById('meta-pr').innerText = 'N/A';
+            document.getElementById('meta-oncall').innerText = 'N/A';
+            document.getElementById('meta-created').innerText = 'N/A';
+            return;
+          }
+
+          // Active Release
+          document.getElementById('no-release-container').style.display = 'none';
+          document.getElementById('active-release-container').style.display = 'block';
+          
+          document.getElementById('active-release-title').innerText = `Active Release: ${state.rc_branch || 'release-candidate'}`;
+          
+          // Controls (Pause/Resume button)
+          const controlsDiv = document.getElementById('active-release-controls');
+          if (state.paused) {
+            controlsDiv.innerHTML = `<button class="control-btn btn-resume" onclick="togglePause()">Resume Release</button>`;
+          } else {
+            controlsDiv.innerHTML = `<button class="control-btn btn-pause" onclick="togglePause()">Pause Release</button>`;
+          }
+
+          // Update sidebar meta
+          document.getElementById('meta-status').innerText = state.paused ? 'Paused' : 'Active';
+          document.getElementById('meta-status').style.color = state.paused ? 'var(--warning)' : 'var(--success)';
+          document.getElementById('meta-state').innerText = state.CURRENT_STATE;
+          document.getElementById('meta-branch').innerText = state.rc_branch || 'N/A';
+          
+          const repo = "rahimkhan19/cluster-toolkit";
+          if (state.pr_number) {
+            document.getElementById('meta-pr').innerHTML = `<a href="https://github.com/${repo}/pull/${state.pr_number}" target="_blank">PR #${state.pr_number}</a>`;
+          } else {
+            document.getElementById('meta-pr').innerText = 'N/A';
+          }
+          
+          document.getElementById('meta-oncall').innerText = state.on_call_ldap ? `${state.on_call_ldap} (GH: ${state.on_call_github})` : 'N/A';
+          document.getElementById('meta-created').innerText = state.created_at ? new Date(state.created_at).toLocaleString() : 'N/A';
+
+          // Progress percentage
+          const stateProgress = {
+            "INITIALIZATION": 10,
+            "TRIAGE": 30,
+            "AWAITING_BUG_FIXES": 50,
+            "TEST_EXECUTION_AND_MONITORING": 70,
+            "AWAITING_FINAL_REVIEW": 85,
+            "MERGE_AND_BACKPORT": 95
+          };
+          const percentage = stateProgress[state.CURRENT_STATE] || 0;
+          document.getElementById('progress-bar-fill').style.width = `${percentage}%`;
+          document.getElementById('progress-percentage-label').innerText = `${percentage}%`;
+          document.getElementById('progress-percentage-text').innerText = `${percentage}%`;
+
+          // Step nodes highlighting
+          const steps = ["INIT", "TRIAGE", "BUG", "TEST", "REVIEW", "MERGE"];
+          const stateToStepIndex = {
+            "INITIALIZATION": 0,
+            "TRIAGE": 1,
+            "AWAITING_BUG_FIXES": 2,
+            "TEST_EXECUTION_AND_MONITORING": 3,
+            "AWAITING_FINAL_REVIEW": 4,
+            "MERGE_AND_BACKPORT": 5
+          };
+          
+          const activeIndex = stateToStepIndex[state.CURRENT_STATE] !== undefined ? stateToStepIndex[state.CURRENT_STATE] : -1;
+          
+          steps.forEach((step, idx) => {
+            const el = document.getElementById(`step-${step}`);
+            el.classList.remove('completed', 'active');
+            if (idx < activeIndex) {
+              el.classList.add('completed');
+            } else if (idx === activeIndex) {
+              el.classList.add('active');
+            }
+          });
+
+          // Bugs Table
+          const tbody = document.getElementById('active-bugs-body');
+          const bugs = state.bugs_details || [];
+          if (bugs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-secondary);">No active bugs tracking for this release.</td></tr>`;
+          } else {
+            tbody.innerHTML = bugs.map(bug => {
+              const bugLink = `https://buganizer.corp.google.com/issues/${bug.ticket_id}`;
+              const isResolved = ["CLOSED", "FIXED", "VERIFIED"].includes(bug.status.toUpperCase());
+              const statusColor = isResolved ? 'var(--success)' : 'var(--danger)';
+              return `
+                <tr>
+                  <td><a href="${bugLink}" target="_blank">#${bug.ticket_id}</a></td>
+                  <td>${bug.title}</td>
+                  <td><span class="badge ${bug.priority === 'P0' ? 'badge-rrc3' : 'badge-rrc1'}">${bug.priority}</span></td>
+                  <td>${bug.assignee || 'Unassigned'}</td>
+                  <td style="color:${statusColor}; font-weight:600;">${bug.status}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+        });
+    }
+
+    // TAB 1: HISTORY MANAGEMENT
+    let allHistory = [];
+    function loadHistory() {
+      fetch('/api/history')
+        .then(r => r.json())
+        .then(data => {
+          allHistory = data;
+          filterAndRenderHistory();
+        })
+        .catch(err => console.error("Error fetching history:", err));
+    }
+
+    function filterAndRenderHistory() {
+      const days = parseInt(document.getElementById('time-filter').value);
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+      
+      const filtered = allHistory.filter(h => {
+        const date = new Date(h.merged_at);
+        return date >= cutoff;
+      });
+
+      // Update stat widgets
+      document.getElementById('stat-total-releases').innerText = filtered.length;
+      
+      let totalBugs = 0, fixedBugs = 0, deprioBugs = 0;
+      filtered.forEach(h => {
+        totalBugs += h.bug_stats.total || 0;
+        fixedBugs += h.bug_stats.fixed || 0;
+        deprioBugs += h.bug_stats.deprioritized || 0;
+      });
+
+      document.getElementById('stat-total-bugs').innerText = totalBugs;
+      document.getElementById('stat-fixed-bugs').innerText = fixedBugs;
+      document.getElementById('stat-deprioritized-bugs').innerText = deprioBugs;
+
+      // Render release list
+      const container = document.getElementById('release-history-list');
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--text-secondary);">No completed releases found in this range.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map((h, index) => {
+        const createdDate = new Date(h.created_at).toLocaleString();
+        const mergedDate = new Date(h.merged_at).toLocaleString();
+        
+        let bugsTableHtml = '';
+        if (h.bugs && h.bugs.length > 0) {
+          bugsTableHtml = `
+            <table class="bugs-table">
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>Description</th>
+                  <th>Priority</th>
+                  <th>Assignee</th>
+                  <th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${h.bugs.map(b => `
+                  <tr>
+                    <td><a href="https://buganizer.corp.google.com/issues/${b.ticket_id}" target="_blank">#${b.ticket_id}</a></td>
+                    <td>${b.title}</td>
+                    <td><span class="badge ${b.priority === 'P0' ? 'badge-rrc3' : 'badge-rrc1'}">${b.priority}</span></td>
+                    <td>${b.assignee}</td>
+                    <td><span class="badge ${['CLOSED','FIXED','VERIFIED'].includes(b.status.toUpperCase()) ? 'badge-fixed' : 'badge-deprioritized'}">${b.status}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        } else {
+          bugsTableHtml = `<p style="font-size:0.875rem; color:var(--text-secondary); margin-top:0.5rem;">No bugs filed during this release cycle.</p>`;
+        }
+
+        return `
+          <div class="release-item" id="history-item-${index}">
+            <div class="release-item-header" onclick="toggleHistoryItem(${index})">
+              <span class="release-id-cell">🚀 ${h.release_id}</span>
+              <span class="release-date-cell">Created: ${new Date(h.created_at).toLocaleDateString()}</span>
+              <span class="release-date-cell">Merged: ${new Date(h.merged_at).toLocaleDateString()}</span>
+              <span class="release-bugs-cell">
+                <span class="badge badge-total">${h.bug_stats.total} Bugs</span>
+                <span class="badge badge-fixed">${h.bug_stats.fixed} Fixed</span>
+                <span class="badge badge-deprioritized">${h.bug_stats.deprioritized} Deprio</span>
+              </span>
+              <span class="expand-btn">&darr;</span>
+            </div>
+            <div class="release-item-details">
+              <div class="meta-list" style="margin-bottom:1rem; grid-template-columns: 1fr 1fr; display: grid; gap: 1rem;">
+                <div><strong>Created:</strong> ${createdDate}</div>
+                <div><strong>Merged:</strong> ${mergedDate}</div>
+                <div><strong>On-Call LDAP:</strong> ${h.on_call_ldap}</div>
+                <div><strong>Release PR:</strong> <a href="https://github.com/rahimkhan19/cluster-toolkit/pull/${h.pr_number}" target="_blank">PR #${h.pr_number}</a></div>
+              </div>
+              <h4 style="font-size:0.9rem; font-weight:600; margin-top: 1rem;">Bug Triage Details:</h4>
+              ${bugsTableHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleHistoryItem(index) {
+      const item = document.getElementById(`history-item-${index}`);
+      item.classList.toggle('expanded');
+    }
+
+    // TAB 3: CALENDAR COMPONENT
+    let currentYear = 2026;
+    let currentMonth = 6; // July (0-indexed: January = 0, July = 6)
+    
+    const freezeWindows = [
+      { name: "Spring Guard Window (RRC1)", start: new Date("2026-04-20"), end: new Date("2026-04-24"), rrc: 1, color: "var(--warning)", desc: "Guarded - No feature releases." },
+      { name: "Autumn Guard Window (RRC2)", start: new Date("2026-10-16"), end: new Date("2026-10-23"), rrc: 2, color: "#f97316", desc: "Guarded - Light week." },
+      { name: "Diwali Guard Window (RRC2)", start: new Date("2026-11-08"), end: new Date("2026-11-10"), rrc: 2, color: "#f97316", desc: "Guarded - Light week (Diwali)." },
+      { name: "Thanksgiving Freeze (RRC1)", start: new Date("2026-11-20"), end: new Date("2026-12-01"), rrc: 1, color: "var(--warning)", desc: "Guarded - Thanksgiving / Cyber Week Freeze." },
+      { name: "Pre-Holiday Guard (RRC1)", start: new Date("2026-12-16"), end: new Date("2026-12-18"), rrc: 1, color: "var(--warning)", desc: "Guarded - Pre-Holiday Guard." },
+      { name: "Winter Holiday Chilled (RRC2)", start: new Date("2026-12-18"), end: new Date("2026-12-23"), rrc: 2, color: "#f97316", desc: "Chilled - Strict Emergency Only." },
+      { name: "Winter Holiday Frozen (RRC3)", start: new Date("2026-12-23"), end: new Date("2027-01-02"), rrc: 3, color: "var(--danger)", desc: "Frozen - TOTAL FREEZE." },
+      { name: "Post-Holiday Guard (RRC1)", start: new Date("2027-01-03"), end: new Date("2027-01-03"), rrc: 1, color: "var(--warning)", desc: "Guarded - Gradual unfreeze." }
+    ];
+
+    function getRRCForDate(date) {
+      // Set hours/minutes to zero for precise comparison
+      const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      
+      for (const w of freezeWindows) {
+        const start = new Date(w.start.getFullYear(), w.start.getMonth(), w.start.getDate());
+        const end = new Date(w.end.getFullYear(), w.end.getMonth(), w.end.getDate());
+        if (checkDate >= start && checkDate <= end) {
+          return { rrc: w.rrc, name: w.name, desc: w.desc, color: w.color };
+        }
+      }
+      
+      // Default is RRC0
+      return { rrc: 0, name: "RRC0 (Normal Operation)", desc: "Active weekly release cycle. Scheduled release creation on Tuesday, merge on Thursday.", color: "var(--success)" };
+    }
+
+    function renderCalendar() {
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      document.getElementById('calendar-title').innerText = `${monthNames[currentMonth]} ${currentYear}`;
+
+      const container = document.getElementById('calendar-days-container');
+      container.innerHTML = '';
+
+      const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+      const numDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Add empty cells for preceding days of the first week
+      for (let i = 0; i < firstDay; i++) {
+        container.innerHTML += `<div class="calendar-day empty"></div>`;
+      }
+
+      // Add actual days
+      for (let day = 1; day <= numDays; day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        const rrcInfo = getRRCForDate(date);
+        
+        let indicatorClass = '';
+        if (rrcInfo.rrc === 0) {
+          // RRC0: highlight scheduled release day (Tuesday)
+          if (date.getDay() === 2) {
+            indicatorClass = 'rrc0';
+          }
+        } else {
+          indicatorClass = `rrc${rrcInfo.rrc}`;
+        }
+
+        const isSelected = date.getDate() === new Date().getDate() && date.getMonth() === new Date().getMonth() && date.getFullYear() === new Date().getFullYear() ? 'selected' : '';
+
+        container.innerHTML += `
+          <div class="calendar-day ${isSelected}" onclick="selectDay(${day})">
+            <span class="day-num">${day}</span>
+            ${indicatorClass ? `<div class="day-indicator ${indicatorClass}"></div>` : ''}
+          </div>
+        `;
+      }
+      
+      // Show details for today or first day
+      selectDay(new Date().getMonth() === currentMonth ? new Date().getDate() : 1);
+    }
+
+    function selectDay(dayNum) {
+      document.querySelectorAll('.calendar-day').forEach(el => el.classList.remove('selected'));
+      // Find matching cell
+      const cells = Array.from(document.querySelectorAll('.calendar-day:not(.empty)'));
+      const targetCell = cells.find(c => c.querySelector('.day-num').innerText === dayNum.toString());
+      if (targetCell) {
+        targetCell.classList.add('selected');
+      }
+
+      const date = new Date(currentYear, currentMonth, dayNum);
+      const rrcInfo = getRRCForDate(date);
+      
+      const detailContainer = document.getElementById('selected-day-details');
+      
+      let releaseScheduleHtml = '';
+      if (rrcInfo.rrc === 0) {
+        releaseScheduleHtml = `
+          <div style="margin-top: 1rem; border-top: 1px dotted var(--border-dark); padding-top: 0.75rem;">
+            <strong>Scheduled Cycle:</strong>
+            <ul style="margin-left: 1.25rem; font-size: 0.8rem; margin-top: 0.25rem;">
+              <li>Tuesday: Create Release Candidate Branch & Version PR</li>
+              <li>Tuesday-Wednesday: Automated Testing & Bug Triage</li>
+              <li>Thursday: Approve & Merge Release PR</li>
+              <li>Friday: Backport release changes to develop</li>
+            </ul>
+          </div>
+        `;
+      }
+
+      detailContainer.innerHTML = `
+        <div class="detail-heading">${date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+        <div class="detail-body" style="margin-top:0.5rem;">
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom: 0.75rem;">
+            <strong>RRC level:</strong> 
+            <span class="badge ${rrcInfo.rrc === 0 ? 'badge-rrc0' : rrcInfo.rrc === 1 ? 'badge-rrc1' : rrcInfo.rrc === 2 ? 'badge-rrc2' : 'badge-rrc3'}">
+              RRC${rrcInfo.rrc}
+            </span>
+          </div>
+          <div style="margin-bottom:0.5rem;"><strong>Window name:</strong> ${rrcInfo.name}</div>
+          <div><strong>Plan:</strong> ${rrcInfo.desc}</div>
+        </div>
+        ${releaseScheduleHtml}
+      `;
+    }
+
+    function changeMonth(direction) {
+      currentMonth += direction;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear -= 1;
+      } else if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear += 1;
+      }
+      renderCalendar();
+    }
+
+    // Bootstrap
+    window.onload = function() {
+      // Start polling state
+      startPollingState();
+      
+      // Load history
+      loadHistory();
+      
+      // Select appropriate tab initially
+      switchTab('past-releases');
+    }
+  </script>
+</body>
+</html>
