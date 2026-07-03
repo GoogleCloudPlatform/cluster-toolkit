@@ -1191,6 +1191,7 @@
         const date = new Date(h.merged_at);
         return date >= cutoff;
       });
+      filtered.sort((a, b) => new Date(b.merged_at) - new Date(a.merged_at));
 
       // Update stat widgets
       document.getElementById('stat-total-releases').innerText = filtered.length;
