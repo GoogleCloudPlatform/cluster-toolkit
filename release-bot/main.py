@@ -241,6 +241,9 @@ def main():
     # Then schedule every 2 seconds for the demo (instead of 5 minutes)
     schedule.every(2).seconds.do(orchestrator.run_cycle)
     
+    # Schedule the inactive PR reminder (e.g. every 30 seconds for demo)
+    schedule.every(30).seconds.do(orchestrator.github.run_inactive_pr_reminder)
+    
     logging.info("Starting ReleaseBot polling daemon...")
     while True:
         schedule.run_pending()

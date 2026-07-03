@@ -198,6 +198,22 @@ class GitHubClient:
             print(f"Error creating backport PR: {e}")
             return None
 
+    def run_inactive_pr_reminder(self):
+        import subprocess
+        import os
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), "inactive-pr-reminder.sh")
+            if not os.path.exists(script_path):
+                print(f"Error: {script_path} not found.")
+                return
+            env = os.environ.copy()
+            if self.pat:
+                env["GH_TOKEN"] = self.pat
+            print("Running inactive-pr-reminder.sh...")
+            subprocess.run(["bash", script_path], env=env)
+        except Exception as e:
+            print(f"Error running inactive-pr-reminder.sh: {e}")
+
 class OnCallClient:
     def fetch_on_call_from_api(self, rotation_name="cluster-toolkit"):
         """
