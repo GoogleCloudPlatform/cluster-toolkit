@@ -57,3 +57,9 @@ variable "deletion_policy" {
   type        = string
   default     = null
 }
+
+variable "name" {
+  description = "Name of the global address allocation for Private Service Access. If null, defaults to deterministic naming based on network name."
+  type        = string
+  default     = null
+}
