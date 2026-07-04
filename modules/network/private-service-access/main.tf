@@ -27,7 +27,7 @@ locals {
 
 resource "google_compute_global_address" "private_ip_alloc" {
   provider      = google
-  name          = var.name != null ? var.name : "psconnect-${local.network_name}"
+  name          = var.name != null ? var.name : "psconnect-${trimsuffix(substr(local.network_name, 0, 53), "-")}"
   project       = var.project_id
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
