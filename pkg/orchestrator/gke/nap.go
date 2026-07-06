@@ -50,15 +50,10 @@ func (g *GKEOrchestrator) validateTPUNAPLimit(resolvedType string) (bool, error)
 		return limit > 0, nil
 	}
 	// Fallback to generic TPU limit ONLY if no specific TPU limits are configured.
-	hasSpecificTPULimits := false
 	for k := range g.napLimits {
 		if isSpecificTPUKey(k) {
-			hasSpecificTPULimits = true
-			break
+			return false, nil
 		}
-	}
-	if hasSpecificTPULimits {
-		return false, nil
 	}
 	return g.napLimits["google.com/tpu"] > 0, nil
 }
@@ -75,15 +70,10 @@ func (g *GKEOrchestrator) validateGPUNAPLimit(resolvedType string, cap MachineTy
 		return limit > 0, nil
 	}
 	// Fallback to generic GPU limit ONLY if no specific GPU limits are configured.
-	hasSpecificGPULimits := false
 	for k := range g.napLimits {
 		if isSpecificGPUKey(k) {
-			hasSpecificGPULimits = true
-			break
+			return false, nil
 		}
-	}
-	if hasSpecificGPULimits {
-		return false, nil
 	}
 	return g.napLimits["nvidia.com/gpu"] > 0, nil
 }
