@@ -100,6 +100,10 @@ resource "google_lustre_instance" "lustre_instance" {
       condition     = !(var.enable_dynamic_tier && var.per_unit_storage_throughput != null)
       error_message = "per_unit_storage_throughput must not be set when enable_dynamic_tier is enabled."
     }
+    precondition {
+      condition     = !var.enable_dynamic_tier || (var.size_gib >= 472000 && var.size_gib % 472000 == 0)
+      error_message = "For Managed Lustre Dynamic Tier, size_gib must be at least 472000 (GiB) and must be in multiples of 472000."
+    }
   }
 
   provisioner "local-exec" {

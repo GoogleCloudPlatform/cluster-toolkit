@@ -150,6 +150,8 @@ to 6988.
 >
 > 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
 > compatibility must be built into the Slurm image.
+>
+> 3. **Static IP Constraint & GKE CSI Support:** Managed Lustre instances do not guarantee static IP allocations. If the Lustre instance is recreated (due to scaling, location moves, etc.), its IP will change. Because GKE CSI PersistentVolume configurations are immutable, an IP change will cause GKE mount failures. You must manually delete and recreate GKE PersistentVolume configurations in such events.
 
 ### Example - Dynamic Tier
 

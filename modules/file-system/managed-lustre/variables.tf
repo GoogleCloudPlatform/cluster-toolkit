@@ -81,6 +81,11 @@ variable "per_unit_storage_throughput" {
   description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. If enable_dynamic_tier is false, this defaults to 500."
   type        = number
   default     = null
+
+  validation {
+    condition     = var.per_unit_storage_throughput == null || contains([125, 250, 500, 1000], var.per_unit_storage_throughput)
+    error_message = "Throughput must be null or one of: 125, 250, 500, 1000."
+  }
 }
 
 variable "labels" {
