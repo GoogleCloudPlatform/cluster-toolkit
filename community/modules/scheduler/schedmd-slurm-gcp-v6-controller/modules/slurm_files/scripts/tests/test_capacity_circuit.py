@@ -14,6 +14,7 @@
 
 from datetime import datetime, timedelta, timezone
 import json
+import subprocess
 from types import SimpleNamespace
 import threading
 from unittest import mock
@@ -218,6 +219,157 @@ def test_trip_only_handles_failed_nodes_after_successful_down(
         "c-n-1",
         "c-n-2",
     ]
+    assert state["nodesets"]["n"]["pending_down_nodes"] == ["c-n-0"]
+
+
+def test_reconcile_reapplies_failed_initial_down(state_files, monkeypatch):
+    lkp = make_lookup()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+
+    def initial_update(nodes, state, reason, lookup, resume_after=None):
+        return state != "down"
+
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", initial_update)
+    trip = capacity_circuit.trip(
+        ["c-n-0"],
+        {"ZONE_RESOURCE_POOL_EXHAUSTED"},
+        lkp,
+    )
+    assert trip is not None
+
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_structured_slurm_nodes",
+        lambda _: {
+            "c-n-0": {
+                "name": "c-n-0",
+                "reason": None,
+                "state": ["ALLOCATED", "CLOUD", "POWERING_UP"],
+            }
+        },
+    )
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=4))
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+
+    capacity_circuit.reconcile(lkp)
+
+    update.assert_called_once_with(
+        ["c-n-0"],
+        "down",
+        trip.reason,
+        lkp,
+        resume_after=6,
+    )
+    record = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert record["pending_down_nodes"] == []
+    assert "c-n-0" in record["owned_nodes"]
+
+
+def test_reconcile_recovers_intent_persisted_before_initial_updates(
+    state_files, monkeypatch
+):
+    lkp = make_lookup()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_update_nodes",
+        mock.Mock(side_effect=KeyboardInterrupt),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        capacity_circuit.trip(
+            ["c-n-0"],
+            {"ZONE_RESOURCE_POOL_EXHAUSTED"},
+            lkp,
+        )
+
+    persisted = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert persisted["pending_down_nodes"] == ["c-n-0"]
+    assert persisted["pending_drain_nodes"] == ["c-n-1", "c-n-2"]
+
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_structured_slurm_nodes",
+        lambda _: {
+            node: {
+                "name": node,
+                "reason": None,
+                "state": ["IDLE", "CLOUD", "POWERED_DOWN"]
+                if node != "c-n-0"
+                else ["ALLOCATED", "CLOUD", "POWERING_UP"],
+            }
+            for node in ("c-n-0", "c-n-1", "c-n-2")
+        },
+    )
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=3))
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+
+    capacity_circuit.reconcile(lkp)
+
+    update.assert_has_calls(
+        [
+            mock.call(
+                ["c-n-1", "c-n-2"],
+                "drain",
+                persisted["reason"],
+                lkp,
+                resume_after=-1,
+            ),
+            mock.call(
+                ["c-n-0"],
+                "down",
+                persisted["reason"],
+                lkp,
+                resume_after=7,
+            ),
+        ]
+    )
+    recovered = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert recovered["pending_down_nodes"] == []
+    assert recovered["pending_drain_nodes"] == []
+    assert recovered["owned_nodes"] == ["c-n-0", "c-n-1", "c-n-2"]
+
+
+def test_reconcile_retires_pending_intent_for_operator_owned_node(
+    state_files, monkeypatch
+):
+    lkp = make_lookup()
+
+    def initial_update(nodes, state, reason, lookup, resume_after=None):
+        return state != "down"
+
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", initial_update)
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_structured_slurm_nodes",
+        lambda _: {
+            "c-n-0": {
+                "name": "c-n-0",
+                "reason": "operator maintenance",
+                "state": ["DOWN", "DRAIN", "CLOUD", "POWERED_DOWN"],
+            }
+        },
+    )
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+    lkp.slurm_nodes()["c-n-0"] = util.NodeState(
+        "DOWN", frozenset({"CLOUD", "DRAIN", "POWERED_DOWN"})
+    )
+
+    capacity_circuit.reconcile(lkp)
+
+    update.assert_not_called()
+    record = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert record["pending_down_nodes"] == []
+    assert "c-n-0" not in record["owned_nodes"]
 
 
 def test_only_probe_failure_extends_backoff(state_files, monkeypatch):
@@ -312,6 +464,8 @@ def test_failed_node_fallback_uses_current_circuit_generation(state_files, monke
     lkp = make_lookup()
     update = mock.Mock(return_value=True)
     monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
     trip = capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
     assert trip is not None
     with capacity_circuit._locked_state(write=True) as state:
@@ -319,6 +473,7 @@ def test_failed_node_fallback_uses_current_circuit_generation(state_files, monke
         record["generation"] = 2
         record["reason"] = "capacity-circuit:n:attempt=2:cooldown=20s"
         record["cooldown_seconds"] = 20
+        record["probe_after"] = (now + timedelta(seconds=20)).isoformat()
     update.reset_mock()
 
     capacity_circuit.finish_failed_nodes(
@@ -334,6 +489,44 @@ def test_failed_node_fallback_uses_current_circuit_generation(state_files, monke
         "capacity-circuit:n:attempt=2:cooldown=20s; GCP Error: stockout",
         lkp,
         resume_after=20,
+    )
+
+
+@pytest.mark.parametrize(("elapsed", "remaining"), [(4, 6), (11, 1)])
+def test_finish_failed_probe_uses_remaining_persisted_cooldown(
+    state_files, monkeypatch, elapsed, remaining
+):
+    lkp = make_lookup()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+
+    def initial_update(nodes, state, reason, lookup, resume_after=None):
+        return state != "down"
+
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", initial_update)
+    trip = capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    assert trip is not None
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_now",
+        lambda: now + timedelta(seconds=elapsed),
+    )
+
+    capacity_circuit.finish_failed_nodes(
+        trip,
+        ["c-n-0"],
+        "GCP Error: stockout",
+        lkp,
+    )
+
+    update.assert_any_call(
+        ["c-n-0"],
+        "down",
+        f"{trip.reason}; GCP Error: stockout",
+        lkp,
+        resume_after=remaining,
     )
 
 
@@ -494,7 +687,12 @@ def test_reconcile_releases_probe_after_cooldown(state_files, monkeypatch):
     monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
-    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    trip = capacity_circuit.trip(
+        ["c-n-0"],
+        {"ZONE_RESOURCE_POOL_EXHAUSTED"},
+        lkp,
+    )
+    assert trip is not None
     monkeypatch.setattr(
         capacity_circuit,
         "_now",
@@ -503,6 +701,26 @@ def test_reconcile_releases_probe_after_cooldown(state_files, monkeypatch):
     lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
     lkp.slurm_nodes()["c-n-0"] = util.NodeState(
         "DOWN", frozenset({"CLOUD", "POWERED_DOWN"})
+    )
+    monkeypatch.setattr(
+        capacity_circuit.util,
+        "run",
+        mock.Mock(
+            return_value=SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "nodes": [
+                            {
+                                "name": "c-n-0",
+                                "reason": trip.reason,
+                                "state": ["DOWN", "CLOUD", "POWERED_DOWN"],
+                            }
+                        ]
+                    }
+                ),
+            )
+        ),
     )
     update.reset_mock()
 
@@ -516,6 +734,100 @@ def test_reconcile_releases_probe_after_cooldown(state_files, monkeypatch):
     )
     state = json.loads(capacity_circuit.STATE_FILE.read_text())
     assert state["nodesets"]["n"]["probe_released"] is True
+
+
+def test_reconcile_retires_resized_pending_nodes_before_probe_release(
+    state_files, monkeypatch
+):
+    lkp = make_lookup()
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+    trip = capacity_circuit.trip(
+        ["c-n-0"],
+        {"ZONE_RESOURCE_POOL_EXHAUSTED"},
+        lkp,
+    )
+    assert trip is not None
+    with capacity_circuit._locked_state(write=True) as state:
+        record = state["nodesets"]["n"]
+        record["pending_down_nodes"] = ["c-n-98"]
+        record["pending_drain_nodes"] = ["c-n-99"]
+        record["target_nodes"].extend(["c-n-98", "c-n-99"])
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=11))
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_structured_slurm_nodes",
+        lambda _: {
+            "c-n-0": {
+                "name": "c-n-0",
+                "reason": trip.reason,
+                "state": ["DOWN", "CLOUD", "POWERED_DOWN"],
+            }
+        },
+    )
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+    lkp.slurm_nodes()["c-n-0"] = util.NodeState(
+        "DOWN", frozenset({"CLOUD", "POWERED_DOWN"})
+    )
+    update.reset_mock()
+
+    capacity_circuit.reconcile(lkp)
+
+    update.assert_called_once_with(
+        ("c-n-0",),
+        "resume",
+        trip.reason,
+        lkp,
+    )
+    record = json.loads(capacity_circuit.STATE_FILE.read_text())["nodesets"]["n"]
+    assert record["pending_down_nodes"] == []
+    assert record["pending_drain_nodes"] == []
+    assert record["probe_released"] is True
+
+
+def test_reconcile_preserves_operator_drain_on_due_probe(state_files, monkeypatch):
+    lkp = make_lookup()
+    update = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", update)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=11))
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+    lkp.slurm_nodes()["c-n-0"] = util.NodeState(
+        "DOWN", frozenset({"CLOUD", "DRAIN", "POWERED_DOWN"})
+    )
+    show_nodes = mock.Mock(
+        return_value=SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "nodes": [
+                        {
+                            "name": "c-n-0",
+                            "reason": "operator maintenance",
+                            "state": ["DOWN", "DRAIN", "CLOUD", "POWERED_DOWN"],
+                        }
+                    ]
+                }
+            ),
+        )
+    )
+    monkeypatch.setattr(capacity_circuit.util, "run", show_nodes)
+    update.reset_mock()
+
+    capacity_circuit.reconcile(lkp)
+
+    show_nodes.assert_called_once_with(
+        f"{lkp.scontrol} show nodes --json",
+        check=False,
+        timeout=capacity_circuit.SCONTROL_TIMEOUT_SECONDS,
+    )
+    update.assert_not_called()
+    state = json.loads(capacity_circuit.STATE_FILE.read_text())
+    assert state["nodesets"]["n"]["probe_released"] is False
 
 
 def test_stale_reconcile_does_not_release_rearmed_probe(state_files, monkeypatch):
@@ -644,6 +956,52 @@ def test_reconcile_hard_resets_stuck_powering_up_probe(state_files, monkeypatch)
     capacity_circuit.reconcile(lkp)
 
     close.assert_called_once_with("n", lkp, mock.ANY, 1)
+
+
+@pytest.mark.parametrize(
+    "replay_error",
+    [None, subprocess.TimeoutExpired("scontrol", 30)],
+    ids=["false-result", "timeout"],
+)
+def test_reconcile_hard_reset_remains_bounded_when_pending_replay_fails(
+    state_files, monkeypatch, caplog, replay_error
+):
+    lkp = make_lookup()
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now)
+
+    def initial_update(nodes, state, reason, lookup, resume_after=None):
+        return state != "down"
+
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", initial_update)
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    replay_update = (
+        mock.Mock(return_value=False)
+        if replay_error is None
+        else mock.Mock(side_effect=replay_error)
+    )
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", replay_update)
+    monkeypatch.setattr(
+        capacity_circuit,
+        "_structured_slurm_nodes",
+        lambda _: {
+            "c-n-0": {
+                "name": "c-n-0",
+                "reason": None,
+                "state": ["ALLOCATED", "CLOUD", "POWERING_UP"],
+            }
+        },
+    )
+    monkeypatch.setattr(capacity_circuit, "_now", lambda: now + timedelta(seconds=31))
+    lkp.instance = mock.Mock(return_value=None)  # type: ignore[method-assign]
+    close = mock.Mock(return_value=True)
+    monkeypatch.setattr(capacity_circuit, "_close_nodeset", close)
+
+    capacity_circuit.reconcile(lkp)
+
+    close.assert_called_once_with("n", lkp, mock.ANY, 1)
+    if replay_error is not None:
+        assert "Unable to reapply pending capacity circuit transitions" in caplog.text
 
 
 def test_reconcile_resets_terminal_probe_instance(state_files, monkeypatch):

@@ -21,6 +21,7 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import math
 import os
 import shlex
 import uuid
@@ -188,6 +189,13 @@ def _parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _remaining_probe_cooldown_seconds(record: Mapping[str, Any]) -> int:
+    probe_after = record.get("probe_after")
+    if not isinstance(probe_after, str):
+        return 1
+    return max(1, math.ceil((_parse_time(probe_after) - _now()).total_seconds()))
+
+
 def _dynamic_nodes(nodeset: Any, lkp: util.Lookup) -> list[str]:
     _, dynamic = lkp.nodenames(nodeset)
     return list(dynamic)
@@ -306,6 +314,12 @@ def trip(
             target = set(previous.get("target_nodes", [])) if previous else set()
             target.update(failed_nodes)
             target.update(powered_down)
+            pending_down = (
+                set(previous.get("pending_down_nodes", [])) if previous else set()
+            )
+            pending_drain = (
+                set(previous.get("pending_drain_nodes", [])) if previous else set()
+            )
             generation = int(previous.get("generation", 0)) + 1 if previous else 1
             circuit_id = (
                 str(previous.get("circuit_id"))
@@ -326,6 +340,11 @@ def trip(
                     owned,
                 )
             )
+            probe_failures = set(probes).intersection(failed_nodes)
+            regular_failures = sorted(set(failed_nodes).difference(probe_failures))
+            pending_down.update(failed_nodes)
+            pending_drain.update(siblings)
+            pending_drain.difference_update(pending_down)
 
             record = {
                 "circuit_id": circuit_id,
@@ -337,6 +356,8 @@ def trip(
                 if previous
                 else now.isoformat(),
                 "owned_nodes": sorted(owned),
+                "pending_down_nodes": sorted(pending_down),
+                "pending_drain_nodes": sorted(pending_drain),
                 "probe_after": probe_after.isoformat()
                 if rearm
                 else previous.get("probe_after"),
@@ -371,11 +392,11 @@ def trip(
 
             if _update_nodes(siblings, "drain", reason, lkp, resume_after=-1):
                 owned.update(siblings)
+                pending_drain.difference_update(siblings)
 
-            probe_failures = set(probes).intersection(failed_nodes)
-            regular_failures = sorted(set(failed_nodes).difference(probe_failures))
             if _update_nodes(regular_failures, "down", reason, lkp):
                 owned.update(regular_failures)
+                pending_down.difference_update(regular_failures)
                 handled.update(regular_failures)
             if _update_nodes(
                 sorted(probe_failures),
@@ -385,8 +406,11 @@ def trip(
                 resume_after=cooldown,
             ):
                 owned.update(probe_failures)
+                pending_down.difference_update(probe_failures)
                 handled.update(probe_failures)
             record["owned_nodes"] = sorted(owned)
+            record["pending_down_nodes"] = sorted(pending_down)
+            record["pending_drain_nodes"] = sorted(pending_drain)
     except Exception:
         if not intent_persisted or result is None:
             raise
@@ -435,6 +459,12 @@ def finish_failed_nodes(
             target = set(record.get("target_nodes", []))
             target.update(failed_nodes)
             record["target_nodes"] = sorted(target)
+            pending_down = set(record.get("pending_down_nodes", []))
+            pending_down.update(failed_nodes)
+            pending_drain = set(record.get("pending_drain_nodes", []))
+            pending_drain.difference_update(failed_nodes)
+            record["pending_down_nodes"] = sorted(pending_down)
+            record["pending_drain_nodes"] = sorted(pending_drain)
             _write_state_unlocked(state)
             intent_persisted = True
 
@@ -444,6 +474,7 @@ def finish_failed_nodes(
             owned = set(record.get("owned_nodes", []))
             if _update_nodes(regular, "down", reason, lkp):
                 owned.update(regular)
+                pending_down.difference_update(regular)
             else:
                 log.error("Unable to mark circuit nodes DOWN: %s", regular)
             if _update_nodes(
@@ -451,12 +482,14 @@ def finish_failed_nodes(
                 "down",
                 reason,
                 lkp,
-                resume_after=int(record.get("cooldown_seconds", 0)),
+                resume_after=_remaining_probe_cooldown_seconds(record),
             ):
                 owned.update(probes)
+                pending_down.difference_update(probes)
             else:
                 log.error("Unable to mark circuit probes DOWN: %s", sorted(probes))
             record["owned_nodes"] = sorted(owned)
+            record["pending_down_nodes"] = sorted(pending_down)
     except Exception:
         if not intent_persisted:
             raise
@@ -509,11 +542,9 @@ def owns_node(node: str, lkp: Optional[util.Lookup] = None) -> bool:
     return node in _owned_nodes_by_nodeset().get(nodeset_name, ())
 
 
-def _circuit_owned_resumable_nodes(
-    nodes: Sequence[str], lkp: util.Lookup
-) -> Optional[tuple[str, ...]]:
-    if not nodes:
-        return tuple()
+def _structured_slurm_nodes(
+    lkp: util.Lookup,
+) -> Optional[dict[str, Mapping[str, Any]]]:
     result = util.run(
         f"{lkp.scontrol} show nodes --json",
         check=False,
@@ -533,17 +564,34 @@ def _circuit_owned_resumable_nodes(
     if not all(isinstance(node, Mapping) for node in node_data):
         log.error("Unexpected Slurm node entry while closing circuit")
         return None
+    return {
+        str(node["name"]): node
+        for node in node_data
+        if isinstance(node.get("name"), str)
+    }
+
+
+def _circuit_owned_resumable_nodes(
+    nodes: Sequence[str],
+    lkp: util.Lookup,
+    reason_prefix: str = REASON_PREFIX,
+) -> Optional[tuple[str, ...]]:
+    if not nodes:
+        return tuple()
+    node_data = _structured_slurm_nodes(lkp)
+    if node_data is None:
+        return None
     target = set(nodes)
     resumable = []
-    for node in node_data:
-        if node.get("name") not in target:
+    for name, node in node_data.items():
+        if name not in target:
             continue
         reason = node.get("reason") or ""
         states = set(node.get("state") or [])
-        if reason.startswith(REASON_PREFIX) and states.intersection(
+        if reason.startswith(reason_prefix) and states.intersection(
             {"DOWN", "DRAIN", "DRAINING"}
         ):
-            resumable.append(node["name"])
+            resumable.append(name)
     return tuple(sorted(resumable))
 
 
@@ -626,8 +674,15 @@ def _release_probe(
             or _now() < _parse_time(probe_after)
         ):
             return False
-        if not _update_nodes(
+        releasable = _circuit_owned_resumable_nodes(
             probes,
+            lkp,
+            f"{REASON_PREFIX}{nodeset_name}:",
+        )
+        if not releasable:
+            return False
+        if not _update_nodes(
+            releasable,
             "resume",
             record.get("reason", REASON_PREFIX),
             lkp,
@@ -656,12 +711,17 @@ def _drain_new_nodes(
         ):
             return False
         probes = set(record.get("probe_nodes", []))
-        candidates = sorted(set(nodes).difference(probes))
+        owned = set(record.get("owned_nodes", []))
+        pending_down = set(record.get("pending_down_nodes", []))
+        candidates = sorted(set(nodes).difference(probes, owned, pending_down))
         if not candidates:
             return False
         target = set(record.get("target_nodes", []))
         target.update(candidates)
         record["target_nodes"] = sorted(target)
+        pending_drain = set(record.get("pending_drain_nodes", []))
+        pending_drain.update(candidates)
+        record["pending_drain_nodes"] = sorted(pending_drain)
         # Persist ownership before changing Slurm state so a process failure
         # cannot leave an untracked drain behind.
         _write_state_unlocked(state)
@@ -678,10 +738,97 @@ def _drain_new_nodes(
             resume_after=-1,
         ):
             return False
-        owned = set(record.get("owned_nodes", []))
         owned.update(candidates)
+        pending_drain.difference_update(candidates)
         record["owned_nodes"] = sorted(owned)
+        record["pending_drain_nodes"] = sorted(pending_drain)
     return True
+
+
+def _reapply_pending_transitions(
+    nodeset_name: str,
+    circuit_id: Optional[str],
+    generation: int,
+    lkp: util.Lookup,
+) -> bool:
+    """Complete persisted Slurm transitions before advancing the circuit."""
+    with _locked_state(write=True) as state:
+        record = state["nodesets"].get(nodeset_name)
+        if (
+            not record
+            or record.get("circuit_id") != circuit_id
+            or int(record.get("generation", 0)) != generation
+        ):
+            return False
+
+        pending_down = set(record.get("pending_down_nodes", []))
+        pending_drain = set(record.get("pending_drain_nodes", []))
+        if not pending_down and not pending_drain:
+            return True
+
+        reason = record.get("reason", REASON_PREFIX)
+        reason_prefix = f"{REASON_PREFIX}{nodeset_name}:"
+        node_data = _structured_slurm_nodes(lkp)
+        if node_data is None:
+            return False
+        restricted_states = {"DOWN", "DRAIN", "DRAINING"}
+        replay_down = set(pending_down)
+        replay_drain = set(pending_drain)
+        for node in pending_down.union(pending_drain):
+            current = node_data.get(node)
+            if current is None:
+                pending_down.discard(node)
+                pending_drain.discard(node)
+                replay_down.discard(node)
+                replay_drain.discard(node)
+                continue
+            current_reason = current.get("reason") or ""
+            current_states = set(current.get("state") or [])
+            if current_states.intersection(
+                restricted_states
+            ) and not current_reason.startswith(reason_prefix):
+                log.info(
+                    "Preserving operator-owned state for pending capacity circuit node %s",
+                    node,
+                )
+                pending_down.discard(node)
+                pending_drain.discard(node)
+                replay_down.discard(node)
+                replay_drain.discard(node)
+
+        owned = set(record.get("owned_nodes", []))
+        if replay_drain and _update_nodes(
+            sorted(replay_drain),
+            "drain",
+            reason,
+            lkp,
+            resume_after=-1,
+        ):
+            owned.update(replay_drain)
+            pending_drain.difference_update(replay_drain)
+
+        probes = set(record.get("probe_nodes", []))
+        regular = sorted(replay_down.difference(probes))
+        if regular and _update_nodes(regular, "down", reason, lkp):
+            owned.update(regular)
+            pending_down.difference_update(regular)
+
+        pending_probes = sorted(replay_down.intersection(probes))
+        if pending_probes:
+            if _update_nodes(
+                pending_probes,
+                "down",
+                reason,
+                lkp,
+                resume_after=_remaining_probe_cooldown_seconds(record),
+            ):
+                owned.update(pending_probes)
+                pending_down.difference_update(pending_probes)
+
+        record["owned_nodes"] = sorted(owned)
+        record["pending_down_nodes"] = sorted(pending_down)
+        record["pending_drain_nodes"] = sorted(pending_drain)
+        return not pending_down and not pending_drain
 
 
 def _probe_is_in_flight(probes: Sequence[str], lkp: util.Lookup) -> bool:
@@ -713,6 +860,19 @@ def reconcile(lkp: Optional[util.Lookup] = None) -> None:
     for nodeset_name, record in snapshot.items():
         circuit_id = record.get("circuit_id")
         generation = int(record.get("generation", 0))
+        try:
+            transitions_complete = _reapply_pending_transitions(
+                nodeset_name,
+                circuit_id,
+                generation,
+                lkp,
+            )
+        except Exception:
+            transitions_complete = False
+            log.exception(
+                "Unable to reapply pending capacity circuit transitions for nodeset %s",
+                nodeset_name,
+            )
         probes = tuple(record.get("probe_nodes", []))
         probe_instances = [lkp.instance(node) for node in probes]
         if any(
@@ -751,7 +911,8 @@ def reconcile(lkp: Optional[util.Lookup] = None) -> None:
                 _close_nodeset(nodeset_name, lkp, circuit_id, generation)
                 continue
         if (
-            not reset_deferred
+            transitions_complete
+            and not reset_deferred
             and not probe_in_flight
             and not any(instance is not None for instance in probe_instances)
         ):
