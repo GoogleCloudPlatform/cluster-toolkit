@@ -58,7 +58,7 @@ steps:
     echo '    use: [network]'                      >> $${EXAMPLE_BP}
     echo '    settings:'                           >> $${EXAMPLE_BP}
     echo '      machine_type: e2-standard-2'       >> $${EXAMPLE_BP}
-    echo '      zone: us-central1-c'               >> $${EXAMPLE_BP}
+    echo '      zone: us-central1-a'               >> $${EXAMPLE_BP}
 
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${EXAMPLE_BP}
