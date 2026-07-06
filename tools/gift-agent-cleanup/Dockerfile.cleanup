@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+# Install the required GCP library
+RUN pip install --no-cache-dir google-cloud-storage
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the script into the container
+COPY cleanup_triage_bucket.py .
+RUN chmod +x cleanup_triage_bucket.py
+
+# The entrypoint expects arguments to be passed at runtime
+ENTRYPOINT ["python3", "cleanup_triage_bucket.py"]
