@@ -174,3 +174,194 @@ def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[in
     lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=unittest.mock.Mock(family="n1")))
 
     assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected
+
+
+def test_completed_probe_closes_capacity_circuit():
+  operation = {
+    "name": "bulk-op",
+    "operationType": "bulkInsert",
+    "status": "DONE",
+    "operationGroupId": "group",
+    "instancesBulkInsertOperationMetadata": {
+      "perLocationStatus": {
+        "zones/test": {"createdVmCount": 1, "targetVmCount": 1}
+      }
+    },
+  }
+
+  with unittest.mock.patch(
+    "capacity_circuit.close_if_probe_succeeded"
+  ) as mock_close:
+    resume._handle_bulk_insert_op(operation, ["c-n-0"], None)
+
+  mock_close.assert_called_once_with(["c-n-0"], unittest.mock.ANY)
+
+
+def test_completed_resume_ignores_capacity_circuit_close_failure():
+  operation = {
+    "operationType": "bulkInsert",
+    "status": "DONE",
+    "operationGroupId": "group",
+    "instancesBulkInsertOperationMetadata": {
+      "perLocationStatus": {
+        "zones/test": {"createdVmCount": 1, "targetVmCount": 1}
+      }
+    },
+  }
+
+  with unittest.mock.patch(
+    "capacity_circuit.close_if_probe_succeeded",
+    side_effect=OSError("state disk unavailable"),
+  ):
+    resume._handle_bulk_insert_op(operation, ["c-n-0"], None)
+
+
+def test_capacity_circuit_trip_failure_falls_back_to_normal_handling():
+  lkp = unittest.mock.Mock()
+  with unittest.mock.patch(
+    "capacity_circuit.trip", side_effect=OSError("state disk unavailable")
+  ):
+    assert resume.trip_capacity_circuit(
+      ["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp
+    ) is None
+
+
+def test_capacity_error_trips_circuit_before_nodes_are_down():
+  operation = {
+    "operationType": "bulkInsert",
+    "status": "DONE",
+    "operationGroupId": "group",
+    "instancesBulkInsertOperationMetadata": {
+      "perLocationStatus": {
+        "zones/test": {"createdVmCount": 0, "targetVmCount": 1}
+      }
+    },
+  }
+  failed_insert = {
+    "name": "insert",
+    "targetLink": "projects/p/zones/test/instances/c-n-0",
+    "error": {
+      "errors": [
+        {
+          "code": "ZONE_RESOURCE_POOL_EXHAUSTED",
+          "message": "capacity unavailable",
+        }
+      ]
+    },
+  }
+  circuit_trip = resume.capacity_circuit.CircuitTrip(
+    "n", 1, "capacity-circuit:n", 10, ("c-n-0",), ("c-n-0",)
+  )
+
+  with (
+    unittest.mock.patch(
+      "resume._get_failed_instance_inserts", return_value=[failed_insert]
+    ),
+    unittest.mock.patch(
+      "capacity_circuit.trip", return_value=circuit_trip
+    ) as mock_trip,
+    unittest.mock.patch("resume.down_nodes_notify_jobs") as mock_down,
+  ):
+    resume._handle_bulk_insert_op(operation, ["c-n-0"], None)
+
+  mock_trip.assert_called_once_with(
+    ["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, unittest.mock.ANY
+  )
+  mock_down.assert_called_once_with(
+    ["c-n-0"],
+    "GCP Error: ZONE_RESOURCE_POOL_EXHAUSTED: capacity unavailable",
+    None,
+    circuit_trip,
+  )
+
+
+def test_top_level_min_count_error_trips_when_no_instances_were_created():
+  operation = {
+    "name": "bulk-op",
+    "operationType": "bulkInsert",
+    "status": "DONE",
+    "operationGroupId": "group",
+    "error": {
+      "errors": [
+        {"code": "VM_MIN_COUNT_NOT_REACHED", "message": "no instances created"}
+      ]
+    },
+    "instancesBulkInsertOperationMetadata": {
+      "perLocationStatus": {
+        "zones/test": {"createdVmCount": 0, "targetVmCount": 1}
+      }
+    },
+  }
+  circuit_trip = resume.capacity_circuit.CircuitTrip(
+    "n", 1, "capacity-circuit:n", 10, ("c-n-0",), ("c-n-0",)
+  )
+
+  with (
+    unittest.mock.patch("resume._get_failed_instance_inserts", return_value=[]),
+    unittest.mock.patch(
+      "resume.trip_capacity_circuit", return_value=circuit_trip
+    ) as mock_trip,
+    unittest.mock.patch("resume.down_nodes_notify_jobs") as mock_down,
+  ):
+    resume._handle_bulk_insert_op(operation, ["c-n-0"], None)
+
+  mock_trip.assert_called_once_with(
+    ["c-n-0"], {"VM_MIN_COUNT_NOT_REACHED"}, unittest.mock.ANY
+  )
+  mock_down.assert_called_once_with(
+    ["c-n-0"],
+    "GCP Error: VM_MIN_COUNT_NOT_REACHED: no instances created",
+    None,
+    circuit_trip,
+  )
+
+
+def test_down_nodes_finishes_unhandled_circuit_nodes():
+  lkp = unittest.mock.Mock()
+  lkp.scontrol = "/usr/bin/scontrol"
+  trip = resume.capacity_circuit.CircuitTrip(
+    "n", 1, "capacity-circuit:n", 10, ("c-n-0",), ("c-n-0",)
+  )
+
+  with (
+    unittest.mock.patch("resume.lookup", return_value=lkp),
+    unittest.mock.patch("resume.run") as mock_run,
+    unittest.mock.patch(
+      "capacity_circuit.finish_failed_nodes"
+    ) as mock_finish,
+  ):
+    resume.down_nodes_notify_jobs(
+      ["c-n-0", "c-n-1"], "GCP Error: stockout", None, trip
+    )
+
+  mock_finish.assert_called_once_with(
+    trip,
+    ["c-n-1"],
+    "GCP Error: stockout",
+    lkp,
+  )
+  mock_run.assert_not_called()
+
+
+def test_down_nodes_falls_back_when_circuit_finish_fails():
+  lkp = unittest.mock.Mock()
+  lkp.scontrol = "/usr/bin/scontrol"
+  trip = resume.capacity_circuit.CircuitTrip(
+    "n", 1, "capacity-circuit:n", 10, ("c-n-0",), ()
+  )
+
+  with (
+    unittest.mock.patch("resume.lookup", return_value=lkp),
+    unittest.mock.patch("resume.run") as mock_run,
+    unittest.mock.patch(
+      "capacity_circuit.finish_failed_nodes",
+      side_effect=OSError("state unavailable"),
+    ),
+  ):
+    resume.down_nodes_notify_jobs(
+      ["c-n-0"], "GCP Error: stockout", None, trip
+    )
+
+  command = mock_run.call_args.args[0]
+  assert "nodename=c-n-0 state=down" in command
+  assert "capacity-circuit:" not in command
