@@ -316,6 +316,24 @@ def test_top_level_min_count_error_trips_when_no_instances_were_created():
   )
 
 
+def test_null_top_level_error_is_ignored():
+  operation = {
+    "name": "bulk-op",
+    "operationType": "bulkInsert",
+    "status": "DONE",
+    "operationGroupId": "group",
+    "error": None,
+    "instancesBulkInsertOperationMetadata": {
+      "perLocationStatus": {
+        "zones/test": {"createdVmCount": 0, "targetVmCount": 1}
+      }
+    },
+  }
+
+  with unittest.mock.patch("resume._get_failed_instance_inserts", return_value=[]):
+    resume._handle_bulk_insert_op(operation, ["c-n-0"], None)
+
+
 def test_down_nodes_finishes_unhandled_circuit_nodes():
   lkp = unittest.mock.Mock()
   lkp.scontrol = "/usr/bin/scontrol"

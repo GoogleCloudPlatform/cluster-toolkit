@@ -426,8 +426,9 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     assert op["operationType"] == "bulkInsert" and op["status"] == "DONE", f"unexpected op: {op}"
 
     group_id = op["operationGroupId"]
-    if "error" in op:
-        error = op["error"]["errors"][0]
+    operation_errors = (op.get("error") or {}).get("errors") or []
+    if operation_errors:
+        error = operation_errors[0]
         log.error(
             f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
@@ -447,12 +448,11 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     #  across all bulkInserts (goes one level above this function) 
     failed = _get_failed_instance_inserts(op, util.lookup())
     if not failed and created == 0:
-        errors = op.get("error", {}).get("errors", [])
-        error_codes = capacity_circuit.structured_error_codes(errors)
+        error_codes = capacity_circuit.structured_error_codes(operation_errors)
         if capacity_circuit.is_capacity_error(error_codes):
             msg = "; ".join(
                 f"{err['code']}: {err.get('message', 'no message')}"
-                for err in errors
+                for err in operation_errors
             )
             trip = trip_capacity_circuit(nodes, error_codes, util.lookup())
             down_nodes_notify_jobs(nodes, f"GCP Error: {msg}", resume_data, trip)

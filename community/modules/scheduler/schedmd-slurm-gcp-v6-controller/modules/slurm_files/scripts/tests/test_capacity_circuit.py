@@ -29,6 +29,7 @@ import util
 def state_files(tmp_path, monkeypatch):
     monkeypatch.setattr(capacity_circuit, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(capacity_circuit, "LOCK_FILE", tmp_path / "state.lock")
+    monkeypatch.setattr(capacity_circuit, "_owned_nodes_cache", None)
 
 
 def make_lookup() -> util.Lookup:
@@ -95,6 +96,18 @@ def test_null_partition_resume_timeout_uses_global_timeout():
     )
 
     assert capacity_circuit._resume_timeout_seconds(lkp, "n") == 10
+
+
+def test_null_partition_nodeset_lists_are_ignored():
+    lkp = make_lookup()
+    lkp.cfg.partitions["p"] = TstPartition(
+        partition_name="p",
+        partition_nodeset=None,  # type: ignore[arg-type]
+        partition_nodeset_dyn=["n"],
+        partition_conf={"ResumeTimeout": "25"},
+    )
+
+    assert capacity_circuit._resume_timeout_seconds(lkp, "n") == 25
 
 
 @pytest.mark.parametrize(
@@ -665,6 +678,32 @@ def test_disabled_circuit_is_noop(state_files, monkeypatch):
     )
     assert not capacity_circuit.owns_node("c-n-0", lkp)
     update.assert_not_called()
+
+
+def test_owns_node_reuses_unchanged_state(state_files, monkeypatch):
+    lkp = make_lookup()
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", mock.Mock(return_value=True))
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    read_state = mock.Mock(wraps=capacity_circuit._read_state_unlocked)
+    monkeypatch.setattr(capacity_circuit, "_read_state_unlocked", read_state)
+
+    assert capacity_circuit.owns_node("c-n-0", lkp)
+    assert capacity_circuit.owns_node("c-n-1", lkp)
+    assert capacity_circuit.owns_node("c-n-2", lkp)
+    assert read_state.call_count == 1
+
+
+def test_owns_node_reloads_state_written_by_another_process(state_files, monkeypatch):
+    lkp = make_lookup()
+    monkeypatch.setattr(capacity_circuit, "_update_nodes", mock.Mock(return_value=True))
+    capacity_circuit.trip(["c-n-0"], {"ZONE_RESOURCE_POOL_EXHAUSTED"}, lkp)
+    assert capacity_circuit.owns_node("c-n-0", lkp)
+
+    replacement = capacity_circuit.STATE_FILE.with_suffix(".replacement")
+    replacement.write_text(json.dumps({"nodesets": {}}))
+    replacement.replace(capacity_circuit.STATE_FILE)
+
+    assert not capacity_circuit.owns_node("c-n-0", lkp)
 
 
 def test_disabling_circuit_resumes_owned_nodes(state_files, monkeypatch):

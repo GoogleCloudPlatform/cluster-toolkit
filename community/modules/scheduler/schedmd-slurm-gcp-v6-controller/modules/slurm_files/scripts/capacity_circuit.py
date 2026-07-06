@@ -53,6 +53,9 @@ TRANSIENT_SLURM_BASE_STATES = frozenset({"ALLOCATED", "MIXED"})
 TRANSIENT_SLURM_FLAGS = frozenset({"CONFIGURING", "POWERING_UP"})
 SCONTROL_TIMEOUT_SECONDS = 30
 SLURM_INFINITE_TIMEOUT_SECONDS = 65533
+_owned_nodes_cache: Optional[
+    tuple[Optional[tuple[int, int, int, int, int]], dict[str, frozenset[str]]]
+] = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +152,8 @@ def _read_state_unlocked() -> dict[str, Any]:
 
 
 def _write_state_unlocked(state: dict[str, Any]) -> None:
+    global _owned_nodes_cache
+    _owned_nodes_cache = None
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not state.get("nodesets"):
         STATE_FILE.unlink(missing_ok=True)
@@ -213,8 +218,8 @@ def _resume_timeout_seconds(lkp: util.Lookup, nodeset_name: str) -> int:
     )
     timeouts = [global_timeout]
     for partition in getattr(lkp.cfg, "partitions", {}).values():
-        partition_nodesets = set(getattr(partition, "partition_nodeset", []))
-        partition_nodesets.update(getattr(partition, "partition_nodeset_dyn", []))
+        partition_nodesets = set(getattr(partition, "partition_nodeset", []) or [])
+        partition_nodesets.update(getattr(partition, "partition_nodeset_dyn", []) or [])
         if nodeset_name not in partition_nodesets:
             continue
         partition_conf = getattr(partition, "partition_conf", {})
@@ -460,17 +465,48 @@ def finish_failed_nodes(
         )
 
 
+def _state_version() -> Optional[tuple[int, int, int, int, int]]:
+    try:
+        stat = STATE_FILE.stat()
+    except FileNotFoundError:
+        return None
+    return (
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+    )
+
+
+def _owned_nodes_by_nodeset() -> dict[str, frozenset[str]]:
+    global _owned_nodes_cache
+    version = _state_version()
+    if _owned_nodes_cache is not None and _owned_nodes_cache[0] == version:
+        return _owned_nodes_cache[1]
+    if version is None:
+        _owned_nodes_cache = (None, {})
+        return _owned_nodes_cache[1]
+
+    with _locked_state(write=False) as state:
+        owned = {
+            nodeset_name: frozenset(record.get("target_nodes", []))
+            for nodeset_name, record in state["nodesets"].items()
+        }
+        # Writers replace the state file atomically while holding the same lock,
+        # so this version describes the state that was just parsed.
+        version = _state_version()
+    _owned_nodes_cache = (version, owned)
+    return owned
+
+
 def owns_node(node: str, lkp: Optional[util.Lookup] = None) -> bool:
     lkp = lkp or util.lookup()
-    if not STATE_FILE.exists():
-        return False
     try:
         nodeset_name = lkp.node_nodeset_name(node)
     except Exception:
         return False
-    with _locked_state(write=False) as state:
-        record = state["nodesets"].get(nodeset_name)
-        return bool(record and node in record.get("target_nodes", []))
+    return node in _owned_nodes_by_nodeset().get(nodeset_name, ())
 
 
 def _circuit_owned_resumable_nodes(
