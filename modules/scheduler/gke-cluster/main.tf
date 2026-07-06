@@ -359,7 +359,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   node_config {
-    machine_type = var.enable_confidential_nodes ? var.system_node_pool_machine_type : "e2-medium"
+    machine_type = var.system_node_pool_machine_type
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
