@@ -52,6 +52,11 @@ locals {
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
   ]
+
+  # Choose the default based on confidential mode
+  default_system_node_pool_machine_type = var.enable_confidential_nodes ? "n2d-standard-4" : "e2-standard-4"
+  # Fallback to the default if the user left it null
+  system_node_pool_machine_type = coalesce(var.system_node_pool_machine_type, local.default_system_node_pool_machine_type)
 }
 
 # GKE Node Auto-Provisioning (NAP) locals
@@ -359,7 +364,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   node_config {
-    machine_type = var.system_node_pool_machine_type
+    machine_type = local.system_node_pool_machine_type
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
       enable_integrity_monitoring = true
@@ -406,7 +411,7 @@ resource "google_container_cluster" "gke_cluster" {
       error_message = "FQDN Network Policy requires GKE Dataplane V2 to be enabled."
     }
     precondition {
-      condition     = !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", var.system_node_pool_machine_type))
+      condition     = !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", local.system_node_pool_machine_type))
       error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true."
     }
   }
@@ -467,7 +472,7 @@ resource "google_container_node_pool" "system_node_pools" {
     resource_labels             = local.labels
     service_account             = var.service_account_email
     oauth_scopes                = var.service_account_scopes
-    machine_type                = var.system_node_pool_machine_type
+    machine_type                = local.system_node_pool_machine_type
     disk_size_gb                = var.system_node_pool_disk_size_gb
     disk_type                   = var.system_node_pool_disk_type
     enable_confidential_storage = var.enable_confidential_storage

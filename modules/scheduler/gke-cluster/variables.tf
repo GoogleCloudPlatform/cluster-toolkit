@@ -281,9 +281,9 @@ variable "system_node_pool_node_count" {
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool."
+  description = "Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4."
   type        = string
-  default     = "e2-standard-4"
+  default     = null
 }
 
 variable "system_node_pool_disk_size_gb" {
