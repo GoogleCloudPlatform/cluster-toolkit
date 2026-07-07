@@ -196,7 +196,7 @@ spec:
                 exit $EXIT_CODE
 {{- if .VolumeMountsYAML }}
               volumeMounts:
-{{StructuralData .VolumeMountsYAML}}
+{{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
@@ -204,7 +204,7 @@ spec:
               image: {{.Pathways.ColocatedPythonSidecarImage}}
             {{- end}}
             volumes:
-{{StructuralData .VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -227,7 +227,7 @@ spec:
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
             annotations:
 {{- if .TopologyAnnotation }}
-{{StructuralData .TopologyAnnotation}}
+{{(StructuralData .TopologyAnnotation)}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
               gke-gcsfuse/volumes: "true"
@@ -304,9 +304,9 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-{{StructuralData .ResourcesString}}
+{{(StructuralData .ResourcesString)}}
             volumes:
-{{StructuralData .VolumesYAML}}
+{{(StructuralData .VolumesYAML)}}
 {{- if .NodeSelector }}
             nodeSelector:
 {{(StructuralData .NodeSelector)}}
