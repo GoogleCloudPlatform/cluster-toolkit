@@ -59,7 +59,8 @@ var (
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
-		Long:  `Google Cloud Cluster Toolkit is an open source tool that makes it easy to create and manage repeatable AI/ML and HPC clusters on Google Cloud.`,
+		Long: `Google Cloud Cluster Toolkit is an open source tool that makes it easy to create and manage repeatable AI/ML and HPC clusters on Google Cloud.
+Source code and documentation are available at: https://github.com/GoogleCloudPlatform/cluster-toolkit`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := cmd.Help(); err != nil {
 				logging.Fatal("cmd.Help function failed: %s", err)
