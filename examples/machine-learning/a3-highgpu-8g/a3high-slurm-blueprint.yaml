@@ -193,7 +193,7 @@ deployment_groups:
               - cuda-toolkit-12-8
               - nvidia-dkms-580-server-open
               - nvidia-driver-580-server-open
-              - datacenter-gpu-manager
+              - datacenter-gpu-manager-4-cuda13
               - libnvidia-nscq-580
               - nvidia-container-toolkit
             tasks:
