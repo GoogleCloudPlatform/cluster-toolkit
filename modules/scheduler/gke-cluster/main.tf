@@ -19,6 +19,8 @@ locals {
   labels = merge(var.labels, { ghpc_module = "gke-cluster", ghpc_role = "scheduler" })
 }
 
+resource "time_static" "exclusion_start" {}
+
 locals {
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
@@ -271,15 +273,18 @@ resource "google_container_cluster" "gke_cluster" {
   min_master_version = local.master_version
 
   maintenance_policy {
-    daily_maintenance_window {
-      start_time = var.maintenance_start_time
+    dynamic "daily_maintenance_window" {
+      for_each = var.maintenance_start_time != null ? [1] : []
+      content {
+        start_time = var.maintenance_start_time
+      }
     }
 
     dynamic "maintenance_exclusion" {
       for_each = var.maintenance_exclusions
       content {
         exclusion_name = maintenance_exclusion.value.name
-        start_time     = maintenance_exclusion.value.start_time
+        start_time     = coalesce(maintenance_exclusion.value.start_time, time_static.exclusion_start.rfc3339)
         end_time       = maintenance_exclusion.value.end_time
         exclusion_options {
           scope             = maintenance_exclusion.value.exclusion_scope

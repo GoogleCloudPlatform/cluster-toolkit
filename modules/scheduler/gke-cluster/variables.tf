@@ -98,21 +98,30 @@ variable "version_prefix" {
 }
 
 variable "maintenance_start_time" {
-  description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
+  description = "Start time for daily maintenance operations in GMT (HH:MM format). If set to null, a daily maintenance window restriction is not configured, meaning GKE can schedule maintenance at any time."
   type        = string
   default     = "09:00"
+  nullable    = true
 }
 
 variable "maintenance_exclusions" {
   description = "List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`."
   type = list(object({
     name                        = string
-    start_time                  = string
+    start_time                  = optional(string)
     end_time                    = optional(string)
     exclusion_scope             = string
     exclusion_end_time_behavior = optional(string)
   }))
   default = []
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions : (
+        x.end_time == null || (x.start_time != null && try(length(trimspace(x.start_time)) > 0, false))
+      )
+    ])
+    error_message = "For fixed-window exclusions (where 'end_time' is specified), 'start_time' must also be provided and cannot be empty."
+  }
   validation {
     condition = alltrue([
       for x in var.maintenance_exclusions : (
