@@ -9,11 +9,11 @@ VM clusters.
 The workload script automates a three-job Slurm pipeline to verify baseline
 computational performance and interconnect efficiency:
 
-*   **Orchestrator Job:** Isolates the Spack environment and compiles the HPL
+* **Orchestrator Job:** Isolates the Spack environment and compiles the HPL
     binary directly on a compute node to ensure OS compatibility.
-*   **Workload Job:** Executes the core HPL math benchmark using the underlying
+* **Workload Job:** Executes the core HPL math benchmark using the underlying
     RDMA hardware for high-bandwidth, low-latency communication.
-*   **Analyzer Job:** Scrapes Slurm logs to extract the final Gflops metric into
+* **Analyzer Job:** Scrapes Slurm logs to extract the final Gflops metric into
     a clean `summary.tsv` file.
 
 ## Usage
@@ -50,8 +50,8 @@ chmod +x run-hpl-workload.sh
 Run the script with the following arguments: `./run-hpl-workload.sh [provider]
 [n_nodes]`
 
-*   **provider**: network provider (see table below). Defaults to `tcp`.
-*   **n_nodes**: number of nodes to run HPL on. Defaults to all available nodes
+* **provider**: network provider (see table below). Defaults to `tcp`.
+* **n_nodes**: number of nodes to run HPL on. Defaults to all available nodes
     in Slurm.
 
 | Provider | Argument | Description                                          |
@@ -70,11 +70,11 @@ Run on 16 nodes with RXM provider: `bash ./run-hpl-workload.sh rxm 16`
 Upon submission, the script will provide specific tail commands to track each
 phase:
 
-*   **Build Phase:** `tail -f
+* **Build Phase:** `tail -f
     ./hpl-[provider]-[tag]/logs/orchestrator_[JOB_ID].out`
-*   **Workload Phase:** `tail -f
+* **Workload Phase:** `tail -f
     ./hpl-[provider]-[tag]/experiments/hpl/calculator/.../slurm-*.out`
-*   **Queue Status:** `watch squeue -u $(whoami)`
+* **Queue Status:** `watch squeue -u $(whoami)`
 
 ## Results
 

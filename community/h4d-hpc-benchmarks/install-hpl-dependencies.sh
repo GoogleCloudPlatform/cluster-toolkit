@@ -23,7 +23,7 @@ INSTALL_SCRIPT="$HOME/install_hpc_stack_payload.sh"
 echo "Creating installation payload at $INSTALL_SCRIPT..."
 
 # Write the payload into the shared home directory
-cat << 'EOF' > "$INSTALL_SCRIPT"
+cat <<'EOF' >"$INSTALL_SCRIPT"
 #!/bin/bash
 set -e
 INSTALL_DIR="/opt"
@@ -100,7 +100,7 @@ echo ""
 
 # Execute across all compute nodes, outputting to individual log files
 srun --partition="$PARTITION" --nodes="$NODE_COUNT" --ntasks-per-node=1 \
-     --output="install_progress_%N.log" \
-     sudo "$INSTALL_SCRIPT"
+	--output="install_progress_%N.log" \
+	sudo "$INSTALL_SCRIPT"
 
 echo "Installation complete across all active compute nodes!"

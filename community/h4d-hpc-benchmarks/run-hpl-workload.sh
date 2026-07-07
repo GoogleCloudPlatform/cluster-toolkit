@@ -27,15 +27,16 @@ TEST_DIR=${PWD}/hpl-${PROVIDER}-${TAG}
 N_NODES=${2:-$(sinfo -N -h -t idle,mix,alloc | wc -l | xargs)}
 
 if [[ "$N_NODES" -eq 0 ]]; then
-    echo "Error: Could not detect any available compute nodes in Slurm."
-    exit 1
+	echo "Error: Could not detect any available compute nodes in Slurm."
+	exit 1
 fi
 
 # --- CONFIGURATION LOGIC ---
 case "$PROVIDER" in
-    "rxm")
-        PROVIDER_NAME="RXM (ofi_rxm)"
-        ENV_VARS_BLOCK=$(cat <<END
+"rxm")
+	PROVIDER_NAME="RXM (ofi_rxm)"
+	ENV_VARS_BLOCK=$(
+		cat <<END
   env_vars:
     set:
       I_MPI_FABRICS: "${MPI_FABRICS}"
@@ -47,11 +48,12 @@ case "$PROVIDER" in
       OMP_PROC_BIND: "TRUE"
       OMP_PLACES: "cores"
 END
-)
-        ;;
-    "tcp")
-        PROVIDER_NAME="TCP"
-        ENV_VARS_BLOCK=$(cat <<END
+	)
+	;;
+"tcp")
+	PROVIDER_NAME="TCP"
+	ENV_VARS_BLOCK=$(
+		cat <<END
   env_vars:
     set:
       I_MPI_FABRICS: "${MPI_FABRICS}"
@@ -62,12 +64,12 @@ END
       OMP_PROC_BIND: "TRUE"
       OMP_PLACES: "cores"
 END
-)
-        ;;
-    *)
-        echo "Error: Invalid provider '$PROVIDER'. Use [tcp|rxm]."
-        exit 1
-        ;;
+	)
+	;;
+*)
+	echo "Error: Invalid provider '$PROVIDER'. Use [tcp|rxm]."
+	exit 1
+	;;
 esac
 
 cat <<EOF
