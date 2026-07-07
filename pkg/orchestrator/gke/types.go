@@ -351,3 +351,11 @@ type jobSetTemplateData struct {
 	IsTPU                         bool
 	IsGPU                         bool
 }
+
+// parsedReservation holds the extracted components of a GCE reservation URI/path.
+type parsedReservation struct {
+	Project  string
+	Name     string
+	Block    string
+	Subblock string
+}

@@ -1756,6 +1756,30 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 	return nil
 }
 
+func injectProvisioningLabels(nodeSelector map[string]string, provisioning string, reservation string) {
+	switch strings.ToLower(provisioning) {
+	case "spot":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "spot"
+	case "on-demand":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
+	case "reservation":
+		res := parseReservationURI(reservation)
+		if res.Name != "" {
+			nodeSelector["cloud.google.com/reservation-name"] = res.Name
+			nodeSelector["cloud.google.com/reservation-affinity"] = "specific"
+		}
+		if res.Project != "" {
+			nodeSelector["cloud.google.com/reservation-project"] = res.Project
+		}
+		if res.Block != "" {
+			nodeSelector["cloud.google.com/reservation-blocks"] = res.Block
+		}
+		if res.Subblock != "" {
+			nodeSelector["cloud.google.com/reservation-subblocks"] = res.Subblock
+		}
+	}
+}
+
 func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isCPUMachine bool) (string, error) {
 	nodeSelector := make(map[string]string)
 	existing, err := getNodeSelector(schedOpts)
@@ -1767,14 +1791,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	}
 
 	// Inject unified consumption options
-	switch job.GKENAPProvisioning {
-	case "spot":
-		nodeSelector["cloud.google.com/gke-provisioning"] = "spot"
-	case "on-demand":
-		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
-	case "reservation":
-		nodeSelector["cloud.google.com/reservation-name"] = extractShortReservationName(job.GKENAPReservation)
-	}
+	injectProvisioningLabels(nodeSelector, job.GKENAPProvisioning, job.GKENAPReservation)
 
 	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
 	if err != nil {
