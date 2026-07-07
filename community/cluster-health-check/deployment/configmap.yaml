@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fatal-xids-config
+  namespace: default
+data:
+  fatal-xids: "79"
