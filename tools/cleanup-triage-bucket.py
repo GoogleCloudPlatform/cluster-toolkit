@@ -26,7 +26,8 @@ from google.cloud import storage
 # Files in the root of the bucket that should NEVER be deleted
 PROTECTED_FILES = {
     "config_triage_agent.env",
-    "state.json"
+    "state.json",
+    "error_categories.json",
 }
 
 def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
