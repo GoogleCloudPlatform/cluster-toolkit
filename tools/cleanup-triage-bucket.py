@@ -46,7 +46,7 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
         blobs = bucket.list_blobs()
     except Exception as e:
         print(f"Error accessing bucket {bucket_name}: {e}")
-        return
+        raise
 
     deleted_count = 0
 
@@ -65,6 +65,7 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
                     print(f"Failed to delete {blob.name}: {e}")
     except Exception as e:
         print(f"Error iterating blobs in {bucket_name}: {e}")
+        raise
 
     print(f"Cleanup complete. Deleted {deleted_count} files.")
 
