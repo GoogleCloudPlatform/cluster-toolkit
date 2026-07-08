@@ -22,6 +22,7 @@ older than 5 days. It explicitly protects root-level configuration files.
 import argparse
 import datetime
 from google.cloud import storage
+from google.api_core.exceptions import NotFound, Forbidden
 
 # Files in the root of the bucket that should NEVER be deleted
 PROTECTED_FILES = {
@@ -56,8 +57,18 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
                     print(f"Deleting: {blob.name}")
                     blob.delete()
                     deleted_count += 1
+                except NotFound:
+                    print(f"Skipping {blob.name}: Already deleted concurrently.")
+                except Forbidden:
+                    print(f"Failed to delete {blob.name}: Permission denied (Forbidden).")
                 except Exception as e:
                     print(f"Failed to delete {blob.name}: {e}")
+    except NotFound:
+        print(f"CRITICAL: Bucket {bucket_name} was not found.")
+        raise
+    except Forbidden:
+        print(f"CRITICAL: Permission denied (Forbidden) accessing bucket {bucket_name}. Check IAM roles.")
+        raise
     except Exception as e:
         print(f"Error iterating blobs in {bucket_name}: {e}")
         raise
