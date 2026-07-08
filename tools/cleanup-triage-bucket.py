@@ -16,7 +16,7 @@
 tools/cleanup-triage-bucket.py
 
 This tool sweeps the Triage GCS bucket and deletes any build artifacts 
-older than 30 days. It explicitly protects root-level configuration files.
+older than 5 days. It explicitly protects root-level configuration files.
 """
 
 import argparse
@@ -42,18 +42,29 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
     print(f"Starting cleanup for bucket: {bucket_name}")
     print(f"Deleting files older than: {cutoff_date.isoformat()}")
 
-    blobs = bucket.list_blobs()
+    try:
+        blobs = bucket.list_blobs()
+    except Exception as e:
+        print(f"Error accessing bucket {bucket_name}: {e}")
+        return
+
     deleted_count = 0
 
-    for blob in blobs:
-        # Protect root-level configuration files
-        if blob.name in PROTECTED_FILES:
-            continue
-            
-        if blob.time_created < cutoff_date:
-            print(f"Deleting: {blob.name}")
-            blob.delete()
-            deleted_count += 1
+    try:
+        for blob in blobs:
+            # Protect root-level configuration files
+            if blob.name in PROTECTED_FILES:
+                continue
+                
+            if blob.time_created < cutoff_date:
+                try:
+                    print(f"Deleting: {blob.name}")
+                    blob.delete()
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"Failed to delete {blob.name}: {e}")
+    except Exception as e:
+        print(f"Error iterating blobs in {bucket_name}: {e}")
 
     print(f"Cleanup complete. Deleted {deleted_count} files.")
 
@@ -61,7 +72,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Clean up old triage builds in GCS.")
     parser.add_argument("--project_id", type=str, required=True, help="Google Cloud project ID")
     parser.add_argument("--bucket_name", type=str, required=True, help="Triage GCS bucket name")
-    parser.add_argument("--days", type=int, default=30, help="Days to retain files")
+    parser.add_argument("--days", type=int, default=5, help="Days to retain files")
     
     args = parser.parse_args()
     cleanup_bucket(args.project_id, args.bucket_name, args.days)
