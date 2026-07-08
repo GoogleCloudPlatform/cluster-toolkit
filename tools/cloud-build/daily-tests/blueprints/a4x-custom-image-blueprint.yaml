@@ -32,15 +32,28 @@ vars:
   net1_range: 192.168.64.0/19
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
-  disk_size_gb: 100
+  disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: $(vars.instance_image_project)
     family: $(vars.instance_image_family)
   a4x_reservation_name: # supply reservation name
+  benchmark_dir: $(ghpc_stage("../../../../examples/machine-learning/a4x-highgpu-4g/system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 
+  # Managed-Lustre instance name. This should be unique for each deployment.
+  lustre_instance_id: $(vars.deployment_name)-lustre
+
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  lustre_size_gib: 36000
+
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 500
+
 deployment_groups:
+
 - group: cluster-env
   modules:
   - id: a4x-slurm-net-0
@@ -48,13 +61,13 @@ deployment_groups:
     settings:
       network_name: $(vars.base_network_name)-net-0
       mtu: 8896
-      enable_internal_traffic: false
+      enable_internal_traffic: false  # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-0
+      - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net0_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-0
+      - name: $(vars.base_network_name)-internal-0
         ranges: [$(vars.net0_range)]
         allow:
         - protocol: tcp
@@ -66,13 +79,13 @@ deployment_groups:
     settings:
       network_name: $(vars.base_network_name)-net-1
       mtu: 8896
-      enable_internal_traffic: false
+      enable_internal_traffic: false  # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
+      - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net1_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
+      - name: $(vars.base_network_name)-internal-1
         ranges: [$(vars.net1_range)]
         allow:
         - protocol: tcp
@@ -86,11 +99,36 @@ deployment_groups:
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
-        name_prefix: $(vars.deployment_name)-mrdma-sub
+        name_prefix: $(vars.base_network_name)-mrdma-sub
         count: 4
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
 
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [a4x-slurm-net-0]
+
+  - id: homefs
+    source: modules/file-system/managed-lustre
+    use:
+    - a4x-slurm-net-0
+    - private_service_access
+    settings:
+      size_gib: $(vars.lustre_size_gib)
+      name: $(vars.lustre_instance_id)
+      local_mount: /home
+      remote_mount: lustrefs
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+    outputs:
+    - network_storage
+
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
   - id: gcs_bucket
     source: modules/file-system/cloud-storage-bucket
     settings:
@@ -106,6 +144,12 @@ deployment_groups:
                       file_mode=777,\
                       allow_other"
 
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_checkpoints
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -118,6 +162,19 @@ deployment_groups:
                       file_mode=777,\
                       allow_other"
 
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_training_data
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -129,6 +186,11 @@ deployment_groups:
                       file_mode=777,\
                       allow_other"
 
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # and
+  # https://docs.cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations
   - id: gcs_model_serving
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -141,12 +203,13 @@ deployment_groups:
                       file_mode=777,\
                       allow_other"
 
+
   - id: a4x_startup
     source: modules/scripts/startup-script
     settings:
       local_ssd_filesystem:
         mountpoint: $(vars.local_ssd_mountpoint)
-        permissions: "1777"
+        permissions: "1777"  # must quote numeric filesystem permissions!
       docker:
         enabled: true
         world_writable: true
@@ -184,28 +247,54 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
-      - type: shell
-        destination: install-dcgm.sh
+      - type: ansible-local
+        destination: install_cuda_and_dcgm.yml
         content: |
-          #!/bin/bash
-          set -ex -o pipefail
-          URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb"
+          ---
+          - name: Install and Configure CUDA 13 / DCGM
+            hosts: all
+            become: true
+            tasks:
+              - name: Download CUDA runfile
+                ansible.builtin.get_url:
+                  url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux_sbsa.run
+                  dest: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run
+                  mode: '0755'
 
-          echo "Downloading keyring from $URL"
-          curl -s -o /tmp/cuda-keyring_1.1-1_all.deb $URL
-          dpkg -i /tmp/cuda-keyring_1.1-1_all.deb
-          rm /tmp/cuda-keyring_1.1-1_all.deb
+              - name: Install CUDA toolkit via runfile
+                ansible.builtin.command:
+                  cmd: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run --silent --toolkit
 
-          apt-get update -y
-          apt-get install -y \
-              datacenter-gpu-manager-4-cuda13 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
+              - name: Remove CUDA runfile
+                ansible.builtin.file:
+                  path: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run
+                  state: absent
 
-          apt-mark hold \
-              datacenter-gpu-manager-4-cuda13 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
+              - name: Install NVIDIA repository keyring
+                ansible.builtin.apt:
+                  deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
+                  state: present
+
+              - name: Update apt cache
+                ansible.builtin.apt:
+                  update_cache: yes
+
+              - name: Install DCGM packages
+                ansible.builtin.apt:
+                  name:
+                    - datacenter-gpu-manager-4-cuda13
+                    - datacenter-gpu-manager-4-dev
+                    - datacenter-gpu-manager-4-core
+                  state: present
+
+              - name: Freeze DCGM packages
+                ansible.builtin.dpkg_selections:
+                  name: "{{ item }}"
+                  selection: hold
+                loop:
+                  - datacenter-gpu-manager-4-cuda13
+                  - datacenter-gpu-manager-4-dev
+                  - datacenter-gpu-manager-4-core
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -264,9 +353,6 @@ deployment_groups:
     use: [a4x-slurm-net-0, a4x_startup]
     settings:
       bandwidth_tier: gvnic_enabled
-      guest_accelerator:
-      - type: nvidia-gb200
-        count: 4
       machine_type: a4x-highgpu-4g
       enable_public_ips: true
       node_count_static: $(vars.a4x_cluster_size)
@@ -278,25 +364,14 @@ deployment_groups:
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4x_reservation_name)
       advanced_machine_features:
-        threads_per_core: null
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 70
         SocketsPerBoard: 2
         ThreadsPerCore: 1
       additional_networks:
         $(concat(
-          [{
-            network=null,
-            subnetwork=a4x-slurm-net-1.subnetwork_self_link,
-            subnetwork_project=vars.project_id,
-            nic_type="GVNIC",
-            queue_count=null,
-            network_ip="",
-            stack_type=null,
-            access_config=[],
-            ipv6_access_config=[],
-            alias_ip_range=[]
-          }],
+          a4x-slurm-net-1.instance_additional_networks,
           a4x-slurm-rdma-net.subnetwork_interfaces
         ))
 
@@ -310,8 +385,8 @@ deployment_groups:
       is_default: true
       partition_conf:
         OverSubscribe: EXCLUSIVE
-        ResumeTimeout: 3600
-        SuspendTimeout: 600
+        ResumeTimeout: 3600  # 1 hour
+        SuspendTimeout: 600  # 10 mins
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
@@ -322,8 +397,8 @@ deployment_groups:
       zone: $(vars.zone)
       enable_login_public_ips: true
       instance_image_custom: true
-      disk_type: hyperdisk-balanced
-      machine_type: c4a-standard-4
+      disk_type: pd-balanced
+      machine_type: t2a-standard-2
 
   - id: controller_startup
     source: modules/scripts/startup-script
@@ -352,6 +427,7 @@ deployment_groups:
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           # enable a GPU health check that runs at the completion of all jobs on A4X nodes
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
           # enable the use of password-free sudo within Slurm jobs on all compute nodes
           # feature is restricted to users with OS Admin Login IAM role
           # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
@@ -370,6 +446,12 @@ deployment_groups:
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_epilog
           chmod 0755 "${SLURM_ROOT}/scripts/imex_epilog"
           ln -s "${SLURM_ROOT}/scripts/imex_epilog" "${SLURM_ROOT}/epilog_slurmd.d/imex_epilog.epilog_slurmd"
+      - type: data
+        destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+        source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+      - type: data
+        destination: /opt/apps/system_benchmarks/README.md
+        source: $(vars.benchmark_dir)/README.md
 
 
   - id: slurm_controller
@@ -377,17 +459,19 @@ deployment_groups:
     use:
     - a4x_partition
     - a4x-slurm-net-0
+    - homefs
     - gcs_bucket
     - slurm_login
     settings:
       enable_controller_public_ips: true
-      machine_type: c4a-highcpu-16
-      disk_type: hyperdisk-balanced
+      machine_type: t2a-standard-2
+      zone: $(vars.zone)
+      disk_type: pd-balanced
       instance_image_custom: true
       cloud_parameters:
         prolog_flags: Alloc,DeferBatch,NoHold
         switch_type: switch/nvidia_imex
       controller_state_disk: null
       controller_startup_script: $(controller_startup.startup_script)
-      compute_startup_scripts_timeout: 600
       enable_external_prolog_epilog: true
+      compute_startup_scripts_timeout: 1800

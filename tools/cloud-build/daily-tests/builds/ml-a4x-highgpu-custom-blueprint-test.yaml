@@ -49,8 +49,8 @@ steps:
     bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=us-west8
-    ZONE=us-west8-a
+    REGION=us-central1
+    ZONE=us-central1-b
 
     BLUEPRINT="/workspace/tools/cloud-build/daily-tests/blueprints/a4x-custom-image-blueprint.yaml"
 
@@ -63,14 +63,14 @@ steps:
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID "\
       --extra-vars="region=$${REGION} zone=$${ZONE} "\
-      --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT}" \
-      --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY}" \
+      --extra-vars="instance_image_project=$${CUSTOM_IMAGE_PROJECT_A4X}" \
+      --extra-vars="instance_image_family=$${CUSTOM_IMAGE_FAMILY_A4X}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4x-highgpu-custom-blueprint-test.yml" \
         --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
         --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
         --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
         --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
-  secretEnv: ['GCLUSTER_GCS_PATH', 'CUSTOM_IMAGE_PROJECT', 'CUSTOM_IMAGE_FAMILY', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'CUSTOM_IMAGE_PROJECT_A4X', 'CUSTOM_IMAGE_FAMILY_A4X', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
 availableSecrets:
   secretManager:
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
@@ -83,7 +83,7 @@ availableSecrets:
     env: 'TRIAGE_INVOKER_SA'
   - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
     env: 'TRIAGE_CLOUD_RUN_URL'
-  - versionName: projects/${PROJECT_ID}/secrets/custom-image-project/versions/latest
-    env: 'CUSTOM_IMAGE_PROJECT'
-  - versionName: projects/${PROJECT_ID}/secrets/custom-image-family-a4x/versions/latest
-    env: 'CUSTOM_IMAGE_FAMILY'
+  - versionName: projects/${PROJECT_ID}/secrets/CUSTOM_IMAGE_PROJECT_A4X/versions/latest
+    env: 'CUSTOM_IMAGE_PROJECT_A4X'
+  - versionName: projects/${PROJECT_ID}/secrets/CUSTOM_IMAGE_FAMILY_A4X/versions/latest
+    env: 'CUSTOM_IMAGE_FAMILY_A4X'
