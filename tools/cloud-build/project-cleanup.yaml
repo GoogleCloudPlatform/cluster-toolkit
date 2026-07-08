@@ -50,3 +50,24 @@ steps:
 
     echo "Max retries reached. Exiting with failure."
     exit
+
+- name: python:3.11-slim
+  entrypoint: /bin/bash
+  env:
+  - "PROJECT_ID=${PROJECT_ID}"
+  args:
+  - -c
+  - |
+    set -euo pipefail
+    echo "--- Starting Triage Bucket Cleanup ---"
+
+    # Install the required library safely using a virtual environment
+    python3 -m venv /workspace/venv
+    source /workspace/venv/bin/activate
+    pip install --no-cache-dir google-cloud-storage
+
+    # Run the cleanup script
+    python3 tools/cleanup-triage-bucket.py \
+      --project_id="${PROJECT_ID}" \
+      --bucket_name="g-ift-agent-bucket" \
+      --days=7
