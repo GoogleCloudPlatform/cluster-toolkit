@@ -41,11 +41,7 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
     print(f"Starting cleanup for bucket: {bucket_name}")
     print(f"Deleting files older than: {cutoff_date.isoformat()}")
 
-    try:
-        blobs = bucket.list_blobs()
-    except Exception as e:
-        print(f"Error accessing bucket {bucket_name}: {e}")
-        raise
+    blobs = bucket.list_blobs()
 
     deleted_count = 0
 
