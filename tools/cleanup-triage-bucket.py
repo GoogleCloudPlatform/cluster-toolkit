@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-tools/maintenance/cleanup_triage_bucket.py
+tools/cleanup-triage-bucket.py
 
 This tool sweeps the Triage GCS bucket and deletes any build artifacts 
 older than 30 days. It explicitly protects root-level configuration files.

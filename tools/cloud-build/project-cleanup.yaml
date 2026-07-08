@@ -70,4 +70,4 @@ steps:
     python3 tools/cleanup-triage-bucket.py \
       --project_id="${PROJECT_ID}" \
       --bucket_name="g-ift-agent-bucket" \
-      --days=7
+      --days=5
