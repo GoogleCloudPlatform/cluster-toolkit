@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 # The following workload runs a JAX TPU test on a single-slice (single-host) TPU v5e node.
-# It checks how many TPU chips JAX can detect on the host.
-
+# It is queued and scheduled via Kueue and prints the detected JAX TPU devices.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: tpu-singleslice-job
+  name: tpu-kueue-jax-sample
+  labels:
+    kueue.x-k8s.io/queue-name: user-queue
 spec:
   backoffLimit: 0
   template:

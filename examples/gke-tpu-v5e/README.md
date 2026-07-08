@@ -1,6 +1,6 @@
 # GKE TPU v5e Blueprint
 
-This example shows how a TPU cluster with v5e machines can be created. The example also includes a `tpu-singleslice.yaml` that creates a Kubernetes job. The job includes commands to run JAX and print the TPU device count.
+This example shows how a TPU cluster with v5e machines can be created. The example also includes a consolidated `tpu-kueue-jax-sample.yaml` that creates a Kueue-managed Kubernetes job to run JAX and print the active TPU device count.
 
 Key parameters when working with TPUs:
 
@@ -85,31 +85,13 @@ This section guides you through the cluster creation process, ensuring that your
       examples/gke-tpu-v5e/gke-tpu-v5e.yaml
     ```
 
-## Advanced Scheduling with Kueue
+## Kueue Scheduling & Running a Sample JAX Job
 
-This blueprint installs and configures [Kueue](https://kueue.sigs.k8s.io/) by default to manage quotas and job queuing.
+This blueprint installs and configures [Kueue](https://kueue.sigs.k8s.io/) by default to manage TPU quotas and queue job submissions. The provided `tpu-kueue-jax-sample.yaml` file creates a Kubernetes Job that integrates both Kueue queue routing and JAX TPU device count validation.
 
-1. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue`. The node count is automatically derived from your `machine_type` and `tpu_topology`, and the quota is calculated as: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
+* **Quota Allocation:** The blueprint automatically calculates and sets a `google.com/tpu` quota in Kueue's `ClusterQueue`. The node count is derived from your `machine_type` and `tpu_topology`, and the quota is calculated using the formula: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
 
-1. **Submit a Job:** To submit a job to the queue, add the label `kueue.x-k8s.io/queue-name: user-queue` to your Job or JobSet manifest.
-
-   A sample job file is provided: `kueue-job-sample.yaml`.
-
-   ```sh
-   kubectl create -f examples/gke-tpu-v5e/kueue-job-sample.yaml
-   ```
-
-1. **Validation:** Check the status of your workload:
-
-   ```sh
-   kubectl get workloads
-   ```
-
-## Run the sample job
-
-The `tpu-singleslice.yaml` file creates a Kubernetes Job workload. It is designed to verify TPU connectivity and JAX functionality on the host.
-
-1. Connect to your cluster:
+1. **Connect to your cluster:**
 
     ```sh
     gcloud container clusters get-credentials gke-tpu-v5e --region=REGION --project=PROJECT_ID
@@ -117,7 +99,7 @@ The `tpu-singleslice.yaml` file creates a Kubernetes Job workload. It is designe
 
     Replace `REGION` and `PROJECT_ID` with your deployment region and project ID.
 
-1. Update the nodeSelector under the template spec of `tpu-singleslice.yaml` file. The values depend on the tpu accelerator and tpu topology used in the blueprint.
+2. **Update the Node Selector:** Open `examples/gke-tpu-v5e/tpu-kueue-jax-sample.yaml` and verify that the `nodeSelector` values match the TPU accelerator and topology configured in your deployment:
 
     ```yaml
     nodeSelector:
@@ -125,32 +107,116 @@ The `tpu-singleslice.yaml` file creates a Kubernetes Job workload. It is designe
         cloud.google.com/gke-tpu-topology: 2x2
     ```
 
-1. Run the workload:
+3. **Submit the Job:** Submit the workload to GKE. The job contains the label `kueue.x-k8s.io/queue-name: user-queue` which automatically routes it through Kueue:
 
     ```sh
-    kubectl apply -f examples/gke-tpu-v5e/tpu-singleslice.yaml
+    kubectl apply -f examples/gke-tpu-v5e/tpu-kueue-jax-sample.yaml
     ```
 
-1. Monitor the job status:
+4. **Verify Workload Admission & Status:** Check if Kueue successfully admitted and queued the workload:
+
+    ```sh
+    kubectl get workloads
+    ```
+
+    Monitor the job and pod execution:
 
     ```sh
     kubectl get jobs
-    kubectl get pods
     ```
 
-1. Check the logs of the pod to verify JAX detected the TPU devices correctly:
+5. **Verify JAX Logs:** Print the logs of the pod to confirm JAX successfully detected the TPU devices:
 
     ```sh
-    kubectl logs -l job-name=tpu-singleslice-job -c jax-tpu
+    kubectl logs -l job-name=tpu-kueue-jax-sample -c jax-tpu
     ```
 
-    You should see output similar to:
+    A successful execution will output:
 
     ```sh
     Global device count: 4
     ```
 
     (Depending on your topology, e.g., 4 chips for `2x2`).
+
+## Running Pathways Workloads
+
+This blueprint supports **Pathways-on-Cloud** orchestration, allowing you to run JAX workloads distributed across remote TPU workers coordinated by a CPU-based head node. The sections below guide you through deploying and verifying a sample job that prints the active TPU device count over the coordinated Pathways network.
+
+### 1. Enable Pathways in the Blueprint
+
+Before deploying, ensure Pathways is enabled in `examples/gke-tpu-v5e/gke-tpu-v5e.yaml`:
+
+```yaml
+vars:
+  # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
+  enable_pathways_for_tpus: true
+```
+
+*Note: Enabling Pathways statically provisions a `cpu-np` node pool (utilizing `n4-standard-64` by default) to host the coordinator head pod, while GKE autoscaling dynamically manages its size between 0 and 100 based on job load.*
+
+### 2. Verify Job Manifest (Dry-Run)
+
+Before submitting the job to the live GKE cluster, it is highly recommended to perform a dry-run to generate and inspect the Kubernetes `JobSet` manifest:
+
+```sh
+./gcluster job submit \
+  --name pathways-job \
+  --compute-type v5litepod-4 \
+  --pathways \
+  --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
+  --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
+  --command "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'" \
+  --dry-run-out my-manifest.yaml
+```
+
+This generates a local file `my-manifest.yaml` containing the complete Kubernetes `JobSet` manifest. You can inspect this file to verify that:
+* The coordinator pod is assigned to the CPU node pool (`nodeSelector: cpu-np`).
+* The worker pods target the TPU node pool.
+* The pathways sidecar containers (`pathways-proxy`, `pathways-worker`) are correctly injected with correct ports and variables.
+
+#### CLI Flags Description
+* `--name`: A unique identifier for your job (keep it under 10 characters to avoid Kubernetes label length constraints).
+* `--compute-type`: The TPU slice topology configuration (e.g., `v5litepod-4` maps to a `2x2` TPU v5e topology).
+* `--pathways`: Flags GCluster to generate a Pathways JobSet coordination architecture.
+* `--pathways-gcs-location`: A Cloud Storage bucket URI used by the coordinator and worker pods to synchronize network state and parameters.
+* `--image`: The container image for the workload (using the standard TPU JAX image).
+* `--command`: The entrypoint command. It dynamically installs `pathwaysutils` and executes the python command verifying JAX initialization.
+* `--dry-run-out`: Outputs the generated Kubernetes manifests to the file path specified as the argument to this flag (e.g., `my-manifest.yaml` in the example above) instead of submitting them to GKE.
+
+### 3. Submit the Live Job
+
+Once you have verified the manifest, submit the job to your live GKE cluster by running the command without the `--dry-run-out` flag:
+
+```sh
+./gcluster job submit \
+  --name pathways-job \
+  --compute-type v5litepod-4 \
+  --pathways \
+  --pathways-gcs-location gs://YOUR_COORDINATION_BUCKET/pathways-scratch \
+  --image us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest \
+  --command "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
+```
+
+### 4. Monitor and Manage the Job
+
+1. **Monitor and Check Logs:** Use the `gcluster` CLI to track the execution status and view the workload logs:
+
+   ```sh
+   gcluster job logs pathways-job
+   ```
+
+   A successful execution will output logs ending with:
+
+   ```sh
+   JAX Device count: 4
+   ```
+
+2. **Cancel and Clean Up Job:** To terminate a running job or clean up resources once finished, run:
+
+   ```sh
+   gcluster job cancel pathways-job
+   ```
 
 ## Tear down the cluster
 
