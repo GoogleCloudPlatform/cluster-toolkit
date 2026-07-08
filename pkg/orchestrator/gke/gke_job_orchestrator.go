@@ -87,18 +87,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	startTime := time.Now()
-	var success bool
-	defer func() {
-		latencySecs := time.Since(startTime).Seconds()
-		profile := map[string]string{
-			"compute_type": job.ComputeType,
-			"nodes":        fmt.Sprintf("%d", job.NumSlices),
-		}
-
-		orchestrator.RecordLocalMetrics(job.WorkloadName, latencySecs, success, profile)
-	}()
-
 	var err error
 	err = g.initializeJobSubmission(&job)
 	if err != nil {
@@ -137,7 +125,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		}
 	}
 	logging.Info("gcluster job submit workflow completed.")
-	success = true
+
 	return nil
 }
 
