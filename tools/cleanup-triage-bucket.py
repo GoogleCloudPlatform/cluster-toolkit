@@ -22,7 +22,6 @@ older than 5 days. It explicitly protects root-level configuration files.
 import argparse
 import datetime
 from google.cloud import storage
-from google.cloud.exceptions import NotFound, Forbidden
 
 # Files in the root of the bucket that should NEVER be deleted
 PROTECTED_FILES = {
