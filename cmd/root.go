@@ -148,7 +148,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 
 	// Ensure telemetry is executed exactly once on normal exits to prevent recurrency
 	if telemetryFlushed.CompareAndSwap(false, true) {
-		if config.IsTelemetryEnabled() && userConfigExists {
+		if config.IsTelemetryEnabled() && userConfigExists && telemetryCollector != nil {
 			telemetryCollector.Execute(exitCode, err)
 		}
 	}
