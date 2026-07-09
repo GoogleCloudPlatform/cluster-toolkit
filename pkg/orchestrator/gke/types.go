@@ -351,3 +351,28 @@ type jobSetTemplateData struct {
 	IsTPU                         bool
 	IsGPU                         bool
 }
+
+// Types for parsing kubectl get nodes -o json
+
+type kubernetesNodeList struct {
+	Items []kubernetesNode `json:"items"`
+}
+
+type kubernetesNode struct {
+	Metadata kubernetesNodeMetadata `json:"metadata"`
+	Status   kubernetesNodeStatus   `json:"status"`
+}
+
+type kubernetesNodeMetadata struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels"`
+}
+
+type kubernetesNodeStatus struct {
+	Conditions []kubernetesNodeCondition `json:"conditions"`
+}
+
+type kubernetesNodeCondition struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+}
