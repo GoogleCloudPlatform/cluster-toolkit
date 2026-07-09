@@ -114,8 +114,8 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	// ConfigMaps (graceful handle if not present)
 	metadataCM := fmt.Sprintf("%s-metadata", opts.ClusterName)
 	resourcesCM := fmt.Sprintf("%s-resources", opts.ClusterName)
-	runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-o", "yaml")
-	runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-o", "yaml")
+	runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", "default", "-o", "yaml")
+	runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", "default", "-o", "yaml")
 
 	// --- 3. Node Status ---
 	runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
@@ -125,7 +125,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// --- 4. Kueue & JobSet Resources ---
 	runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
-	runAndLog("Kueue: LocalQueue Details", "kubectl", "describe", "LocalQueue")
+	runAndLog("Kueue: LocalQueue Details", "kubectl", "describe", "LocalQueue", "-A")
 	runAndLog("Kueue: ResourceFlavor Details", "kubectl", "describe", "ResourceFlavor")
 	runAndLog("Kueue: Kueue Deployment Details", "kubectl", "describe", "Deployment", "kueue-controller-manager", "-n", "kueue-system")
 	runAndLog("Kueue: Kueue Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/kueue-controller-manager", "-n", "kueue-system", "-c", "manager", "--tail=100")
@@ -144,8 +144,17 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	runAndLog("Kubectl: All Workloads", "kubectl", "get", "workloads", "-A")
 
 	if opts.WorkloadName != "" {
-		runAndLog(fmt.Sprintf("JobSet: Config for %s", opts.WorkloadName), "kubectl", "describe", "jobsets", opts.WorkloadName)
-		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", fmt.Sprintf("jobset-%s", opts.WorkloadName))
+		workloadNamespace := "default"
+		if g.kubeClient != nil {
+			ns, err := g.kubeClient.GetJobNamespace(opts.WorkloadName)
+			if err == nil {
+				workloadNamespace = ns
+			} else {
+				logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", opts.WorkloadName, err)
+			}
+		}
+		runAndLog(fmt.Sprintf("JobSet: Config for %s", opts.WorkloadName), "kubectl", "describe", "jobsets", opts.WorkloadName, "-n", workloadNamespace)
+		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", fmt.Sprintf("jobset-%s", opts.WorkloadName), "-n", workloadNamespace)
 	}
 
 	// --- 7. Console Links ---
