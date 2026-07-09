@@ -1749,9 +1749,9 @@ func TestGetErrorType(t *testing.T) {
 			expected: ErrTypePermissionDenied,
 		},
 		{
-			name:     "File Not Exist",
+			name:     "Resource Not Exist",
 			err:      os.ErrNotExist,
-			expected: ErrTypeFileNotFound,
+			expected: ErrTypeResourceNotFound,
 		},
 		{
 			name:     "Context Deadline Exceeded",
@@ -1781,7 +1781,7 @@ func TestGetErrorType(t *testing.T) {
 		{
 			name:     "Text Match Not Found",
 			err:      errors.New("resource not found"),
-			expected: ErrTypeFileNotFound,
+			expected: ErrTypeResourceNotFound,
 		},
 		{
 			name:     "Unknown Error",
