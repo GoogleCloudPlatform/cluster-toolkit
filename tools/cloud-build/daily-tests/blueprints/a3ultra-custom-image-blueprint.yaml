@@ -476,7 +476,7 @@ deployment_groups:
       enable_controller_public_ips: true
       disk_type: pd-extreme
       disk_size_gb: 300
-      machine_type: n2-standard-80
+      machine_type: e2-standard-16
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
       compute_startup_scripts_timeout: 1800
