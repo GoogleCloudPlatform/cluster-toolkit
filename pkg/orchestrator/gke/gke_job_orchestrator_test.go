@@ -2194,6 +2194,47 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 	}
 }
 
+func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	mockDescribeOutput := `{
+		"locations": ["us-central1-a", "us-central1-b"],
+		"nodePools": [],
+		"autoscaling": {}
+	}`
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json": {
+			{
+				ExitCode: 1,
+				Stderr:   "Resource my-cluster was not found in us-central1-a",
+			},
+		},
+		"gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json": {
+			{
+				ExitCode: 0,
+				Stdout:   mockDescribeOutput,
+			},
+		},
+	}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	job := &orchestrator.JobDefinition{
+		ProjectID:       "my-project",
+		ClusterName:     "my-cluster",
+		ClusterLocation: "us-central1-a",
+	}
+
+	err := orc.populateClusterMetadata(job)
+	if err != nil {
+		t.Fatalf("populateClusterMetadata failed: %v", err)
+	}
+
+	if job.ClusterLocation != "us-central1" {
+		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
+	}
+}
+
 func TestPopulateNAPFlavors(t *testing.T) {
 	tests := []struct {
 		name        string

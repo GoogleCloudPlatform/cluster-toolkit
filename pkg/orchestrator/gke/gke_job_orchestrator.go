@@ -395,7 +395,27 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
 			return fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", job.ClusterName, job.ProjectID)
 		}
-		return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
+		if len(strings.Split(job.ClusterLocation, "-")) == 3 {
+			region := shell.ExtractRegion(job.ClusterLocation)
+			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", job.ClusterLocation, region)
+			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
+				"--location", region,
+				"--project", job.ProjectID,
+				"--format=json")
+			if fallbackRes.ExitCode == 0 {
+				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
+					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
+					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
+					job.ClusterName, region, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation)
+				job.ClusterLocation = region
+				res = fallbackRes
+			} else {
+				return fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", job.ClusterName, job.ClusterLocation, region, res.Stderr)
+			}
+		} else {
+			return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+		}
 	}
 
 	var clusterDesc gkeCluster
