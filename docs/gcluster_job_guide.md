@@ -1121,6 +1121,10 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-f, --follow` | `flag` | Stream logs continuously (like `tail -f`). |
+| `--main-only` | `bool` | Fetch logs only for the coordinator/leader pod (Rank 0) of the main replicated job (e.g. `main-job` or `pathways-head`). |
+
+> [!NOTE]
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
 
 ## 10. Troubleshooting: ImagePullBackOff
 

@@ -127,6 +127,7 @@ type LogsOptions struct {
 	ClusterName     string
 	ClusterLocation string
 	Follow          bool
+	MainOnly        *bool
 }
 
 type JobOrchestrator interface {

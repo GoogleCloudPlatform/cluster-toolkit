@@ -52,6 +52,9 @@ const (
 
 	// kueueAPIVersion is the GVR version used for Kueue resources.
 	kueueAPIVersion = "v1beta2"
+
+	// maxLogRequests is the maximum concurrent log streams allowed by the GKE logs CLI.
+	maxLogRequests = 10
 )
 
 func NewGKEOrchestrator() *GKEOrchestrator {
@@ -209,13 +212,44 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 
-	// Retry loop for pulling logs, especially to handle ImagePullBackOff/waiting states
+	selector, mainOnly, podCountForNotice := g.resolveLogsSelector(name, foundNamespace, opts.MainOnly)
+
+	if opts.MainOnly == nil && mainOnly {
+		logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCountForNotice)
+	}
+
+	// Proactively check pod count against GKE logs limits
+	podCount, _ := g.getJobPodCount(foundNamespace, selector)
+	if podCount > maxLogRequests {
+		consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
+		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+	}
+
+	if opts.Follow {
+		logging.Info("Streaming logs for job '%s'...", name)
+		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
+		return "", err
+	}
+
+	res, err := g.fetchLogsWithRetry(foundNamespace, selector)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
+	}
+
+	return res.Stdout, nil
+}
+
+func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector string) (shell.CommandResult, error) {
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "--max-log-requests=50")
+		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
 		if res.ExitCode == 0 {
-			break
+			return res, nil
 		}
 
 		if strings.Contains(res.Stderr, "is waiting to start") {
@@ -226,24 +260,43 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 			continue
 		}
 
-		return "", fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
+		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
+	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "pods", "-n", ns, "-l", selector, "--no-headers")
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+		return 0, fmt.Errorf("failed to query pods: %s", res.Stderr)
+	}
+	stdout := strings.TrimSpace(res.Stdout)
+	if stdout == "" {
+		return 0, nil
+	}
+	return len(strings.Split(stdout, "\n")), nil
+}
+
+func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *bool) (string, bool, int) {
+	mainOnly := false
+	podCount := 0
+	if optsMainOnly == nil {
+		totalSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
+		var err error
+		podCount, err = g.getJobPodCount(ns, totalSelector)
+		if err == nil && podCount > 5 {
+			mainOnly = true
+		}
+	} else {
+		mainOnly = *optsMainOnly
 	}
 
-	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name), "--all-containers", "-f", "--max-log-requests=10")
-		return "", err
+	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
+	if mainOnly {
+		selector = fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s,jobset.sigs.k8s.io/replicatedjob-name in (main-job, pathways-head),jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", name)
 	}
-
-	if strings.TrimSpace(res.Stdout) == "" {
-		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
-	}
-
-	return res.Stdout, nil
+	return selector, mainOnly, podCount
 }
 
 func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) error {
@@ -262,6 +315,20 @@ func (g *GKEOrchestrator) generateAndSubmitManifests(job orchestrator.JobDefinit
 	return g.generateAndApplyManifest(manifestOpts, profile, job.DryRunManifest)
 }
 
+func getCloudConsoleLogsURL(projectID, location, clusterName, namespace, podNamePrefix string) string {
+	query := fmt.Sprintf(`resource.type="k8s_container"
+resource.labels.project_id="%s"
+resource.labels.location="%s"
+resource.labels.cluster_name="%s"
+resource.labels.namespace_name="%s"
+resource.labels.pod_name:"%s-"
+severity>=DEFAULT`, projectID, location, clusterName, namespace, podNamePrefix)
+
+	encodedFilter := url.QueryEscape(query)
+	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
+		encodedFilter, projectID)
+}
+
 func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 	jobName := job.WorkloadName + "-main-job-0"
 	if job.IsPathwaysJob {
@@ -272,18 +339,7 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 
 	logging.Info("Follow your workload details here: %s", gkeLink)
 
-	logFilter := fmt.Sprintf(`resource.type="k8s_container"
-resource.labels.project_id="%s"
-resource.labels.location="%s"
-resource.labels.cluster_name="%s"
-resource.labels.namespace_name="default"
-resource.labels.pod_name:"%s-"
-severity>=DEFAULT`, job.ProjectID, job.ClusterLocation, job.ClusterName, jobName)
-
-	encodedFilter := url.QueryEscape(logFilter)
-	logsLink := fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;storageScope=project;duration=P1D?project=%s",
-		encodedFilter, job.ProjectID)
-
+	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, "default", jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 }
 
