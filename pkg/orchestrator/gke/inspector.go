@@ -145,13 +145,11 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	workloadNamespace := "default"
 	if opts.WorkloadName != "" {
-		if g.kubeClient != nil {
-			ns, err := g.kubeClient.GetJobNamespace(opts.WorkloadName)
-			if err == nil {
-				workloadNamespace = ns
-			} else {
-				logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", opts.WorkloadName, err)
-			}
+		ns, err := g.getJobNamespace(opts.WorkloadName)
+		if err == nil {
+			workloadNamespace = ns
+		} else {
+			logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", opts.WorkloadName, err)
 		}
 		runAndLog(fmt.Sprintf("JobSet: Config for %s", opts.WorkloadName), "kubectl", "describe", "jobsets", opts.WorkloadName, "-n", workloadNamespace)
 		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", fmt.Sprintf("jobset-%s", opts.WorkloadName), "-n", workloadNamespace)
