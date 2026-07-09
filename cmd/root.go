@@ -81,10 +81,6 @@ func init() {
 
 	rootCmd.AddCommand(cluster.ClusterCmd)
 	rootCmd.AddCommand(job.JobCmd)
-
-	for _, child := range rootCmd.Commands() {
-		wrapTelemetry(child)
-	}
 }
 
 // Execute the root command
@@ -121,6 +117,10 @@ Commit info: {{index .Annotations "commitInfo"}}
 `
 		}
 		rootCmd.SetVersionTemplate(tmpl)
+	}
+
+	for _, child := range rootCmd.Commands() {
+		wrapTelemetry(child)
 	}
 
 	err := rootCmd.Execute()
