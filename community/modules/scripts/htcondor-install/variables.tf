@@ -21,7 +21,7 @@ variable "enable_docker" {
 }
 
 variable "condor_version" {
-  description = "Yum/DNF-compatible version string; leave unset to use latest 25.0 LTS release (examples: \"25.0.0\",\"25.*\"))"
+  description = "Yum/DNF-compatible version string; leave unset to use latest 25.0 LTS release (examples: \"25.0.0\",\"25.*\")"
   type        = string
   default     = "25.*"
 
