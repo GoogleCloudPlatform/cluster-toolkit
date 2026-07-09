@@ -491,6 +491,10 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`cpu: "2"`,
 		`memory: "8Gi"`,
 		"kill -SIGTERM $PID",
+		"echo \"Exit code: $EXIT_CODE\"",
+		"name: shared-tmp",
+		"emptyDir: {}",
+		"mountPath: /tmp",
 	}
 
 	for _, substr := range expectedSubstrs {
