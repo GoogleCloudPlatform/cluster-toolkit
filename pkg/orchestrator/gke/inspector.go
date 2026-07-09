@@ -152,7 +152,14 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 			logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", opts.WorkloadName, err)
 		}
 		runAndLog(fmt.Sprintf("JobSet: Config for %s", opts.WorkloadName), "kubectl", "describe", "jobsets", opts.WorkloadName, "-n", workloadNamespace)
-		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", fmt.Sprintf("jobset-%s", opts.WorkloadName), "-n", workloadNamespace)
+
+		targetWorkload := fmt.Sprintf("jobset-%s", opts.WorkloadName)
+		if g.kubeClient != nil {
+			if tw, err := g.findTargetWorkload(workloadNamespace, opts.WorkloadName); err == nil {
+				targetWorkload = tw
+			}
+		}
+		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
 	}
 
 	// --- 7. Console Links ---
