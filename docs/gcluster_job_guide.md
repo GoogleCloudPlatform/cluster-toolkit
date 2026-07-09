@@ -253,6 +253,35 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
     Verify it's gone by running `gcluster job list` again.
 
+* **Inspect Cluster and Workload Health:**
+    If you encounter scheduling delays, errors, or suspect resource exhaustion, you can run `gcluster job inspect` to capture a comprehensive diagnostic sweep of your cluster state and active workloads.
+
+    ```bash
+    ./gcluster job inspect
+    ```
+
+    To debug a specific workload, provide its name to fetch details like Kueue Workload status and JobSet configurations:
+
+    ```bash
+    ./gcluster job inspect --name my-python-app-job
+    ```
+
+    To view logs output in the console in addition to saving them to the diagnostic file, add the `--show` (or `-s`) flag:
+
+    ```bash
+    ./gcluster job inspect --name my-python-app-job --show
+    ```
+
+    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory containing:
+
+  * **Local Setup**: Gcloud version and active configuration.
+  * **GKE Infra**: GKE cluster descriptions, node-pool listings, and metadata/resources ConfigMaps.
+  * **Node Status**: Wide listing of nodes, along with Go-calculated counts of total and healthy nodes per node pool.
+  * **Kueue / JobSet**: Configurations and logs for Kueue and JobSet controller managers.
+  * **Slice Controller**: Slice controller deployment details and manager logs (if GKE Kueue dynamic slicing is active).
+  * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
+  * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
+
 ## 6. Advanced Workloads
 
 *Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
