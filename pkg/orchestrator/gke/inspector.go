@@ -60,7 +60,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}
 
 	// 2. Create log file (Critical, fail fast)
-	timestamp := time.Now().Format("20060102-150405")
+	timestamp := time.Now().UTC().Format("20060102-150405")
 	fileName := fmt.Sprintf("gcluster-inspect-%s-%s.log", opts.ClusterName, timestamp)
 	filePath := filepath.Join(".", fileName)
 	file, err := os.Create(filePath)
