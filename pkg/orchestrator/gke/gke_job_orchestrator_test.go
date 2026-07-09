@@ -76,6 +76,7 @@ func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
 func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 	return &GKEOrchestrator{
 		executor:                 executor,
+		kubeClient:               &MockKubeClient{Namespace: "default"},
 		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),

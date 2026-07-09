@@ -143,8 +143,8 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	// --- 6. Workloads ---
 	runAndLog("Kubectl: All Workloads", "kubectl", "get", "workloads", "-A")
 
+	workloadNamespace := "default"
 	if opts.WorkloadName != "" {
-		workloadNamespace := "default"
 		if g.kubeClient != nil {
 			ns, err := g.kubeClient.GetJobNamespace(opts.WorkloadName)
 			if err == nil {
@@ -158,7 +158,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}
 
 	// --- 7. Console Links ---
-	logConsoleLinks(file, opts)
+	logConsoleLinks(file, opts, workloadNamespace)
 
 	logging.Info("Cluster inspection report saved to %s", fileName)
 	return nil
@@ -246,7 +246,7 @@ func countNodes(nodeList *kubernetesNodeList) (map[string]int, map[string]int) {
 	return totalNodesPerPool, healthyNodesPerPool
 }
 
-func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions) {
+func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadNamespace string) {
 	desc := "Cloud Console Links"
 	if opts.Show {
 		fmt.Printf("Description: %s\n", desc)
@@ -281,7 +281,7 @@ func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions) {
 			url  string
 		}{
 			desc: fmt.Sprintf("Cloud Console for workload %s", opts.WorkloadName),
-			url:  fmt.Sprintf("https://console.cloud.google.com/kubernetes/service/%s/%s/default/%s/details?project=%s", opts.ClusterLocation, opts.ClusterName, opts.WorkloadName, opts.ProjectID),
+			url:  fmt.Sprintf("https://console.cloud.google.com/kubernetes/service/%s/%s/%s/%s/details?project=%s", opts.ClusterLocation, opts.ClusterName, workloadNamespace, opts.WorkloadName, opts.ProjectID),
 		}
 		links = append(links, workloadLink)
 	}

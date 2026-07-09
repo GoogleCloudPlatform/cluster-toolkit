@@ -65,6 +65,7 @@ func TestInspectCluster_Success(t *testing.T) {
 	mockExec := NewMockExecutor(responses)
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = project
+	orc.kubeClient = &MockKubeClient{Namespace: "custom-namespace"}
 
 	opts := orchestrator.InspectOptions{
 		ProjectID:       project,
@@ -111,6 +112,7 @@ func TestInspectCluster_Success(t *testing.T) {
 		"jobset-config",
 		"Cloud Console Links",
 		"https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/test-cluster-success/details?project=test-project",
+		"https://console.cloud.google.com/kubernetes/service/us-central1-a/test-cluster-success/custom-namespace/test-workload/details?project=test-project",
 	}
 
 	for _, sub := range expectedSubstrings {
