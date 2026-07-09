@@ -275,18 +275,12 @@ class AutoScaler:
                 f'regexp(".*/{self.instance_group_manager}$", CloudCreatedBy)'
         )
 
-        # classad v2: 
         filter_mig_str = f"regexp(\".*/{self.instance_group_manager}$\", CloudCreatedBy)"
         filter_claimed_vms_str = "PartitionableSlot && NumDynamicSlots>0"
 
         # A full list of Machine (StartD) ClassAd attributes can be found at
         # https://htcondor.readthedocs.io/en/latest/classad-attributes/machine-classad-attributes.html
-        # classad v1:
-        # idle_node_ads = coll.query(htcondor.AdTypes.Startd,
-        #    constraint=filter_idle_vms.and_(filter_mig),
-        #    projection=["Machine", "CloudZone"])
 
-        # classad v2
         idle_node_ads = coll.query(
             ad_type=htcondor.AdTypes.Startd,
             constraint=combined_node_query,
