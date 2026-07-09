@@ -95,8 +95,10 @@ set -x
 
 echo "Building image ${IMAGE}:${VERSION}"
 
-SCRIPT_DIR=$(dirname "$0")
-ROOT_DIR="${SCRIPT_DIR}/../.."
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+echo "Vendoring Go dependencies..."
+(cd "${SCRIPT_DIR}" && go mod vendor)
 
 docker buildx build --platform linux/amd64,linux/arm64 \
 	-t "${REMOTE_DESTINATION}:${VERSION}" \

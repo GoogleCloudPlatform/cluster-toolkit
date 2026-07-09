@@ -1,4 +1,4 @@
-module github.com/NVIDIA/dcgm-healthcheck
+module community/cluster-health-check
 
 go 1.25.0
 

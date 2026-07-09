@@ -1,3 +1,17 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -8,11 +22,13 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -52,21 +68,36 @@ func main() {
 	checkInterval := flag.Duration("check-interval", 5*time.Minute, "Interval between health checks")
 	flag.Parse()
 
+	// Wire SIGINT/SIGTERM to ctx so shutdown is cooperative — the informer
+	// stops, subprocesses started with CommandContext get killed, and the
+	// main select returns cleanly.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	log.Println("Starting nv-hostengine...")
-	hostEngine := exec.Command("nv-hostengine", "-n")
+	hostEngine := exec.CommandContext(ctx, "nv-hostengine", "-n")
 	if err := hostEngine.Start(); err != nil {
 		log.Fatalf("Failed to start nv-hostengine: %v", err)
 	}
 
 	go func() {
 		err := hostEngine.Wait()
+		if ctx.Err() != nil {
+			log.Printf("nv-hostengine exited during shutdown: %v", err)
+			return
+		}
 		log.Fatalf("nv-hostengine exited unexpectedly: %v", err)
 	}()
 
-	time.Sleep(5 * time.Second)
+	if err := waitForHostEngine(ctx, 30*time.Second); err != nil {
+		log.Fatalf("nv-hostengine not ready: %v", err)
+	}
 
 	log.Println("Setting all health watches via dcgmi...")
-	if err := exec.Command("dcgmi", "health", "-s", "a").Run(); err != nil {
+	setupCtx, setupCancel := context.WithTimeout(ctx, 30*time.Second)
+	err := exec.CommandContext(setupCtx, "dcgmi", "health", "-s", "a").Run()
+	setupCancel()
+	if err != nil {
 		log.Fatalf("Failed to set health watches: %v", err)
 	}
 
@@ -86,9 +117,6 @@ func main() {
 	nodeInformer := factory.Core().V1().Nodes()
 	informer := nodeInformer.Informer()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	log.Println("Starting Node informer cache...")
 	factory.Start(ctx.Done())
 	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
@@ -99,11 +127,11 @@ func main() {
 	defer ticker.Stop()
 
 	log.Printf("Starting health check loop for node %s", nodeName)
-	runHealthCheck(clientset, nodeInformer.Lister(), nodeName, true)
+	runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName)
 	for {
 		select {
 		case <-ticker.C:
-			runHealthCheck(clientset, nodeInformer.Lister(), nodeName, false)
+			runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName)
 		case <-ctx.Done():
 			log.Println("Shutting down...")
 			return
@@ -111,13 +139,39 @@ func main() {
 	}
 }
 
+// waitForHostEngine polls dcgmi discovery until nv-hostengine responds, or
+// timeout elapses. This replaces a blind time.Sleep — slow-boot nodes fail
+// on 5s but usually succeed within 10-15s.
+func waitForHostEngine(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		probeCtx, probeCancel := context.WithTimeout(ctx, 5*time.Second)
+		err := exec.CommandContext(probeCtx, "dcgmi", "discovery", "-l").Run()
+		probeCancel()
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for nv-hostengine: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+}
+
 func getFatalXids() map[int]struct{} {
-	fatalXids := make(map[int]struct{})
 	data, err := os.ReadFile("/etc/dcgm-healthcheck/fatal-xids")
 	if err != nil {
-		return fatalXids
+		return make(map[int]struct{})
 	}
+	return parseFatalXids(data)
+}
 
+func parseFatalXids(data []byte) map[int]struct{} {
+	fatalXids := make(map[int]struct{})
 	for _, xidStr := range strings.Split(string(data), ",") {
 		xidStr = strings.TrimSpace(xidStr)
 		if xidStr == "" {
@@ -130,8 +184,8 @@ func getFatalXids() map[int]struct{} {
 	return fatalXids
 }
 
-func runHealthCheck(clientset *kubernetes.Clientset, nodeLister corev1listers.NodeLister, nodeName string, isFirstRun bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, nodeLister corev1listers.NodeLister, nodeName string) {
+	ctx, cancel := context.WithTimeout(mainCtx, 5*time.Minute)
 	defer cancel()
 
 	var errorMessages []string
@@ -144,59 +198,28 @@ func runHealthCheck(clientset *kubernetes.Clientset, nodeLister corev1listers.No
 
 	fatalXids := getFatalXids()
 
-	// 1. Passive Test: DCGMI Health
-	if sev, err := runDcgmiHealth(ctx); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, fmt.Sprintf("dcgmi health failed: %v", err))
+	passiveChecks := []struct {
+		name string
+		fn   func(context.Context) (string, error)
+	}{
+		{"dcgmi health", runDcgmiHealth},
+		// {"NIC heartbeat", checkNICHeartbeat},
+		{"XID/SXID monitoring", func(c context.Context) (string, error) { return checkKernelLogsForXidSxid(c, fatalXids) }},
+		{"ECC errors", checkECCErrors},
+		{"PCIe link health", checkPCIe},
+		{"InfiniBand links", checkIB},
+		{"GPU temperature", checkTemperature},
+		// {"HCA Firmware", checkHCAFW},
+		// {"GPU Power draw", checkPower},
 	}
-
-	// 2. Passive Test: NIC Heartbeat (ibv_devinfo check port state)
-	if sev, err := checkNICHeartbeat(ctx); err != nil {
+	for _, chk := range passiveChecks {
+		sev, err := chk.fn(ctx)
+		if err == nil {
+			continue
+		}
 		updateSeverity(sev)
-		errorMessages = append(errorMessages, fmt.Sprintf("NIC heartbeat failed: %v", err))
+		errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", chk.name, err))
 	}
-
-	// 3. Passive Test: HCA FW monitoring
-	// if sev, err := checkHCAFW(ctx); err != nil {
-	// 	updateSeverity(sev)
-	// 	errorMessages = append(errorMessages, fmt.Sprintf("HCA FW check failed: %v", err))
-	// }
-
-	// 4. Passive Test: XID / SXID monitoring
-	if sev, err := checkKernelLogsForXidSxid(ctx, fatalXids); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	// 5. Passive Test: ECC Errors
-	if sev, err := checkECCErrors(ctx); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	// 6. Passive Test: PCIe Link Health
-	if sev, err := checkPCIe(ctx); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	// 7. Passive Test: InfiniBand Links
-	if sev, err := checkIB(ctx); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	// 8. Passive Test: GPU Temperature
-	if sev, err := checkTemperature(ctx); err != nil {
-		updateSeverity(sev)
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	// 9. Passive Test: GPU Power and Utilization
-	// if sev, err := checkPower(ctx); err != nil {
-	// 	updateSeverity(sev)
-	// 	errorMessages = append(errorMessages, err.Error())
-	// }
 
 	node, err := nodeLister.Get(nodeName)
 	if err != nil {
@@ -205,51 +228,57 @@ func runHealthCheck(clientset *kubernetes.Clientset, nodeLister corev1listers.No
 	}
 
 	hasIssue := false
-	var currentMessage string
+	conditionExists := false
 	var currentReason string
 	for _, condition := range node.Status.Conditions {
 		if condition.Type == corev1.NodeConditionType(ConditionTypeGPUUnhealthy) {
+			conditionExists = true
 			if condition.Status == corev1.ConditionTrue {
 				hasIssue = true
 			}
-			currentMessage = condition.Message
-			currentReason = condition.Reason
+			currentReason = string(condition.Reason)
 			break
 		}
 	}
 
-	hasStatus := false
-	if node.Labels != nil {
-		_, hasStatus = node.Labels[LabelHealthStatus]
-	}
+	_, hasStatus := node.Labels[LabelHealthStatus]
 
 	if len(errorMessages) == 0 {
-		if currentReason != string(ReasonActiveTestFailed) && (hasIssue || currentMessage != "Node is healthy" || hasStatus) {
+		if currentReason != string(ReasonActiveTestFailed) && (conditionExists || hasStatus) {
 			log.Println("Node is now healthy from passive checks. Ensuring condition/labels are cleared.")
-			clearNodeHealth(ctx, clientset, nodeName)
+			clearNodeHealth(ctx, clientset, nodeName, conditionExists, hasStatus)
 		}
-	} else {
-		desiredMessage := strings.Join(errorMessages, " | ")
-		log.Printf("Passive checks failed: %s", desiredMessage)
-		currentStatus := ""
-		if hasStatus {
-			currentStatus = node.Labels[LabelHealthStatus]
-		}
-
-		if hasIssue && currentReason == string(ReasonActiveTestFailed) {
-			log.Printf("Passive checks failed but node has active test failure. Preserving active failure.")
-		} else if !hasIssue || currentMessage != desiredMessage || currentStatus != highestSeverity {
-			log.Printf("Node is in warning state. Updating API...")
-			updateNodeHealth(ctx, clientset, node, ReasonHealthCheckFailed, highestSeverity, desiredMessage)
-		}
+		return
 	}
+
+	desiredMessage := strings.Join(errorMessages, " | ")
+	log.Printf("Passive checks failed: %s", desiredMessage)
+
+	// When the node already carries an active-test-failed reason, keep
+	// that reason (which has precedence) but still surface the passive
+	// severity/message via mergeMessage inside updateNodeHealth.
+	reason := ReasonHealthCheckFailed
+	if hasIssue && currentReason == string(ReasonActiveTestFailed) {
+		reason = ReasonActiveTestFailed
+	}
+
+	updateNodeHealth(ctx, clientset, node, reason, highestSeverity, desiredMessage)
 }
 
 func extractOverflowMessages(v interface{}) []string {
 	var messages []string
 	switch val := v.(type) {
 	case map[string]interface{}:
-		for k, child := range val {
+		// Sort keys so identical dcgmi output produces an identical joined
+		// message across ticks — otherwise randomized map iteration order
+		// causes constant Node PATCH churn.
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			child := val[k]
 			if k == "overflow" {
 				if arr, ok := child.([]interface{}); ok {
 					var parts []string
@@ -349,7 +378,7 @@ func checkNICHeartbeat(ctx context.Context) (string, error) {
 }
 
 func checkHCAFW(ctx context.Context) (string, error) {
-	out, err := exec.Command("dmesg").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "dmesg").CombinedOutput()
 	if err != nil {
 		log.Printf("Cannot run dmesg for HCA FW monitoring: %v", err)
 		return "", nil
@@ -419,45 +448,109 @@ func mergeMessage(oldMsg, newMsg string) string {
 	return strings.Join(segments, " | ")
 }
 
+// The patch shapes are declared as typed structs and marshaled with
+// json.Marshal so that user-derived strings (dmesg lines, dcgmi output) are
+// escaped by the standard JSON encoder rather than fmt %q — Go's %q emits
+// invalid JSON escapes (\a, \v, \xHH) for control bytes.
+
+type nodeStatusPatch struct {
+	Status struct {
+		Conditions []corev1.NodeCondition `json:"conditions"`
+	} `json:"status"`
+}
+
+type nodeLabelsPatch struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+}
+
+type nodeLabelsClearPatch struct {
+	Metadata struct {
+		Labels map[string]interface{} `json:"labels"`
+	} `json:"metadata"`
+}
+
+type nodeConditionDeletePatch struct {
+	Status struct {
+		Conditions []map[string]interface{} `json:"conditions"`
+	} `json:"status"`
+}
+
 func updateNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, node *corev1.Node, reason GPUUnhealthyReason, status, details string) {
-	now := time.Now().Format(time.RFC3339)
 	nodeName := node.Name
 
 	oldStatus := ""
 	oldMsg := ""
 	oldReason := ""
-	if node.Labels != nil {
-		if val, ok := node.Labels[LabelHealthStatus]; ok {
-			oldStatus = val
-		}
+	oldCondStatus := corev1.ConditionUnknown
+	var oldTransitionTime time.Time
+	if val, ok := node.Labels[LabelHealthStatus]; ok {
+		oldStatus = val
 	}
 	for _, cond := range node.Status.Conditions {
 		if cond.Type == corev1.NodeConditionType(ConditionTypeGPUUnhealthy) {
 			oldMsg = cond.Message
 			oldReason = string(cond.Reason)
+			oldCondStatus = cond.Status
+			oldTransitionTime = cond.LastTransitionTime.Time
 			break
 		}
 	}
 
 	finalStatus := mergeStatus(oldStatus, status)
-	finalMsg := details
-	if oldReason != "" && oldReason != string(reason) {
+
+	// Replace the message only when the current condition is a
+	// same-reason passive re-report (rotating passive failures should
+	// not accumulate). Otherwise merge — either the reason is transitioning
+	// (preserve prior signal) or we're accumulating active-test context.
+	var finalMsg string
+	if oldReason != "" && !(oldReason == string(reason) && reason == ReasonHealthCheckFailed) {
 		finalMsg = mergeMessage(oldMsg, details)
+	} else {
+		finalMsg = details
 	}
 
-	// 1. Patch Status Conditions
-	statusPatch := fmt.Sprintf(`{"status":{"conditions":[{"type":"%s","status":"True","reason":"%s","message":%q,"lastTransitionTime":"%s"}]}}`,
-		ConditionTypeGPUUnhealthy, reason, finalMsg, now)
-	_, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, []byte(statusPatch), metav1.PatchOptions{}, "status")
+	// No-op if the node already reflects the intended state — otherwise we
+	// would rewrite lastTransitionTime every tick and thrash the API server.
+	if oldCondStatus == corev1.ConditionTrue &&
+		oldReason == string(reason) &&
+		oldMsg == finalMsg &&
+		oldStatus == finalStatus {
+		return
+	}
+
+	// Only advance lastTransitionTime when the Status field is actually transitioning
+	transitionTime := time.Now()
+	if oldCondStatus == corev1.ConditionTrue {
+		transitionTime = oldTransitionTime
+	}
+
+	var condPatch nodeStatusPatch
+	condPatch.Status.Conditions = []corev1.NodeCondition{{
+		Type:               corev1.NodeConditionType(ConditionTypeGPUUnhealthy),
+		Status:             corev1.ConditionTrue,
+		Reason:             string(reason),
+		Message:            finalMsg,
+		LastTransitionTime: metav1.Time{Time: transitionTime},
+	}}
+	statusPatchBytes, err := json.Marshal(condPatch)
 	if err != nil {
+		log.Printf("Error building status patch for %s: %v", nodeName, err)
+		return
+	}
+	if _, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, statusPatchBytes, metav1.PatchOptions{}, "status"); err != nil {
 		log.Printf("Error patching node status %s: %v", nodeName, err)
 	}
 
-	// 2. Patch Metadata Labels
-	metadataPatch := fmt.Sprintf(`{"metadata":{"labels":{"%s":"%s"}}}`,
-		LabelHealthStatus, finalStatus)
-	_, err = clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, []byte(metadataPatch), metav1.PatchOptions{})
+	var labelsPatch nodeLabelsPatch
+	labelsPatch.Metadata.Labels = map[string]string{LabelHealthStatus: finalStatus}
+	labelsPatchBytes, err := json.Marshal(labelsPatch)
 	if err != nil {
+		log.Printf("Error building metadata patch for %s: %v", nodeName, err)
+		return
+	}
+	if _, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, labelsPatchBytes, metav1.PatchOptions{}); err != nil {
 		log.Printf("Error patching node metadata %s: %v", nodeName, err)
 	} else {
 		log.Printf("Successfully updated node %s with status %s", nodeName, finalStatus)
@@ -467,7 +560,7 @@ func updateNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, node
 var xidRegex = regexp.MustCompile(`(?i)(?:xid|sxid)(?:\s*\(.*?\))?:\s*(\d+)`)
 
 func checkKernelLogsForXidSxid(ctx context.Context, fatalXids map[int]struct{}) (string, error) {
-	out, err := exec.Command("dmesg").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "dmesg").CombinedOutput()
 	if err != nil {
 		log.Printf("Cannot run dmesg for kernel log monitoring: %v", err)
 		return "", nil
@@ -521,7 +614,7 @@ func nvidiaSmiPath() string {
 func checkECCErrors(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=ecc.errors.corrected.volatile.total,ecc.errors.uncorrected.volatile.total", "--format=csv,noheader,nounits").CombinedOutput()
 	if err != nil {
-		return "", nil // skip if nvidia-smi is unavailable or fails
+		return SeverityWarning, fmt.Errorf("nvidia-smi ecc query failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	for i, line := range lines {
@@ -537,17 +630,21 @@ func checkECCErrors(ctx context.Context) (string, error) {
 }
 
 func checkPCIe(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=pcie.link.gen.current,pcie.link.width.current", "--format=csv,noheader,nounits").CombinedOutput()
+	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=pcie.link.width.current,pcie.link.width.max", "--format=csv,noheader,nounits").CombinedOutput()
 	if err != nil {
-		return "", nil
+		return SeverityWarning, fmt.Errorf("nvidia-smi pcie query failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	for i, line := range lines {
 		parts := strings.Split(line, ",")
 		if len(parts) >= 2 {
-			width, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-			if width > 0 && width < 16 {
-				return SeverityWarning, fmt.Errorf("PCIe link width degraded on GPU %d: %d", i, width)
+			width, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+			maxWidth, errMax := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if errMax != nil || maxWidth <= 0 {
+				maxWidth = 16 // fallback
+			}
+			if width > 0 && width < maxWidth {
+				return SeverityWarning, fmt.Errorf("PCIe link width degraded on GPU %d: %d (expected %d)", i, width, maxWidth)
 			}
 		}
 	}
@@ -571,15 +668,29 @@ func checkIB(ctx context.Context) (string, error) {
 }
 
 func checkTemperature(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits").CombinedOutput()
+	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=temperature.gpu,temperature.gpu.tlimit", "--format=csv,noheader,nounits").CombinedOutput()
 	if err != nil {
-		return "", nil
+		return SeverityWarning, fmt.Errorf("nvidia-smi temperature query failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	for i, line := range lines {
-		temp, err := strconv.Atoi(strings.TrimSpace(line))
-		if err == nil && temp > 90 {
-			return SeverityWarning, fmt.Errorf("GPU %d temperature too high: %d C", i, temp)
+		parts := strings.Split(line, ",")
+		if len(parts) >= 2 {
+			tempStr := strings.TrimSpace(parts[0])
+			limitStr := strings.TrimSpace(parts[1])
+
+			countdown, err := strconv.Atoi(limitStr)
+			if err == nil {
+				if countdown <= 0 {
+					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: current is %s degree which is %d degrees over target temprature", i, tempStr, -countdown)
+				}
+			} else {
+				// Fallback to absolute temperature check if countdown is not supported
+				temp, errTemp := strconv.Atoi(tempStr)
+				if errTemp == nil && temp >= 90 {
+					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: %d C >= 90 C", i, temp)
+				}
+			}
 		}
 	}
 	return "", nil
@@ -588,7 +699,7 @@ func checkTemperature(ctx context.Context) (string, error) {
 func checkPower(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, nvidiaSmiPath(), "--query-gpu=power.draw", "--format=csv,noheader,nounits").CombinedOutput()
 	if err != nil {
-		return "", nil
+		return SeverityWarning, fmt.Errorf("nvidia-smi power query failed: %v: %s", err, strings.TrimSpace(string(out)))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	for i, line := range lines {
@@ -600,19 +711,28 @@ func checkPower(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-func clearNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, nodeName string) {
-	// 1. Patch Status Conditions (Delete the condition)
-	statusPatch := fmt.Sprintf(`{"status":{"conditions":[{"type":"%s","$patch":"delete"}]}}`, ConditionTypeGPUUnhealthy)
-	_, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, []byte(statusPatch), metav1.PatchOptions{}, "status")
-	if err != nil {
-		log.Printf("Error deleting node status condition %s: %v", nodeName, err)
+func clearNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, nodeName string, clearCondition, clearLabel bool) {
+	if clearCondition {
+		var condPatch nodeConditionDeletePatch
+		condPatch.Status.Conditions = []map[string]interface{}{
+			{"type": ConditionTypeGPUUnhealthy, "$patch": "delete"},
+		}
+		patchBytes, err := json.Marshal(condPatch)
+		if err != nil {
+			log.Printf("Error building status delete patch for %s: %v", nodeName, err)
+		} else if _, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status"); err != nil {
+			log.Printf("Error deleting node status condition %s: %v", nodeName, err)
+		}
 	}
 
-	// 2. Clear Metadata Labels
-	metadataPatch := fmt.Sprintf(`{"metadata":{"labels":{"%s":null}}}`,
-		LabelHealthStatus)
-	_, err = clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, []byte(metadataPatch), metav1.PatchOptions{})
-	if err != nil {
-		log.Printf("Info: Attempted to clear health labels on node %s: %v", nodeName, err)
+	if clearLabel {
+		var labelsPatch nodeLabelsClearPatch
+		labelsPatch.Metadata.Labels = map[string]interface{}{LabelHealthStatus: nil}
+		patchBytes, err := json.Marshal(labelsPatch)
+		if err != nil {
+			log.Printf("Error building metadata clear patch for %s: %v", nodeName, err)
+		} else if _, err := clientset.CoreV1().Nodes().Patch(ctx, nodeName, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
+			log.Printf("Info: Attempted to clear health labels on node %s: %v", nodeName, err)
+		}
 	}
 }
