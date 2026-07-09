@@ -50,9 +50,16 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 }
 
 func TestInspectCluster_Success(t *testing.T) {
-	clusterName := "test-cluster"
+	clusterName := "test-cluster-success"
 	location := "us-central1-a"
 	project := "test-project"
+
+	t.Cleanup(func() {
+		files, _ := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
+		for _, f := range files {
+			_ = os.Remove(f)
+		}
+	})
 
 	responses := defaultMockResponses(clusterName, location, project)
 	mockExec := NewMockExecutor(responses)
@@ -73,7 +80,7 @@ func TestInspectCluster_Success(t *testing.T) {
 	}
 
 	// Verify log file was created
-	files, err := filepath.Glob("gcluster-inspect-test-cluster-*.log")
+	files, err := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
 	if err != nil {
 		t.Fatalf("failed to glob log files: %v", err)
 	}
@@ -81,9 +88,6 @@ func TestInspectCluster_Success(t *testing.T) {
 		t.Fatalf("expected 1 log file, found %d", len(files))
 	}
 	logFile := files[0]
-	defer func() {
-		_ = os.Remove(logFile)
-	}() // Cleanup
 
 	contentBytes, err := os.ReadFile(logFile)
 	if err != nil {
@@ -106,7 +110,7 @@ func TestInspectCluster_Success(t *testing.T) {
 		"JobSet: Config for test-workload",
 		"jobset-config",
 		"Cloud Console Links",
-		"https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/test-cluster/details?project=test-project",
+		"https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/test-cluster-success/details?project=test-project",
 	}
 
 	for _, sub := range expectedSubstrings {
@@ -117,9 +121,16 @@ func TestInspectCluster_Success(t *testing.T) {
 }
 
 func TestInspectCluster_CommandFailure(t *testing.T) {
-	clusterName := "test-cluster"
+	clusterName := "test-cluster-failure"
 	location := "us-central1-a"
 	project := "test-project"
+
+	t.Cleanup(func() {
+		files, _ := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
+		for _, f := range files {
+			_ = os.Remove(f)
+		}
+	})
 
 	responses := defaultMockResponses(clusterName, location, project)
 	// Make describe cluster fail
@@ -144,14 +155,11 @@ func TestInspectCluster_CommandFailure(t *testing.T) {
 		t.Fatalf("InspectCluster failed: %v", err)
 	}
 
-	files, err := filepath.Glob("gcluster-inspect-test-cluster-*.log")
+	files, err := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
 	if err != nil || len(files) != 1 {
 		t.Fatalf("expected 1 log file")
 	}
 	logFile := files[0]
-	defer func() {
-		_ = os.Remove(logFile)
-	}()
 
 	contentBytes, _ := os.ReadFile(logFile)
 	content := string(contentBytes)
