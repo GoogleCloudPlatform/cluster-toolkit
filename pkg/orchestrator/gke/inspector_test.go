@@ -112,7 +112,7 @@ func TestInspectCluster_Success(t *testing.T) {
 		"jobset-config",
 		"Cloud Console Links",
 		"https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/test-cluster-success/details?project=test-project",
-		"https://console.cloud.google.com/kubernetes/service/us-central1-a/test-cluster-success/custom-namespace/test-workload/details?project=test-project",
+		"https://console.cloud.google.com/kubernetes/workload/details/us-central1-a/test-cluster-success/custom-namespace/test-workload?project=test-project",
 	}
 
 	for _, sub := range expectedSubstrings {

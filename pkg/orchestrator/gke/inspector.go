@@ -281,7 +281,7 @@ func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadName
 			url  string
 		}{
 			desc: fmt.Sprintf("Cloud Console for workload %s", opts.WorkloadName),
-			url:  fmt.Sprintf("https://console.cloud.google.com/kubernetes/service/%s/%s/%s/%s/details?project=%s", opts.ClusterLocation, opts.ClusterName, workloadNamespace, opts.WorkloadName, opts.ProjectID),
+			url:  fmt.Sprintf("https://console.cloud.google.com/kubernetes/workload/details/%s/%s/%s/%s?project=%s", opts.ClusterLocation, opts.ClusterName, workloadNamespace, opts.WorkloadName, opts.ProjectID),
 		}
 		links = append(links, workloadLink)
 	}
