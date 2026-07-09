@@ -52,7 +52,7 @@ def cleanup_bucket(project_id: str, bucket_name: str, days_to_keep: int):
             if blob.name in PROTECTED_FILES:
                 continue
                 
-            if blob.time_created < cutoff_date:
+            if blob.time_created and blob.time_created < cutoff_date:
                 try:
                     print(f"Deleting: {blob.name}")
                     blob.delete()
