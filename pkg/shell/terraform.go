@@ -298,7 +298,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 		return err
 	}
 	defer os.Remove(f.Name())
-	wantsChange, err := planWithGkeRecovery(tf, f.Name(), destroy)
+	wantsChange, err := planModule(tf, f.Name(), destroy)
 	if err != nil {
 		return err
 	}
@@ -329,21 +329,6 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 	}
 
 	return nil
-}
-
-func planWithGkeRecovery(tf *tfexec.Terraform, planPath string, destroy bool) (bool, error) {
-	wantsChange, err := planModule(tf, planPath, destroy)
-	if err != nil {
-		if destroy && IsKubernetesUnreachableError(err) {
-			logging.Warn("GKE cluster is unreachable during destroy. Attempting to remove Kubernetes-related resources from state and retrying.")
-			if rmErr := RemoveKubernetesResourcesFromState(tf); rmErr != nil {
-				return false, fmt.Errorf("failed to clean unreachable Kubernetes resources from state: %w (original error: %v)", rmErr, err)
-			}
-			return planModule(tf, planPath, destroy)
-		}
-		return false, err
-	}
-	return wantsChange, nil
 }
 
 func getOutputs(tf *tfexec.Terraform, b ApplyBehavior, o OutputFormat) (map[string]cty.Value, error) {
@@ -519,16 +504,19 @@ func TfVersion() (string, error) {
 	return version.TerraformVersion, nil
 }
 
+var dialLoopbackRegex = regexp.MustCompile(`dial tcp (?:127\.0\.0\.1|\[::1\]|localhost):[0-9]+`)
+
 // IsKubernetesUnreachableError returns true if the error indicates GKE is unreachable
 func IsKubernetesUnreachableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "dial tcp [::1]:80") ||
-		strings.Contains(msg, "Kubernetes cluster unreachable") ||
+	// Convert to lowercase to ensure case-insensitive matching
+	msg := strings.ToLower(err.Error())
+	return dialLoopbackRegex.MatchString(msg) ||
+		strings.Contains(msg, "kubernetes cluster unreachable") ||
 		strings.Contains(msg, "failed to create kubernetes rest client") ||
-		strings.Contains(msg, "no configuration has been provided, try setting KUBERNETES_MASTER")
+		strings.Contains(msg, "no configuration has been provided, try setting kubernetes_master")
 }
 
 // RemoveKubernetesResourcesFromState removes all kubernetes/helm/kubectl provider resources from the state

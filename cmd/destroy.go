@@ -200,9 +200,40 @@ func destroyTerraformGroup(groupDir string) error {
 		return err
 	}
 
-	// Always output text when destroying the cluster
-	// The current implementation outputs JSON only for the "deploy" command
-	return shell.Destroy(tf, getApplyBehavior(), shell.TextOutput)
+	err = shell.Destroy(tf, getApplyBehavior(), shell.TextOutput)
+	if err != nil {
+		if shell.IsKubernetesUnreachableError(err) {
+			if robustDestroy {
+				applyBehavior := getApplyBehavior()
+				forceDestroyApproved := false
+
+				if applyBehavior == shell.PromptBeforeApply {
+					promptMsg := "GKE cluster is unreachable. Do you want to force destroy the remaining infrastructure by removing GKE resources from the state? [y/n]: "
+					if confirmAction(promptMsg) {
+						forceDestroyApproved = true
+					} else {
+						return err
+					}
+				} else if applyBehavior == shell.AutomaticApply {
+					forceDestroyApproved = true
+				} else {
+					return err
+				}
+
+				if forceDestroyApproved {
+					logging.Warn("GKE cluster is unreachable during destroy. Attempting to remove Kubernetes-related resources from state and retrying.")
+					if rmErr := shell.RemoveKubernetesResourcesFromState(tf); rmErr != nil {
+						return fmt.Errorf("failed to clean unreachable Kubernetes resources from state: %w (original error: %v)", rmErr, err)
+					}
+					return shell.Destroy(tf, shell.AutomaticApply, shell.TextOutput)
+				}
+			} else {
+				return fmt.Errorf("GKE cluster is unreachable. You can attempt a robust destroy to force-clean the state by using the --robust flag (original error: %w)", err)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func confirmAction(prompt string) bool {
