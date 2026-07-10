@@ -54,8 +54,7 @@ get_approval_status() {
 #   $2: The JSON array of the PR's comments.
 #   $3: The PR's `createdAt` timestamp string (initial creation time).
 #   $4: The JSON array of the PR's latest reviews.
-#   $5: The JSON array of the PR's commits.
-#   $6: The PR's `updatedAt` timestamp string.
+#   $5: The PR's `updatedAt` timestamp string.
 # Outputs:
 #   Writes the timestamp of the latest activity to stdout.
 get_latest_activity_timestamp() {
@@ -63,8 +62,7 @@ get_latest_activity_timestamp() {
 	local comments_json=$2
 	local pr_created_at=$3
 	local latest_reviews_json=$4
-	local commits_json=$5
-	local updated_at=$6
+	local updated_at=$5
 
 	# Check if there are any bot reminders
 	local latest_bot_reminder_timestamp
@@ -129,16 +127,14 @@ get_latest_activity_timestamp() {
 
 		# Check latest commit activity
 		local latest_commit_updated_at
-		latest_commit_updated_at=$(echo "$commits_json" | jq -r '
-			map(select(.committedDate | type == "string")) |
-			map(.committedDate) |
-			max // null
-		')
-
-		if [[ -n "$latest_commit_updated_at" && "$latest_commit_updated_at" != "null" ]]; then
-			if [[ "$(date -d "$latest_human_activity_timestamp" +%s)" -lt "$(date -d "$latest_commit_updated_at" +%s)" ]]; then
-				latest_human_activity_timestamp="$latest_commit_updated_at"
+		if latest_commit_updated_at=$(gh pr view "$pr_number" --json commits --jq '.commits | map(select(.committedDate | type == "string")) | map(.committedDate) | max // null' 2>/dev/null); then
+			if [[ -n "$latest_commit_updated_at" && "$latest_commit_updated_at" != "null" ]]; then
+				if [[ "$(date -d "$latest_human_activity_timestamp" +%s)" -lt "$(date -d "$latest_commit_updated_at" +%s)" ]]; then
+					latest_human_activity_timestamp="$latest_commit_updated_at"
+				fi
 			fi
+		else
+			echo "Warning: Failed to fetch commits for PR #${pr_number}." >&2
 		fi
 	fi
 
@@ -195,8 +191,6 @@ process_pr() {
 	comments_json=$(echo "$pr_json" | jq -c '.comments')
 	local latest_reviews_json
 	latest_reviews_json=$(echo "$pr_json" | jq -c '.latestReviews')
-	local commits_json
-	commits_json=$(echo "$pr_json" | jq -c '.commits')
 
 	echo "---"
 	echo "Checking PR #${pr_number}"
@@ -204,7 +198,7 @@ process_pr() {
 	approval_status_code=$(get_approval_status "$pr_number" "$pr_json")
 
 	local latest_activity_timestamp
-	latest_activity_timestamp=$(get_latest_activity_timestamp "$pr_number" "$comments_json" "$created_at" "$latest_reviews_json" "$commits_json" "$updated_at")
+	latest_activity_timestamp=$(get_latest_activity_timestamp "$pr_number" "$comments_json" "$created_at" "$latest_reviews_json" "$updated_at")
 
 	local updated_at_seconds now_seconds inactive_seconds inactive_days
 	updated_at_seconds=$(date -d "$latest_activity_timestamp" +%s)
@@ -253,7 +247,7 @@ main() {
 
 	while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
 		echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
-		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,commits); then
+		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt); then
 			break
 		fi
 
