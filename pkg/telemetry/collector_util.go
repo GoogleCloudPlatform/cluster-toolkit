@@ -337,7 +337,7 @@ func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
-				return strings.ReplaceAll(v.AsString(), "\"", "")
+return strings.Trim(v.AsString(), "\"")
 			}
 		}
 	}
