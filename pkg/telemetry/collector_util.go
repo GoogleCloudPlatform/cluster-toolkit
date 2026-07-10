@@ -155,7 +155,7 @@ return strings.Trim(t, "\"")
 	}
 	// 2. If no explicit setting, try defaults
 	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
-		return strings.ReplaceAll(t, "\"", "")
+return strings.Trim(t, "\"")
 	}
 
 	return ""
