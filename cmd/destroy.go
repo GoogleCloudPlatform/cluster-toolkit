@@ -59,9 +59,13 @@ var (
 )
 
 var (
-	destroyGroupsFunc         = destroyGroups
-	cleanupFirewallRulesFunc  = cleanupFirewallRules
-	destroyTerraformGroupFunc = destroyTerraformGroup
+	destroyGroupsFunc                           = destroyGroups
+	cleanupFirewallRulesFunc                    = cleanupFirewallRules
+	destroyTerraformGroupFunc                   = destroyTerraformGroup
+	shellDestroyFunc                            = shell.Destroy
+	shellRemoveKubernetesResourcesFromStateFunc = shell.RemoveKubernetesResourcesFromState
+	confirmActionFunc                           = confirmAction
+	abortDestroyRetries                         = false
 )
 
 func runDestroyCmd(cmd *cobra.Command, args []string) {
@@ -80,6 +84,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 }
 
 func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) {
+	abortDestroyRetries = false
 	maxRetries := 1
 	if robustDestroy {
 		maxRetries = 3
@@ -94,6 +99,10 @@ func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 			logging.Info("Successfully destroyed all selected groups.")
 			modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)
 			return // Exit runDestroyCmd successfully
+		}
+
+		if abortDestroyRetries {
+			logging.Fatal("Destruction of %q failed: user declined state cleanup", deplRoot)
 		}
 
 		if attempt == maxRetries {
@@ -200,7 +209,7 @@ func destroyTerraformGroup(groupDir string) error {
 		return err
 	}
 
-	err = shell.Destroy(tf, getApplyBehavior(), shell.TextOutput)
+	err = shellDestroyFunc(tf, getApplyBehavior(), shell.TextOutput)
 	if err != nil {
 		if shell.IsKubernetesUnreachableError(err) {
 			if robustDestroy {
@@ -209,9 +218,10 @@ func destroyTerraformGroup(groupDir string) error {
 
 				if applyBehavior == shell.PromptBeforeApply {
 					promptMsg := "GKE cluster is unreachable. Do you want to force destroy the remaining infrastructure by removing GKE resources from the state? [y/n]: "
-					if confirmAction(promptMsg) {
+					if confirmActionFunc(promptMsg) {
 						forceDestroyApproved = true
 					} else {
+						abortDestroyRetries = true
 						return err
 					}
 				} else if applyBehavior == shell.AutomaticApply {
@@ -222,10 +232,10 @@ func destroyTerraformGroup(groupDir string) error {
 
 				if forceDestroyApproved {
 					logging.Warn("GKE cluster is unreachable during destroy. Attempting to remove Kubernetes-related resources from state and retrying.")
-					if rmErr := shell.RemoveKubernetesResourcesFromState(tf); rmErr != nil {
+					if rmErr := shellRemoveKubernetesResourcesFromStateFunc(tf); rmErr != nil {
 						return fmt.Errorf("failed to clean unreachable Kubernetes resources from state: %w (original error: %v)", rmErr, err)
 					}
-					return shell.Destroy(tf, shell.AutomaticApply, shell.TextOutput)
+					return shellDestroyFunc(tf, shell.AutomaticApply, shell.TextOutput)
 				}
 			} else {
 				return fmt.Errorf("GKE cluster is unreachable. You can attempt a robust destroy to force-clean the state by using the --robust flag (original error: %w)", err)

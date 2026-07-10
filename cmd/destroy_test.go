@@ -15,13 +15,16 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
 	compute "google.golang.org/api/compute/v1"
 )
@@ -87,6 +90,7 @@ func TestRunDestroyCmd(t *testing.T) {
 		robust        bool
 		autoApprove   bool
 		destroyFailed bool
+		abortRetries  bool
 		expectFatal   bool
 	}{
 		{
@@ -124,12 +128,23 @@ func TestRunDestroyCmd(t *testing.T) {
 			destroyFailed: true,
 			expectFatal:   true,
 		},
+		{
+			name:          "robust, destroy failed, user aborted (declined GKE cleanup)",
+			robust:        true,
+			autoApprove:   false,
+			destroyFailed: true,
+			abortRetries:  true,
+			expectFatal:   true,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Mock destroyGroups to control its behavior
+			destroyGroupsCallCount := 0
 			destroyGroupsFunc = func(_ string, _ string, _ config.Blueprint, _ *config.YamlCtx) (bool, []string) {
+				destroyGroupsCallCount++
+				abortDestroyRetries = tc.abortRetries
 				return tc.destroyFailed, []string{}
 			}
 
@@ -174,6 +189,15 @@ func TestRunDestroyCmd(t *testing.T) {
 					if tc.expectFatal {
 						t.Errorf("runDestroyCmd() did not panic when it should have.")
 					}
+				}
+
+				// Assert call count
+				expectedCalls := 1
+				if tc.robust && tc.destroyFailed && !tc.abortRetries {
+					expectedCalls = 3
+				}
+				if destroyGroupsCallCount != expectedCalls {
+					t.Errorf("destroyGroupsCallCount = %d, expected %d", destroyGroupsCallCount, expectedCalls)
 				}
 			}()
 
@@ -376,5 +400,143 @@ func TestFilterString(t *testing.T) {
 
 	if actualFilter != expectedFilter {
 		t.Errorf("Filter string mismatch: got %q, want %q", actualFilter, expectedFilter)
+	}
+}
+
+type unreachableGKETestCase struct {
+	robust              bool
+	autoApprove         bool
+	confirmValue        bool
+	destroyErr          error
+	expectCleanupCalled bool
+	expectSecondDestroy bool
+	expectErr           bool
+}
+
+func TestDestroyTerraformGroupUnreachableGKE(t *testing.T) {
+	// Setup mocks and restore afterward
+	originalRobustDestroy := robustDestroy
+	originalFlagAutoApprove := flagAutoApprove
+	originalShellDestroy := shellDestroyFunc
+	originalShellRemove := shellRemoveKubernetesResourcesFromStateFunc
+	originalConfirmAction := confirmActionFunc
+	defer func() {
+		robustDestroy = originalRobustDestroy
+		flagAutoApprove = originalFlagAutoApprove
+		shellDestroyFunc = originalShellDestroy
+		shellRemoveKubernetesResourcesFromStateFunc = originalShellRemove
+		confirmActionFunc = originalConfirmAction
+	}()
+
+	unreachableErr := errors.New("dial tcp [::1]:80: connect: connection refused")
+
+	testCases := []unreachableGKETestCase{
+		{
+			robust:              false,
+			autoApprove:         true,
+			confirmValue:        false,
+			destroyErr:          unreachableErr,
+			expectCleanupCalled: false,
+			expectSecondDestroy: false,
+			expectErr:           true,
+		},
+		{
+			robust:              true,
+			autoApprove:         true,
+			confirmValue:        false,
+			destroyErr:          unreachableErr,
+			expectCleanupCalled: true,
+			expectSecondDestroy: true,
+			expectErr:           false,
+		},
+		{
+			robust:              true,
+			autoApprove:         false,
+			confirmValue:        true,
+			destroyErr:          unreachableErr,
+			expectCleanupCalled: true,
+			expectSecondDestroy: true,
+			expectErr:           false,
+		},
+		{
+			robust:              true,
+			autoApprove:         false,
+			confirmValue:        false,
+			destroyErr:          unreachableErr,
+			expectCleanupCalled: false,
+			expectSecondDestroy: false,
+			expectErr:           true,
+		},
+		{
+			robust:              true,
+			autoApprove:         true,
+			confirmValue:        false,
+			destroyErr:          errors.New("some other error"),
+			expectCleanupCalled: false,
+			expectSecondDestroy: false,
+			expectErr:           true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("robust=%v,autoApprove=%v,confirm=%v,err=%v", tc.robust, tc.autoApprove, tc.confirmValue, tc.destroyErr), func(t *testing.T) {
+			runUnreachableGKETestCase(t, tc, unreachableErr)
+		})
+	}
+}
+
+func runUnreachableGKETestCase(t *testing.T, tc unreachableGKETestCase, unreachableErr error) {
+	cleanupCalled := false
+	shellRemoveKubernetesResourcesFromStateFunc = func(tf shell.TerraformCLI) error {
+		cleanupCalled = true
+		return nil
+	}
+
+	destroyCallCount := 0
+	shellDestroyFunc = func(tf *tfexec.Terraform, b shell.ApplyBehavior, o shell.OutputFormat) error {
+		destroyCallCount++
+		if destroyCallCount == 1 {
+			return tc.destroyErr
+		}
+		return nil // Second destroy succeeds
+	}
+
+	confirmCalled := false
+	confirmActionFunc = func(prompt string) bool {
+		confirmCalled = true
+		return tc.confirmValue
+	}
+
+	// We need a dummy directory to configure terraform
+	tmpDir, err := os.MkdirTemp("", "test-group-dir")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	err = destroyTerraformGroup(tmpDir)
+
+	if tc.expectErr && err == nil {
+		t.Errorf("expected error, got nil")
+	}
+	if !tc.expectErr && err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+
+	if cleanupCalled != tc.expectCleanupCalled {
+		t.Errorf("cleanupCalled = %v, expected %v", cleanupCalled, tc.expectCleanupCalled)
+	}
+
+	expectedDestroyCalls := 1
+	if tc.expectSecondDestroy {
+		expectedDestroyCalls = 2
+	}
+	if destroyCallCount != expectedDestroyCalls {
+		t.Errorf("destroyCallCount = %d, expected %d", destroyCallCount, expectedDestroyCalls)
+	}
+
+	expectedConfirmCalled := tc.robust && !tc.autoApprove && tc.destroyErr == unreachableErr
+	if confirmCalled != expectedConfirmCalled {
+		t.Errorf("confirmCalled = %v, expected %v", confirmCalled, expectedConfirmCalled)
 	}
 }

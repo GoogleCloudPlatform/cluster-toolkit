@@ -519,8 +519,14 @@ func IsKubernetesUnreachableError(err error) bool {
 		strings.Contains(msg, "no configuration has been provided, try setting kubernetes_master")
 }
 
+// TerraformCLI is an interface wrapping the required tfexec.Terraform methods for state manipulation.
+type TerraformCLI interface {
+	Show(ctx context.Context, opts ...tfexec.ShowOption) (*tfjson.State, error)
+	StateRm(ctx context.Context, address string, opts ...tfexec.StateRmCmdOption) error
+}
+
 // RemoveKubernetesResourcesFromState removes all kubernetes/helm/kubectl provider resources from the state
-func RemoveKubernetesResourcesFromState(tf *tfexec.Terraform) error {
+func RemoveKubernetesResourcesFromState(tf TerraformCLI) error {
 	ctx := context.Background()
 	state, err := tf.Show(ctx)
 	if err != nil {

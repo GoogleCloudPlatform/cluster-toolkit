@@ -17,11 +17,13 @@ limitations under the License.
 package shell
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 
+	"github.com/hashicorp/terraform-exec/tfexec"
 	tfjson "github.com/hashicorp/terraform-json"
 	. "gopkg.in/check.v1"
 )
@@ -98,4 +100,54 @@ func (s *MySuite) TestGetResourcesRecursively(c *C) {
 		{Address: "module.foo.google_service_account.main", Type: "google_service_account"},
 		{Address: "module.bar.helm_release.apply_chart", Type: "helm_release"},
 	})
+}
+
+type mockTerraformCLI struct {
+	state   *tfjson.State
+	removed []string
+}
+
+func (m *mockTerraformCLI) Show(ctx context.Context, opts ...tfexec.ShowOption) (*tfjson.State, error) {
+	return m.state, nil
+}
+
+func (m *mockTerraformCLI) StateRm(ctx context.Context, address string, opts ...tfexec.StateRmCmdOption) error {
+	m.removed = append(m.removed, address)
+	return nil
+}
+
+func (s *MySuite) TestRemoveKubernetesResourcesFromState(c *C) {
+	// Construct in-memory state with google and kubernetes/helm/kubectl resources
+	state := &tfjson.State{
+		Values: &tfjson.StateValues{
+			RootModule: &tfjson.StateModule{
+				Resources: []*tfjson.StateResource{
+					{Address: "google_compute_network.vpc", Type: "google_compute_network"},
+					{Address: "kubernetes_service_account.sa", Type: "kubernetes_service_account"},
+				},
+				ChildModules: []*tfjson.StateModule{
+					{
+						Resources: []*tfjson.StateResource{
+							{Address: "module.foo.helm_release.nginx", Type: "helm_release"},
+							{Address: "module.foo.kubectl_manifest.pod", Type: "kubectl_manifest"},
+							{Address: "module.foo.google_service_account.sa", Type: "google_service_account"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mockTf := &mockTerraformCLI{state: state}
+
+	err := RemoveKubernetesResourcesFromState(mockTf)
+	c.Assert(err, IsNil)
+
+	// Verify that StateRm was called exactly for the kubernetes, helm and kubectl resources
+	expectedRemoved := []string{
+		"kubernetes_service_account.sa",
+		"module.foo.helm_release.nginx",
+		"module.foo.kubectl_manifest.pod",
+	}
+	c.Assert(mockTf.removed, DeepEquals, expectedRemoved)
 }
