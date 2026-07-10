@@ -382,6 +382,18 @@ variable "cloud_parameters" {
   nullable = false
 }
 
+variable "capacity_circuit_breaker" {
+  description = "Controls automatic nodeset failover after GCE capacity errors."
+  type = object({
+    enabled                  = optional(bool, false)
+    initial_cooldown_seconds = optional(number, 300)
+    max_cooldown_seconds     = optional(number, 1800)
+    probe_count              = optional(number, 1)
+  })
+  default  = {}
+  nullable = false
+}
+
 ##########
 # HYBRID #
 ##########

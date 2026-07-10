@@ -508,6 +508,34 @@ variable "cloud_parameters" {
   nullable = false
 }
 
+variable "capacity_circuit_breaker" {
+  description = <<-EOT
+    Controls automatic failover away from a GCE nodeset after a capacity error.
+    When enabled, powered-down nodes in the affected nodeset are drained while
+    a small probe set is retried after an exponential cooldown. A successful
+    probe makes the nodeset schedulable again. If no workload can use the probe
+    set, the nodeset is automatically reset after a bounded grace period that
+    accounts for Slurm's ResumeTimeout.
+  EOT
+  type = object({
+    enabled                  = optional(bool, false)
+    initial_cooldown_seconds = optional(number, 300)
+    max_cooldown_seconds     = optional(number, 1800)
+    probe_count              = optional(number, 1)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = (
+      var.capacity_circuit_breaker.initial_cooldown_seconds >= 1 &&
+      var.capacity_circuit_breaker.max_cooldown_seconds >= var.capacity_circuit_breaker.initial_cooldown_seconds &&
+      var.capacity_circuit_breaker.probe_count >= 1
+    )
+    error_message = "Capacity circuit breaker cooldowns must be positive, max_cooldown_seconds must be at least initial_cooldown_seconds, and probe_count must be at least 1."
+  }
+}
+
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller

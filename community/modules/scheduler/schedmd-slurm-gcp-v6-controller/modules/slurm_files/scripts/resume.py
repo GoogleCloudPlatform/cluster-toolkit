@@ -44,6 +44,7 @@ from util import (
 from util import lookup, ReservationDetails
 import tpu
 import mig_flex
+import capacity_circuit
 
 log = logging.getLogger()
 
@@ -353,7 +354,18 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         failed_reqs = [str(e) for e in failed.items()]
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
-            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data) # type: ignore
+            failed_nodes = grouped_nodes[ident].nodes
+            trip = trip_capacity_circuit(
+                failed_nodes,
+                capacity_circuit.exception_error_codes(exc),
+                lkp,
+            )
+            down_nodes_notify_jobs(
+                failed_nodes,
+                f"GCP Error: {exc._get_reason()}", # type: ignore
+                resume_data,
+                trip,
+            )
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -414,8 +426,9 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     assert op["operationType"] == "bulkInsert" and op["status"] == "DONE", f"unexpected op: {op}"
 
     group_id = op["operationGroupId"]
-    if "error" in op:
-        error = op["error"]["errors"][0]
+    operation_errors = (op.get("error") or {}).get("errors") or []
+    if operation_errors:
+        error = operation_errors[0]
         log.error(
             f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
@@ -425,11 +438,25 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
         created += status.get("createdVmCount", 0)
     if created == len(nodes):
         log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
+        try:
+            capacity_circuit.close_if_probe_succeeded(nodes, util.lookup())
+        except Exception:
+            log.exception("Unable to close GCE capacity circuit after successful resume")
         return # no need to gather status of insert-operations.
 
     # TODO: don't gather insert-operations per bulkInsert request, instead aggregate it
     #  across all bulkInserts (goes one level above this function) 
     failed = _get_failed_instance_inserts(op, util.lookup())
+    if not failed and created == 0:
+        error_codes = capacity_circuit.structured_error_codes(operation_errors)
+        if capacity_circuit.is_capacity_error(error_codes):
+            msg = "; ".join(
+                f"{err['code']}: {err.get('message', 'no message')}"
+                for err in operation_errors
+            )
+            trip = trip_capacity_circuit(nodes, error_codes, util.lookup())
+            down_nodes_notify_jobs(nodes, f"GCP Error: {msg}", resume_data, trip)
+            return
     
     # Multiple errors are possible, group by all of them (joined string codes)
     by_error_inserts = util.groupby_unsorted(
@@ -449,13 +476,47 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
             for err in failed_ops[0]["error"]["errors"]
         )
         if code != "RESOURCE_ALREADY_EXISTS":
-            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
+            errors = [
+                error
+                for failed_op in failed_ops
+                for error in failed_op["error"]["errors"]
+            ]
+            trip = trip_capacity_circuit(
+                failed_nodes,
+                capacity_circuit.structured_error_codes(errors),
+                util.lookup(),
+            )
+            down_nodes_notify_jobs(
+                failed_nodes,
+                f"GCP Error: {msg}",
+                resume_data,
+                trip,
+            )
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
 
 
-def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
+def trip_capacity_circuit(
+    failed_nodes: List[str],
+    error_codes: set[str],
+    lkp: util.Lookup,
+) -> Optional[capacity_circuit.CircuitTrip]:
+    try:
+        return capacity_circuit.trip(failed_nodes, error_codes, lkp)
+    except Exception:
+        log.exception(
+            "Unable to open GCE capacity circuit; preserving normal node failure handling"
+        )
+        return None
+
+
+def down_nodes_notify_jobs(
+    nodes: List[str],
+    reason: str,
+    resume_data: Optional[ResumeData],
+    circuit_trip: Optional[capacity_circuit.CircuitTrip] = None,
+) -> None:
     """set nodes down with reason"""
     nodes_set = set(nodes) # turn into set to speed up intersection
     jobs = resume_data.jobs if resume_data else []
@@ -467,9 +528,35 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
         run(f"{lookup().scontrol} update jobid={job.job_id} admincomment={reason_quoted}", check=False)
         run(f"{lookup().scontrol} notify {job.job_id} {reason_quoted}", check=False)
 
-    nodelist = util.to_hostlist(nodes)
-    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+    handled_nodes = set(circuit_trip.handled_nodes) if circuit_trip else set()
+    remaining_nodes = [node for node in nodes if node not in handled_nodes]
+    if not remaining_nodes:
+        return
+
+    if circuit_trip is not None:
+        nodelist = util.to_hostlist(remaining_nodes)
+        log.error(f"Finishing capacity-circuit handling for nodes {nodelist}")
+        try:
+            capacity_circuit.finish_failed_nodes(
+                circuit_trip,
+                remaining_nodes,
+                reason,
+                lookup(),
+            )
+            return
+        except Exception:
+            log.exception(
+                "Unable to finish capacity-circuit node handling; preserving normal failure handling"
+            )
+
+    node_reason = reason
+    node_reason_quoted = shlex.quote(node_reason)
+    nodelist = util.to_hostlist(remaining_nodes)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {node_reason}")
+    run(
+        f"{lookup().scontrol} update nodename={nodelist} state=down reason={node_reason_quoted}",
+        check=False,
+    )
     
     
 

@@ -68,11 +68,12 @@ locals {
     slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
-    prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
-    epilog_scripts      = [for k, v in google_storage_bucket_object.epilog_scripts : k]
-    task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
-    task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
-    cloud_parameters    = var.cloud_parameters
+    prolog_scripts           = [for k, v in google_storage_bucket_object.prolog_scripts : k]
+    epilog_scripts           = [for k, v in google_storage_bucket_object.epilog_scripts : k]
+    task_prolog_scripts      = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
+    task_epilog_scripts      = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
+    cloud_parameters         = var.cloud_parameters
+    capacity_circuit_breaker = var.capacity_circuit_breaker
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -186,6 +187,7 @@ locals {
     "tools/gpu-test",
     "tools/task-epilog",
     "tools/task-prolog",
+    "capacity_circuit.py",
     "conf.py",
     "conf_v2411.py",
     "file_cache.py",
@@ -212,6 +214,7 @@ locals {
     "tools/gpu-test",
     "tools/task-epilog",
     "tools/task-prolog",
+    "capacity_circuit.py",
     "conf.py",
     "conf_v2411.py",
     "file_cache.py",
