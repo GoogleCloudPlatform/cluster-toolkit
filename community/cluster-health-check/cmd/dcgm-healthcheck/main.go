@@ -60,6 +60,7 @@ const (
 )
 
 func main() {
+	startTime := time.Now()
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName == "" {
 		log.Fatal("NODE_NAME environment variable is required")
@@ -82,8 +83,11 @@ func main() {
 
 	go func() {
 		err := hostEngine.Wait()
+		// a non-nil ctx.Err() means ctx received a shutdown signal, so nv-hostengine
+		// was killed as part of that shutdown instead of errored out. In that case
+		// we don't Fatalf
 		if ctx.Err() != nil {
-			log.Printf("nv-hostengine exited during shutdown: %v", err)
+			log.Printf("nv-hostengine exited during container shutdown: %v", err)
 			return
 		}
 		log.Fatalf("nv-hostengine exited unexpectedly: %v", err)
@@ -127,11 +131,11 @@ func main() {
 	defer ticker.Stop()
 
 	log.Printf("Starting health check loop for node %s", nodeName)
-	runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName)
+	runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName, startTime)
 	for {
 		select {
 		case <-ticker.C:
-			runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName)
+			runHealthCheck(ctx, clientset, nodeInformer.Lister(), nodeName, startTime)
 		case <-ctx.Done():
 			log.Println("Shutting down...")
 			return
@@ -184,17 +188,16 @@ func parseFatalXids(data []byte) map[int]struct{} {
 	return fatalXids
 }
 
-func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, nodeLister corev1listers.NodeLister, nodeName string) {
+func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, nodeLister corev1listers.NodeLister, nodeName string, startTime time.Time) {
 	ctx, cancel := context.WithTimeout(mainCtx, 5*time.Minute)
 	defer cancel()
 
 	var errorMessages []string
+	// SeverityWarning is the baseline: when no check fails, errorMessages is
+	// empty and no NodeCondition/label is written, so this default is never
+	// surfaced. It only takes effect after a check returns an error without
+	// its own severity — escalating severity can happen but never lowering it.
 	highestSeverity := SeverityWarning
-	updateSeverity := func(sev string) {
-		if getSeverity(sev) > getSeverity(highestSeverity) {
-			highestSeverity = sev
-		}
-	}
 
 	fatalXids := getFatalXids()
 
@@ -204,7 +207,7 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 	}{
 		{"dcgmi health", runDcgmiHealth},
 		// {"NIC heartbeat", checkNICHeartbeat},
-		{"XID/SXID monitoring", func(c context.Context) (string, error) { return checkKernelLogsForXidSxid(c, fatalXids) }},
+		{"XID/SXID monitoring", func(c context.Context) (string, error) { return checkKernelLogsForXidSxid(c, fatalXids, startTime) }},
 		{"ECC errors", checkECCErrors},
 		{"PCIe link health", checkPCIe},
 		{"InfiniBand links", checkIB},
@@ -217,7 +220,7 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 		if err == nil {
 			continue
 		}
-		updateSeverity(sev)
+		highestSeverity = mergeStatus(highestSeverity, sev)
 		errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", chk.name, err))
 	}
 
@@ -534,6 +537,14 @@ func updateNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, node
 		Message:            finalMsg,
 		LastTransitionTime: metav1.Time{Time: transitionTime},
 	}}
+
+	var labelsPatch nodeLabelsPatch
+	labelsPatch.Metadata.Labels = map[string]string{LabelHealthStatus: finalStatus}
+
+	applyPatches(ctx, clientset, nodeName, condPatch, labelsPatch, finalStatus)
+}
+
+func applyPatches(ctx context.Context, clientset *kubernetes.Clientset, nodeName string, condPatch nodeStatusPatch, labelsPatch nodeLabelsPatch, finalStatus string) {
 	statusPatchBytes, err := json.Marshal(condPatch)
 	if err != nil {
 		log.Printf("Error building status patch for %s: %v", nodeName, err)
@@ -543,8 +554,6 @@ func updateNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, node
 		log.Printf("Error patching node status %s: %v", nodeName, err)
 	}
 
-	var labelsPatch nodeLabelsPatch
-	labelsPatch.Metadata.Labels = map[string]string{LabelHealthStatus: finalStatus}
 	labelsPatchBytes, err := json.Marshal(labelsPatch)
 	if err != nil {
 		log.Printf("Error building metadata patch for %s: %v", nodeName, err)
@@ -559,8 +568,9 @@ func updateNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, node
 
 var xidRegex = regexp.MustCompile(`(?i)(?:xid|sxid)(?:\s*\(.*?\))?:\s*(\d+)`)
 
-func checkKernelLogsForXidSxid(ctx context.Context, fatalXids map[int]struct{}) (string, error) {
-	out, err := exec.CommandContext(ctx, "dmesg").CombinedOutput()
+func checkKernelLogsForXidSxid(ctx context.Context, fatalXids map[int]struct{}, startTime time.Time) (string, error) {
+	timeStr := startTime.Format("2006-01-02 15:04:05")
+	out, err := exec.CommandContext(ctx, "dmesg", "--since", timeStr).CombinedOutput()
 	if err != nil {
 		log.Printf("Cannot run dmesg for kernel log monitoring: %v", err)
 		return "", nil
@@ -659,11 +669,6 @@ func checkIB(ctx context.Context) (string, error) {
 	if strings.Contains(string(out), "Down") {
 		return SeverityWarning, fmt.Errorf("ibstat reported Down")
 	}
-
-	outDiag, errDiag := exec.CommandContext(ctx, "ibdiagnet").Output()
-	if errDiag == nil && (strings.Contains(string(outDiag), "Error") || strings.Contains(string(outDiag), "Fail")) {
-		return SeverityWarning, fmt.Errorf("ibdiagnet reported errors")
-	}
 	return "", nil
 }
 
@@ -682,7 +687,7 @@ func checkTemperature(ctx context.Context) (string, error) {
 			countdown, err := strconv.Atoi(limitStr)
 			if err == nil {
 				if countdown <= 0 {
-					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: current is %s degree which is %d degrees over target temprature", i, tempStr, -countdown)
+					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: current is %s degree which is %d degrees over target temperature", i, tempStr, -countdown)
 				}
 			} else {
 				// Fallback to absolute temperature check if countdown is not supported

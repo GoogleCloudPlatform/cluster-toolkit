@@ -28,13 +28,13 @@ The health check agent is deployed as a DaemonSet to ensure it runs on every nod
    ```
 
 2. **Update the image reference**:
-   Edit `deployment/daemonset.yaml` to replace the `<YOUR_REGISTRY>/<YOUR_REPO>/cluster-health-check:latest` image string with your remote destination image created in the previous step.
+   Edit `deployment/dcgm-healthcheck.yaml` to replace the `<YOUR_REGISTRY>/<YOUR_REPO>/cluster-health-check:latest` image string with your remote destination image created in the previous step.
 
 3. **Deploy the DaemonSet**:
    Apply the Kubernetes manifest in the `deployment/` directory:
 
    ```bash
-   kubectl apply -f deployment/daemonset.yaml
+   kubectl apply -f deployment/dcgm-healthcheck.yaml
    ```
 
 ### 📝 Example Output
@@ -87,8 +87,8 @@ This section is for developers who wish to customize the script's behavior or re
 
 ### 1. Modifying the Code
 
-* The core logic for generating the health check is located in the `cmd/` directory, with the main entry point being `cmd/dcgm-healthcheck/main.go`.
-* The image and all relevant dependencies are defined in the `Dockerfile`.
+- The core logic for generating the health check is located in the `cmd/` directory, with the main entry point being `cmd/dcgm-healthcheck/main.go`.
+- The image and all relevant dependencies are defined in the `Dockerfile`.
 
 ### 2. Building and Pushing to Artifact Registry
 

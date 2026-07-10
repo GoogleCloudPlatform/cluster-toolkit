@@ -32,13 +32,13 @@ RUN CGO_ENABLED=0 \
 # -----------------------------------------------------------------------------
 # Base Debian Libraries
 # -----------------------------------------------------------------------------
-FROM gke.gcr.io/debian-base:bookworm-v1.0.2-gke.0@sha256:0c094a459519c81e5e6dcd969c38b865fee1f470196134a4a044fffcabd70fc0 AS base
+FROM gke.gcr.io/debian-base:bookworm-v1.0.2-gke.0 AS base
 RUN apt-get update && apt-get install -y --no-install-recommends infiniband-diags
 
 # -----------------------------------------------------------------------------
 # Part 1: Base Application Image (Without DCGM dependencies)
 # -----------------------------------------------------------------------------
-FROM gke.gcr.io/gke-distroless/libc:gke_distroless_20240307.00_p0@sha256:4f834e207f2721977094aeec4c9daee7032c5daec2083c0be97760f4306e4f88 AS dcgm-healthcheck-base
+FROM gke.gcr.io/gke-distroless/libc:gke_distroless_20240307.00_p0 AS dcgm-healthcheck-base
 
 # Required for GPU metrics
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,compat32
@@ -75,7 +75,7 @@ FROM dcgm-healthcheck-base AS dcgm-healthcheck
 COPY --from=dcgm-nvidia /usr/bin/nv-hostengine /usr/bin/nv-hostengine
 COPY --from=dcgm-nvidia /usr/bin/dcgmi /usr/bin/dcgmi
 
-# Copy DCGM libraries. Because the source path uses a wildcard (*-linux-gnu), 
+# Copy DCGM libraries. Because the source path uses a wildcard (*-linux-gnu),
 # Docker flattens the output into the destination directory (/usr/lib/).
 COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgm.so* /usr/lib/
 COPY --from=dcgm-nvidia /usr/lib/*-linux-gnu/libdcgmmodulenvswitch.so* /usr/lib/

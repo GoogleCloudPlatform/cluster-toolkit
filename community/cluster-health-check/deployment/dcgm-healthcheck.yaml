@@ -73,13 +73,20 @@ spec:
         - -c
         - |
           echo "Waiting for NVML drivers..."
-          while true; do
+          # Bounded wait: if drivers never load, exit non-zero so the kubelet
+          # restarts the pod and the failure surfaces as Init:CrashLoopBackOff.
+          timeout=120
+          elapsed=0
+          while (( elapsed < timeout )); do
             if [[ -f "/usr/local/nvidia/lib64/libnvidia-ml.so.1" ]]; then
               echo "NVML drivers found!"
               exit 0
             fi
             sleep 2
+            (( elapsed += 2 ))
           done
+          echo "Timed out after ${timeout}s waiting for NVML drivers." >&2
+          exit 1
         volumeMounts:
         - name: nvidia-install-dir-host
           mountPath: /usr/local/nvidia
