@@ -43,7 +43,7 @@ func TestDestroyGroupsUnsupportedKind(t *testing.T) {
 	}
 	ctx := &config.YamlCtx{}
 
-	destroyFailed, _ := destroyGroups("", "", bp, ctx)
+	destroyFailed, _, _ := destroyGroups("", "", bp, ctx)
 
 	if !destroyFailed {
 		t.Errorf("destroyGroups() failed to report destruction failure for unsupported kind.")
@@ -142,10 +142,13 @@ func TestRunDestroyCmd(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Mock destroyGroups to control its behavior
 			destroyGroupsCallCount := 0
-			destroyGroupsFunc = func(_ string, _ string, _ config.Blueprint, _ *config.YamlCtx) (bool, []string) {
+			destroyGroupsFunc = func(_ string, _ string, _ config.Blueprint, _ *config.YamlCtx) (bool, []string, error) {
 				destroyGroupsCallCount++
-				abortDestroyRetries = tc.abortRetries
-				return tc.destroyFailed, []string{}
+				var err error
+				if tc.abortRetries {
+					err = errUserAborted
+				}
+				return tc.destroyFailed, []string{}, err
 			}
 
 			// Set the flags
@@ -380,7 +383,7 @@ func TestDestroyGroupsRobust(t *testing.T) {
 			bp.Groups = []config.Group{tc.group}
 
 			// We only care about the failure flag, not the packer manifests
-			destroyFailed, _ := destroyGroups("", "", bp, &config.YamlCtx{})
+			destroyFailed, _, _ := destroyGroups("", "", bp, &config.YamlCtx{})
 
 			if cleanupCalled != tc.expectCleanupCall {
 				t.Errorf("cleanupFirewallRules call was %v, expected %v", cleanupCalled, tc.expectCleanupCall)
@@ -417,18 +420,20 @@ func TestDestroyTerraformGroupUnreachableGKE(t *testing.T) {
 	// Setup mocks and restore afterward
 	originalRobustDestroy := robustDestroy
 	originalFlagAutoApprove := flagAutoApprove
+	originalShellConfigure := shellConfigureTerraformFunc
 	originalShellDestroy := shellDestroyFunc
 	originalShellRemove := shellRemoveKubernetesResourcesFromStateFunc
 	originalConfirmAction := confirmActionFunc
 	defer func() {
 		robustDestroy = originalRobustDestroy
 		flagAutoApprove = originalFlagAutoApprove
+		shellConfigureTerraformFunc = originalShellConfigure
 		shellDestroyFunc = originalShellDestroy
 		shellRemoveKubernetesResourcesFromStateFunc = originalShellRemove
 		confirmActionFunc = originalConfirmAction
 	}()
 
-	unreachableErr := errors.New("dial tcp [::1]:80: connect: connection refused")
+	unreachableErr := errors.New("kubernetes_namespace.ns: dial tcp [::1]:80: connect: connection refused")
 
 	testCases := []unreachableGKETestCase{
 		{
@@ -486,6 +491,13 @@ func TestDestroyTerraformGroupUnreachableGKE(t *testing.T) {
 }
 
 func runUnreachableGKETestCase(t *testing.T, tc unreachableGKETestCase, unreachableErr error) {
+	robustDestroy = tc.robust
+	flagAutoApprove = tc.autoApprove
+
+	shellConfigureTerraformFunc = func(workingDir string) (*tfexec.Terraform, error) {
+		return tfexec.NewTerraform(workingDir, "dummy-terraform-path")
+	}
+
 	cleanupCalled := false
 	shellRemoveKubernetesResourcesFromStateFunc = func(tf shell.TerraformCLI) error {
 		cleanupCalled = true

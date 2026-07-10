@@ -504,8 +504,6 @@ func TfVersion() (string, error) {
 	return version.TerraformVersion, nil
 }
 
-var dialLoopbackRegex = regexp.MustCompile(`dial tcp (?:127\.0\.0\.1|\[::1\]|localhost):[0-9]+`)
-
 // IsKubernetesUnreachableError returns true if the error indicates GKE is unreachable
 func IsKubernetesUnreachableError(err error) bool {
 	if err == nil {
@@ -513,7 +511,14 @@ func IsKubernetesUnreachableError(err error) bool {
 	}
 	// Convert to lowercase to ensure case-insensitive matching
 	msg := strings.ToLower(err.Error())
-	return dialLoopbackRegex.MatchString(msg) ||
+
+	isKubernetesRelated := strings.Contains(msg, "kubernetes_") ||
+		strings.Contains(msg, "helm_") ||
+		strings.Contains(msg, "kubectl_")
+
+	isDialError := strings.Contains(msg, "dial tcp")
+
+	return (isDialError && isKubernetesRelated) ||
 		strings.Contains(msg, "kubernetes cluster unreachable") ||
 		strings.Contains(msg, "failed to create kubernetes rest client") ||
 		strings.Contains(msg, "no configuration has been provided, try setting kubernetes_master")
