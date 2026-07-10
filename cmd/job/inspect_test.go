@@ -55,16 +55,18 @@ func TestInspectCmd_Success(t *testing.T) {
 	location = "us-central1-a"
 	projectID = "test-project"
 	inspectWorkloadName = ""
+	inspectOutputPath = ""
 	inspectShow = false
 	defer func() {
 		clusterName = ""
 		location = ""
 		projectID = ""
 		inspectWorkloadName = ""
+		inspectOutputPath = ""
 		inspectShow = false
 	}()
 
-	_, err := executeCommand(JobCmd, "inspect", "--name", "test-workload", "--show")
+	_, err := executeCommand(JobCmd, "inspect", "--name", "test-workload", "--show", "--output", "/tmp/custom.log")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,6 +85,9 @@ func TestInspectCmd_Success(t *testing.T) {
 	}
 	if mockOrc.inspectOpts.WorkloadName != "test-workload" {
 		t.Errorf("expected WorkloadName to be 'test-workload', got %q", mockOrc.inspectOpts.WorkloadName)
+	}
+	if mockOrc.inspectOpts.OutputPath != "/tmp/custom.log" {
+		t.Errorf("expected OutputPath to be '/tmp/custom.log', got %q", mockOrc.inspectOpts.OutputPath)
 	}
 	if !mockOrc.inspectOpts.Show {
 		t.Errorf("expected Show to be true")

@@ -180,3 +180,43 @@ func TestInspectCluster_CommandFailure(t *testing.T) {
 		t.Errorf("expected node pool counts to be logged even after previous error")
 	}
 }
+
+func TestInspectCluster_CustomOutputPath(t *testing.T) {
+	clusterName := "test-cluster-custom-path"
+	location := "us-central1-a"
+	project := "test-project"
+	customPath := filepath.Join(t.TempDir(), "my-custom-inspect.log")
+
+	responses := defaultMockResponses(clusterName, location, project)
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = project
+
+	opts := orchestrator.InspectOptions{
+		ProjectID:       project,
+		ClusterName:     clusterName,
+		ClusterLocation: location,
+		OutputPath:      customPath,
+		Show:            false,
+	}
+
+	err := orc.InspectCluster(opts)
+	if err != nil {
+		t.Fatalf("InspectCluster failed: %v", err)
+	}
+
+	// Verify custom file was created
+	if _, err := os.Stat(customPath); os.IsNotExist(err) {
+		t.Fatalf("expected custom output file to exist at %s", customPath)
+	}
+
+	contentBytes, err := os.ReadFile(customPath)
+	if err != nil {
+		t.Fatalf("failed to read custom output file: %v", err)
+	}
+	content := string(contentBytes)
+
+	if !strings.Contains(content, "Local Setup: gcloud version") {
+		t.Errorf("expected custom log file to contain diagnostic logs, but it did not.")
+	}
+}

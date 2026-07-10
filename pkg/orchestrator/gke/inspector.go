@@ -28,6 +28,40 @@ import (
 
 const spacer = "========================================================"
 
+type inspectWriter struct {
+	writer   io.Writer
+	show     bool
+	executor Executor
+}
+
+func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
+	outputStr := fmt.Sprintf("Description: %s\nCommand: %s %v\n", description, command, args)
+	if w.show {
+		fmt.Print(outputStr)
+	}
+	_, _ = fmt.Fprint(w.writer, outputStr)
+
+	res := w.executor.ExecuteCommand(command, args...)
+	if res.ExitCode != 0 {
+		errStr := fmt.Sprintf("Error (%d):\n%s\n", res.ExitCode, res.Stderr)
+		if w.show {
+			fmt.Print(errStr)
+		}
+		_, _ = fmt.Fprint(w.writer, errStr)
+	} else {
+		outStr := fmt.Sprintf("Output:\n%s\n", res.Stdout)
+		if w.show {
+			fmt.Print(outStr)
+		}
+		_, _ = fmt.Fprint(w.writer, outStr)
+	}
+	divider := fmt.Sprintf("\n%s\n\n", spacer)
+	if w.show {
+		fmt.Print(divider)
+	}
+	_, _ = fmt.Fprint(w.writer, divider)
+}
+
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
 	// 1. Setup Kubectl (Critical, fail fast)
@@ -36,9 +70,12 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}
 
 	// 2. Create log file (Critical, fail fast)
-	timestamp := time.Now().UTC().Format("20060102-150405")
-	fileName := fmt.Sprintf("gcluster-inspect-%s-%s.log", opts.ClusterName, timestamp)
-	filePath := filepath.Join(".", fileName)
+	filePath := opts.OutputPath
+	if filePath == "" {
+		timestamp := time.Now().UTC().Format("20060102-150405")
+		fileName := fmt.Sprintf("gcluster-inspect-%s-%s.log", opts.ClusterName, timestamp)
+		filePath = filepath.Join(".", fileName)
+	}
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create log file %s: %w", filePath, err)
@@ -50,99 +87,84 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	// Initial header in log
 	_, _ = fmt.Fprintf(file, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
 
-	// Helper for running commands and logging them
-	runAndLog := func(description string, command string, args ...string) {
-		outputStr := fmt.Sprintf("Description: %s\nCommand: %s %v\n", description, command, args)
-		if opts.Show {
-			fmt.Print(outputStr)
-		}
-		_, _ = fmt.Fprint(file, outputStr)
-
-		res := g.executor.ExecuteCommand(command, args...)
-		if res.ExitCode != 0 {
-			errStr := fmt.Sprintf("Error (%d):\n%s\n", res.ExitCode, res.Stderr)
-			if opts.Show {
-				fmt.Print(errStr)
-			}
-			_, _ = fmt.Fprint(file, errStr)
-		} else {
-			outStr := fmt.Sprintf("Output:\n%s\n", res.Stdout)
-			if opts.Show {
-				fmt.Print(outStr)
-			}
-			_, _ = fmt.Fprint(file, outStr)
-		}
-		divider := fmt.Sprintf("\n%s\n\n", spacer)
-		if opts.Show {
-			fmt.Print(divider)
-		}
-		_, _ = fmt.Fprint(file, divider)
+	writer := &inspectWriter{
+		writer:   file,
+		show:     opts.Show,
+		executor: g.executor,
 	}
 
 	// --- 1. Local Setup ---
-	runAndLog("Local Setup: gcloud version", "gcloud", "version")
-	runAndLog("Local Setup: Active gcloud configuration", "gcloud", "config", "list")
+	writer.runAndLog("Local Setup: gcloud version", "gcloud", "version")
+	writer.runAndLog("Local Setup: Active gcloud configuration", "gcloud", "config", "list")
 
 	// --- 2. GKE Infrastructure ---
-	runAndLog("GKE: Cluster Details", "gcloud", "container", "clusters", "describe", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID, "--format=yaml")
-	runAndLog("GKE: Node Pool Details", "gcloud", "container", "node-pools", "list", "--cluster", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID)
+	writer.runAndLog("GKE: Cluster Details", "gcloud", "container", "clusters", "describe", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID, "--format=yaml")
+	writer.runAndLog("GKE: Node Pool Details", "gcloud", "container", "node-pools", "list", "--cluster", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID)
 
 	// ConfigMaps (graceful handle if not present)
 	metadataCM := fmt.Sprintf("%s-metadata", opts.ClusterName)
 	resourcesCM := fmt.Sprintf("%s-resources", opts.ClusterName)
-	runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", "default", "-o", "yaml")
-	runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", "default", "-o", "yaml")
+	writer.runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", "default", "-o", "yaml")
+	writer.runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", "default", "-o", "yaml")
 
 	// --- 3. Node Status ---
-	runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
+	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
 
 	// Count nodes per pool (healthy and total)
 	logNodeCounts(file, g.executor, opts.Show)
 
 	// --- 4. Kueue & JobSet Resources ---
-	runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
-	runAndLog("Kueue: LocalQueue Details", "kubectl", "describe", "LocalQueue", "-A")
-	runAndLog("Kueue: ResourceFlavor Details", "kubectl", "describe", "ResourceFlavor")
-	runAndLog("Kueue: Kueue Deployment Details", "kubectl", "describe", "Deployment", "kueue-controller-manager", "-n", "kueue-system")
-	runAndLog("Kueue: Kueue Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/kueue-controller-manager", "-n", "kueue-system", "-c", "manager", "--tail=100")
+	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
+	writer.runAndLog("Kueue: LocalQueue Details", "kubectl", "describe", "LocalQueue", "-A")
+	writer.runAndLog("Kueue: ResourceFlavor Details", "kubectl", "describe", "ResourceFlavor")
+	writer.runAndLog("Kueue: Kueue Deployment Details", "kubectl", "describe", "Deployment", "kueue-controller-manager", "-n", "kueue-system")
+	writer.runAndLog("Kueue: Kueue Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/kueue-controller-manager", "-n", "kueue-system", "-c", "manager", "--tail=100")
 
-	runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
-	runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
+	writer.runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
+	writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
 
 	// --- 5. Slice Controller (Dynamic Slicing) ---
 	cResult := g.executor.ExecuteCommand("kubectl", "get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode == 0 {
-		runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
-		runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
+		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
+		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
 	}
 
 	// --- 6. Workloads ---
-	runAndLog("Kubectl: All Workloads", "kubectl", "get", "workloads", "-A")
+	writer.runAndLog("Kubectl: All Workloads", "kubectl", "get", "workloads", "-A")
 
-	workloadNamespace := "default"
-	if opts.WorkloadName != "" {
-		ns, err := g.getJobNamespace(opts.WorkloadName)
-		if err == nil {
-			workloadNamespace = ns
-		} else {
-			logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", opts.WorkloadName, err)
-		}
-		runAndLog(fmt.Sprintf("JobSet: Config for %s", opts.WorkloadName), "kubectl", "describe", "jobsets", opts.WorkloadName, "-n", workloadNamespace)
-
-		targetWorkload := fmt.Sprintf("jobset-%s", opts.WorkloadName)
-		if g.kubeClient != nil {
-			if tw, err := g.findTargetWorkload(workloadNamespace, opts.WorkloadName); err == nil {
-				targetWorkload = tw
-			}
-		}
-		runAndLog(fmt.Sprintf("Kueue: Workload config for %s", opts.WorkloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
-	}
+	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName)
 
 	// --- 7. Console Links ---
 	logConsoleLinks(file, opts, workloadNamespace)
 
-	logging.Info("Cluster inspection report saved to %s", fileName)
+	logging.Info("Cluster inspection report saved to %s", filePath)
 	return nil
+}
+
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName string) string {
+	workloadNamespace := "default"
+	if workloadName == "" {
+		return workloadNamespace
+	}
+
+	ns, err := g.getJobNamespace(workloadName)
+	if err == nil {
+		workloadNamespace = ns
+	} else {
+		logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", workloadName, err)
+	}
+	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
+
+	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
+	if g.kubeClient != nil {
+		if tw, err := g.findTargetWorkload(workloadNamespace, workloadName); err == nil {
+			targetWorkload = tw
+		}
+	}
+	writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
+
+	return workloadNamespace
 }
 
 func logNodeCounts(w io.Writer, exec Executor, show bool) {

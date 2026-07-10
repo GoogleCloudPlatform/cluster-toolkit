@@ -135,6 +135,7 @@ type InspectOptions struct {
 	ClusterName     string
 	ClusterLocation string
 	WorkloadName    string
+	OutputPath      string
 	Show            bool
 }
 

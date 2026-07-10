@@ -31,11 +31,13 @@ var InspectCmd = &cobra.Command{
 
 var (
 	inspectWorkloadName string
+	inspectOutputPath   string
 	inspectShow         bool
 )
 
 func init() {
 	InspectCmd.Flags().StringVar(&inspectWorkloadName, "name", "", "Specific workload name to inspect.")
+	InspectCmd.Flags().StringVarP(&inspectOutputPath, "output", "o", "", "Custom path/filename to write logs to.")
 	InspectCmd.Flags().BoolVarP(&inspectShow, "show", "s", false, "Print output to terminal in addition to file.")
 }
 
@@ -45,6 +47,7 @@ func runInspectCmd(cmd *cobra.Command, args []string) error {
 		ClusterName:     clusterName,
 		ClusterLocation: location,
 		WorkloadName:    inspectWorkloadName,
+		OutputPath:      inspectOutputPath,
 		Show:            inspectShow,
 	}
 
