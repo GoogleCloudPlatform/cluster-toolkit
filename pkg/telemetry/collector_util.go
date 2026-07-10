@@ -150,7 +150,7 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	// 1. Try explicit settings first
 	for _, key := range machineTypeSettings {
 		if t := extractExplicitStringSetting(key, m, bp); t != "" {
-			return strings.ReplaceAll(t, "\"", "")
+return strings.Trim(t, "\"")
 		}
 	}
 	// 2. If no explicit setting, try defaults
