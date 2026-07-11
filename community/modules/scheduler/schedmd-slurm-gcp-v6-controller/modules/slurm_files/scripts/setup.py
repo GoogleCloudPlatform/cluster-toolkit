@@ -755,6 +755,7 @@ def setup_cloud_ops() -> None:
         prom_pipeline = pipelines["prometheus_pipeline"]
 
         if not isinstance(prom_pipeline.get("receivers"), list): prom_pipeline["receivers"] = []
+        if not isinstance(prom_pipeline.get("exporters"), list): prom_pipeline["exporters"] = ["google"]
             
         # The Slurm controller natively exposes OpenMetrics on the control host port.
         port = str(lkp.cfg.slurm_control_host_port).split('-')[0]
@@ -797,6 +798,23 @@ def setup_cloud_ops() -> None:
         # Append the receiver to the pipeline to activate it, preserving any pre-existing receivers.
         if "slurm_prometheus" not in prom_pipeline["receivers"]:
             prom_pipeline["receivers"].append("slurm_prometheus")
+    else:
+        # Clean up stale config (e.g. from custom images) to prevent scraper connection errors.
+        metrics = file.get("metrics", {})
+        if isinstance(metrics, dict):
+            receivers = metrics.get("receivers", {})
+            if isinstance(receivers, dict):
+                receivers.pop("slurm_prometheus", None)
+            
+            service = metrics.get("service", {})
+            if isinstance(service, dict):
+                pipelines = service.get("pipelines", {})
+                if isinstance(pipelines, dict):
+                    prom_pipeline = pipelines.get("prometheus_pipeline", {})
+                    if isinstance(prom_pipeline, dict):
+                        receivers_list = prom_pipeline.get("receivers", [])
+                        if isinstance(receivers_list, list) and "slurm_prometheus" in receivers_list:
+                            receivers_list.remove("slurm_prometheus")
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
