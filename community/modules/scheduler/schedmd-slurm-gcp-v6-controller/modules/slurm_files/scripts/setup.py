@@ -738,6 +738,7 @@ def setup_cloud_ops() -> None:
     lkp = lookup()
     enable_openmetrics = lkp.cfg.get("enable_openmetrics", False)
     
+
     if lkp.is_controller and enable_openmetrics and util.slurm_version_gte(lkp.slurm_version, "25.11"):
         # Safely initialize nested dictionaries to prevent KeyErrors from missing/null YAML blocks.
         if not isinstance(file.get("metrics"), dict): file["metrics"] = {}
@@ -798,23 +799,6 @@ def setup_cloud_ops() -> None:
         # Append the receiver to the pipeline to activate it, preserving any pre-existing receivers.
         if "slurm_prometheus" not in prom_pipeline["receivers"]:
             prom_pipeline["receivers"].append("slurm_prometheus")
-    else:
-        # Clean up stale config (e.g. from custom images) to prevent scraper connection errors.
-        metrics = file.get("metrics", {})
-        if isinstance(metrics, dict):
-            receivers = metrics.get("receivers", {})
-            if isinstance(receivers, dict):
-                receivers.pop("slurm_prometheus", None)
-            
-            service = metrics.get("service", {})
-            if isinstance(service, dict):
-                pipelines = service.get("pipelines", {})
-                if isinstance(pipelines, dict):
-                    prom_pipeline = pipelines.get("prometheus_pipeline", {})
-                    if isinstance(prom_pipeline, dict):
-                        receivers_list = prom_pipeline.get("receivers", [])
-                        if isinstance(receivers_list, list) and "slurm_prometheus" in receivers_list:
-                            receivers_list.remove("slurm_prometheus")
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
