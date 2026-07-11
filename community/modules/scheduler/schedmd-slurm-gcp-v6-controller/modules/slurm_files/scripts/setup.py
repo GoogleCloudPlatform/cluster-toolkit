@@ -739,20 +739,30 @@ def setup_cloud_ops() -> None:
     enable_openmetrics = lkp.cfg.get("enable_openmetrics", False)
     
     if lkp.is_controller and enable_openmetrics and util.slurm_version_gte(lkp.slurm_version, "25.11"):
-        if "metrics" not in file or not isinstance(file["metrics"], dict):
-            file["metrics"] = {}
+        # Safely initialize nested dictionaries to prevent KeyErrors from missing/null YAML blocks.
+        if not isinstance(file.get("metrics"), dict): file["metrics"] = {}
         metrics = file["metrics"]
-        if "receivers" not in metrics or not isinstance(metrics["receivers"], dict):
-            metrics["receivers"] = {}
-        if "service" not in metrics or not isinstance(metrics["service"], dict):
-            metrics["service"] = {}
+
+        if not isinstance(metrics.get("receivers"), dict): metrics["receivers"] = {}
+
+        if not isinstance(metrics.get("service"), dict): metrics["service"] = {}
         service = metrics["service"]
-        if "pipelines" not in service or not isinstance(service["pipelines"], dict):
-            service["pipelines"] = {}
+
+        if not isinstance(service.get("pipelines"), dict): service["pipelines"] = {}
+        pipelines = service["pipelines"]
+
+        if not isinstance(pipelines.get("prometheus_pipeline"), dict): pipelines["prometheus_pipeline"] = {}
+        prom_pipeline = pipelines["prometheus_pipeline"]
+
+        if not isinstance(prom_pipeline.get("receivers"), list): prom_pipeline["receivers"] = []
             
+        # The Slurm controller natively exposes OpenMetrics on the control host port.
         port = str(lkp.cfg.slurm_control_host_port).split('-')[0]
         
-        file["metrics"]["receivers"]["slurm_prometheus"] = {
+        # The root /metrics endpoint returns an index page that the Ops Agent cannot parse.
+        # We must explicitly define scrape configs for each sub-path.
+        # Note: /metrics/jobs-users-accts is intentionally omitted to avoid excessive metric volume.
+        metrics["receivers"]["slurm_prometheus"] = {
             "type": "prometheus",
             "config": {
                 "scrape_configs": [
@@ -784,9 +794,9 @@ def setup_cloud_ops() -> None:
             }
         }
         
-        file["metrics"]["service"]["pipelines"]["prometheus_pipeline"] = {
-            "receivers": ["slurm_prometheus"]
-        }
+        # Append the receiver to the pipeline to activate it, preserving any pre-existing receivers.
+        if "slurm_prometheus" not in prom_pipeline["receivers"]:
+            prom_pipeline["receivers"].append("slurm_prometheus")
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
