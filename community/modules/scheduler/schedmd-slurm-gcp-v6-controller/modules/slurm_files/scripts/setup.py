@@ -737,7 +737,6 @@ def setup_cloud_ops() -> None:
 
     lkp = lookup()
     enable_openmetrics = lkp.cfg.get("enable_openmetrics", False)
-    
 
     if lkp.is_controller and enable_openmetrics and util.slurm_version_gte(lkp.slurm_version, "25.11"):
         # Safely initialize nested dictionaries to prevent KeyErrors from missing/null YAML blocks.
@@ -759,7 +758,7 @@ def setup_cloud_ops() -> None:
         if not isinstance(prom_pipeline.get("exporters"), list): prom_pipeline["exporters"] = ["google"]
             
         # The Slurm controller natively exposes OpenMetrics on the control host port.
-        port = str(lkp.cfg.slurm_control_host_port).split('-')[0]
+        port = str(lkp.cfg.get("slurm_control_host_port", "6818")).split('-')[0]
         
         # The root /metrics endpoint returns an index page that the Ops Agent cannot parse.
         # We must explicitly define scrape configs for each sub-path.
