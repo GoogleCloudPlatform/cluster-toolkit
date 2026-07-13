@@ -172,17 +172,28 @@ func initTelemetry(cmd *cobra.Command, args []string) {
 // custom pre-run logic. Commands without their own hook will naturally inherit
 // the wrapped hook of their closest parent.
 func wrapTelemetry(cmd *cobra.Command) {
-	if cmd.PersistentPreRunE != nil {
-		oldPreRunE := cmd.PersistentPreRunE
-		cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-			initTelemetry(c, args)
-			return oldPreRunE(c, args)
-		}
-	} else if cmd.PersistentPreRun != nil {
-		oldPreRun := cmd.PersistentPreRun
-		cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
-			initTelemetry(c, args)
-			oldPreRun(c, args)
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+
+	if cmd.Annotations["telemetry-wrapped"] != "true" {
+		cmd.Annotations["telemetry-wrapped"] = "true"
+		if cmd.PersistentPreRunE != nil {
+			oldPreRunE := cmd.PersistentPreRunE
+			cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+				err := oldPreRunE(c, args)
+				if err != nil {
+					return err
+				}
+				initTelemetry(c, args)
+				return nil
+			}
+		} else if cmd.PersistentPreRun != nil {
+			oldPreRun := cmd.PersistentPreRun
+			cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+				oldPreRun(c, args)
+				initTelemetry(c, args)
+			}
 		}
 	}
 
