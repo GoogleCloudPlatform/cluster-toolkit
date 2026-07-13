@@ -376,3 +376,43 @@ type kubernetesNodeCondition struct {
 	Type   string `json:"type"`
 	Status string `json:"status"`
 }
+
+type kueueWorkloadCondition struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Message            string `json:"message"`
+	LastTransitionTime string `json:"lastTransitionTime"`
+}
+
+type kueueWorkloadPodSet struct {
+	Count int `json:"count"`
+}
+
+type kueueWorkloadOwnerRef struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+type kueueWorkload struct {
+	Metadata struct {
+		Name              string                  `json:"name"`
+		Namespace         string                  `json:"namespace"`
+		CreationTimestamp string                  `json:"creationTimestamp"`
+		OwnerReferences   []kueueWorkloadOwnerRef `json:"ownerReferences"`
+	} `json:"metadata"`
+	Spec struct {
+		PriorityClassName string                `json:"priorityClassName"`
+		PodSets           []kueueWorkloadPodSet `json:"podSets"`
+	} `json:"spec"`
+	Status struct {
+		Admission *struct {
+			PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+		} `json:"admission"`
+		ReclaimablePods []kueueWorkloadPodSet    `json:"reclaimablePods"`
+		Conditions      []kueueWorkloadCondition `json:"conditions"`
+	} `json:"status"`
+}
+
+type kueueWorkloadList struct {
+	Items []kueueWorkload `json:"items"`
+}

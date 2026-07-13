@@ -24,6 +24,9 @@ import (
 )
 
 func defaultMockResponses(clusterName, location, project string) map[string][]shell.CommandResult {
+	workloadsJSON := `{"items": [{"metadata":{"name":"jobset-test-workload","namespace":"custom-namespace","creationTimestamp":"2026-07-10T12:00:00Z","ownerReferences":[{"kind":"JobSet","name":"test-workload"}]},"spec":{"priorityClassName":"high-priority","podSets":[{"count":4}]},"status":{"admission":{"podSetAssignments":[{"count":4}]},"reclaimablePods":[{"count":0}],"conditions":[{"type":"Admitted","status":"True","message":"Admitted by ClusterQueue","lastTransitionTime":"2026-07-10T12:01:00Z"}]}}]}`
+	workloadsResult := shell.CommandResult{ExitCode: 0, Stdout: workloadsJSON}
+
 	return map[string][]shell.CommandResult{
 		"gcloud container clusters get-credentials": {{ExitCode: 0}},
 		"gcloud version":                                                  {{ExitCode: 0, Stdout: "Google Cloud SDK 400.0.0"}},
@@ -43,7 +46,7 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 		"kubectl get crd topologies.kueue.x-k8s.io":                       {{ExitCode: 0, Stdout: "topologies-crd"}},
 		"kubectl describe deployment slice-controller-controller-manager": {{ExitCode: 0, Stdout: "slice-dep-details"}},
 		"kubectl logs deployment/slice-controller-controller-manager":     {{ExitCode: 0, Stdout: "slice-logs"}},
-		"kubectl get workloads -A":                                        {{ExitCode: 0, Stdout: "workloads-list"}},
+		"kubectl get workloads -A -o json":                                {workloadsResult, workloadsResult, workloadsResult, workloadsResult},
 		"kubectl describe jobsets":                                        {{ExitCode: 0, Stdout: "jobset-config"}},
 		"kubectl describe workloads":                                      {{ExitCode: 0, Stdout: "workload-config"}},
 	}
@@ -111,6 +114,23 @@ func TestInspectCluster_Success(t *testing.T) {
 		"pool-1: 1 healthy",
 		"Kueue: ClusterQueue Details",
 		"clusterqueue-details",
+		"Kubectl: List Jobs with filter-by-status=EVERYTHING",
+		"Kubectl: List Jobs with filter-by-status=QUEUED",
+		"Kubectl: List Jobs with filter-by-status=RUNNING",
+		"Kubectl: List Jobs with filter-by-status=EVERYTHING with filter-by-job=test-workload",
+		"Jobset Name",
+		"Created Time",
+		"Priority",
+		"TPU VMs Needed",
+		"TPU VMs Running/Ran",
+		"TPU VMs Done",
+		"Status",
+		"Status Message",
+		"Status Time",
+		"test-workload",
+		"2026-07-10T12:00:00Z",
+		"high-priority",
+		"Admitted by ClusterQueue",
 		"JobSet: Config for test-workload",
 		"jobset-config",
 		"Kueue: Workload config for test-workload",

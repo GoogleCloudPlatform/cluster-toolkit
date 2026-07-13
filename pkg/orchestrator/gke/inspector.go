@@ -23,6 +23,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"text/tabwriter"
 	"time"
 )
 
@@ -131,7 +133,9 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}
 
 	// --- 6. Workloads ---
-	writer.runAndLog("Kubectl: All Workloads", "kubectl", "get", "workloads", "-A")
+	logWorkloadList(file, g.executor, "EVERYTHING", "", opts.Show)
+	logWorkloadList(file, g.executor, "QUEUED", "", opts.Show)
+	logWorkloadList(file, g.executor, "RUNNING", "", opts.Show)
 
 	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName)
 
@@ -154,6 +158,9 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName st
 	} else {
 		logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", workloadName, err)
 	}
+
+	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, writer.show)
+
 	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
 
 	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
@@ -298,5 +305,141 @@ func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadName
 		fmt.Print(outputStr)
 	}
 	_, _ = fmt.Fprint(w, outputStr)
+	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
+}
+
+
+func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWorkload string, show bool) {
+	desc := fmt.Sprintf("Kubectl: List Jobs with filter-by-status=%s", filterStatus)
+	if filterWorkload != "" {
+		desc += fmt.Sprintf(" with filter-by-job=%s", filterWorkload)
+	}
+
+	if show {
+		fmt.Printf("Description: %s\n", desc)
+	}
+	_, _ = fmt.Fprintf(w, "Description: %s\n", desc)
+
+	res := exec.ExecuteCommand("kubectl", "get", "workloads", "-A", "-o", "json")
+	if res.ExitCode != 0 {
+		errStr := fmt.Sprintf("Error listing workloads (%d):\n%s\n", res.ExitCode, res.Stderr)
+		if show {
+			fmt.Print(errStr)
+		}
+		_, _ = fmt.Fprint(w, errStr)
+		_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
+		return
+	}
+
+	var wlList kueueWorkloadList
+	if err := json.Unmarshal([]byte(res.Stdout), &wlList); err != nil {
+		errStr := fmt.Sprintf("Error parsing workloads JSON: %v\n", err)
+		if show {
+			fmt.Print(errStr)
+		}
+		_, _ = fmt.Fprint(w, errStr)
+		_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
+		return
+	}
+
+	var filtered []kueueWorkload
+	for _, wl := range wlList.Items {
+		// Filter by workload name
+		if filterWorkload != "" {
+			jobsetName := wl.Metadata.Name
+			if len(wl.Metadata.OwnerReferences) > 0 {
+				jobsetName = wl.Metadata.OwnerReferences[0].Name
+			}
+			if !strings.Contains(jobsetName, filterWorkload) {
+				continue
+			}
+		}
+
+		// Filter by status
+		if filterStatus == "QUEUED" {
+			running := 0
+			if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
+				running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
+			}
+			status := ""
+			if len(wl.Status.Conditions) > 0 {
+				status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
+			}
+			statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted") || strings.Contains(status, "QuotaReserved")
+			if !(statusMatch && running == 0) {
+				continue
+			}
+		} else if filterStatus == "RUNNING" {
+			running := 0
+			if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
+				running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
+			}
+			status := ""
+			if len(wl.Status.Conditions) > 0 {
+				status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
+			}
+			statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted")
+			if !(statusMatch && running > 0) {
+				continue
+			}
+		}
+
+		filtered = append(filtered, wl)
+	}
+
+	// Render table using tabwriter
+	var sb strings.Builder
+	sb.WriteString("Output:\n")
+
+	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "Jobset Name\tCreated Time\tPriority\tTPU VMs Needed\tTPU VMs Running/Ran\tTPU VMs Done\tStatus\tStatus Message\tStatus Time")
+
+	for _, wl := range filtered {
+		jobsetName := wl.Metadata.Name
+		if len(wl.Metadata.OwnerReferences) > 0 {
+			jobsetName = wl.Metadata.OwnerReferences[0].Name
+		}
+
+		createdTime := wl.Metadata.CreationTimestamp
+		priority := wl.Spec.PriorityClassName
+		if priority == "" {
+			priority = "<none>"
+		}
+
+		needed := 0
+		if len(wl.Spec.PodSets) > 0 {
+			needed = wl.Spec.PodSets[0].Count
+		}
+
+		running := 0
+		if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
+			running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
+		}
+
+		done := 0
+		if len(wl.Status.ReclaimablePods) > 0 {
+			done = wl.Status.ReclaimablePods[0].Count
+		}
+
+		status := "<none>"
+		msg := "<none>"
+		statusTime := "<none>"
+		if len(wl.Status.Conditions) > 0 {
+			cond := wl.Status.Conditions[len(wl.Status.Conditions)-1]
+			status = cond.Type
+			msg = cond.Message
+			statusTime = cond.LastTransitionTime
+		}
+
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",
+			jobsetName, createdTime, priority, needed, running, done, status, msg, statusTime)
+	}
+	_ = tw.Flush()
+
+	outStr := sb.String()
+	if show {
+		fmt.Print(outStr)
+	}
+	_, _ = fmt.Fprint(w, outStr)
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
