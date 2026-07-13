@@ -22,20 +22,6 @@ spec:
     resourceClaimTemplate:
       name: nccl-test-compute-domain-channel
 ---
-apiVersion: resource.k8s.io/v1
-kind: ResourceClaimTemplate
-metadata:
-  name: nccl-test-all-mrdma
-spec:
-  spec:
-    devices:
-      requests:
-      - name: req-mrdma
-        exactly:
-          deviceClassName: mrdma.google.com
-          allocationMode: ExactCount
-          count: 8
----
 apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
@@ -87,7 +73,7 @@ spec:
             - name: compute-domain-channel
               resourceClaimTemplateName: nccl-test-compute-domain-channel
             - name: rdma
-              resourceClaimTemplateName: nccl-test-all-mrdma
+              resourceClaimTemplateName: default-rdma
             containers:
             - name: nccl-test
               stdin: true
