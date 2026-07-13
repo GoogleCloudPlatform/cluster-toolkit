@@ -775,7 +775,7 @@ func checkNVLinkBandwidth(ctx context.Context) (string, error) {
 		return SeverityWarning, fmt.Errorf("nvidia-smi nvlink -s failed: %v", err)
 	}
 
-	for line := range strings.SplitSeq(string(outS), "\n") {
+	for _, line := range strings.Split(string(outS), "\n") {
 		matches := nvlinkStatusRegex.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			if speed, err := strconv.ParseFloat(matches[1], 64); err == nil {
@@ -795,7 +795,7 @@ func checkNVLinkErrors(ctx context.Context) (string, error) {
 		return SeverityWarning, fmt.Errorf("nvidia-smi nvlink -e failed: %v", err)
 	}
 
-	for line := range strings.SplitSeq(string(outE), "\n") {
+	for _, line := range strings.Split(string(outE), "\n") {
 		if err := parseNVLinkErrorLine(line); err != nil {
 			return SeverityWarning, err
 		}
