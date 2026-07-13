@@ -116,3 +116,9 @@ variable "filestore_id" {
     error_message = "The 'filestore_id' variable must contain exactly one element."
   }
 }
+
+variable "slurm_control_host_port" {
+  type        = string
+  description = "The port number that the Slurm controller, slurmctld, listens to for work."
+  default     = "6818"
+}

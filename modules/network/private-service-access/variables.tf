@@ -59,7 +59,7 @@ variable "deletion_policy" {
 }
 
 variable "name" {
-  description = "Name of the global address allocation for Private Service Access. If null, defaults to deterministic naming based on network name."
+  description = "Name of the global address allocation for Private Service Access. If null, defaults to deterministic naming based on network name. Note: Changing this on an existing deployment will force resource recreation."
   type        = string
   default     = null
 }

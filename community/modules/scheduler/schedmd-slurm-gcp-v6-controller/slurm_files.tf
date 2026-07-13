@@ -163,6 +163,7 @@ module "slurm_files" {
   bucket_dir                    = var.bucket_dir
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
+  slurm_control_host_port       = var.slurm_control_host_port
 
   slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
   slurm_conf_tpl      = var.slurm_conf_tpl

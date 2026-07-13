@@ -447,6 +447,13 @@ variable "controller_state_disk" {
   }
 }
 
+variable "slurm_control_host_port" {
+  type        = string
+  description = "The port number that the Slurm controller, slurmctld, listens to for work."
+  default     = "6818"
+}
+
+
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."

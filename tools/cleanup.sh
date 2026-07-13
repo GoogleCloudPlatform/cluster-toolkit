@@ -1155,6 +1155,18 @@ process_networks() {
 	local count=0
 	while IFS=$'\t' read -r name self_link; do
 		[[ -z "$name" || "$name" == "default" || $(is_excluded "$name") ]] && continue
+
+		# Delete Service Networking connections (Private Service Access vpc peerings)
+		# We check if a peering exists first to avoid false-alarm error counts.
+		if gcloud compute networks describe "$name" --project="$PROJECT_ID" --format="value(peerings[].name)" 2>/dev/null | grep -q "servicenetworking-googleapis-com"; then
+			execute_delete "Service Networking Connection" "servicenetworking.googleapis.com" "on network $name" \
+				gcloud services vpc-peerings delete \
+				--service=servicenetworking.googleapis.com \
+				--network="$name" \
+				--project="$PROJECT_ID" \
+				--quiet
+		fi
+
 		gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
 			if [[ -n "$r" ]] && ! is_excluded "$r"; then
 				execute_delete "Dependent Route" "$r" "" \
