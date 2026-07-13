@@ -684,16 +684,19 @@ func checkTemperature(ctx context.Context) (string, error) {
 			tempStr := strings.TrimSpace(parts[0])
 			limitStr := strings.TrimSpace(parts[1])
 
-			countdown, err := strconv.Atoi(limitStr)
-			if err == nil {
+			temp, errTemp := strconv.Atoi(tempStr)
+			limit, errLimit := strconv.Atoi(limitStr)
+			if errTemp == nil && errLimit == nil {
+				countdown := limit - temp
 				if countdown <= 0 {
-					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: current is %s degree which is %d degrees over target temperature", i, tempStr, -countdown)
+					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: current is %d degree which is %d degrees over target temperature", i, temp, -countdown)
 				}
+			} else if errTemp != nil {
+				return SeverityWarning, fmt.Errorf("GPU %d temperature check failed: unable to parse current temperature %q: %v", i, tempStr, errTemp)
 			} else {
-				// Fallback to absolute temperature check if countdown is not supported
-				temp, errTemp := strconv.Atoi(tempStr)
-				if errTemp == nil && temp >= 90 {
-					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: %d C >= 90 C", i, temp)
+				// Fallback to absolute temperature check if only the limit is not supported/parseable
+				if temp >= 90 {
+					return SeverityWarning, fmt.Errorf("GPU %d temperature too high: %d C >= 90 C (unable to parse limit %q: %v)", i, temp, limitStr, errLimit)
 				}
 			}
 		}
