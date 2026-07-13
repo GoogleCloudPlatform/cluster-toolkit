@@ -177,6 +177,8 @@ func init() {
 	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
+	SubmitCmd.Flags().BoolVar(&pathways.MTCEnabled, "pathways-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC) for Pathways.")
+	SubmitCmd.Flags().StringVar(&pathways.RamdiskDirectory, "pathways-ramdisk-directory", "", "The ramdisk directory path for local checkpoints in MTC.")
 
 	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("name")

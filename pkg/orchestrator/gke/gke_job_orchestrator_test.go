@@ -484,7 +484,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "100Gi"`,
 		`cpu: "8"`,
 		`memory: "32Gi"`,
-		"restartStrategy: Recreate",
+		"restartStrategy: BlockingRecreate",
 		"privileged: true",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "24"`,
@@ -495,12 +495,88 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"name: shared-tmp",
 		"emptyDir: {}",
 		"mountPath: /tmp",
+		"jobset.sigs.k8s.io/hack: \"true\"",
+		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
+		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
+		"backoffLimitPerIndex: 4000",
+		"podReplacementPolicy: Failed",
+		"maxFailedIndexes: 0",
 	}
 
 	for _, substr := range expectedSubstrs {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
+	}
+}
+
+func TestGeneratePathwaysManifest_MTC(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-mtc-test",
+		CommandToRun:    "echo hello",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage:            "proxy:latest",
+			ServerImage:                 "server:latest",
+			WorkerImage:                 "worker:latest",
+			ColocatedPythonSidecarImage: "sidecar:latest",
+			GCSLocation:                 "gs://my-bucket",
+			HeadNodePool:                "pathways-np",
+			MTCEnabled:                  true,
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-mtc-test",
+		"colocated-python-sidecar",
+		"restartPolicy: Always",
+		"driver: multitier-checkpoint.csi.storage.gke.io",
+		"name: sidecar-shared-memory",
+		"medium: Memory",
+		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
+		"mountPath: /tmp/mtc_checkpoints",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	parts := strings.Split(manifest, "name: worker")
+	if len(parts) < 2 {
+		t.Fatalf("failed to split manifest into head and worker parts")
+	}
+	headPart := parts[0]
+	workerPart := parts[1]
+
+	if strings.Contains(headPart, "colocated-python-sidecar") {
+		t.Errorf("headPart should not contain colocated-python-sidecar container")
+	}
+	if !strings.Contains(workerPart, "colocated-python-sidecar") {
+		t.Errorf("workerPart should contain colocated-python-sidecar container")
 	}
 }
 

@@ -369,6 +369,9 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
+	if job.Pathways.MTCEnabled && job.Pathways.RamdiskDirectory == "" {
+		job.Pathways.RamdiskDirectory = "/tmp/mtc_checkpoints"
+	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
 	if err != nil {
