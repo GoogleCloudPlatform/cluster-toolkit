@@ -29,7 +29,7 @@ vars:
   sys_net_range: 172.16.0.0/16
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2404-amd64-with-nvidia-580-v20260522
+    image: ubuntu-accelerator-2404-amd64-with-nvidia-595-v20260707
   a3mega_partition_name: a3mega
   local_mount_homefs: /home
   instance_image:
@@ -185,7 +185,7 @@ deployment_groups:
               distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
               cuda_repo_url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb"
               nvidia_packages:
-                - cuda-toolkit-13-0
+                - cuda-toolkit-13-2
                 - nvidia-container-toolkit
                 - datacenter-gpu-manager-4-cuda13
                 - datacenter-gpu-manager-4-dev
@@ -715,6 +715,9 @@ deployment_groups:
           ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
           curl -s -o "${SLURM_ROOT}/scripts/rxdm" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega
+          sed -i -e 's|^NCCL_PLUGIN_IMAGE=.*|NCCL_PLUGIN_IMAGE=us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpxo/nccl-plugin-gpudirecttcpx-dev:v1.0.17|' \
+                 -e 's|^RXDM_IMAGE=.*|RXDM_IMAGE=us-docker.pkg.dev/gce-ai-infra/gpudirect-tcpxo/tcpgpudmarxd-dev:v1.0.23|' \
+                 "${SLURM_ROOT}/scripts/rxdm"
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
