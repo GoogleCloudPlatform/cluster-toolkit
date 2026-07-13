@@ -289,8 +289,10 @@ func getStaticNodeCounts(bp config.Blueprint) string {
 		return ""
 	}
 
-	// Trimming the curly braces safely extracts our exact format `"g4-standard-48":3,"a3-ultragpu-8g":2`
-	return strings.Trim(string(counts), "{}")
+	// Trim the curly braces and remove the double quotes for a cleaner metric.
+	// Expected return format: "g4-standard-48:3,a3-ultragpu-8g:2"
+	return strings.ReplaceAll(strings.Trim(string(counts), "{}"), `"`, "")
+
 }
 
 func getOSName() string {
