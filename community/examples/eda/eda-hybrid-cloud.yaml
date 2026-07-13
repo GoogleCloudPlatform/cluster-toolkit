@@ -23,6 +23,12 @@ vars:
   zone: us-central1-a  ## Set GCP Zone Here ##
   network: default ## Set name of existing VPC network here
   rdma_net_range: 192.168.128.0/18 # Specify an unused CIDR range for the RDMA network
+  gcnv_dns_name: gcnv.internal.
+  # List every NFS endpoint IP for each pre-existing volume or FlexCache.
+  toolsfs_server_ips:   ## Set list of NFS server IPs here ##
+  libraryfs_server_ips: ## Set list of NFS server IPs here ##
+  homefs_server_ips:    ## Set list of NFS server IPs here ##
+  scratchfs_server_ips: ## Set list of NFS server IPs here ##
 
 deployment_groups:
 
@@ -91,13 +97,42 @@ deployment_groups:
         subnet_ip: $(vars.rdma_net_range)
         region: $(vars.region)
 
+  # Publish every endpoint IP for each pre-existing volume or FlexCache under a
+  # private FQDN. DNS round-robin distributes Slurm clients across endpoints.
+  - id: gcnv_dns_zone
+    source: modules/network/dns-managed-zone
+    settings:
+      zone_name: $(vars.deployment_name)-gcnv-dns
+      dns_name: $(vars.gcnv_dns_name)
+      visibility: private
+      network_id: $(eda-net.network_id)
+      description: "Private DNS for NetApp volume and FlexCache NFS endpoints"
+      recordsets:
+      - name: toolsfs
+        type: A
+        ttl: 60
+        rrdatas: $(vars.toolsfs_server_ips)
+      - name: libraryfs
+        type: A
+        ttl: 60
+        rrdatas: $(vars.libraryfs_server_ips)
+      - name: homefs
+        type: A
+        ttl: 60
+        rrdatas: $(vars.homefs_server_ips)
+      - name: scratchfs
+        type: A
+        ttl: 60
+        rrdatas: $(vars.scratchfs_server_ips)
+
 # Connect existing Google Cloud NetApp Volumes
-# Replace server_ip, remote_mount, and local_mount values as needed for toolsfs, libraryfs, homefs, scratchfs
+# Set every endpoint IP in vars above, then replace remote_mount and local_mount
+# values as needed for toolsfs, libraryfs, homefs, and scratchfs.
 # Make sure the root inode of each volume has appropriate permissions for intended users, otherwise SLURM jobs may fail
   - id: toolsfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip:    # Set IP address of the NFS server here
+      server_ip: toolsfs.$(vars.gcnv_dns_name)
       remote_mount: # Set exported path of NFS share here
       local_mount: /tools
       fs_type: nfs
@@ -107,7 +142,7 @@ deployment_groups:
   - id: libraryfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip:    # Set IP address of the NFS server here
+      server_ip: libraryfs.$(vars.gcnv_dns_name)
       remote_mount: # Set exported path of NFS share here
       local_mount: /library
       fs_type: nfs
@@ -117,7 +152,7 @@ deployment_groups:
   - id: homefs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip:    # Set IP address of the NFS server here
+      server_ip: homefs.$(vars.gcnv_dns_name)
       remote_mount: # Set exported path of NFS share here
       local_mount: /home
       fs_type: nfs
@@ -126,7 +161,7 @@ deployment_groups:
   - id: scratchfs
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip:    # Set IP address of the NFS server here
+      server_ip: scratchfs.$(vars.gcnv_dns_name)
       remote_mount: # Set exported path of NFS share here
       local_mount: /scratch
       fs_type: nfs
@@ -228,5 +263,6 @@ deployment_groups:
     - scratchfs
     settings:
       enable_controller_public_ips: true
+      enable_slurm_auth: true
       cloud_parameters:
         slurmd_timeout: 900

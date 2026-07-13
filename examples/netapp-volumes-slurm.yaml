@@ -1,0 +1,132 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# This blueprint creates a basic Slurm cluster backed by a Google Cloud NetApp
+# Volumes Flex Unified large-capacity volume. Cloud DNS publishes all NFS
+# endpoint IPs under one private FQDN, which Slurm clients use to mount /home.
+# Auto-tiering is enabled on both the storage pool and volume.
+
+blueprint_name: netapp-volumes-slurm
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: netapp-volumes-slurm
+  region:     ## Set GCP Region Here ##
+  zone:       ## Set GCP Zone Here ##
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/cluster-toolkit
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role, which
+  # is included in the Owner role but not the Editor role.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+      service_name: netapp.servicenetworking.goog
+      deletion_policy: ABANDON
+
+  # The private zone makes the volume's multiple NFS endpoint IPs available
+  # under a single FQDN to clients in this VPC.
+  - id: gcnv_dns_zone
+    source: modules/network/dns-managed-zone
+    settings:
+      zone_name: $(vars.deployment_name)-gcnv-dns
+      dns_name: gcnv.internal.
+      visibility: private
+      network_id: $(network.network_id)
+      description: Private DNS for NetApp volume NFS endpoints
+
+  - id: netapp_pool
+    source: modules/file-system/netapp-storage-pool
+    use: [network, private_service_access]
+    settings:
+      pool_name: $(vars.deployment_name)-netapp-pool
+      service_level: FLEX
+      region: $(vars.region)
+      zone: $(vars.zone)
+      scale_type: SCALE_TYPE_SCALEOUT
+      capacity_gib: 12288
+      total_throughput_mibps: 256
+      total_iops: 4096
+      allow_auto_tiering: true
+      hot_tier_size_gib: 6144
+      enable_hot_tier_auto_resize: true
+
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      volume_name: homefs
+      # 4800 GiB is the minimum Flex Unified large-capacity volume size.
+      capacity_gib: 4800
+      large_capacity_config:
+        constituent_count: 48
+      local_mount: /home
+      protocols: [NFSV3]
+      unix_permissions: "0777"
+      tiering_policy:
+        tier_action: ENABLED
+        cooling_threshold_days: 31
+        hot_tier_bypass_mode_enabled: false
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs]
+    settings:
+      node_count_static: 2
+      node_count_dynamic_max: 10
+      machine_type: n2-standard-4
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    - homefs
+    - slurm_login
+    settings:
+      machine_type: n2-standard-4
+      enable_controller_public_ips: true
+      enable_slurm_auth: true

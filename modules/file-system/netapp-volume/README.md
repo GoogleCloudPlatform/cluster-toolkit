@@ -152,6 +152,40 @@ Requires a zonal pool with `scale_type: SCALE_TYPE_SCALEOUT`. Do not set `large_
         hot_tier_bypass_mode_enabled: false  # Set true only during data migration; disable after
 ```
 
+### Example: large capacity volume with DNS for Slurm
+
+Requires a private Cloud DNS zone in the same deployment group. The zone `dns_name` suffix is derived automatically; do not set `dns_suffix` on the volume.
+
+```yaml
+  - id: gcnv_dns_zone
+    source: modules/network/dns-managed-zone
+    settings:
+      project_id: $(vars.project_id)
+      zone_name: $(vars.deployment_name)-gcnv-dns
+      dns_name: gcnv.internal.
+      visibility: private
+      network_id: $(network.network_id)
+
+  - id: home_volume
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      volume_name: homefs
+      capacity_gib: 16000
+      large_capacity: true
+      local_mount: /home
+      protocols: ["NFSV3"]
+      dns_config:
+        managed_zone_name: $(gcnv_dns_zone.zone_name)
+        record_name: my-dns-name
+```
+
+#### DNS configuration tips and requirements
+
+1. If you do not specify `dns_config.record_name`, the module uses `volume_name` as the DNS record name. `volume_name` must not contain underscores (`_`); use hyphens (`-`) instead. Terraform fails at plan time if this rule is violated.
+2. For Flex Unified volumes, dashes (`-`) are not allowed in volume names; use underscores (`_`) instead. DNS names cannot contain underscores, so set `dns_config.record_name` to a DNS-safe name (letters, digits, and hyphens only).
+3. The internal Cloud DNS zone is project-wide. Every NetApp volume using DNS in a project must have a unique DNS name. If multiple volumes share the same name, set unique values for `dns_config.record_name` to avoid conflicts.
+
 ## Protocol support
 
 This module supports NFSv3 and NFSv4.1 only. SMB and iSCSI are not supported.
@@ -192,7 +226,9 @@ Large capacity volumes expose the same NFS export through multiple IP addresses 
 
 When you attach a volume with the `use:` directive, the module mount runner passes all `server_ips` to the mount script. Each client selects one endpoint from that list at mount time, which spreads clients across the available IPs.
 
-Slurm integrations do not distribute clients across endpoints today. Slurm mounts use the first IP address only, so large capacity volumes do not get the full multi-endpoint performance benefit in Slurm clusters.
+Slurm integrations do not distribute clients across endpoints when `dns_config` is omitted. Slurm mounts use the first IP address only, so large capacity volumes do not get the full multi-endpoint performance benefit in Slurm clusters.
+
+To spread Slurm (and other) clients across all endpoints, set `dns_config` on the volume. The module creates a round-robin Cloud DNS A record and sets `network_storage.server_ip` to the volume FQDN. Provision a private `dns-managed-zone` in the same deployment group and pass `managed_zone_name: $(gcnv_dns_zone.zone_name)`.
 
 For volumes mounted through [pre-existing-network-storage](../pre-existing-network-storage/README.md), you must configure endpoints yourself (for example, round-robin DNS or manual client grouping per the Google Cloud documentation).
 
@@ -229,7 +265,7 @@ Example code:
 - id: homefs
   source: modules/file-system/pre-existing-network-storage
   settings:
-    server_ip: ## Set server IP here ##
+    server_ip: homefs.gcnv.internal.  # FQDN with all endpoint IPs; a single IP also works
     remote_mount: nfsshare
     local_mount: /shared
     fs_type: nfs
@@ -237,7 +273,7 @@ Example code:
 
 This creates a resource in Cluster Toolkit which references the specified NFS export, which will be mounted at `/shared` by clients which mount if via USE directive.
 
-Note that the `server_ip` must be known before deployment and this module does not allow to specify a list of IPs for large volumes. For large volumes it is recommended to use a DNS FQDN which hands out the volume IPs in round-robin fashion.
+`server_ip` must be known before deployment. The module accepts only one address string, not a list of IPs. For large-capacity volumes and FlexCache, publish every endpoint IP in a private Cloud DNS A record and set `server_ip` to that FQDN. The [EDA hybrid blueprint](../../../community/examples/eda/eda-hybrid-cloud.yaml) shows this pattern.
 
 ## FlexCache support
 
@@ -285,7 +321,10 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
+| [google_dns_record_set.volume](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/dns_record_set) | resource |
 | [google_netapp_volume.netapp_volume](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/netapp_volume) | resource |
+| [google_project_service.dns_api](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_service) | resource |
+| [google_dns_managed_zone.mount](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/dns_managed_zone) | data source |
 
 ## Inputs
 
@@ -295,6 +334,7 @@ No modules.
 | <a name="input_capacity_gib"></a> [capacity\_gib](#input\_capacity\_gib) | The capacity of the volume in GiB. Minimum is 100 GiB for STANDARD, PREMIUM, and EXTREME; 15 TiB (15360 GiB) for STANDARD, PREMIUM, and EXTREME large capacity volumes; 1 GiB for Flex Unified; 4800 GiB for Flex Unified large capacity volumes. | `number` | `1024` | no |
 | <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | Controls Terraform destroy behavior. Omit to use the provider default (delete the volume in Google Cloud).<br/>DEFAULT or DELETE: delete the volume in Google Cloud.<br/>FORCE: delete the volume even when nested snapshot resources exist.<br/>PREVENT: block Terraform from deleting the volume.<br/>ABANDON: remove the volume from Terraform state without deleting it in Google Cloud. | `string` | `null` | no |
 | <a name="input_description"></a> [description](#input\_description) | A description of the NetApp volume. | `string` | `""` | no |
+| <a name="input_dns_config"></a> [dns\_config](#input\_dns\_config) | Optional Cloud DNS configuration for this volume. When set, the module creates an A record<br/>with all volume endpoint IPs (round-robin) and uses the resulting FQDN as network\_storage.server\_ip.<br/>managed\_zone\_name must reference an existing private Cloud DNS zone visible to clients.<br/>The zone dns\_name suffix is read from the managed zone; record\_name defaults to volume\_name.<br/>record\_name and the default volume\_name must not contain underscores; use hyphens (-) instead.<br/>For Flex Unified volumes, set record\_name explicitly when the volume name contains underscores. | <pre>object({<br/>    managed_zone_name = string<br/>    record_name       = optional(string)<br/>    ttl               = optional(number)<br/>  })</pre> | `null` | no |
 | <a name="input_export_policy_rules"></a> [export\_policy\_rules](#input\_export\_policy\_rules) | Define NFS export policy. | <pre>list(object({<br/>    allowed_clients = optional(string)<br/>    has_root_access = optional(bool, false)<br/>    access_type     = optional(string, "READ_WRITE")<br/>    nfsv3           = optional(bool)<br/>    nfsv4           = optional(bool)<br/>  }))</pre> | <pre>[<br/>  {<br/>    "access_type": "READ_WRITE",<br/>    "allowed_clients": "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16",<br/>    "has_root_access": true<br/>  }<br/>]</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NetApp volume. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_large_capacity"></a> [large\_capacity](#input\_large\_capacity) | If true, the volume will be created with large capacity for STANDARD/PREMIUM/EXTREME service levels.<br/>For FLEX service level, use large\_capacity\_config instead. | `bool` | `false` | no |
@@ -318,6 +358,7 @@ No modules.
 | <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | Volume capacity in GiB. |
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
 | <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |
+| <a name="output_mount_fqdn"></a> [mount\_fqdn](#output\_mount\_fqdn) | FQDN for NFS mount when dns\_config is set; null otherwise. |
 | <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using an ansible playbook. The startup-script<br/>module will automatically handle installation of ansible.<br/>- id: example-startup-script<br/>  source: modules/scripts/startup-script<br/>  settings:<br/>    runners:<br/>    - $(your-fs-id.mount\_runner)<br/>... |
 | <a name="output_netapp_volume_id"></a> [netapp\_volume\_id](#output\_netapp\_volume\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/volumes/{{name}}` |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a NetApp Volumes volume. |

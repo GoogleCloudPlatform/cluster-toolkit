@@ -184,6 +184,39 @@ variable "deletion_policy" {
   }
 }
 
+variable "dns_config" {
+  description = <<-EOT
+    Optional Cloud DNS configuration for this volume. When set, the module creates an A record
+    with all volume endpoint IPs (round-robin) and uses the resulting FQDN as network_storage.server_ip.
+    managed_zone_name must reference an existing private Cloud DNS zone visible to clients.
+    The zone dns_name suffix is read from the managed zone; record_name defaults to volume_name.
+    record_name and the default volume_name must not contain underscores; use hyphens (-) instead.
+    For Flex Unified volumes, set record_name explicitly when the volume name contains underscores.
+    EOT
+  type = object({
+    managed_zone_name = string
+    record_name       = optional(string)
+    ttl               = optional(number)
+  })
+  default = null
+  validation {
+    condition     = var.dns_config == null || var.dns_config.managed_zone_name != ""
+    error_message = "dns_config.managed_zone_name must be non-empty when dns_config is set."
+  }
+  validation {
+    condition     = var.dns_config == null || var.dns_config.ttl == null || var.dns_config.ttl > 0
+    error_message = "dns_config.ttl must be greater than 0 when set."
+  }
+  validation {
+    condition     = var.dns_config == null || var.dns_config.record_name != null || !strcontains(var.volume_name, "_")
+    error_message = "When dns_config is set and record_name is omitted, volume_name cannot contain underscores. Use hyphens (-) instead. For Flex Unified volumes, set dns_config.record_name to a DNS-safe name."
+  }
+  validation {
+    condition     = var.dns_config == null || var.dns_config.record_name == null || !strcontains(var.dns_config.record_name, "_")
+    error_message = "dns_config.record_name cannot contain underscores. DNS hostnames allow only letters, digits, and hyphens. Use hyphens (-) instead."
+  }
+}
+
 variable "export_policy_rules" {
   description = "Define NFS export policy."
   type = list(object({
