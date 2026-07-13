@@ -227,7 +227,7 @@ class AutoScaler:
 
         print(f"Last negotiation cycle occurred at: {datetime.fromtimestamp(last_negotiation_cycle_time)}")
         idle_job_query = classad.ExprTree(f"JobStatus == 1 && QDate < {last_negotiation_cycle_time}")
-        combined_query_str = combined_query_str = f'JobStatus == 1 && QDate < {last_negotiation_cycle_time} && RequireId == "{self.instance_group_manager}"'
+        combined_query_str = f'JobStatus == 1 && QDate < {last_negotiation_cycle_time} && RequireId == "{self.instance_group_manager}"'
         idle_job_ads = schedd.query(constraint=combined_query_str, projection=job_attributes)
 
         total_idle_request_cpus = sum(j[REQUEST_CPUS_ATTRIBUTE] for j in idle_job_ads)
