@@ -35,6 +35,10 @@ vars:
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
   kms_key: ""
+  slurm_image:
+    # Pinned to working version prior to July 10, 2026 due to Lustre client incompatibility on Rocky 9.8
+    name: slurm-gcp-6-12-hpc-rocky-linux-9-20260519
+    project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -70,6 +74,7 @@ deployment_groups:
       node_count_dynamic_max: 2
       machine_type: $(vars.compute_node_machine_type)
       allow_automatic_updates: false
+      instance_image: $(vars.slurm_image)
 
   - id: lustre_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -85,6 +90,7 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
+      instance_image: $(vars.slurm_image)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -96,3 +102,4 @@ deployment_groups:
     settings:
       machine_type: n2-standard-4
       enable_controller_public_ips: true
+      instance_image: $(vars.slurm_image)

@@ -31,7 +31,8 @@ vars:
     # for a list of valid family options with Slurm
     # Rocky 8: slurm-gcp-6-12-hpc-rocky-linux-8
     # Rocky 9: slurm-gcp-6-12-hpc-rocky-linux-9
-    family: slurm-gcp-6-12-hpc-rocky-linux-9
+    # Pinned to working version prior to July 10, 2026 due to Lustre client incompatibility on Rocky 9.8
+    name: slurm-gcp-6-12-hpc-rocky-linux-9-20260519
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false
