@@ -16,7 +16,7 @@ import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
 
-import addict # type: ignore
+from util import NSDict
 from conf import conflines
 import util
 
@@ -138,7 +138,7 @@ def test_conflines(cfg, want):
     lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))
     assert conflines(lkp) == want
 
-    cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
+    cfg.cloud_parameters = NSDict(cfg.cloud_parameters)
     lkp = util.Lookup(cfg)
     lkp.cfg.slurm_version = "24.11"
     lkp.template_info = Mock(return_value=TstTemplateInfo(gpu=None))

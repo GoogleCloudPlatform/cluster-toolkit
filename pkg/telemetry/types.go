@@ -26,9 +26,9 @@ import (
 const (
 	clearcutProdURL = "https://play.googleapis.com/log"
 	configDirName   = "cluster-toolkit"
-	timeout15Sec    = 15 * time.Second
-	timeout10Sec    = 10 * time.Second
-	timeout2Sec     = 2 * time.Second
+	apiTimeout      = 15 * time.Second
+	uploadTimeout   = 10 * time.Second
+	shortTimeout    = 2 * time.Second
 	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
 	CONCORD         = "CONCORD"
 	SOURCE          = "SOURCE"

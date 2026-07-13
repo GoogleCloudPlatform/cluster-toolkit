@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"slices"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,9 +30,10 @@ type SchedulingOptions struct {
 	Scheduler          string
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
+	IsStaticSlicing    bool
 }
 
-func GetNodeSelector(opts SchedulingOptions) map[string]string {
+func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
@@ -43,17 +45,22 @@ func GetNodeSelector(opts SchedulingOptions) map[string]string {
 		if strings.Contains(v, "|") {
 			continue
 		}
-		// Skip if it's topology (will go to affinity)
+		// Validate topology format
 		if k == tpuTopologyLabel {
+			trimmed := strings.ToLower(strings.TrimSpace(v))
+			if !config.TopologyRegex.MatchString(trimmed) {
+				return nil, fmt.Errorf("invalid topology format %q for key %s", v, k)
+			}
+			nodeSelector[k] = trimmed
 			continue
 		}
 		nodeSelector[k] = v
 	}
 
 	if len(nodeSelector) == 0 {
-		return nil
+		return nil, nil
 	}
-	return nodeSelector
+	return nodeSelector, nil
 }
 
 func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
@@ -87,14 +94,13 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 
 	for _, k := range keys {
 		v := opts.NodeAffinityLabels[k]
-		isTopologyMerge := (k == tpuTopologyLabel) && (opts.Topology != "") && (!opts.IsDynamicSlicing)
 		hasPipe := strings.Contains(v, "|")
 
-		if !hasPipe && k != tpuTopologyLabel {
+		if !hasPipe {
 			continue
 		}
 
-		values, err := parseAffinityValues(k, v, opts.Topology, isTopologyMerge)
+		values, err := parseAffinityValues(k, v)
 		if err != nil {
 			return nil, err
 		}
@@ -115,28 +121,23 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 	return affinity, nil
 }
 
-func parseAffinityValues(k string, v string, topology string, isTopologyMerge bool) ([]string, error) {
-	if v == "" && !isTopologyMerge {
+func parseAffinityValues(k string, v string) ([]string, error) {
+	if v == "" {
 		return nil, nil
 	}
 
-	var values []string
-	if isTopologyMerge {
-		values = append(values, topology)
+	if k == tpuTopologyLabel && strings.Contains(v, "|") {
+		return nil, fmt.Errorf("multiple topologies in node constraints are not supported for key %s: got %q. GKE Warden validation rejects templates targeting multiple topologies", k, v)
 	}
 
-	if v != "" {
-		for _, val := range strings.Split(v, "|") {
-			trimmed := strings.TrimSpace(val)
-			if trimmed == "" {
-				return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
-			}
-			if k == tpuTopologyLabel && !config.TopologyRegex.MatchString(trimmed) {
-				return nil, fmt.Errorf("invalid topology format %q for key %s", trimmed, k)
-			}
-			if !slices.Contains(values, trimmed) {
-				values = append(values, trimmed)
-			}
+	var values []string
+	for _, val := range strings.Split(v, "|") {
+		trimmed := strings.TrimSpace(val)
+		if trimmed == "" {
+			return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
+		}
+		if !slices.Contains(values, trimmed) {
+			values = append(values, trimmed)
 		}
 	}
 
@@ -145,23 +146,25 @@ func parseAffinityValues(k string, v string, topology string, isTopologyMerge bo
 
 // GetTopologyAnnotation returns the GKE and Kueue topology annotations for the given topology and slice count.
 // It dynamically selects the appropriate Kueue annotation key based on whether it is a single-slice or multi-slice job.
-func GetTopologyAnnotation(topology string, numSlices int) map[string]string {
+func GetTopologyAnnotation(topology string, machineType string, numSlices int, nodesPerSlice int) map[string]string {
 	if topology == "" {
 		return nil
 	}
 
 	annotationKey := "kueue.x-k8s.io/podset-required-topology"
+	annotations := map[string]string{
+		"cloud.google.com/gke-tpu-slice-topology": topology,
+	}
+	partitionValue := fmt.Sprintf("cloud.google.com/gke-tpu-slice-%s-id", topology)
+	if strings.Contains(machineType, "tpu7x") {
+		partitionValue = fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology)
+	}
 	if numSlices > 1 {
 		annotationKey = "kueue.x-k8s.io/podset-slice-required-topology"
+		annotations["kueue.x-k8s.io/podset-slice-size"] = strconv.Itoa(nodesPerSlice)
 	}
-
-	// Dynamic slicing is only active for TPU7x, which uses partition-level requirements.
-	partitionValue := fmt.Sprintf("cloud.google.com/gke-tpu-partition-%s-id", topology)
-
-	return map[string]string{
-		"cloud.google.com/gke-tpu-slice-topology": topology,
-		annotationKey: partitionValue,
-	}
+	annotations[annotationKey] = partitionValue
+	return annotations
 }
 
 func GetTolerations(acceleratorType string) []corev1.Toleration {

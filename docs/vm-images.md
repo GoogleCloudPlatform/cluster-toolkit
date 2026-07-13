@@ -97,7 +97,7 @@ gcloud compute images create <new_image_name> --project=<your project> --source-
 
 Alternatively, a user can specify a family of images you wish to pull from (i.e.
 `--source-image-family` instead of `--source-image`). See more on
-[gcloud compute images create](gcloud-compute-images).
+[gcloud compute images create][gcloud-compute-images].
 
 Once the image has been created or copied, the user can specify their own
 project and the new image name in the `instance_image` field discussed in

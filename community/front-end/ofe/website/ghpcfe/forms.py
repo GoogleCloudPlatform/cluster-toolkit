@@ -407,9 +407,9 @@ class ClusterPartitionForm(forms.ModelForm):
                 specific_reservation = matching_reservation.get("specificReservationRequired")
                 if specific_reservation == False:
                     raise ValidationError(
-                        f"You must use a 'specific' reservation type."
-                        f"Please read the following URL for more information about setting up reservations:"
-                        f"https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work"
+                        "You must use a 'specific' reservation type. "
+                        "Please read the following URL for more information about setting up reservations: "
+                        "https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work"
                     )
 
             except Exception as e:
@@ -1344,20 +1344,20 @@ class ContainerRegistryForm(forms.ModelForm):
             if not use_public_repository and not cleaned_data.get("repo_mirror_url"):
                 self.add_error("repo_mirror_url", "Mirror URL is required for remote repositories unless using a public repository.")
                 raise ValidationError(
-                        f"repo_mirror_url is required for remote repositories unless using a public repository."
+                        "repo_mirror_url is required for remote repositories unless using a public repository."
                     )
 
             if cleaned_data.get("use_upstream_credentials") and not cleaned_data.get("repo_username"):
                 self.add_error("repo_username", "Username is required when using upstream credentials.")
                 raise ValidationError(
-                        f"repo_username is required when using upstream credentials."
+                        "repo_username is required when using upstream credentials."
                     )
 
             # Allow repo_password to exist in cleaned_data even if not saved to the model
             if cleaned_data.get("use_upstream_credentials") and not cleaned_data.get("repo_password"):
                 self.add_error("repo_password", "Password is required when using upstream credentials.")
                 raise ValidationError(
-                        f"repo_password is required when using upstream credentials."
+                        "repo_password is required when using upstream credentials."
                     )
 
             # If use_public_repository is set, enforce defaults

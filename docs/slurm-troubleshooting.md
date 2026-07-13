@@ -85,7 +85,7 @@ to `false` on the partition in question.
 If VMs get stuck in `status: staging` when using the `vm-instance` module with
 placement enabled, it may be because you need to allow terraform to make more
 concurrent requests. See
-[this note](modules/compute/vm-instance/README.md#placement) in the vm-instance
+[this note](../modules/compute/vm-instance/README.md#placement) in the vm-instance
 README.
 
 #### Insufficient Service Account Permissions

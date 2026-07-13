@@ -674,8 +674,50 @@ variable "machine_mappings_json" {
   default     = "{}"
 }
 
-variable "enable_managed_ml_diagnostics" {
+variable "enable_ml_diagnostics" {
   description = "Enables ML Diagnostics on the GKE cluster."
   type        = bool
   default     = false
+}
+
+variable "network_policy" {
+  description = "Configuration for the network policy addon. Enabling network policy for clusters with GKE Dataplane V2 (ADVANCED_DATAPATH) is not supported; GKE Dataplane V2 automatically manages network policy enforcement."
+  type = object({
+    enabled  = bool
+    provider = optional(string, "PROVIDER_UNSPECIFIED")
+  })
+  default = {
+    enabled  = false
+    provider = "PROVIDER_UNSPECIFIED"
+  }
+}
+
+variable "enable_fqdn_network_policy" {
+  description = "Enable FQDN Network Policy on the cluster. This feature requires GKE Dataplane V2 to be enabled."
+  type        = bool
+  default     = false
+}
+
+variable "enable_confidential_nodes" {
+  description = "Enable Confidential Nodes at the cluster level. All nodes in the cluster will run on Confidential VMs."
+  type        = bool
+  default     = false
+}
+
+variable "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes (e.g., SEV, SEV_SNP, TDX). Leave null for default."
+  type        = string
+  default     = null
+}
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage on the cluster nodes. Node boot disks will be encrypted using keys protected by the Confidential VM."
+  type        = bool
+  default     = false
+}
+
+variable "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable_confidential_storage is true."
+  type        = string
+  default     = null
 }

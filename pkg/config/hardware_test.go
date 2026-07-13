@@ -575,3 +575,61 @@ func TestCheckTopologyContainment(t *testing.T) {
 		})
 	}
 }
+
+func TestIs3DTorusTPU(t *testing.T) {
+	tests := []struct {
+		name        string
+		machineType string
+		wantResult  bool
+	}{
+		{
+			name:        "v4 chip name (Torus)",
+			machineType: "ct4p-hightpu-4t",
+			wantResult:  true,
+		},
+		{
+			name:        "v5p machine name (Torus)",
+			machineType: "ct5p-hightpu-4t",
+			wantResult:  true,
+		},
+		{
+			name:        "v5e machine name (2D Mesh)",
+			machineType: "ct5l-hightpu-4t",
+			wantResult:  false,
+		},
+		{
+			name:        "v6e machine name (2D Mesh)",
+			machineType: "ct6e-standard-8t",
+			wantResult:  false,
+		},
+		{
+			name:        "tpu7x machine name (Exclude)",
+			machineType: "tpu7x-standard-16t",
+			wantResult:  false,
+		},
+		{
+			name:        "Shorthand v4-8",
+			machineType: "v4-8",
+			wantResult:  true,
+		},
+		{
+			name:        "Shorthand v5p-8",
+			machineType: "v5p-8",
+			wantResult:  true,
+		},
+		{
+			name:        "Non-TPU machine type",
+			machineType: "a2-highgpu-1g",
+			wantResult:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Is3DTorusTPU(tt.machineType)
+			if got != tt.wantResult {
+				t.Errorf("Is3DTorusTPU(%q) = %v, want %v", tt.machineType, got, tt.wantResult)
+			}
+		})
+	}
+}

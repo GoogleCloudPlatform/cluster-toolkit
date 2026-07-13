@@ -204,3 +204,26 @@ variable "tpu_chips_per_node" {
   type        = list(string)
   default     = [null]
 }
+
+variable "resource_claims" {
+  description = "A list of resource claims at the Pod level, defining name and resource_claim_template_name."
+  type = list(object({
+    name                         = string
+    resource_claim_template_name = string
+  }))
+  default = []
+}
+
+variable "claims" {
+  description = "A list of claims in the container resources block (e.g. [{ name = \"rdma\" }])."
+  type = list(object({
+    name = string
+  }))
+  default = []
+}
+
+variable "enable_dranet" {
+  description = "Boolean indicating whether DRANET is enabled on the target node pool."
+  type        = list(bool)
+  default     = [false]
+}

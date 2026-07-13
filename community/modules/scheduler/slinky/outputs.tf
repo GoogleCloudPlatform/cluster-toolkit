@@ -33,3 +33,34 @@ output "slurm_operator_namespace" {
     helm_release.prometheus
   ]
 }
+
+output "instructions" {
+  description = "Instructions on how to connect to the cluster and run basic Slurm commands."
+  value       = <<-EOT
+    To test Slurm functionality, connect to the controller or the login node and use Slurm client commands.
+
+    First, get cluster credentials:
+      gcloud container clusters get-credentials ${local.cluster_name} --location ${local.cluster_location} --project ${local.project_id}
+
+    Connect to the controller:
+      kubectl exec -it statefulsets/slurm-controller --namespace=${var.slurm_namespace} -- bash --login
+
+    Connect to the login node (if enabled):
+      (Note: It may take a few minutes for the LoadBalancer IP to become available)
+      SLURM_LOGIN_IP="$(kubectl get services -n ${var.slurm_namespace} -l app.kubernetes.io/instance=slurm,app.kubernetes.io/name=login -o jsonpath="{.items[0].status.loadBalancer.ingress[0].ip}")"
+      # If using root with SSH authorized keys:
+      ssh -p 2222 root@$${SLURM_LOGIN_IP}
+      # Or if SSSD/LDAP is configured:
+      ssh -p 2222 $${USER}@$${SLURM_LOGIN_IP}
+
+    Once connected, you can run:
+      sinfo
+      srun hostname
+  EOT
+  depends_on = [
+    helm_release.cert_manager,
+    helm_release.slurm_operator,
+    helm_release.slurm,
+    helm_release.prometheus
+  ]
+}

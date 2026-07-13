@@ -18,10 +18,14 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"strings"
 
@@ -65,6 +69,15 @@ var (
 
 	volumeStr []string
 	pathways  orchestrator.PathwaysJobDefinition
+
+	gkeNapProvisioning string
+	gkeNapReservation  string
+
+	envVars           []string
+	pathwaysProxyEnv  []string
+	pathwaysServerEnv []string
+	pathwaysWorkerEnv []string
+	validEnvKeyRegex  = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
 )
 
 var SubmitCmd = &cobra.Command{
@@ -79,6 +92,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 	RunE: runSubmitCmd,
 
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if len(workloadName) > 28 {
+			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		}
+
 		if err := validateImageFlags(); err != nil {
 			return err
 		}
@@ -91,11 +108,17 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		priorityClassName = strings.ToLower(priorityClassName)
-		if priorityClassName != "" && !slices.Contains(orchestrator.ValidPriorityClasses, priorityClassName) {
-			return fmt.Errorf("invalid value for --priority: %s. Allowed values are: %s",
-				priorityClassName, strings.Join(orchestrator.ValidPriorityClasses, ", "))
+		if err := validateGKENAPFlags(); err != nil {
+			return err
 		}
+
+		for _, envs := range [][]string{envVars, pathwaysProxyEnv, pathwaysServerEnv, pathwaysWorkerEnv} {
+			if err := validateEnvFlags(envs); err != nil {
+				return err
+			}
+		}
+
+		priorityClassName = strings.ToLower(priorityClassName)
 
 		return nil
 	},
@@ -112,6 +135,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringSliceVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>:<dest>[:<mode>], mode can be 'ro' or 'rw', default 'ro').")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -132,8 +156,10 @@ func init() {
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeoutStr, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
-	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "medium", "A priority, one of `very-low`, `low`, `medium`, `high` or `very-high`. Defaults to `medium`.")
+	SubmitCmd.Flags().StringVar(&priorityClassName, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
 	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
+	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
@@ -146,6 +172,9 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
@@ -155,6 +184,12 @@ func init() {
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
+	if dryRunManifest != "" {
+		if err := ensureDryRunDir(dryRunManifest); err != nil {
+			return err
+		}
+	}
+
 	ttlSeconds, err := parseDurationToSeconds(ttlAfterFinished, "--gke-ttl-after-finished")
 	if err != nil {
 		return err
@@ -170,11 +205,6 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		affinity["cpu-affinity"] = cpuAffinityStr
 	}
 
-	vols, err := parseVolumeFlag(volumeStr)
-	if err != nil {
-		return err
-	}
-
 	if timeoutStr != "-1s" {
 		awaitJobCompletion = true
 	}
@@ -182,6 +212,12 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
 		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
 	}
+
+	jobTopology := strings.ToLower(strings.TrimSpace(topology))
+
+	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
+	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
+	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
 
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
@@ -207,96 +243,53 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		RestartOnExitCodes:            restartOnExitCodes,
 		ImagePullSecrets:              imagePullSecrets,
 		ServiceAccountName:            serviceAccountName,
-		Topology:                      topology,
+		Topology:                      jobTopology,
 		GKEScheduler:                  gkeScheduler,
 		AwaitJobCompletion:            awaitJobCompletion,
 		UseParallelContainers:         !gkeDisableParallelContainers,
 		Timeout:                       timeoutStr,
 		PriorityClassName:             priorityClassName,
+		GKENAPProvisioning:            gkeNapProvisioning,
+		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,
 		Pathways:                      pathways,
-		Volumes:                       vols,
+		RawMounts:                     volumeStr,
+		Env:                           parseEnvFlags(envVars),
 		Verbose:                       verbose,
 	}
 
 	return orc.SubmitJob(jobDef)
 }
 
-func parseVolumeFlag(vStrs []string) ([]orchestrator.VolumeDefinition, error) {
-	var vols []orchestrator.VolumeDefinition
-	seenSources := make(map[string]bool)
-	seenDestinations := make(map[string]bool)
-
-	for i, vStr := range vStrs {
-		src, dest, readOnly, err := parseSingleVolume(vStr)
-		if err != nil {
-			return nil, err
-		}
-
-		if seenSources[src] {
-			return nil, fmt.Errorf("duplicate volume source: %s", src)
-		}
-		if seenDestinations[dest] {
-			return nil, fmt.Errorf("duplicate volume destination: %s", dest)
-		}
-		seenSources[src] = true
-		seenDestinations[dest] = true
-
-		volType := "pvc"
-		if strings.HasPrefix(src, "gs://") {
-			volType = "gcsfuse"
-		} else if strings.HasPrefix(src, "/") {
-			volType = "hostPath"
-		}
-
-		vols = append(vols, orchestrator.VolumeDefinition{
-			Name:      fmt.Sprintf("vol-%d", i),
-			Source:    src,
-			MountPath: dest,
-			Type:      volType,
-			ReadOnly:  readOnly,
-		})
+func parseEnvFlags(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
 	}
-	return vols, nil
+	res := make(map[string]string)
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			res[parts[0]] = parts[1]
+		}
+	}
+	return res
 }
 
-func parseSingleVolume(vStr string) (src, dest string, readOnly bool, err error) {
-	readOnly = true
-	idx := strings.LastIndex(vStr, ":")
-	if idx <= 0 || idx == len(vStr)-1 {
-		return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
-	}
-
-	lastPart := vStr[idx+1:]
-	srcDestPart := vStr[:idx]
-
-	if lastPart == "ro" || lastPart == "rw" {
-		readOnly = (lastPart == "ro")
-		idx = strings.LastIndex(srcDestPart, ":")
-		if idx <= 0 || idx == len(srcDestPart)-1 {
-			return "", "", false, fmt.Errorf("invalid volume format: %s. Expected format: <src>:<dest>[:<mode>]", vStr)
+func validateEnvFlags(envs []string) error {
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid environment variable format: %q. Must be in KEY=VALUE format", env)
 		}
-		src = srcDestPart[:idx]
-		dest = srcDestPart[idx+1:]
-	} else {
-		src = srcDestPart
-		dest = lastPart
-
-		if strings.HasPrefix(vStr, "gs://") && !strings.HasPrefix(src, "gs://") {
-			return "", "", false, fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
+		key := parts[0]
+		if key == "" {
+			return fmt.Errorf("invalid environment variable key in %q: key cannot be empty", env)
 		}
-
-		if strings.Contains(src, ":") {
-			if strings.HasPrefix(src, "gs://") {
-				if strings.Contains(src[5:], ":") {
-					return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
-				}
-			} else {
-				return "", "", false, fmt.Errorf("invalid volume format: %s", vStr)
-			}
+		if !validEnvKeyRegex.MatchString(key) {
+			return fmt.Errorf("invalid environment variable name: %q. Must conform to POSIX environment variable naming rules (letters, numbers, and underscores, cannot start with a digit)", key)
 		}
 	}
-	return src, dest, readOnly, nil
+	return nil
 }
 
 func parseDurationToSeconds(dStr string, flagName string) (int, error) {
@@ -320,7 +313,7 @@ func validatePathwaysFlags() error {
 		}
 	} else {
 		// Check if any pathways-specific flag is set without --pathways
-		if pathways != (orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) {
+		if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 {
 			return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 		}
 	}
@@ -352,10 +345,54 @@ func validateBuildContext() error {
 		return nil
 	}
 	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).")
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo)")
 	}
 	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
+	}
+	return nil
+}
+
+func validateGKENAPFlags() error {
+	gkeNapProvisioning = strings.ToLower(gkeNapProvisioning)
+	if gkeNapProvisioning != "" {
+		validModels := []string{"on-demand", "spot", "reservation"}
+		if !slices.Contains(validModels, gkeNapProvisioning) {
+			return fmt.Errorf("invalid value %q for --gke-nap-provisioning. Allowed values: %s", gkeNapProvisioning, strings.Join(validModels, ", "))
+		}
+
+		if gkeNapProvisioning == "reservation" && gkeNapReservation == "" {
+			return fmt.Errorf("--gke-nap-reservation is required when --gke-nap-provisioning=reservation")
+		}
+	}
+	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
+		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
+	}
+	return nil
+}
+
+func ensureDryRunDir(path string) error {
+	if len(path) > 0 && os.IsPathSeparator(path[len(path)-1]) {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return fmt.Errorf("the dry-run-out path %q must be a file path, not a directory path", path)
+	}
+
+	dir := filepath.Dir(path)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			prompt := fmt.Sprintf("Directory %q does not exist. Would you like to create it?", dir)
+			if shell.PromptYesNo(prompt) {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create directory %s: %w", dir, err)
+				}
+				return nil
+			}
+			return fmt.Errorf("directory %q does not exist. Please check your path for typos or create the directory manually", dir)
+		}
+		return fmt.Errorf("failed to check directory %s: %w", dir, err)
 	}
 	return nil
 }

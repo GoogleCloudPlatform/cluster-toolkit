@@ -468,7 +468,7 @@ func getLinuxVersion() string {
 
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -480,7 +480,7 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")

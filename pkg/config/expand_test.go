@@ -572,3 +572,20 @@ func (s *zeroSuite) TestExpandGlobalLabels(c *C) {
 		c.Check(labelsVal, DeepEquals, expectedLabels)
 	}
 }
+
+func (s *zeroSuite) TestCheckInputValueMatchesType_Panic(c *C) {
+	m := tMod("yarn").
+		inputs(modulereader.VarInfo{Name: "bad_input", Type: cty.String}).
+		set("bad_input", cty.NilVal).
+		build()
+
+	bp := Blueprint{
+		Groups: []Group{
+			{Modules: []Module{m}}},
+	}
+
+	mp := Root.Groups.At(0).Modules.At(0)
+	err := bp.expandModule(mp, &m)
+	c.Assert(err, NotNil)
+	c.Check(err, ErrorMatches, ".*panic during type conversion for \"bad_input\".*")
+}

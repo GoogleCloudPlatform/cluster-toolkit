@@ -50,8 +50,8 @@ var (
 var (
 	InstallationMode   string // Toolkit installation mode like "SOURCE", "BINARY", etc.
 	telemetryCollector *telemetry.Collector
-	userConfigExists   bool        = false
-	telemetryFlushed   atomic.Bool // 2-state flag for whether telemetry event is flushed or not.
+	userConfigExists   bool        = false // userConfigExists tracks whether the user configuration has been initialized.
+	telemetryFlushed   atomic.Bool         // 2-state flag for whether telemetry event is flushed or not.
 )
 
 var (

@@ -33,6 +33,11 @@ type PathwaysJobDefinition struct {
 	ServerArgs string // Default: ""
 	WorkerArgs string // Default: ""
 
+	// Custom Environment Variables for Pathways components
+	ProxyEnv  map[string]string
+	ServerEnv map[string]string
+	WorkerEnv map[string]string
+
 	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
 
@@ -82,12 +87,15 @@ type JobDefinition struct {
 	UseParallelContainers bool
 	Timeout               string
 	PriorityClassName     string
+	GKENAPProvisioning    string
+	GKENAPReservation     string
 
 	// Pathways-specific fields
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
-	Volumes []VolumeDefinition
+	RawMounts []string
+	Env       map[string]string
 
 	Verbose bool
 }

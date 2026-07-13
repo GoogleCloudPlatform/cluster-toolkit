@@ -129,7 +129,7 @@
     </tbody>
   </table>
   {% if admin_view == 1 %}
-  <input type="checkbox" id="id_show_destroyed"/> Show Destroyed Clusters
+  <input type="checkbox" id="id_show_destroyed"/> <label for="id_show_destroyed">Show Destroyed Clusters</label>
   {% endif %}
   </div>
   {% else %}
@@ -161,6 +161,7 @@ function filterTable() {
 }
 function setupFilter() {
     var toggle = document.getElementById("id_show_destroyed");
+    if (!toggle) return;
     toggle_cookie = ($.cookie("cluster_list_show_destroyed") != "false");
     if ( toggle_cookie ) {
         toggle.checked = true;

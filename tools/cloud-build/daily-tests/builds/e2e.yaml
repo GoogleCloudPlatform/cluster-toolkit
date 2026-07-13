@@ -40,7 +40,7 @@ steps:
     vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zone"
 
     cd /workspace
-    make
+    bash tools/get_binary.sh "" "true"
     BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
     bash tools/add_ttl_label.sh "${BLUEPRINT}"
     ./gcluster deploy "${BLUEPRINT}" --vars="$vars" --auto-approve

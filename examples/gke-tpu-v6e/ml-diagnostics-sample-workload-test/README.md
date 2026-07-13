@@ -10,8 +10,8 @@ To run a sample job, you need a GKE TPU cluster with ML Diagnostics enabled:
 
 1. Deploy a GKE TPU blueprint (e.g., v6e or 7x) with ML Diagnostics features enabled. Instructions can be found in the respective READMEs:
 
-   - [GKE TPU v6e README](../../examples/gke-tpu-v6e/README.md#understanding-ml-diagnostics-integration)
-   - [GKE TPU 7x README](../../examples/gke-tpu-7x/README.md#understanding-ml-diagnostics-integration)
+   - [GKE TPU v6e README](../README.md#understanding-ml-diagnostics-integration)
+   - [GKE TPU 7x README](../../gke-tpu-7x/README.md#understanding-ml-diagnostics-integration)
 
 2. Verify the cluster and ML Diagnostics components are correctly configured by following the "Testing ML Diagnostics Cluster Configuration" section in the blueprint's README.
 

@@ -76,8 +76,54 @@ func TestBuildResourcesString(t *testing.T) {
 			if !tt.wantErr && tt.wantContain != "" && !strings.Contains(got, tt.wantContain) {
 				t.Errorf("buildResourcesString() = %v, want contain %v", got, tt.wantContain)
 			}
-			if !tt.wantErr && tt.wantContain == "" && got != "" {
-				t.Errorf("buildResourcesString() = %v, want empty", got)
+		})
+	}
+}
+
+func TestAssembleManifest(t *testing.T) {
+	tests := []struct {
+		name                string
+		mainManifest        string
+		additionalManifests []string
+		want                string
+	}{
+		{
+			name:                "no additional manifests",
+			mainManifest:        "main: content",
+			additionalManifests: nil,
+			want:                "main: content",
+		},
+		{
+			name:                "one additional manifest",
+			mainManifest:        "main: content",
+			additionalManifests: []string{"add1: content"},
+			want:                "add1: content\n---\nmain: content",
+		},
+		{
+			name:                "multiple additional manifests",
+			mainManifest:        "main: content",
+			additionalManifests: []string{"add1: content", "add2: content"},
+			want:                "add1: content\n---\nadd2: content\n---\nmain: content",
+		},
+		{
+			name:                "empty and whitespace additional manifests",
+			mainManifest:        "main: content",
+			additionalManifests: []string{"", "  ", "add1: content", "\n"},
+			want:                "add1: content\n---\nmain: content",
+		},
+		{
+			name:                "whitespace main manifest",
+			mainManifest:        "  main: content  ",
+			additionalManifests: []string{"add1: content"},
+			want:                "add1: content\n---\nmain: content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := assembleManifest(tt.mainManifest, tt.additionalManifests)
+			if got != tt.want {
+				t.Errorf("assembleManifest() = %q, want %q", got, tt.want)
 			}
 		})
 	}

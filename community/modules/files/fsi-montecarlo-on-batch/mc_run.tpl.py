@@ -19,17 +19,16 @@ Run MC simulation for VaR portfolio risk
 
 import avro.schema
 import io
-import google.auth
 import numpy
 import time
 import yfinance as yf
 
 from absl import app
 from absl import flags
-from avro.io import DatumWriter, BinaryEncoder, BinaryDecoder, DatumReader
+from avro.io import DatumWriter, BinaryEncoder
 from datetime import datetime
 from datetime import timedelta
-from google.cloud import pubsub_v1, bigquery
+from google.cloud import pubsub_v1
 from google.cloud.pubsub import SchemaServiceClient
 
 PROJECT_ID = '${project_id}'

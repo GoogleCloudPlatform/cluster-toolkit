@@ -156,6 +156,8 @@ module "slurm_files" {
 
   project_id                    = var.project_id
   slurm_cluster_name            = local.slurm_cluster_name
+  slurm_control_host            = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
+  slurm_control_addr            = var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null
   slurm_backup_controller_name  = var.enable_backup_controller ? local.slurm_backup_controller_name : null
   slurm_backup_controller_ip    = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
   bucket_dir                    = var.bucket_dir

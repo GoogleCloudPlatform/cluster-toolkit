@@ -180,7 +180,7 @@ main() {
 
 	# Create pip virtual environment for Cluster Toolkit
 	${python_path} -m venv "${venv_path}" --copies
-	venv_python_path=${venv_path}/bin/python3
+	venv_python_path="${venv_path}/bin/$(basename "${python_path}")"
 
 	# Upgrade pip if necessary
 	pip_version=$(${venv_python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')

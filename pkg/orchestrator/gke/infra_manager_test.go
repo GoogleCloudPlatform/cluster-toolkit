@@ -65,13 +65,15 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	orc := &GKEOrchestrator{
 		capacity: ClusterCapacity{
 			Flavors: map[string]FlavorCapacity{
-				"flavor-default": {
+				"flavor-tpu": { // TPU flavor (name contains 'tpu')
 					CPUs:     100,
 					MemoryGi: 400,
+					TPUs:     8, // Physical TPU capacity
 				},
-				"pathways-flavor": { // Pathways flavor
+				"pathways-flavor": { // Pathways flavor (CPU-only)
 					CPUs:     480,
 					MemoryGi: 2000,
+					TPUs:     0, // No TPUs
 				},
 			},
 		},
@@ -85,17 +87,42 @@ func TestRenderClusterQueue_Pathways(t *testing.T) {
 	output := string(bytes)
 
 	// Verify quotas are rendered correctly
-	if !strings.Contains(output, "nominalQuota: 100") {
-		t.Errorf("expected nominalQuota: 100 for CPU, got %s", output)
+	// The TPU flavor (flavor-tpu) CPU/Memory must be overridden to the high defaults (999999 / 999999T)
+	// The TPU nominal quota should match physical capacity (8)
+	if !strings.Contains(output, "nominalQuota: \"999999\"") {
+		t.Errorf("expected nominalQuota: \"999999\" for TPU flavor CPU, got %s", output)
 	}
-	if !strings.Contains(output, "nominalQuota: 480") {
-		t.Errorf("expected nominalQuota: 480 for CPU, got %s", output)
+	if !strings.Contains(output, "nominalQuota: 999999T") {
+		t.Errorf("expected nominalQuota: 999999T for TPU flavor Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 8") {
+		t.Errorf("expected nominalQuota: 8 for TPU flavor TPUs, got %s", output)
 	}
 
-	// Verify TWO resource groups
+	// The Pathways flavor CPU/Memory should remain at their physical/mocked values
+	// The TPU nominal quota for Pathways flavor must be successfully injected as 0
+	if !strings.Contains(output, "nominalQuota: 480") {
+		t.Errorf("expected nominalQuota: 480 for Pathways flavor CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 2000Gi") {
+		t.Errorf("expected nominalQuota: 2000Gi for Pathways flavor Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 0") {
+		t.Errorf("expected nominalQuota: 0 for Pathways flavor TPUs, got %s", output)
+	}
+
+	// Verify SINGLE resource group (unified when Pathways is active)
 	count := strings.Count(output, "coveredResources:")
-	if count != 2 {
-		t.Errorf("expected 2 coveredResources blocks for Pathways case, got %d. Output: %s", count, output)
+	if count != 1 {
+		t.Errorf("expected 1 coveredResources block for Pathways case (unified), got %d. Output: %s", count, output)
+	}
+
+	// Verify both flavors are present in the output
+	if !strings.Contains(output, "name: flavor-tpu") {
+		t.Errorf("expected flavor-tpu in output, got %s", output)
+	}
+	if !strings.Contains(output, "name: pathways-flavor") {
+		t.Errorf("expected pathways-flavor in output, got %s", output)
 	}
 }
 
@@ -241,6 +268,9 @@ func TestParseVersion(t *testing.T) {
 		{"v0.6.3", 0, 6, 3},
 		{"1.2.3", 1, 2, 3},
 		{"v1.2", 1, 2, 0},
+		{"v0.16.6-some-random-suffix", 0, 16, 6},
+		{"v0.16.6+build123", 0, 16, 6},
+		{"v0.16.6-rc1+build123", 0, 16, 6},
 		{"invalid", 0, 0, 0},
 	}
 
@@ -265,6 +295,7 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 		action  func()
 	}{
 		{pattern: "kubectl delete crd", action: func() { deleteCalled = true }, res: shell.CommandResult{ExitCode: 0}},
+		{pattern: "auth can-i", res: shell.CommandResult{ExitCode: 0, Stdout: "yes"}},
 		{pattern: "kubectl get crd", res: shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}},
 		{pattern: "jsonpath", res: shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}},
 		{pattern: "kubectl get deployment", res: shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}},
@@ -310,8 +341,8 @@ func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return failure with "not found" to simulate missing priority classes
-				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): priorityclass \"very-low\" not found"}
+				// Return only system priority classes to simulate no user priority classes
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical"}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
 				applyCalled = true
@@ -341,8 +372,8 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			fullCmd := name + " " + strings.Join(args, " ")
 			if strings.Contains(fullCmd, "kubectl get priorityclass") {
-				// Return success to simulate all are present
-				return shell.CommandResult{ExitCode: 0}
+				// Return system classes and at least one user class (e.g. 'low') to simulate pre-existing classes
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical low"}
 			}
 			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
 				applyCalled = true
@@ -380,5 +411,296 @@ func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "user declined to re-install Kueue") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRenderClusterQueue_NAP(t *testing.T) {
+	orc := &GKEOrchestrator{
+		napEnabled: true,
+		napLimits: map[string]int64{
+			"cpu":            1000,
+			"memory":         4000, // limit is in GB in napLimits
+			"nvidia.com/gpu": 80,
+		},
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"flavor-default": {
+					CPUs:     4,
+					MemoryGi: 16,
+				},
+				"nvidia-tesla-a100": {
+					GPUs: 2,
+				},
+			},
+		},
+	}
+
+	bytes, err := orc.renderClusterQueue("cluster-queue")
+	if err != nil {
+		t.Fatalf("renderClusterQueue failed: %v", err)
+	}
+
+	output := string(bytes)
+
+	// Verify nominal quotas are rendered from napLimits, not static capacities
+	if !strings.Contains(output, "nominalQuota: 1000") { // CPU limit from napLimits
+		t.Errorf("expected nominalQuota: 1000 for CPU, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 4000G") { // Memory limit from napLimits
+		t.Errorf("expected nominalQuota: 4000G for Memory, got %s", output)
+	}
+	if !strings.Contains(output, "nominalQuota: 80") { // GPU limit from napLimits
+		t.Errorf("expected nominalQuota: 80 for GPU, got %s", output)
+	}
+}
+
+func TestCheckAndInstallKueue_PermissionDenied(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i") {
+				if strings.Contains(fullCmd, "clusterroles") {
+					return shell.CommandResult{ExitCode: 0, Stdout: "no"}
+				}
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
+			}
+			if strings.Contains(fullCmd, "jsonpath") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	if err == nil {
+		t.Fatal("expected error due to insufficient permissions, got nil")
+	}
+
+	expectedErr := "unable to re-install kueue to version"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
+	deleteCalled := false
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			if strings.Contains(fullCmd, "auth can-i") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			}
+			if strings.Contains(fullCmd, "kubectl delete crd") {
+				deleteCalled = true
+				return shell.CommandResult{ExitCode: 0}
+			}
+			if strings.Contains(fullCmd, "kubectl get crd") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}
+			}
+			if strings.Contains(fullCmd, "jsonpath") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "registry.k8s.io/kueue/kueue:v0.12.0"}
+			}
+			if strings.Contains(fullCmd, "kubectl get deployment") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "kueue-controller-manager found"}
+			}
+			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+
+	origPrompt := shell.PromptYesNo
+	defer func() { shell.PromptYesNo = origPrompt }()
+	shell.PromptYesNo = func(prompt string) bool { return true }
+
+	orc := &GKEOrchestrator{
+		executor: mock,
+	}
+
+	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !deleteCalled {
+		t.Errorf("expected DeleteAllKueueResources to be called, but it wasn't")
+	}
+}
+
+func TestValidatePriorityClass_Empty(t *testing.T) {
+	orc := &GKEOrchestrator{}
+	err := orc.validatePriorityClass("")
+	if err != nil {
+		t.Fatalf("expected no error for empty priority, got %v", err)
+	}
+}
+
+func TestValidatePriorityClass_Exists(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low medium high"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+	err := orc.validatePriorityClass("medium")
+	if err != nil {
+		t.Fatalf("expected no error for existing priority, got %v", err)
+	}
+}
+
+func TestValidatePriorityClass_NotExist(t *testing.T) {
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			if strings.Contains(name+" "+strings.Join(args, " "), "kubectl get priorityclass") {
+				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical low high"}
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{executor: mock}
+	err := orc.validatePriorityClass("medium")
+	if err == nil {
+		t.Fatal("expected error for non-existing priority, got nil")
+	}
+	expected := `priority class "medium" does not exist in the cluster`
+	if !strings.Contains(err.Error(), expected) {
+		t.Errorf("expected error to contain %q, got %v", expected, err)
+	}
+}
+
+func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
+	tests := []struct {
+		name     string
+		podSpec  map[interface{}]interface{}
+		wantSpec map[interface{}]interface{}
+	}{
+		{
+			name: "replaces v0.13.1 image",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+					map[interface{}]interface{}{
+						"name":  "other-container",
+						"image": "nginx:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces v0.14.0 image dynamically",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.14.0",
+					},
+				},
+			},
+		},
+		{
+			name: "ignores unrelated images",
+			podSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"containers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "main",
+						"image": "gcr.io/my-project/my-image:latest",
+					},
+				},
+			},
+		},
+		{
+			name: "replaces image in initContainers",
+			podSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+			wantSpec: map[interface{}]interface{}{
+				"initContainers": []interface{}{
+					map[interface{}]interface{}{
+						"name":  "kube-rbac-proxy-init",
+						"image": "quay.io/brancz/kube-rbac-proxy:v0.13.1",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			replaceDeprecatedRbacProxyImage(tt.podSpec)
+
+			checkContainers := func(key string) {
+				containers, ok1 := tt.podSpec[key].([]interface{})
+				wantContainers, ok2 := tt.wantSpec[key].([]interface{})
+				if ok1 != ok2 {
+					t.Fatalf("mismatch in %s presence: got %v, want %v", key, ok1, ok2)
+				}
+				if !ok1 {
+					return
+				}
+				if len(containers) != len(wantContainers) {
+					t.Fatalf("length mismatch for %s: got %d, want %d", key, len(containers), len(wantContainers))
+				}
+				for i := range containers {
+					c := containers[i].(map[interface{}]interface{})
+					w := wantContainers[i].(map[interface{}]interface{})
+					if c["image"] != w["image"] {
+						t.Errorf("image mismatch in %s: got %q, want %q", key, c["image"], w["image"])
+					}
+				}
+			}
+
+			checkContainers("containers")
+			checkContainers("initContainers")
+		})
 	}
 }

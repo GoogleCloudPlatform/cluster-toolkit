@@ -1,0 +1,224 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package gke
+
+import (
+	"fmt"
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/orchestrator"
+	"sort"
+	"strings"
+)
+
+func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (bool, error) {
+	if !g.napEnabled {
+		return false, nil
+	}
+
+	resolvedType := config.ResolveMachineType(machineType)
+
+	if config.IsTPU(resolvedType) {
+		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0, nil
+	}
+
+	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
+	if err != nil {
+		return false, err
+	}
+	if len(cap.Accelerators) > 0 {
+		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+		if strings.EqualFold(key, resolvedType) {
+			key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
+		}
+		if !isKnownGKEAccelerator(key) {
+			return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
+		}
+		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0, nil
+	}
+
+	return g.napLimits["cpu"] > 0, nil
+}
+
+func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
+	if !g.napEnabled && hasNAPFlags {
+		return fmt.Errorf("GKE NAP provisioning options (--gke-nap-provisioning %q, --gke-nap-reservation %q) are only supported on GKE clusters with Node Auto-Provisioning (NAP) enabled. The current cluster does not have NAP enabled.\nRemediation: Enable Node Auto-Provisioning on your cluster to use these options, or submit your job without them", job.GKENAPProvisioning, job.GKENAPReservation)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) getConfiguredLimitsError(computeType string) error {
+	var configuredLimits []string
+	for k, v := range g.napLimits {
+		if v > 0 {
+			configuredLimits = append(configuredLimits, k)
+		}
+	}
+	sort.Strings(configuredLimits)
+	return fmt.Errorf("workload submission rejected. Compute type %q is not configured within your cluster's Node Auto-Provisioning (NAP) limits. Configured limits on cluster: %s", computeType, strings.Join(configuredLimits, ", "))
+}
+
+func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.JobDefinition) error {
+	hasNAPFlags := job.GKENAPProvisioning != ""
+
+	if err := g.checkNAPFlagsSupported(hasNAPFlags, job); err != nil {
+		return err
+	}
+
+	if !g.napEnabled || !hasNAPFlags {
+		return nil
+	}
+
+	// NAP flags were requested. Validate strictly against GKE NAP limits.
+	isNAP, err := g.isNAPEnabledForMachineType(job.MachineType, job.ClusterLocation)
+	if err != nil {
+		return err
+	}
+	if !isNAP {
+		return g.getConfiguredLimitsError(job.ComputeType)
+	}
+
+	return nil
+}
+
+// extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
+// It handles standard URIs, simple names, and paths containing reservationBlocks/reservationSubBlocks.
+// E.g.,
+// - "my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res" -> "my-res"
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
+// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
+func extractShortReservationName(resName string) string {
+	resName = strings.TrimSuffix(resName, "/")
+	if !strings.Contains(resName, "/") {
+		return resName
+	}
+
+	parts := strings.Split(resName, "/")
+
+	// Case 1: Full GCP URI containing ".../reservations/RESERVATION_NAME/..."
+	for i, part := range parts {
+		if part == "reservations" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+
+	// Case 2: Path containing ".../reservationBlocks/..." but not "reservations" prefix
+	for i, part := range parts {
+		if part == "reservationBlocks" && i > 0 {
+			return parts[i-1]
+		}
+	}
+
+	// Fallback: Return the last segment
+	return parts[len(parts)-1]
+}
+
+func isKnownGKEAccelerator(key string) bool {
+	switch key {
+	case "nvidia-tesla-t4", "nvidia-tesla-v100":
+		return true
+	}
+	for _, val := range machineFamilyToLabelMap {
+		if val == key {
+			return true
+		}
+	}
+	return false
+}
+
+func parseNAPLimits(autoscaling gkeClusterAutoscaling) map[string]int64 {
+	limits := make(map[string]int64)
+	for _, rl := range autoscaling.ResourceLimits {
+		limits[rl.ResourceType] = rl.Maximum
+	}
+
+	for _, rl := range autoscaling.ResourceLimits {
+		resName := rl.ResourceType
+		maxVal := rl.Maximum
+		if resName == "gpu" || strings.Contains(resName, "nvidia") {
+			if maxVal > limits["nvidia.com/gpu"] {
+				limits["nvidia.com/gpu"] = maxVal
+			}
+		} else if strings.Contains(resName, "tpu") {
+			if maxVal > limits["google.com/tpu"] {
+				limits["google.com/tpu"] = maxVal
+			}
+		}
+	}
+	return limits
+}
+
+func isNonAcceleratorResource(resName string) bool {
+	switch resName {
+	case "cpu", "memory", "gpu", "tpu", "pods", "storage", "ephemeral-storage":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveFlavorFromResource(resName string) (string, map[string]string, error) {
+	var flavorName string
+	var nodeLabels map[string]string
+
+	switch {
+	case resName == "google.com/tpu":
+		flavorName = "flavor-tpu-generic"
+	case resName == "nvidia.com/gpu":
+		flavorName = "flavor-nvidia-generic"
+	case strings.HasPrefix(resName, "nvidia-"):
+		flavorName = "flavor-" + resName
+		nodeLabels = map[string]string{
+			"cloud.google.com/gke-accelerator": resName,
+		}
+	case strings.HasPrefix(resName, "tpu-"):
+		flavorName = "flavor-" + resName
+		nodeLabels = map[string]string{
+			"cloud.google.com/gke-tpu-accelerator": resName,
+		}
+	default:
+		return "", nil, fmt.Errorf("unknown accelerator label %q", resName)
+	}
+
+	return flavorName, nodeLabels, nil
+}
+
+func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) error {
+	if !g.napEnabled {
+		return nil
+	}
+
+	for resName, maxLimit := range g.napLimits {
+		if maxLimit <= 0 {
+			continue
+		}
+		if isNonAcceleratorResource(resName) {
+			continue
+		}
+
+		flavorName, nodeLabels, err := resolveFlavorFromResource(resName)
+		if err != nil {
+			return err
+		}
+
+		if _, ok := flavors[flavorName]; !ok {
+			flavors[flavorName] = FlavorCapacity{
+				NodeLabels: nodeLabels,
+			}
+		}
+	}
+	return nil
+}

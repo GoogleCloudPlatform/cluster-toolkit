@@ -198,7 +198,7 @@ func getProjectNumber(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
 	projectName, err := fetchProjectName(ctx, projectID)
@@ -242,11 +242,11 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	return getKeyFromBlueprint("region", bp)
+	return config.GetKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	return getKeyFromBlueprint("zone", bp)
+	return config.GetKeyFromBlueprint("zone", bp)
 }
 
 // getModules returns a comma-separated string of sanitized module names.
@@ -310,7 +310,7 @@ func getBillingAccountId(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout15Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 
 	billingAccount, err := getProjectBillingAccount(ctx, projectID)

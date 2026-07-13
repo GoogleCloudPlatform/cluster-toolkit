@@ -21,7 +21,7 @@ vars:
   # The GCP Region used for this deployment.
   region: us-central1
   # The GCP Zone used for this deployment.
-  zone: us-central1-c
+  zone: us-central1-a
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
@@ -35,6 +35,7 @@ vars:
   size_gib: 36000
   # Maximum throughput of the lustre instance in MBps per TiB
   per_unit_storage_throughput: 500
+  kms_key: ""
 
 deployment_groups:
 - group: primary
@@ -86,6 +87,7 @@ deployment_groups:
       remote_mount: lustrefs
       size_gib: $(vars.size_gib)
       per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+      kms_key: $(vars.kms_key)
 
   - id: node_pool_service_account
     source: modules/project/service-account

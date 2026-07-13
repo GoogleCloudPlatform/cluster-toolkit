@@ -77,7 +77,7 @@ locals {
     EOT
   )
 
-  mldiagnostics_message = !var.enable_managed_ml_diagnostics ? "" : trimspace(
+  mldiagnostics_message = !var.enable_ml_diagnostics ? "" : trimspace(
     <<-EOT
       ML Diagnostics has been configured:
         - Namespace '${var.namespace}' has been labeled 'managed-mldiagnostics-gke: "true"' to enable webhook injection.
@@ -144,7 +144,22 @@ output "cluster_ca_certificate" {
   value       = google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate
 }
 
-output "enable_managed_ml_diagnostics" {
-  description = "Indicates whether native ML Diagnostics is enabled on the GKE cluster."
-  value       = var.enable_managed_ml_diagnostics
+output "enable_confidential_nodes" {
+  description = "Indicates whether Confidential Nodes are enabled at the cluster level."
+  value       = var.enable_confidential_nodes
+}
+
+output "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes."
+  value       = var.confidential_instance_type
+}
+
+output "enable_confidential_storage" {
+  description = "Indicates whether Confidential Storage is enabled at the cluster level."
+  value       = var.enable_confidential_storage
+}
+
+output "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes."
+  value       = var.boot_disk_kms_key
 }

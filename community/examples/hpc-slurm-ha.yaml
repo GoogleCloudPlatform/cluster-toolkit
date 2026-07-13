@@ -21,6 +21,7 @@ vars:
   deployment_name: hpcslurmha
   region: us-central1
   zone: us-central1-a
+  enable_slurm_auth: true
 
 terraform_backend_defaults:
   type: gcs
@@ -161,6 +162,7 @@ deployment_groups:
     use: [debug_partition]
     settings:
       enable_backup_controller: true
+      controller_ha_type: regional
       slurm_cluster_name: hpcslurmha
       backup_zone: us-central1-f
       # Disable PD state disk, rely on /var/spool/slurm filestore share
