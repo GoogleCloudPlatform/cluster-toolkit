@@ -15,7 +15,7 @@
  */
 
 variable "server_ip" {
-  description = "The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse."
+  description = "The device name as supplied to fs-tab, excluding remote fs-name (for nfs, the server IP or DNS FQDN; for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse. For large-capacity NetApp volumes and FlexCache, use a DNS FQDN whose A record contains every NFS endpoint IP."
   type        = string
   default     = ""
 }
