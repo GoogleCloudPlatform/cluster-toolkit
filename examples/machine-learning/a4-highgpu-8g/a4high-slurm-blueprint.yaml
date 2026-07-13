@@ -36,7 +36,7 @@ vars:
   instance_image:
     project: advanced-compute-images
     family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
-  disk_size_gb: 100
+  disk_size_gb: 300
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 
@@ -282,20 +282,23 @@ deployment_groups:
           - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
+            vars:
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run"
+              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux.run"
             tasks:
               - name: Download CUDA runfile
                 ansible.builtin.get_url:
-                  url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run
-                  dest: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  url: "{{ cuda_installer_url }}"
+                  dest: "{{ cuda_installer_file }}"
                   mode: '0755'
 
               - name: Install CUDA toolkit via runfile
                 ansible.builtin.command:
-                  cmd: /tmp/cuda_13.0.0_580.65.06_linux.run --silent --toolkit
+                  cmd: "{{ cuda_installer_file }} --silent --toolkit"
 
               - name: Remove CUDA runfile
                 ansible.builtin.file:
-                  path: /tmp/cuda_13.0.0_580.65.06_linux.run
+                  path: "{{ cuda_installer_file }}"
                   state: absent
 
               - name: Install NVIDIA repository keyring
@@ -437,7 +440,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a4high-slurm-net-0]
     settings:
-      disk_size_gb: 300
+      disk_size_gb: $(vars.disk_size_gb)
       enable_login_public_ips: true
       machine_type: e2-standard-16
       metadata:
@@ -501,7 +504,7 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       disk_type: pd-extreme
-      disk_size_gb: 300
+      disk_size_gb: $(vars.disk_size_gb)
       machine_type: e2-standard-16
       controller_startup_script: $(controller_startup.startup_script)
       enable_external_prolog_epilog: true
