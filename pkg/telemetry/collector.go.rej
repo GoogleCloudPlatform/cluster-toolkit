@@ -1,9 +1,0 @@
---- pkg/telemetry/collector.go
-+++ pkg/telemetry/collector.go
-@@ -38,5 +38,6 @@
- 		"node_count",
- 		"static_node_count",
- 		"instance_count",
- 		"node_count_static",
-+		"target_size", // Used by HTCondor execute points and MIGs for pool capacity
- 	}
