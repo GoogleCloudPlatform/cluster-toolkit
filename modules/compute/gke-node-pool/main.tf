@@ -59,6 +59,23 @@ locals {
   is_dataplane_v2_enabled = data.google_container_cluster.gke_cluster.datapath_provider == "ADVANCED_DATAPATH"
   enable_dranet_actual    = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible && length(var.additional_networks) == 0 && local.is_dataplane_v2_enabled)
 
+  is_mellanox_rdma_machine = (
+    var.machine_type == "a3-ultragpu-8g" ||
+    startswith(var.machine_type, "a4-") ||
+    startswith(var.machine_type, "a4x-")
+  )
+
+  dranet_device_class_name_default = local.is_mellanox_rdma_machine ? "mrdma.google.com" : "netdev.google.com"
+  dranet_device_class_name_actual  = coalesce(var.dranet_device_class_name, local.dranet_device_class_name_default)
+
+  dranet_template_names = {
+    "mrdma.google.com"  = "default-rdma"
+    "netdev.google.com" = "default-netdev"
+  }
+  dranet_template_name_actual = lookup(local.dranet_template_names, local.dranet_device_class_name_actual, "default-dranet-${replace(local.dranet_device_class_name_actual, ".", "-")}")
+  dranet_device_count_actual  = var.dranet_device_count != null ? var.dranet_device_count : 1
+
+
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
@@ -557,12 +574,14 @@ module "dranet_template_apply" {
   cluster_id = var.cluster_id
   project_id = var.project_id
 
-  apply_manifests = local.enable_dranet_actual ? [
+  apply_manifests = (local.enable_dranet_actual && var.install_dranet_template) ? [
     {
       source = "${path.module}/resource-claim-template.yaml.tftpl"
       template_vars = {
-        device_class_name = var.dranet_device_class_name
+        template_name     = local.dranet_template_name_actual
+        device_class_name = local.dranet_device_class_name_actual
         allocation_mode   = var.dranet_allocation_mode
+        device_count      = local.dranet_device_count_actual
       }
     }
   ] : []
@@ -579,5 +598,14 @@ check "dranet_additional_networks_conflict" {
   assert {
     condition     = var.enable_dranet == true ? length(var.additional_networks) == 0 : true
     error_message = "DRANET automatically configures networks. additional_networks must not be provided when enable_dranet is set to true."
+  }
+}
+
+resource "terraform_data" "validate_dranet_allocation" {
+  lifecycle {
+    precondition {
+      condition     = var.dranet_allocation_mode == "ExactCount" ? var.dranet_device_count != null : true
+      error_message = "dranet_device_count must be set if dranet_allocation_mode is 'ExactCount'."
+    }
   }
 }

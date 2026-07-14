@@ -227,3 +227,9 @@ variable "enable_dranet" {
   type        = list(bool)
   default     = [false]
 }
+
+variable "dranet_template_name" {
+  description = "The name of the DRANET ResourceClaimTemplate to use. Automatically inherited from the node pool if 'use' is set."
+  type        = list(string)
+  default     = []
+}

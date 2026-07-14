@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strings"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 
@@ -32,7 +33,7 @@ import (
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 7.38.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 7.36.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
@@ -143,6 +144,8 @@ func (bp *Blueprint) expandGroups() error {
 	if errs.Any() {
 		return errs
 	}
+
+	bp.deduplicateDranetTemplates()
 
 	// Following actions depend on whole blueprint being expanded
 	// run it after all groups are expanded
@@ -574,4 +577,76 @@ func intersection(s1 []string, s2 []string) []string {
 	is := maps.Keys(both)
 	slices.Sort(is)
 	return is
+}
+
+func isGKENodePool(m *Module) bool {
+	return strings.HasSuffix(m.Source, "modules/compute/gke-node-pool")
+}
+
+func (bp *Blueprint) getEnableDranet(m *Module) bool {
+	if !m.Settings.Has("enable_dranet") {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get("enable_dranet"))
+	return err == nil && val.Type() == cty.Bool && val.True()
+}
+
+func (bp *Blueprint) getMachineType(m *Module) string {
+	if !m.Settings.Has("machine_type") {
+		return ""
+	}
+	val, err := bp.Eval(m.Settings.Get("machine_type"))
+	if err == nil && val.Type() == cty.String {
+		return val.AsString()
+	}
+	return ""
+}
+
+func isMellanoxRdmaMachine(machineType string) bool {
+	return machineType == "a3-ultragpu-8g" ||
+		strings.HasPrefix(machineType, "a4-") ||
+		strings.HasPrefix(machineType, "a4x-")
+}
+
+func (bp *Blueprint) getDeviceClassName(m *Module) string {
+	if m.Settings.Has("dranet_device_class_name") {
+		val, err := bp.Eval(m.Settings.Get("dranet_device_class_name"))
+		if err == nil && val.Type() == cty.String {
+			return val.AsString()
+		}
+	}
+
+	// Auto-detect based on machine type if not explicitly set
+	machineType := bp.getMachineType(m)
+	if isMellanoxRdmaMachine(machineType) {
+		return "mrdma.google.com"
+	}
+	return "netdev.google.com"
+}
+
+func (bp *Blueprint) deduplicateDranetTemplates() {
+	installedTemplates := make(map[string]ModuleID)
+
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		if !isGKENodePool(m) {
+			return
+		}
+
+		if !bp.getEnableDranet(m) {
+			return
+		}
+
+		deviceClassName := bp.getDeviceClassName(m)
+
+		// Check for duplicates
+		if primaryModuleID, exists := installedTemplates[deviceClassName]; exists {
+			// Duplicate found for this device class, disable installation
+			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(false))
+			logging.Info("DRANET: Module %s will skip ResourceClaimTemplate installation for class %s (handled by %s)", m.ID, deviceClassName, primaryModuleID)
+		} else {
+			// First module for this device class, enable installation
+			installedTemplates[deviceClassName] = m.ID
+			m.Settings = m.Settings.With("install_dranet_template", cty.BoolVal(true))
+		}
+	})
 }
