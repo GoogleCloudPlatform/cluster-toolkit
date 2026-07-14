@@ -188,7 +188,7 @@ func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
 
 	// Process complex inline iterables (Slurm V6)
 	for _, key := range staticNodeCountInlineKeys {
-		if processInlineKey(m, bp, key, topMachineType, counts) {
+		if processInlineKey(m, bp, key, topMachineType, counts, staticNodeCountSettings) {
 			inlineFound = true
 		}
 	}
@@ -199,7 +199,7 @@ func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
 
 	// Fallback to standard top-level extraction
 	if topMachineType != "" {
-		if count, found := getTopLevelNodeCount(m, bp, topMachineType); found {
+		if count, found := getTopLevelNodeCount(m, bp, topMachineType, staticNodeCountSettings); found {
 			counts[topMachineType] += count
 		}
 	}
@@ -207,7 +207,7 @@ func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
 }
 
 // processInlineKey evaluates a specific key for iterable structures and processes its items.
-func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int) bool {
+func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int, targetKeys []string) bool {
 	if !m.Settings.Has(key) {
 		return false
 	}
@@ -226,13 +226,13 @@ func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachi
 	}
 
 	for _, item := range unmarked.AsValueSlice() {
-		processInlineItem(item, topMachineType, counts)
+		processInlineItem(item, topMachineType, counts, targetKeys)
 	}
 	return true
 }
 
 // processInlineItem extracts machine types and counts from an individual map/object in an inline list.
-func processInlineItem(item cty.Value, topMachineType string, counts map[string]int) {
+func processInlineItem(item cty.Value, topMachineType string, counts map[string]int, targetKeys []string) {
 	item, _ = item.Unmark()
 	if !item.IsKnown() || item.IsNull() {
 		return
@@ -248,20 +248,20 @@ func processInlineItem(item cty.Value, topMachineType string, counts map[string]
 		inlineMType = topMachineType
 	}
 
-	if count, found := extractIntFromCtyMap(item, staticNodeCountSettings); found && inlineMType != "" {
+	if count, found := extractIntFromCtyMap(item, targetKeys); found && inlineMType != "" {
 		counts[inlineMType] += count
 	}
 }
 
-func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string) (int, bool) {
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
 	var baseCount int
 	var found bool
 
-	for _, key := range staticNodeCountSettings {
+	for _, key := range targetKeys {
 		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
 			baseCount = count
 			found = true
-			if key == "static_node_count" {
+			if key == "static_node_count" || key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
 				baseCount *= getZonalMultiplier(m, bp)
 			}
 			break
@@ -277,7 +277,7 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 	}
 
 	if !found {
-		if count, ok := extractDefaultSetting[int](staticNodeCountSettings, m); ok {
+		if count, ok := extractDefaultSetting[int](targetKeys, m); ok {
 			baseCount = count
 			found = true
 			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
@@ -399,6 +399,9 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 	for i := 1; i < len(keys); i++ {
 		if ev, err := bp.Eval(keyValue); err == nil {
 			keyValue = ev
+		}
+		if !keyValue.IsKnown() || keyValue.IsNull() {
+			return 0, false
 		}
 		if !keyValue.Type().IsObjectType() && !keyValue.Type().IsMapType() {
 			return 0, false
@@ -791,7 +794,7 @@ func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys
 	topMachineType := getMachineTypeFromModule(m, bp)
 	inlineFound := false
 	for _, key := range staticNodeCountInlineKeys {
-		if processInlineKeyDynamic(m, bp, key, topMachineType, counts, targetKeys) {
+		if processInlineKey(m, bp, key, topMachineType, counts, targetKeys) {
 			inlineFound = true
 		}
 	}
@@ -799,83 +802,9 @@ func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys
 		return counts
 	}
 	if topMachineType != "" {
-		if count, found := getTopLevelDynamicNodeCount(m, bp, topMachineType, targetKeys); found {
+		if count, found := getTopLevelNodeCount(m, bp, topMachineType, targetKeys); found {
 			counts[topMachineType] += count
 		}
 	}
 	return counts
-}
-
-func processInlineKeyDynamic(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int, targetKeys []string) bool {
-	if !m.Settings.Has(key) {
-		return false
-	}
-	val, err := bp.Eval(m.Settings.Get(key))
-	if err != nil {
-		return false
-	}
-	unmarked, _ := val.Unmark()
-	if !unmarked.IsKnown() || unmarked.IsNull() {
-		return false
-	}
-	ty := unmarked.Type()
-	if !ty.IsListType() && !ty.IsTupleType() && !ty.IsSetType() {
-		return false
-	}
-	for _, item := range unmarked.AsValueSlice() {
-		processInlineItemDynamic(item, topMachineType, counts, targetKeys)
-	}
-	return true
-}
-
-func processInlineItemDynamic(item cty.Value, topMachineType string, counts map[string]int, targetKeys []string) {
-	item, _ = item.Unmark()
-	if !item.IsKnown() || item.IsNull() {
-		return
-	}
-	ty := item.Type()
-	if !ty.IsObjectType() && !ty.IsMapType() {
-		return
-	}
-	inlineMType := extractStringFromCtyMap(item, machineTypeSettings)
-	if inlineMType == "" {
-		inlineMType = topMachineType
-	}
-	if count, found := extractIntFromCtyMap(item, targetKeys); found && inlineMType != "" {
-		counts[inlineMType] += count
-	}
-}
-
-func getTopLevelDynamicNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
-	var baseCount int
-	var found bool
-	for _, key := range targetKeys {
-		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
-			baseCount = count
-			found = true
-			if key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
-				baseCount *= getZonalMultiplier(m, bp)
-			}
-			break
-		}
-	}
-	if !found {
-		if count, ok := getTPUNodeCount(m, bp, topMachineType); ok {
-			baseCount = count
-			found = true
-		}
-	}
-	if !found {
-		if count, ok := extractDefaultSetting[int](targetKeys, m); ok {
-			baseCount = count
-			found = true
-		}
-	}
-	if !found {
-		return 0, false
-	}
-	pools := getMultiplier("num_node_pools", m, bp)
-	slices := getMultiplier("num_slices", m, bp)
-	multiplier := max(slices, pools)
-	return baseCount * multiplier, true
 }
