@@ -90,10 +90,13 @@ or built on-the-fly using Crane (--base-image with --build-context).
 It accepts parameters for the container image, command to execute, accelerator type,
 and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
-
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(workloadName) > 28 {
 			return fmt.Errorf("workload name cannot exceed 28 characters due to Kubernetes/GCE resource name limits. The provided name %q has %d characters", workloadName, len(workloadName))
+		}
+
+		if !pathways.Headless && commandToRun == "" {
+			return fmt.Errorf("required flag \"command\" not set")
 		}
 
 		if err := validateImageFlags(); err != nil {
@@ -180,7 +183,6 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&pathways.MTCEnabled, "pathways-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC) for Pathways.")
 	SubmitCmd.Flags().StringVar(&pathways.RamdiskDirectory, "pathways-ramdisk-directory", "", "The ramdisk directory path for local checkpoints in MTC.")
 
-	_ = SubmitCmd.MarkFlagRequired("command")
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("compute-type")
 }
@@ -323,6 +325,9 @@ func validatePathwaysFlags() error {
 }
 
 func validateImageFlags() error {
+	if pathways.Headless {
+		return nil
+	}
 	if err := validateImageSources(); err != nil {
 		return err
 	}

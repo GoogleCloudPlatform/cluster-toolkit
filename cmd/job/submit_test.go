@@ -1001,3 +1001,49 @@ func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
 	}
 
 }
+
+func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	resetSubmitCmdFlags()
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-headless",
+		"--name", "pathways-headless-test",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--pathways-gcs-location", "gs://my-bucket",
+		"--compute-type", "n2-standard-4",
+	)
+
+	if err != nil {
+		t.Fatalf("command failed with error: %v", err)
+	}
+
+	if !pathways.Headless {
+		t.Errorf("expected pathways.Headless to be true")
+	}
+}
