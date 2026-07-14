@@ -76,6 +76,7 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29000
               args:
@@ -108,6 +109,7 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29001
               - containerPort: 29002
@@ -152,6 +154,7 @@ spec:
             containers:
             - name: workload-container
               image: {{.FullImageName}}
+              imagePullPolicy: Always
               securityContext:
                 privileged: true
               resources:
@@ -208,7 +211,9 @@ spec:
             {{- end}}
             volumes:
             - name: shared-tmp
-              emptyDir: {}
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}
@@ -290,6 +295,7 @@ spec:
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29005
               - containerPort: 29006
@@ -361,7 +367,9 @@ spec:
 {{- end }}
             volumes:
             - name: shared-tmp
-              emptyDir: {}
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
             {{- if .Pathways.MTCEnabled}}
             - name: cache
               csi:

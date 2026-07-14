@@ -1243,12 +1243,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
-	workerBackoffLimit := 0
-	if opts.Pathways.ElasticSlices > 0 {
-		workerBackoffLimit = opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
-	} else {
-		workerBackoffLimit = opts.NodesPerSlice * 4
-	}
+	workerBackoffLimit := 2048000
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
