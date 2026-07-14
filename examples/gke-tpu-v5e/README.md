@@ -27,17 +27,13 @@ This section guides you through the cluster creation process, ensuring that your
 
 1. [Launch Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the instructions to [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
 
-1. Clone the Cluster Toolkit from the git repository:
+1. Install the Cluster Toolkit: Download and extract the pre-built `gcluster` binary bundle. Follow the download commands for your operating system in the [Install the Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install) section of the setup guide.
 
-    ```sh
-    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-    ```
+1. Once extracted, verify that the installation is ready:
 
-1. Install the Cluster Toolkit:
-
-    ```sh
-    cd cluster-toolkit && git checkout main && make
-    ```
+      ```sh
+      ./gcluster --version
+      ```
 
 1. Create a Cloud Storage bucket to store the state of the Terraform deployment:
 
