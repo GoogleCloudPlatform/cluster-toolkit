@@ -280,6 +280,9 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 		if count, ok := extractDefaultSetting[int](staticNodeCountSettings, m); ok {
 			baseCount = count
 			found = true
+			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
+				baseCount *= getZonalMultiplier(m, bp)
+			}
 		}
 	}
 
