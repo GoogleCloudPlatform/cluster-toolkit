@@ -148,11 +148,13 @@ variable "project_id" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
   }))
   default = []
 }

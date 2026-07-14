@@ -10,7 +10,7 @@ Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https:/
 
 The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
 
-1. **Deploy MPI Operator (v0.8.0):**
+1. **Deploy MPI Operator (v0.8.2):**
 
    * **Automated (During Cluster Creation via Blueprint YAML):** Include the MPI Operator manifest in `apply_manifests` under `kubectl-apply` in your blueprint YAML (`gke-a4x.yaml`):
 
@@ -21,13 +21,13 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
          settings:
            apply_manifests:
            - name: mpi-operator
-             source: https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
+             source: https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml
      ```
 
    * **Manual (After Cluster Deployment via `kubectl`):** Once the cluster is deployed, run the following command against your cluster:
 
      ```bash
-     kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.0/deploy/v2beta1/mpi-operator.yaml
+     kubectl apply --server-side -f https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.8.2/deploy/v2beta1/mpi-operator.yaml
      ```
 
 2. **Verify Installation:**
@@ -57,7 +57,7 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
            spec:
              containers:
              - name: mpi-launcher
-               image: mpioperator/mpi-pi:v0.8.0-openmpi
+               image: mpioperator/mpi-pi:v0.8.2-openmpi
                command:
                - mpirun
                - --allow-run-as-root
@@ -73,7 +73,7 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
            spec:
              containers:
              - name: mpi-worker
-               image: mpioperator/mpi-pi:v0.8.0-openmpi
+               image: mpioperator/mpi-pi:v0.8.2-openmpi
    ```
 
    Submit the job and inspect launcher logs:

@@ -18,6 +18,7 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -59,10 +60,16 @@ var (
 )
 
 var (
-	destroyGroupsFunc         = destroyGroups
-	cleanupFirewallRulesFunc  = cleanupFirewallRules
-	destroyTerraformGroupFunc = destroyTerraformGroup
+	destroyGroupsFunc                           = destroyGroups
+	cleanupFirewallRulesFunc                    = cleanupFirewallRules
+	destroyTerraformGroupFunc                   = destroyTerraformGroup
+	shellConfigureTerraformFunc                 = shell.ConfigureTerraform
+	shellDestroyFunc                            = shell.Destroy
+	shellRemoveKubernetesResourcesFromStateFunc = shell.RemoveKubernetesResourcesFromState
+	confirmActionFunc                           = confirmAction
 )
+
+var errUserAborted = errors.New("user declined state cleanup")
 
 func runDestroyCmd(cmd *cobra.Command, args []string) {
 	deplRoot := args[0]
@@ -88,12 +95,16 @@ func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		logging.Info("Destroy attempt %d of %d", attempt, maxRetries)
 
-		destroyFailed, packerManifests := destroyGroupsFunc(deplRoot, artifactsDir, bp, ctx)
+		destroyFailed, packerManifests, err := destroyGroupsFunc(deplRoot, artifactsDir, bp, ctx)
 
 		if !destroyFailed {
 			logging.Info("Successfully destroyed all selected groups.")
 			modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)
 			return // Exit runDestroyCmd successfully
+		}
+
+		if errors.Is(err, errUserAborted) {
+			logging.Fatal("Destruction of %q failed: user declined state cleanup", deplRoot)
 		}
 
 		if attempt == maxRetries {
@@ -112,7 +123,7 @@ func groupHasNetworkModule(group config.Group) bool {
 	return false
 }
 
-func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) (bool, []string) {
+func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) (bool, []string, error) {
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
 	destroyFailed := false
@@ -123,48 +134,66 @@ func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 			continue
 		}
 
-		if robustDestroy && groupHasNetworkModule(group) {
-			projectID, deploymentName, err := getProjectAndDeploymentVars(bp.Vars)
-			if err != nil {
-				logging.Error("Skipping firewall cleanup: could not get required variables. %v", err)
-				destroyFailed = true
-				break
-			} else if err := cleanupFirewallRulesFunc(projectID, deploymentName); err != nil {
-				logging.Error("Failed to cleanup firewall rules for group %s: %v", group.Name, err)
-				destroyFailed = true
-				break
-			}
-		}
-
-		groupDir := filepath.Join(deplRoot, string(group.Name))
-
-		if err := shell.ImportInputs(groupDir, artifactsDir, bp); err != nil {
-			logging.Error("failed to import inputs for group %q: %v", group.Name, err)
-			// still proceed with destroying the group
-		}
-
-		var err error
-		switch group.Kind() {
-		case config.PackerKind:
-			// Packer groups are enforced to have length 1
-			// TODO: destroyPackerGroup(moduleDir)
-			moduleDir := filepath.Join(groupDir, string(group.Modules[0].ID))
-			packerManifests = append(packerManifests, filepath.Join(moduleDir, "packer-manifest.json"))
-		case config.TerraformKind:
-			err = destroyTerraformGroupFunc(groupDir)
-		default:
-			err = fmt.Errorf("group %q is an unsupported kind %q", groupDir, group.Kind().String())
-		}
-
-		if err != nil {
-			logging.Error("failed to destroy group %q:\n%s", group.Name, renderError(err, *ctx))
+		manifests, failed, shouldBreak, err := destroyGroup(group, deplRoot, artifactsDir, bp, ctx, i)
+		packerManifests = append(packerManifests, manifests...)
+		if failed {
 			destroyFailed = true
-			if i == 0 || !destroyChoice(bp.Groups[i-1].Name) {
-				break // Stop processing groups for this attempt
-			}
+		}
+		if errors.Is(err, errUserAborted) {
+			return true, packerManifests, err
+		}
+		if shouldBreak {
+			break
 		}
 	}
-	return destroyFailed, packerManifests
+	return destroyFailed, packerManifests, nil
+}
+
+func destroyGroup(group config.Group, deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx, i int) ([]string, bool, bool, error) {
+	packerManifests := []string{}
+	destroyFailed := false
+	if robustDestroy && groupHasNetworkModule(group) {
+		projectID, deploymentName, err := getProjectAndDeploymentVars(bp.Vars)
+		if err != nil {
+			logging.Error("Skipping firewall cleanup: could not get required variables. %v", err)
+			return nil, true, true, nil
+		} else if err := cleanupFirewallRulesFunc(projectID, deploymentName); err != nil {
+			logging.Error("Failed to cleanup firewall rules for group %s: %v", group.Name, err)
+			return nil, true, true, nil
+		}
+	}
+
+	groupDir := filepath.Join(deplRoot, string(group.Name))
+
+	if err := shell.ImportInputs(groupDir, artifactsDir, bp); err != nil {
+		logging.Error("failed to import inputs for group %q: %v", group.Name, err)
+		// still proceed with destroying the group
+	}
+
+	var err error
+	switch group.Kind() {
+	case config.PackerKind:
+		// Packer groups are enforced to have length 1
+		// TODO: destroyPackerGroup(moduleDir)
+		moduleDir := filepath.Join(groupDir, string(group.Modules[0].ID))
+		packerManifests = append(packerManifests, filepath.Join(moduleDir, "packer-manifest.json"))
+	case config.TerraformKind:
+		err = destroyTerraformGroupFunc(groupDir)
+	default:
+		err = fmt.Errorf("group %q is an unsupported kind %q", groupDir, group.Kind().String())
+	}
+
+	if err != nil {
+		if errors.Is(err, errUserAborted) {
+			return packerManifests, true, true, err
+		}
+		logging.Error("failed to destroy group %q:\n%s", group.Name, renderError(err, *ctx))
+		destroyFailed = true
+		if i == 0 || !destroyChoice(bp.Groups[i-1].Name) {
+			return packerManifests, destroyFailed, true, nil
+		}
+	}
+	return packerManifests, destroyFailed, false, nil
 }
 
 func getStringVar(vars config.Dict, key string) (string, error) {
@@ -195,14 +224,45 @@ func getProjectAndDeploymentVars(vars config.Dict) (string, string, error) {
 }
 
 func destroyTerraformGroup(groupDir string) error {
-	tf, err := shell.ConfigureTerraform(groupDir)
+	tf, err := shellConfigureTerraformFunc(groupDir)
 	if err != nil {
 		return err
 	}
 
-	// Always output text when destroying the cluster
-	// The current implementation outputs JSON only for the "deploy" command
-	return shell.Destroy(tf, getApplyBehavior(), shell.TextOutput)
+	err = shellDestroyFunc(tf, getApplyBehavior(), shell.TextOutput)
+	if err != nil {
+		if shell.IsKubernetesUnreachableError(err) {
+			if robustDestroy {
+				applyBehavior := getApplyBehavior()
+				forceDestroyApproved := false
+
+				if applyBehavior == shell.PromptBeforeApply {
+					promptMsg := "GKE cluster is unreachable. Do you want to force destroy the remaining infrastructure by removing GKE resources from the state? [y/n]: "
+					if confirmActionFunc(promptMsg) {
+						forceDestroyApproved = true
+					} else {
+						return errUserAborted
+					}
+				} else if applyBehavior == shell.AutomaticApply {
+					forceDestroyApproved = true
+				} else {
+					return err
+				}
+
+				if forceDestroyApproved {
+					logging.Warn("GKE cluster is unreachable during destroy. Attempting to remove Kubernetes-related resources from state and retrying.")
+					if rmErr := shellRemoveKubernetesResourcesFromStateFunc(tf); rmErr != nil {
+						return fmt.Errorf("failed to clean unreachable Kubernetes resources from state: %w (original error: %v)", rmErr, err)
+					}
+					return shellDestroyFunc(tf, shell.AutomaticApply, shell.TextOutput)
+				}
+			} else {
+				return fmt.Errorf("GKE cluster is unreachable. You can attempt a robust destroy to force-clean the state by using the --robust flag (original error: %w)", err)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func confirmAction(prompt string) bool {

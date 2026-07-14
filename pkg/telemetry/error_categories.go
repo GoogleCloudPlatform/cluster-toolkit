@@ -21,7 +21,7 @@ import (
 
 const (
 	ErrTypePermissionDenied = "PermissionDenied"
-	ErrTypeFileNotFound     = "FileNotFound"
+	ErrTypeResourceNotFound = "ResourceNotFound"
 	ErrTypeValidation       = "ValidationError"
 	ErrTypeNetwork          = "NetworkError"
 	ErrTypeTimeout          = "TimeoutError"
@@ -40,7 +40,7 @@ var exactErrMatchers = []struct {
 	category string
 }{
 	{os.ErrPermission, ErrTypePermissionDenied},
-	{os.ErrNotExist, ErrTypeFileNotFound},
+	{os.ErrNotExist, ErrTypeResourceNotFound},
 	{context.DeadlineExceeded, ErrTypeTimeout},
 	{context.Canceled, ErrTypeCanceled},
 }
@@ -57,8 +57,8 @@ var substringErrMatchers = []struct {
 	{"permission denied", ErrTypePermissionDenied},
 	{"403 forbidden", ErrTypePermissionDenied},
 	{"access denied", ErrTypePermissionDenied},
-	{"not found", ErrTypeFileNotFound},
-	{"error 404", ErrTypeFileNotFound},
+	{"not found", ErrTypeResourceNotFound},
+	{"error 404", ErrTypeResourceNotFound},
 	{"validation failed", ErrTypeValidation},
 	{"invalid argument", ErrTypeValidation},
 	{"invalid value", ErrTypeValidation},

@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
+	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 )
@@ -501,4 +502,67 @@ func TfVersion() (string, error) {
 	}
 
 	return version.TerraformVersion, nil
+}
+
+// IsKubernetesUnreachableError returns true if the error indicates GKE is unreachable
+func IsKubernetesUnreachableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Convert to lowercase to ensure case-insensitive matching
+	msg := strings.ToLower(err.Error())
+
+	isKubernetesRelated := strings.Contains(msg, "kubernetes_") ||
+		strings.Contains(msg, "helm_") ||
+		strings.Contains(msg, "kubectl_")
+
+	isDialError := strings.Contains(msg, "dial tcp")
+
+	return (isDialError && isKubernetesRelated) ||
+		strings.Contains(msg, "kubernetes cluster unreachable") ||
+		strings.Contains(msg, "failed to create kubernetes rest client") ||
+		strings.Contains(msg, "no configuration has been provided, try setting kubernetes_master")
+}
+
+// TerraformCLI is an interface wrapping the required tfexec.Terraform methods for state manipulation.
+type TerraformCLI interface {
+	Show(ctx context.Context, opts ...tfexec.ShowOption) (*tfjson.State, error)
+	StateRm(ctx context.Context, address string, opts ...tfexec.StateRmCmdOption) error
+}
+
+// RemoveKubernetesResourcesFromState removes all kubernetes/helm/kubectl provider resources from the state
+func RemoveKubernetesResourcesFromState(tf TerraformCLI) error {
+	ctx := context.Background()
+	state, err := tf.Show(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to show state: %w", err)
+	}
+	if state == nil || state.Values == nil || state.Values.RootModule == nil {
+		return nil
+	}
+
+	resources := getResourcesRecursively(state.Values.RootModule)
+	for _, res := range resources {
+		if strings.HasPrefix(res.Type, "kubernetes_") ||
+			strings.HasPrefix(res.Type, "helm_") ||
+			strings.HasPrefix(res.Type, "kubectl_") {
+			logging.Info("GKE cluster unreachable: removing resource %s from state", res.Address)
+			if err := tf.StateRm(ctx, res.Address); err != nil {
+				logging.Error("failed to remove resource %s from state: %v", res.Address, err)
+			}
+		}
+	}
+	return nil
+}
+
+func getResourcesRecursively(module *tfjson.StateModule) []*tfjson.StateResource {
+	if module == nil {
+		return nil
+	}
+	var resources []*tfjson.StateResource
+	resources = append(resources, module.Resources...)
+	for _, child := range module.ChildModules {
+		resources = append(resources, getResourcesRecursively(child)...)
+	}
+	return resources
 }

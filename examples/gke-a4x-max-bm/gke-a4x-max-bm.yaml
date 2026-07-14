@@ -60,6 +60,7 @@ vars:
   accelerator_type: nvidia-gb300
   version_prefix: "1.35."
 
+
   # To enable Managed-Lustre please uncomment this section and fill out the settings.
   # Additionally, please uncomment the private_service_access, lustre_firewall_rule, managed-lustre and lustre-pv modules.
   # Managed Lustre is only supported in specific regions and zones
@@ -104,34 +105,6 @@ deployment_groups:
         - protocol: udp
           ports: ["0-65535"]
         - protocol: icmp
-
-  - id: gke-a4x-max-net-1
-    source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-1
-      ips_per_nat: 6
-      nic_type: "IDPF"
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
-        subnet_region: $(vars.region)
-        subnet_ip: 192.168.64.0/18
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
-        ranges: [192.168.0.0/16]
-        allow:
-        - protocol: tcp
-          ports: ["0-65535"]
-        - protocol: udp
-          ports: ["0-65535"]
-        - protocol: icmp
-
-  - id: gke-a4x-max-rdma-net
-    source: modules/network/gpu-rdma-vpc
-    settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce-metal
-      network_routing_mode: REGIONAL
-      subnetworks_template: null
 
   - id: node_pool_service_account
     source: modules/project/service-account
@@ -178,7 +151,6 @@ deployment_groups:
       release_channel: REGULAR
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2025-12-01T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
         exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
     outputs: [instructions]
@@ -241,6 +213,7 @@ deployment_groups:
     settings:
       machine_type: $(vars.compute_nodepool_machine_type)
       auto_upgrade: true
+      enable_dranet: true
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.a4x_max_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
@@ -254,17 +227,9 @@ deployment_groups:
         specific_reservations:
         - name: $(vars.reservation)
           project: $(vars.reservation_project_id)
-      kubernetes_labels:
-        cloud.google.com/gke-networking-dra-driver: "true"
-        cloud.google.com/gke-dpv2-unified-cni: "cni-migration"
       linux_node_config:
         hugepages_config:
           hugepage_size_2m: 4096
-      additional_networks:
-        $(concat(
-          gke-a4x-max-net-1.instance_additional_networks,
-          gke-a4x-max-rdma-net.subnetwork_interfaces_gke
-        ))
     outputs: [instructions]
 
   - id: workload-manager-install

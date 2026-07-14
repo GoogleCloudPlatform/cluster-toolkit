@@ -67,6 +67,30 @@ variable "local_mount" {
   default     = "/parallelstore"
 }
 
+variable "local_mount_owner" {
+  description = "Local mount owner, string in format <user>:<group>."
+  type        = string
+  default     = ""
+  nullable    = false
+  validation {
+    condition     = var.local_mount_owner == "" || length(split(":", var.local_mount_owner)) == 2
+    error_message = "Provide owner as <user>:<group>."
+  }
+  validation {
+    condition = var.local_mount_owner == "" || alltrue([
+      for x in split(":", var.local_mount_owner) : (length(x) > 0)
+    ])
+    error_message = "Both user and group part must be non-empty"
+  }
+}
+
+variable "local_mount_permissions" {
+  description = "Local mount permissions, specified as mode according to chmod(2)."
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
 variable "mount_options" {
   description = "Options describing various aspects of the parallelstore instance."
   type        = string

@@ -29,12 +29,13 @@ data "google_compute_network_peering" "private_peering" {
 }
 
 locals {
-  server_ip        = split(":", google_lustre_instance.lustre_instance.mount_point)[0]
-  remote_mount     = split(":", google_lustre_instance.lustre_instance.mount_point)[1]
-  fs_type          = "lustre"
-  mount_options    = var.mount_options
-  instance_id      = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  destination_path = "/"
+  server_ip                   = split(":", google_lustre_instance.lustre_instance.mount_point)[0]
+  remote_mount                = split(":", google_lustre_instance.lustre_instance.mount_point)[1]
+  fs_type                     = "lustre"
+  mount_options               = var.mount_options
+  instance_id                 = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  destination_path            = "/"
+  per_unit_storage_throughput = var.enable_dynamic_tier ? null : coalesce(var.per_unit_storage_throughput, 500)
 
   install_managed_lustre_client_runner = {
     "type"        = "shell"
@@ -67,13 +68,20 @@ resource "google_lustre_instance" "lustre_instance" {
 
   filesystem                  = var.remote_mount
   capacity_gib                = var.size_gib
-  per_unit_storage_throughput = var.per_unit_storage_throughput
+  per_unit_storage_throughput = local.per_unit_storage_throughput
 
   labels  = local.labels
   network = var.network_id
 
   gke_support_enabled = var.gke_support_enabled
   kms_key             = var.kms_key == "" ? null : var.kms_key
+
+  dynamic "dynamic_tier_options" {
+    for_each = var.enable_dynamic_tier ? [1] : []
+    content {
+      mode = "DEFAULT_CACHE"
+    }
+  }
 
   timeouts {
     create = "1h"
@@ -87,6 +95,14 @@ resource "google_lustre_instance" "lustre_instance" {
     precondition {
       condition     = data.google_compute_network_peering.private_peering.state == "ACTIVE"
       error_message = "The subnetwork that the lustre instance is hosted on must have private service access."
+    }
+    precondition {
+      condition     = !(var.enable_dynamic_tier && var.per_unit_storage_throughput != null)
+      error_message = "per_unit_storage_throughput must not be set when enable_dynamic_tier is enabled."
+    }
+    precondition {
+      condition     = !var.enable_dynamic_tier || (var.size_gib >= 472000 && var.size_gib % 472000 == 0)
+      error_message = "For Managed Lustre Dynamic Tier, size_gib must be at least 472000 (GiB) and must be in multiples of 472000."
     }
   }
 

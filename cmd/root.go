@@ -59,7 +59,8 @@ var (
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
-		Long:  `Google Cloud Cluster Toolkit is an open source tool that makes it easy to create and manage repeatable AI/ML and HPC clusters on Google Cloud.`,
+		Long: `Google Cloud Cluster Toolkit is an open source tool that makes it easy to create and manage repeatable AI/ML and HPC clusters on Google Cloud.
+Source code and documentation are available at: https://github.com/GoogleCloudPlatform/cluster-toolkit`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := cmd.Help(); err != nil {
 				logging.Fatal("cmd.Help function failed: %s", err)
@@ -76,20 +77,7 @@ func init() {
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
 		initDependencies(cmd)
-		if err := config.InitUserConfig(); err == nil {
-			telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
-			userConfigExists = true
-
-			// Register the fatal hook to flush telemetry on hard failures
-			logging.FatalHook = func(exitCode int, e error) {
-				// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
-				if telemetryFlushed.CompareAndSwap(false, true) {
-					if config.IsTelemetryEnabled() && telemetryCollector != nil {
-						telemetryCollector.Execute(exitCode, e)
-					}
-				}
-			}
-		}
+		initTelemetry(cmd, args)
 	}
 
 	rootCmd.AddCommand(cluster.ClusterCmd)
@@ -132,6 +120,10 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
+	for _, child := range rootCmd.Commands() {
+		wrapTelemetry(child)
+	}
+
 	err := rootCmd.Execute()
 
 	// Capture Error Code
@@ -154,6 +146,61 @@ Commit info: {{index .Annotations "commitInfo"}}
 	}
 
 	return err
+}
+
+func initTelemetry(cmd *cobra.Command, args []string) {
+	if err := config.InitUserConfig(); err == nil {
+		telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
+		userConfigExists = true
+
+		// Register the fatal hook to flush telemetry on hard failures
+		logging.FatalHook = func(exitCode int, e error) {
+			// Ensure telemetry is executed exactly once to prevent re-entrancy and duplicates.
+			if telemetryFlushed.CompareAndSwap(false, true) {
+				if config.IsTelemetryEnabled() && telemetryCollector != nil {
+					telemetryCollector.Execute(exitCode, e)
+				}
+			}
+		}
+	}
+}
+
+// wrapTelemetry recursively traverses the command tree and wraps any command
+// that defines its own PersistentPreRun or PersistentPreRunE hook.
+// This is necessary because Cobra does not execute a parent's PersistentPreRun
+// if a child command overrides it. By wrapping these hooks, we ensure telemetry
+// is correctly initialized across all subcommands, while still preserving their
+// custom pre-run logic. Commands without their own hook will naturally inherit
+// the wrapped hook of their closest parent.
+func wrapTelemetry(cmd *cobra.Command) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+
+	if cmd.Annotations["telemetry-wrapped"] != "true" {
+		cmd.Annotations["telemetry-wrapped"] = "true"
+		if cmd.PersistentPreRunE != nil {
+			oldPreRunE := cmd.PersistentPreRunE
+			cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
+				err := oldPreRunE(c, args)
+				if err != nil {
+					return err
+				}
+				initTelemetry(c, args)
+				return nil
+			}
+		} else if cmd.PersistentPreRun != nil {
+			oldPreRun := cmd.PersistentPreRun
+			cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+				oldPreRun(c, args)
+				initTelemetry(c, args)
+			}
+		}
+	}
+
+	for _, child := range cmd.Commands() {
+		wrapTelemetry(child)
+	}
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git

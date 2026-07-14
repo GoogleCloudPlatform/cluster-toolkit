@@ -22,6 +22,7 @@ blueprint_yaml: "{{ workspace }}/examples/pfs-managed-lustre-slurm.yaml"
 network: "{{ deployment_name }}-net"
 slurm_cluster_name: "mgdltr{{ build[0:3] }}"
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   compute_node_machine_type: c2-standard-4

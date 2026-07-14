@@ -28,6 +28,7 @@ post_deploy_tests:
 custom_vars:
   project: "{{ project }}"
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
   base_network_name: "{{ deployment_name }}-basic"

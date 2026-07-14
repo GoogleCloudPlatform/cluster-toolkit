@@ -127,11 +127,33 @@ repos:
     types: [python]
     pass_filenames: false
 
+  - id: go-vet-community-health-check
+    name: go-vet-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go vet ./...'
+    language: system
+    files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-unit-tests-community-health-check
+    name: go-unit-tests-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
+    language: system
+    files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-mod-tidy-community-health-check
+    name: go-mod-tidy-community-health-check
+    entry: bash -c 'cd community/cluster-health-check && go mod tidy && git diff --exit-code go.mod go.sum'
+    language: system
+    files: ^community/cluster-health-check/(go\.mod|go\.sum|.*\.go)$
+    pass_filenames: false
+
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
   - id: go-fmt
   - id: go-vet
+    exclude: ^community/cluster-health-check/
   - id: go-imports
   - id: go-cyclo
     args: [-over=13]

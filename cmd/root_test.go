@@ -404,3 +404,37 @@ func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
 		t.Errorf("Expected telemetryFlushed to be true after FatalHook execution")
 	}
 }
+
+func TestWrapTelemetryDynamic(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	_ = config.InitUserConfig()
+
+	telemetryCollector = nil
+	userConfigExists = false
+
+	// Create a command with a custom hook
+	customCmd := &cobra.Command{
+		Use: "custom",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	// Wrap it
+	wrapTelemetry(customCmd)
+
+	// Execute the hook
+	err := customCmd.PersistentPreRunE(customCmd, []string{})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Assert telemetry was initialized
+	if telemetryCollector == nil {
+		t.Errorf("Expected telemetryCollector to be initialized by wrapTelemetry")
+	}
+	if !userConfigExists {
+		t.Errorf("Expected userConfigExists to be true")
+	}
+}

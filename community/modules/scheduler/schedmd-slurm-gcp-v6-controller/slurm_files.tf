@@ -169,6 +169,7 @@ module "slurm_files" {
   slurm_conf_template = var.slurm_conf_template
   cgroup_conf_tpl     = var.cgroup_conf_tpl
   cloud_parameters    = var.cloud_parameters
+  experimental        = var.experimental
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -198,11 +199,13 @@ module "slurm_files" {
   disable_default_mounts = !var.enable_default_mounts || var.enable_backup_controller
   network_storage = [
     for storage in var.network_storage : {
-      server_ip     = storage.server_ip,
-      remote_mount  = storage.remote_mount,
-      local_mount   = storage.local_mount,
-      fs_type       = storage.fs_type,
-      mount_options = storage.mount_options
+      server_ip               = storage.server_ip,
+      remote_mount            = storage.remote_mount,
+      local_mount             = storage.local_mount,
+      local_mount_owner       = storage.local_mount_owner
+      local_mount_permissions = storage.local_mount_permissions
+      fs_type                 = storage.fs_type,
+      mount_options           = storage.mount_options
     }
     if storage.fs_type != "daos"
   ]

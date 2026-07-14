@@ -88,18 +88,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	startTime := time.Now()
-	var success bool
-	defer func() {
-		latencySecs := time.Since(startTime).Seconds()
-		profile := map[string]string{
-			"compute_type": job.ComputeType,
-			"nodes":        fmt.Sprintf("%d", job.NumSlices),
-		}
-
-		orchestrator.RecordLocalMetrics(job.WorkloadName, latencySecs, success, profile)
-	}()
-
 	var err error
 	err = g.initializeJobSubmission(&job)
 	if err != nil {
@@ -138,7 +126,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		}
 	}
 	logging.Info("gcluster job submit workflow completed.")
-	success = true
+
 	return nil
 }
 
@@ -395,7 +383,27 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
 			return fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", job.ClusterName, job.ProjectID)
 		}
-		return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
+		if len(strings.Split(job.ClusterLocation, "-")) == 3 {
+			region := shell.ExtractRegion(job.ClusterLocation)
+			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", job.ClusterLocation, region)
+			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
+				"--location", region,
+				"--project", job.ProjectID,
+				"--format=json")
+			if fallbackRes.ExitCode == 0 {
+				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
+					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
+					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
+					job.ClusterName, region, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation)
+				job.ClusterLocation = region
+				res = fallbackRes
+			} else {
+				return fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", job.ClusterName, job.ClusterLocation, region, res.Stderr)
+			}
+		} else {
+			return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+		}
 	}
 
 	var clusterDesc gkeCluster
@@ -1757,6 +1765,30 @@ func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, sched
 	return nil
 }
 
+func injectProvisioningLabels(nodeSelector map[string]string, provisioning string, reservation string) {
+	switch strings.ToLower(provisioning) {
+	case "spot":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "spot"
+	case "on-demand":
+		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
+	case "reservation":
+		res := parseReservationURI(reservation)
+		if res.Name != "" {
+			nodeSelector["cloud.google.com/reservation-name"] = res.Name
+			nodeSelector["cloud.google.com/reservation-affinity"] = "specific"
+		}
+		if res.Project != "" {
+			nodeSelector["cloud.google.com/reservation-project"] = res.Project
+		}
+		if res.Block != "" {
+			nodeSelector["cloud.google.com/reservation-blocks"] = res.Block
+		}
+		if res.Subblock != "" {
+			nodeSelector["cloud.google.com/reservation-subblocks"] = res.Subblock
+		}
+	}
+}
+
 func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isCPUMachine bool) (string, error) {
 	nodeSelector := make(map[string]string)
 	existing, err := getNodeSelector(schedOpts)
@@ -1768,14 +1800,7 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	}
 
 	// Inject unified consumption options
-	switch job.GKENAPProvisioning {
-	case "spot":
-		nodeSelector["cloud.google.com/gke-provisioning"] = "spot"
-	case "on-demand":
-		nodeSelector["cloud.google.com/gke-provisioning"] = "standard"
-	case "reservation":
-		nodeSelector["cloud.google.com/reservation-name"] = extractShortReservationName(job.GKENAPReservation)
-	}
+	injectProvisioningLabels(nodeSelector, job.GKENAPProvisioning, job.GKENAPReservation)
 
 	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
 	if err != nil {

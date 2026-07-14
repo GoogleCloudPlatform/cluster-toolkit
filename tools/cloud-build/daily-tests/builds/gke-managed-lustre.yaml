@@ -63,8 +63,15 @@ steps:
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${EXAMPLE_BP}
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
+
+    # 1. Run the script execution
+    python3 tools/fix_vpc_name.py "$${EXAMPLE_BP}" "${_TEST_PREFIX}"
+
+    # 2. Use isolated flags cleanly
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="use_fixed_vpc=true" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-lustre.yml" \
         --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
         --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \

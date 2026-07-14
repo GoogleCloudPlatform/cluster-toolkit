@@ -49,8 +49,11 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     BLUEPRINT="examples/pfs-managed-lustre-slurm.yaml"
-    bash tools/add_ttl_label.sh $${BLUEPRINT}
+    bash tools/add_ttl_label.sh "$${BLUEPRINT}"
+    python3 tools/fix_vpc_name.py "$${BLUEPRINT}" "${_TEST_PREFIX}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --extra-vars="test_prefix=${_TEST_PREFIX}" \
+      --extra-vars="use_fixed_vpc=true" \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/pfs-managed-lustre-slurm.yml" \
         --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \

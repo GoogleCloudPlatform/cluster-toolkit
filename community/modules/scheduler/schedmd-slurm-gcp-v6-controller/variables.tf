@@ -281,13 +281,15 @@ variable "nodeset" {
     min_cpu_platform         = optional(string)
     network_tier             = optional(string, "STANDARD")
     network_storage = optional(list(object({
-      server_ip             = string
-      remote_mount          = string
-      local_mount           = string
-      fs_type               = string
-      mount_options         = string
-      client_install_runner = optional(map(string))
-      mount_runner          = optional(map(string))
+      server_ip               = string
+      remote_mount            = string
+      local_mount             = string
+      local_mount_owner       = optional(string)
+      local_mount_permissions = optional(string)
+      fs_type                 = string
+      mount_options           = string
+      client_install_runner   = optional(map(string))
+      mount_runner            = optional(map(string))
     })), [])
     on_host_maintenance   = optional(string)
     preemptible           = optional(bool, false)
@@ -368,13 +370,15 @@ variable "nodeset_tpu" {
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
     network_storage = optional(list(object({
-      server_ip             = string
-      remote_mount          = string
-      local_mount           = string
-      fs_type               = string
-      mount_options         = string
-      client_install_runner = optional(map(string))
-      mount_runner          = optional(map(string))
+      server_ip               = string
+      remote_mount            = string
+      local_mount             = string
+      local_mount_owner       = optional(string)
+      local_mount_permissions = optional(string)
+      fs_type                 = string
+      mount_options           = string
+      client_install_runner   = optional(map(string))
+      mount_runner            = optional(map(string))
     })), [])
     subnetwork = string
     service_account = optional(object({
@@ -508,6 +512,15 @@ variable "cloud_parameters" {
   nullable = false
 }
 
+variable "experimental" {
+  description = "Experimental Slurm settings. These features are subject to change and may be modified in future releases."
+  type = object({
+    enable_async_reply = optional(bool, false)
+  })
+  default  = {}
+  nullable = false
+}
+
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
@@ -521,13 +534,15 @@ variable "enable_default_mounts" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = optional(map(string))
-    mount_runner          = optional(map(string))
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
+    client_install_runner   = optional(map(string))
+    mount_runner            = optional(map(string))
   }))
   default = []
 }
@@ -535,11 +550,13 @@ variable "network_storage" {
 variable "login_network_storage" {
   description = "An array of network attached storage mounts to be configured on all login nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
   }))
   default = []
 }
