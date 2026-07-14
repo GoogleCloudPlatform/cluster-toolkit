@@ -2869,3 +2869,64 @@ func TestGetJobLogs(t *testing.T) {
 
 	}
 }
+
+func TestGeneratePathwaysManifest_Headless(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-headless-test",
+		NumSlices:       1,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			Headless:         true,
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-headless-test",
+		"image: proxy:latest",
+		"image: server:latest",
+		"--gcs_scratch_location=gs://my-bucket",
+		"cloud.google.com/gke-nodepool: pathways-np",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	// In headless mode, the workload-container must NOT be present.
+	if strings.Contains(manifest, "workload-container") {
+		t.Errorf("manifest contains 'workload-container', which is unexpected in headless mode")
+	}
+
+	// In headless mode, the command template block must NOT be present.
+	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
+		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
+	}
+}
