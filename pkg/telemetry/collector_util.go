@@ -306,7 +306,7 @@ func getZonalMultiplier(m config.Module, bp config.Blueprint) int {
 			continue
 		}
 		unmarked, _ := evaluated.Unmark()
-		if unmarked.IsKnown() && !unmarked.IsNull() && unmarked.Type().IsTupleType() {
+		if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsTupleType() || unmarked.Type().IsListType() || unmarked.Type().IsSetType()) {
 			return len(unmarked.AsValueSlice())
 		}
 	}
