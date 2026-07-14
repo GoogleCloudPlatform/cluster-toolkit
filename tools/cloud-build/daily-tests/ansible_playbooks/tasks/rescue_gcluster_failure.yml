@@ -33,17 +33,9 @@
     - delete
     - "{{ deployment_name }}"
 
-- name: Delete Service Networking Connection (PSA Peering)
-  register: psa_deleted
-  changed_when: psa_deleted.rc == 0
-  failed_when: false
-  ansible.builtin.command: >-
-    gcloud services vpc-peerings delete
-    --service=servicenetworking.googleapis.com
-    --network={{ network }}
-    --project={{ project }}
-    --quiet
-  when: network is defined and network != "" and project is defined
+- name: Clean up PSA resources on failure
+  ansible.builtin.include_tasks:
+    file: cleanup_existing_psa.yml
 
 - name: Destroy block
   block:

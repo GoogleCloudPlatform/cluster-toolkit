@@ -66,6 +66,10 @@
   - name: Create Infrastructure and test
     block:
 
+    - name: Clean up any existing PSA resources from previous runs
+      ansible.builtin.include_tasks:
+        file: tasks/cleanup_existing_psa.yml
+
     - name: Create Cluster with gcluster
       register: deployment
       changed_when: deployment.changed
