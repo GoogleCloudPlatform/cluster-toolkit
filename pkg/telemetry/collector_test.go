@@ -2109,6 +2109,37 @@ func TestGetStaticNodeCounts(t *testing.T) {
 			},
 			want: "n2-standard-4:8", // 2 * max(3, 4) = 8
 		},
+		{
+			name: "Extracts target_size as static_node_count",
+			bp: config.Blueprint{
+				Groups: []config.Group{{
+					Modules: []config.Module{{
+						Source: "modules/compute/htcondor-execute-point",
+						Settings: config.NewDict(map[string]cty.Value{
+							"machine_type": cty.StringVal("e2-standard-2"),
+							"target_size":  cty.NumberIntVal(10),
+						}),
+					}},
+				}},
+			},
+			want: "e2-standard-2:10",
+		},
+		{
+			name: "Zonal multiplier applies to static_node_count when zones are declared",
+			bp: config.Blueprint{
+				Groups: []config.Group{{
+					Modules: []config.Module{{
+						Source: "modules/compute/gke-node-pool",
+						Settings: config.NewDict(map[string]cty.Value{
+							"machine_type":      cty.StringVal("t2a-standard-1"),
+							"static_node_count": cty.NumberIntVal(2),
+							"zones":             cty.TupleVal([]cty.Value{cty.StringVal("a"), cty.StringVal("b"), cty.StringVal("c")}),
+						}),
+					}},
+				}},
+			},
+			want: "t2a-standard-1:6", // 2 count * 3 zones
+		},
 	}
 
 	for _, tc := range tests {
