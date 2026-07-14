@@ -150,12 +150,12 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	// 1. Try explicit settings first
 	for _, key := range machineTypeSettings {
 		if t := extractExplicitStringSetting(key, m, bp); t != "" {
-			return t
+			return strings.Trim(t, "\"")
 		}
 	}
 	// 2. If no explicit setting, try defaults
 	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
-		return t
+		return strings.Trim(t, "\"")
 	}
 
 	return ""
@@ -337,7 +337,7 @@ func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
-				return v.AsString()
+				return strings.Trim(v.AsString(), "\"")
 			}
 		}
 	}

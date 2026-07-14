@@ -19,7 +19,9 @@ locals {
   labels = merge(var.labels, { ghpc_module = "gke-cluster", ghpc_role = "scheduler" })
 }
 
-resource "time_static" "exclusion_start" {}
+resource "time_static" "exclusion_start" {
+  count = length(var.maintenance_exclusions) > 0 ? 1 : 0
+}
 
 locals {
   upgrade_settings = {
@@ -289,7 +291,7 @@ resource "google_container_cluster" "gke_cluster" {
       for_each = var.maintenance_exclusions
       content {
         exclusion_name = maintenance_exclusion.value.name
-        start_time     = coalesce(maintenance_exclusion.value.start_time, time_static.exclusion_start.rfc3339)
+        start_time     = coalesce(maintenance_exclusion.value.start_time, time_static.exclusion_start[0].rfc3339)
         end_time       = maintenance_exclusion.value.end_time
         exclusion_options {
           scope             = maintenance_exclusion.value.exclusion_scope

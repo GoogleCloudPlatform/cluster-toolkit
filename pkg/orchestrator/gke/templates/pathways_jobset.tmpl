@@ -193,18 +193,28 @@ spec:
                 wait $PID
                 EXIT_CODE=$?
                 echo "GCluster End: $(date)"
+                echo "Exit code: $EXIT_CODE"
                 exit $EXIT_CODE
-{{- if .VolumeMountsYAML }}
               volumeMounts:
+              - name: shared-tmp
+                mountPath: /tmp
+{{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             {{- if .Pathways.ColocatedPythonSidecarImage}}
             - name: python-sidecar
               image: {{.Pathways.ColocatedPythonSidecarImage}}
+              volumeMounts:
+              - name: shared-tmp
+                mountPath: /tmp
             {{- end}}
             volumes:
+            - name: shared-tmp
+              emptyDir: {}
+{{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
+{{- end }}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -305,8 +315,18 @@ spec:
                 value: {{ printf "%q" .Value }}
               {{- end }}
 {{(StructuralData .ResourcesString)}}
+              volumeMounts:
+              - name: shared-tmp
+                mountPath: /tmp
+{{- if .VolumeMountsYAML }}
+{{(StructuralData .VolumeMountsYAML)}}
+{{- end }}
             volumes:
+            - name: shared-tmp
+              emptyDir: {}
+{{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
+{{- end }}
 {{- if .NodeSelector }}
             nodeSelector:
 {{(StructuralData .NodeSelector)}}

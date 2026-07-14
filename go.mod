@@ -30,6 +30,7 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/safetext v0.0.0-20260330151545-1fb717a317c5
 	github.com/hashicorp/terraform-exec v0.24.0
+	github.com/hashicorp/terraform-json v0.27.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/moby/patternmatcher v0.6.0
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
@@ -92,7 +93,6 @@ require (
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/hashicorp/aws-sdk-go-base/v2 v2.0.0-beta.70 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
-	github.com/hashicorp/terraform-json v0.27.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

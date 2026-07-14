@@ -28,6 +28,9 @@ on:
     - release-candidate
     - hotfix-*
 
+permissions:
+  contents: read
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest

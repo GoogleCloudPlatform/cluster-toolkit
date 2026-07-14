@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.96.0"
+	latestToolkitVersion     = "v1.97.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )

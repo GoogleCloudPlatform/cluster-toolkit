@@ -459,3 +459,32 @@ variable "slurm_key_mount" {
   })
   default = null
 }
+
+variable "health_check" {
+  description = "Health check and autohealing configuration for controller HA instance groups."
+  type = object({
+    type                 = optional(string, "tcp")
+    port                 = optional(number, 6818)
+    initial_delay_sec    = optional(number, 900)
+    check_interval_sec   = optional(number, 60)
+    timeout_sec          = optional(number, 10)
+    healthy_threshold    = optional(number, 2)
+    unhealthy_threshold  = optional(number, 5)
+    enable_logging       = optional(bool, true)
+    request_path         = optional(string, "/healthz")
+    create_firewall_rule = optional(bool, true)
+    port_name            = optional(string, "slurmctld")
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["tcp", "http"], var.health_check.type)
+    error_message = "The health_check.type must be either 'tcp' or 'http'."
+  }
+
+  validation {
+    condition     = var.health_check.timeout_sec <= var.health_check.check_interval_sec
+    error_message = "The health_check.timeout_sec must be less than or equal to health_check.check_interval_sec."
+  }
+}

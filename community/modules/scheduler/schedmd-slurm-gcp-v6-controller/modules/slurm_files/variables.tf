@@ -333,11 +333,13 @@ Storage to mounted on all instances.
 - mount_options : Options to mount with.
 EOD
   type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
+    server_ip               = string
+    remote_mount            = string
+    local_mount             = string
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string
+    mount_options           = string
   }))
   default = []
 }
@@ -377,6 +379,15 @@ variable "cloud_parameters" {
     tree_width              = optional(number)
     prolog_flags            = optional(string)
     switch_type             = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
+variable "experimental" {
+  description = "Experimental Slurm settings. These features are subject to change and may be modified in future releases."
+  type = object({
+    enable_async_reply = optional(bool, false)
   })
   default  = {}
   nullable = false

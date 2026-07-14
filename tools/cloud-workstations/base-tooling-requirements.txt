@@ -21,7 +21,7 @@ packaging==26.2 \
 pip-tools==7.5.3 \
     --hash=sha256:3aac0c473240ae90db7213c033401f345b05197293ccbdd2704e52e7a783785e \
     --hash=sha256:8fa364779ebc010cbfe17cb9de404457ac733e100840423f28f6955de7742d41
-    # via -r tools/cloud-workstations/base-tooling-requirements.in
+    # via -r base-tooling-requirements.in
 pyproject-hooks==1.2.0 \
     --hash=sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8 \
     --hash=sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913
@@ -32,19 +32,19 @@ wheel==0.47.0 \
     --hash=sha256:212281cab4dff978f6cedd499cd893e1f620791ca6ff7107cf270781e587eced \
     --hash=sha256:cc72bd1009ba0cf63922e28f94d9d83b920aa2bb28f798a31d0691b02fa3c9b3
     # via
-    #   -r tools/cloud-workstations/base-tooling-requirements.in
+    #   -r base-tooling-requirements.in
     #   pip-tools
 
 # The following packages are considered to be unsafe in a requirements file:
-pip==26.1.1 \
-    --hash=sha256:99cb1c2899893b075ff56e4ed0af55669a955b49ad7fb8d8603ecdaf4ed653fb \
-    --hash=sha256:d36762751d156a4ee895de8af39aa0abeeeb577f93a2eca6ab62467bbf0f8a78
+pip==26.1.2 \
+    --hash=sha256:382ff9f685ee3bc25864f820aa50505825f10f5458ffff07e30a6d96e5715cab \
+    --hash=sha256:f49cd134c61cf2fd75e0ce2676db03e4054504a5a4986d00f8299ae632dc4605
     # via
-    #   -r tools/cloud-workstations/base-tooling-requirements.in
+    #   -r base-tooling-requirements.in
     #   pip-tools
 setuptools==82.0.1 \
     --hash=sha256:7d872682c5d01cfde07da7bccc7b65469d3dca203318515ada1de5eda35efbf9 \
     --hash=sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb
     # via
-    #   -r tools/cloud-workstations/base-tooling-requirements.in
+    #   -r base-tooling-requirements.in
     #   pip-tools

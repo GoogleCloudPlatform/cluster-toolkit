@@ -123,7 +123,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				REGION:             "us-central1",
 				ZONE:               "us-central1-a",
 				MACHINE_TYPE:       "c2-standard-8",
-				STATIC_NODE_COUNTS: `"c2-standard-8":1`,
+				STATIC_NODE_COUNTS: "c2-standard-8:1",
 				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
 				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION:  getTerraformVersion(), // Dynamically expect the current Terraform version
@@ -1857,7 +1857,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"g4":3`,
+			want: "g4:3",
 		},
 		{
 			// 2. Multiple Modules Sharing a Machine Type
@@ -1884,7 +1884,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					},
 				}},
 			},
-			want: `"c2-standard-8":6`,
+			want: "c2-standard-8:6",
 		},
 		{
 			// 3. Multiple Modules with Varying Machine Types
@@ -1911,7 +1911,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					},
 				}},
 			},
-			want: `"a3u":2,"g4":3`,
+			want: "a3u:2,g4:3",
 		},
 		{
 			// 4. Explicit Zero Override
@@ -1929,7 +1929,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: ``,
+			want: "",
 		},
 		{
 			// 5. Autoscaling Parameters Co-Existing
@@ -1948,7 +1948,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"n2-standard-2":2`,
+			want: "n2-standard-2:2",
 		},
 		{
 			// 6. Inline Slurm Partitions with Inherited Machine Types
@@ -1970,7 +1970,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"c2-standard-8":5`,
+			want: "c2-standard-8:5",
 		},
 		{
 			// 7. Heterogeneous Inline Slurm Partitions
@@ -1997,7 +1997,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"a2-highgpu-1g":2,"a3-ultragpu-8g":4`,
+			want: "a2-highgpu-1g:2,a3-ultragpu-8g:4",
 		},
 		{
 			// 8. Module Missing a Machine Type Definition
@@ -2014,7 +2014,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: ``,
+			want: "",
 		},
 		{
 			// 9. Unknown or Computed Variables
@@ -2032,7 +2032,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: ``,
+			want: "",
 		},
 		{
 			// 10. Blueprints with No Compute Instances
@@ -2044,7 +2044,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					Modules: []config.Module{},
 				}},
 			},
-			want: ``,
+			want: "",
 		},
 		{
 			// 11. (Additional) Extraneous Non-Numeric Nested Data
@@ -2069,7 +2069,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"c2-standard-8":3`,
+			want: "c2-standard-8:3",
 		},
 		{
 			// 12. TPU Topology calculation
@@ -2087,7 +2087,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"ct5lp-hightpu-8t":16`,
+			want: "ct5lp-hightpu-8t:16",
 		},
 		{
 			// 13. Multiplier properties (num_node_pools, num_slices)
@@ -2107,7 +2107,7 @@ func TestGetStaticNodeCounts(t *testing.T) {
 					}},
 				}},
 			},
-			want: `"n2-standard-4":8`, // 2 * max(3, 4) = 8
+			want: "n2-standard-4:8", // 2 * max(3, 4) = 8
 		},
 	}
 
