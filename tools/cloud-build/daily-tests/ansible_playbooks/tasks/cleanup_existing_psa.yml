@@ -21,7 +21,7 @@
     gcloud compute addresses list
     --project={{ project }}
     --global
-    --filter="network:{{ network }}"
+    --filter="network=projects/{{ project }}/global/networks/{{ network }}"
     --format="value(name)"
   when: network is defined and network != "" and project is defined
 
