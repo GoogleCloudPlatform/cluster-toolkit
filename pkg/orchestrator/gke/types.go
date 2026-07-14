@@ -416,6 +416,7 @@ type kueueWorkload struct {
 
 type kueueWorkloadList struct {
 	Items []kueueWorkload `json:"items"`
+}
 
 // parsedReservation holds the extracted components of a GCE reservation URI/path.
 type parsedReservation struct {
