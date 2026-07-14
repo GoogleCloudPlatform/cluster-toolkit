@@ -56,7 +56,7 @@ This section guides you through the cluster creation process, ensuring that your
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
    * `num_slices`: the number of TPU slices to create.
-   * `machine_type`: the machine type of the TPU (e.g., `ct5lp-hightpu-8t`).
+   * `machine_type`: the machine type of the TPU (e.g.,`ct5lp-hightpu-1t`, `ct5lp-hightpu-4t`, `ct5lp-hightpu-8t`).
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x4`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
    * `reservation`: the name of the Compute Engine reservation of TPU v5e nodes (if any).
