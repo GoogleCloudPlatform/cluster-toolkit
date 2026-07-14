@@ -981,6 +981,19 @@ When the `--pathways` flag is specified, GCluster automatically refactors the Jo
 
 All GCS pathways artifact locations, elastic slice configurations, and proxy command arguments are dynamically compiled into the manifest based on your `--pathways-*` flags.
 
+#### Headless Pathways Orchestration
+
+When `--pathways-headless` is enabled, GCluster deploys the Pathways infrastructure without running a workload container inside the cluster:
+* **Optional Image and Command Flags**: Since no client workload container is deployed inside GKE, the `--image`, `--base-image`, and `--command` flags are **not required**.
+* **Infrastructure-Only Manifest**: The manifest compiles `pathways-rm` and `pathways-proxy` as direct main containers inside the coordinator replicatedJob (`pathways-head`). No `workload-container` is generated.
+* **External Client Connection**: You can connect to the running Pathways cluster externally (e.g. from a local notebook or Vertex AI development instance) by port-forwarding the proxy server container port `29000`:
+
+  ```bash
+  kubectl port-forward <pathways-head-pod> 29000:29000
+  ```
+
+  And then initializing JAX/Pathways client pointing to `grpc://127.0.0.1:29000`.
+
 ---
 
 ### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
