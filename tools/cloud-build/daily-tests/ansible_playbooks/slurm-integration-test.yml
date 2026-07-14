@@ -207,8 +207,6 @@
         ansible_ssh_common_args: >-
           {% if login_is_private %}
           -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
-          {% else %}
-          ""
           {% endif %}
         groups: [remote_host]
 
@@ -219,8 +217,6 @@
         ansible_ssh_common_args: >-
           {% if controller_is_private %}
           -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
-          {% else %}
-          ""
           {% endif %}
 
 

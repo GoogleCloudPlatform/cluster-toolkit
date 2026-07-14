@@ -25,7 +25,7 @@
 
 - name: Wait for firewall to allow port 22 connection
   ansible.builtin.wait_for:
-    host: "{{ hostvars[_host_to_wait]['ansible_host'] | default(_host_to_wait) }}"
+    host: "{{ hostvars[_host_to_wait]['ansible_host'] | default(_host_to_wait) if _host_to_wait in hostvars else _host_to_wait }}"
     port: 22
     delay: 60
     timeout: 300
