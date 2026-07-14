@@ -60,6 +60,7 @@ This section guides you through the cluster creation process, ensuring that your
    * `tpu_topology`: the TPU placement topology for the pod slice node pool (e.g., `2x4`).
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine running Terraform.
    * `reservation`: the name of the Compute Engine reservation of TPU v5e nodes (if any).
+   * `user_namespace`: The Kubernetes service account namespace where your TPU workloads will run (defaults to `default`).
 
     > **Note:** The `static_node_count` is automatically calculated from `machine_type`, `num_slices` and `tpu_topology`. It is derived using the formula: `(total_chips_in_topology / chips_per_machine)`.
 
