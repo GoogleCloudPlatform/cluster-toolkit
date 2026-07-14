@@ -132,6 +132,13 @@ func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobSt
 	return []orchestrator.JobStatus{}, m.Err
 }
 
+func (m *MockKubeClient) GetCurrentNamespace() (string, error) {
+	if m.Namespace != "" {
+		return m.Namespace, nil
+	}
+	return "default", m.Err
+}
+
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
 	setupMockMachineConfig(t)
 

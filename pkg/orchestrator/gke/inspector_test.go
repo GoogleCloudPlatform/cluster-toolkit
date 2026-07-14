@@ -46,7 +46,7 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 		"kubectl get crd topologies.kueue.x-k8s.io":                       {{ExitCode: 0, Stdout: "topologies-crd"}},
 		"kubectl describe deployment slice-controller-controller-manager": {{ExitCode: 0, Stdout: "slice-dep-details"}},
 		"kubectl logs deployment/slice-controller-controller-manager":     {{ExitCode: 0, Stdout: "slice-logs"}},
-		"kubectl get workloads -A -o json":                                {workloadsResult, workloadsResult, workloadsResult, workloadsResult},
+		"kubectl get workloads":                                           {workloadsResult, workloadsResult, workloadsResult, workloadsResult},
 		"kubectl describe jobsets":                                        {{ExitCode: 0, Stdout: "jobset-config"}},
 		"kubectl describe workloads":                                      {{ExitCode: 0, Stdout: "workload-config"}},
 	}

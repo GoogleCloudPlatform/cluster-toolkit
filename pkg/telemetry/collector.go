@@ -225,8 +225,7 @@ func getMachineType(bp config.Blueprint) string {
 	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
 
 	for _, m := range config.GetAllBpModules(&bp) {
-		var mType string
-		mType = getMachineTypeFromModule(m, bp)
+		var mType = getMachineTypeFromModule(m, bp)
 
 		if mType != "" && !seen[mType] {
 			machineTypes = append(machineTypes, mType)

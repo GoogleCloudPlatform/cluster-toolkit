@@ -32,35 +32,22 @@ const spacer = "========================================================"
 
 type inspectWriter struct {
 	writer   io.Writer
-	show     bool
 	executor Executor
 }
 
 func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
 	outputStr := fmt.Sprintf("Description: %s\nCommand: %s %v\n", description, command, args)
-	if w.show {
-		fmt.Print(outputStr)
-	}
 	_, _ = fmt.Fprint(w.writer, outputStr)
 
 	res := w.executor.ExecuteCommand(command, args...)
 	if res.ExitCode != 0 {
 		errStr := fmt.Sprintf("Error (%d):\n%s\n", res.ExitCode, res.Stderr)
-		if w.show {
-			fmt.Print(errStr)
-		}
 		_, _ = fmt.Fprint(w.writer, errStr)
 	} else {
 		outStr := fmt.Sprintf("Output:\n%s\n", res.Stdout)
-		if w.show {
-			fmt.Print(outStr)
-		}
 		_, _ = fmt.Fprint(w.writer, outStr)
 	}
 	divider := fmt.Sprintf("\n%s\n\n", spacer)
-	if w.show {
-		fmt.Print(divider)
-	}
 	_, _ = fmt.Fprint(w.writer, divider)
 }
 
@@ -86,12 +73,23 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 		_ = file.Close()
 	}()
 
+	// Resolve namespace context
+	targetNamespace, err := g.getCurrentNamespace()
+	if err != nil {
+		logging.Warn("Failed to resolve current namespace: %v. Defaulting to 'default'", err)
+		targetNamespace = "default"
+	}
+
+	var outputTarget io.Writer = file
+	if opts.Show {
+		outputTarget = io.MultiWriter(file, os.Stdout)
+	}
+
 	// Initial header in log
-	_, _ = fmt.Fprintf(file, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
+	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
 
 	writer := &inspectWriter{
-		writer:   file,
-		show:     opts.Show,
+		writer:   outputTarget,
 		executor: g.executor,
 	}
 
@@ -106,14 +104,14 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	// ConfigMaps (graceful handle if not present)
 	metadataCM := fmt.Sprintf("%s-metadata", opts.ClusterName)
 	resourcesCM := fmt.Sprintf("%s-resources", opts.ClusterName)
-	writer.runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", "default", "-o", "yaml")
-	writer.runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", "default", "-o", "yaml")
+	writer.runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", targetNamespace, "-o", "yaml")
+	writer.runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", targetNamespace, "-o", "yaml")
 
 	// --- 3. Node Status ---
 	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
 
 	// Count nodes per pool (healthy and total)
-	logNodeCounts(file, g.executor, opts.Show)
+	logNodeCounts(outputTarget, g.executor)
 
 	// --- 4. Kueue & JobSet Resources ---
 	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
@@ -133,14 +131,14 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}
 
 	// --- 6. Workloads ---
-	logWorkloadList(file, g.executor, "EVERYTHING", "", opts.Show)
-	logWorkloadList(file, g.executor, "QUEUED", "", opts.Show)
-	logWorkloadList(file, g.executor, "RUNNING", "", opts.Show)
+	logWorkloadList(outputTarget, g.executor, "EVERYTHING", "", targetNamespace)
+	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
+	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
 
 	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName)
 
 	// --- 7. Console Links ---
-	logConsoleLinks(file, opts, workloadNamespace)
+	logConsoleLinks(outputTarget, opts, workloadNamespace)
 
 	logging.Info("Cluster inspection report saved to %s", filePath)
 	return nil
@@ -159,7 +157,7 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName st
 		logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", workloadName, err)
 	}
 
-	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, writer.show)
+	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)
 
 	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
 
@@ -174,19 +172,13 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName st
 	return workloadNamespace
 }
 
-func logNodeCounts(w io.Writer, exec Executor, show bool) {
+func logNodeCounts(w io.Writer, exec Executor) {
 	desc := "Kubectl: Node count analysis"
-	if show {
-		fmt.Printf("Description: %s\n", desc)
-	}
 	_, _ = fmt.Fprintf(w, "Description: %s\n", desc)
 
 	nodeList, err := fetchNodeList(exec)
 	if err != nil {
 		errStr := fmt.Sprintf("Error fetching nodes for analysis: %v\n", err)
-		if show {
-			fmt.Print(errStr)
-		}
 		_, _ = fmt.Fprint(w, errStr)
 		_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 		return
@@ -211,9 +203,6 @@ func logNodeCounts(w io.Writer, exec Executor, show bool) {
 		outputStr += fmt.Sprintf("  - %s: %d healthy\n", pool, healthyNodesPerPool[pool])
 	}
 
-	if show {
-		fmt.Print(outputStr)
-	}
 	_, _ = fmt.Fprint(w, outputStr)
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
@@ -258,9 +247,6 @@ func countNodes(nodeList *kubernetesNodeList) (map[string]int, map[string]int) {
 
 func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadNamespace string) {
 	desc := "Cloud Console Links"
-	if opts.Show {
-		fmt.Printf("Description: %s\n", desc)
-	}
 	_, _ = fmt.Fprintf(w, "Description: %s\n", desc)
 
 	links := []struct {
@@ -301,31 +287,28 @@ func logConsoleLinks(w io.Writer, opts orchestrator.InspectOptions, workloadName
 		outputStr += fmt.Sprintf("Link Description: %s\nLink: %s\n\n", l.desc, l.url)
 	}
 
-	if opts.Show {
-		fmt.Print(outputStr)
-	}
 	_, _ = fmt.Fprint(w, outputStr)
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
 
-
-func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWorkload string, show bool) {
+func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWorkload string, namespace string) {
 	desc := fmt.Sprintf("Kubectl: List Jobs with filter-by-status=%s", filterStatus)
 	if filterWorkload != "" {
 		desc += fmt.Sprintf(" with filter-by-job=%s", filterWorkload)
 	}
 
-	if show {
-		fmt.Printf("Description: %s\n", desc)
-	}
 	_, _ = fmt.Fprintf(w, "Description: %s\n", desc)
 
-	res := exec.ExecuteCommand("kubectl", "get", "workloads", "-A", "-o", "json")
+	args := []string{"get", "workloads"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	} else {
+		args = append(args, "-A")
+	}
+	args = append(args, "-o", "json")
+	res := exec.ExecuteCommand("kubectl", args...)
 	if res.ExitCode != 0 {
 		errStr := fmt.Sprintf("Error listing workloads (%d):\n%s\n", res.ExitCode, res.Stderr)
-		if show {
-			fmt.Print(errStr)
-		}
 		_, _ = fmt.Fprint(w, errStr)
 		_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 		return
@@ -334,16 +317,18 @@ func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWork
 	var wlList kueueWorkloadList
 	if err := json.Unmarshal([]byte(res.Stdout), &wlList); err != nil {
 		errStr := fmt.Sprintf("Error parsing workloads JSON: %v\n", err)
-		if show {
-			fmt.Print(errStr)
-		}
 		_, _ = fmt.Fprint(w, errStr)
 		_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 		return
 	}
 
+	filtered := filterWorkloads(wlList.Items, filterStatus, filterWorkload)
+	renderWorkloadsTable(w, filtered)
+}
+
+func filterWorkloads(items []kueueWorkload, filterStatus string, filterWorkload string) []kueueWorkload {
 	var filtered []kueueWorkload
-	for _, wl := range wlList.Items {
+	for _, wl := range items {
 		// Filter by workload name
 		if filterWorkload != "" {
 			jobsetName := wl.Metadata.Name
@@ -356,38 +341,43 @@ func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWork
 		}
 
 		// Filter by status
-		if filterStatus == "QUEUED" {
-			running := 0
-			if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
-				running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
-			}
-			status := ""
-			if len(wl.Status.Conditions) > 0 {
-				status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
-			}
-			statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted") || strings.Contains(status, "QuotaReserved")
-			if !(statusMatch && running == 0) {
-				continue
-			}
-		} else if filterStatus == "RUNNING" {
-			running := 0
-			if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
-				running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
-			}
-			status := ""
-			if len(wl.Status.Conditions) > 0 {
-				status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
-			}
-			statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted")
-			if !(statusMatch && running > 0) {
-				continue
-			}
+		if filterStatus == "QUEUED" && !isWorkloadQueued(wl) {
+			continue
+		}
+		if filterStatus == "RUNNING" && !isWorkloadRunning(wl) {
+			continue
 		}
 
 		filtered = append(filtered, wl)
 	}
+	return filtered
+}
 
-	// Render table using tabwriter
+func getWorkloadStats(wl kueueWorkload) (int, string) {
+	running := 0
+	if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
+		running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
+	}
+	status := ""
+	if len(wl.Status.Conditions) > 0 {
+		status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
+	}
+	return running, status
+}
+
+func isWorkloadQueued(wl kueueWorkload) bool {
+	running, status := getWorkloadStats(wl)
+	statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted") || strings.Contains(status, "QuotaReserved")
+	return statusMatch && running == 0
+}
+
+func isWorkloadRunning(wl kueueWorkload) bool {
+	running, status := getWorkloadStats(wl)
+	statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted")
+	return statusMatch && running > 0
+}
+
+func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 	var sb strings.Builder
 	sb.WriteString("Output:\n")
 
@@ -437,9 +427,6 @@ func logWorkloadList(w io.Writer, exec Executor, filterStatus string, filterWork
 	_ = tw.Flush()
 
 	outStr := sb.String()
-	if show {
-		fmt.Print(outStr)
-	}
 	_, _ = fmt.Fprint(w, outStr)
 	_, _ = fmt.Fprintf(w, "\n%s\n\n", spacer)
 }
