@@ -389,10 +389,28 @@ func extractIntFromCtyMap(val cty.Value, targetKeys []string) (int, bool) {
 // extractExplicitIntSetting attempts to get the given key int value if explicitly defined.
 // It returns the int value, and a boolean indicating if the setting was found.
 func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) (int, bool) {
-	if !m.Settings.Has(key) {
+	keys := strings.Split(key, ".")
+	if !m.Settings.Has(keys[0]) {
 		return 0, false
 	}
-	keyValue := m.Settings.Get(key)
+	keyValue := m.Settings.Get(keys[0])
+
+	// Traverse nested object properties if dot notation is used
+	for i := 1; i < len(keys); i++ {
+		if ev, err := bp.Eval(keyValue); err == nil {
+			keyValue = ev
+		}
+		if !keyValue.Type().IsObjectType() && !keyValue.Type().IsMapType() {
+			return 0, false
+		}
+		asMap := keyValue.AsValueMap()
+		if val, exists := asMap[keys[i]]; exists {
+			keyValue = val
+		} else {
+			return 0, false
+		}
+	}
+
 	evaluatedKey, err := bp.Eval(keyValue)
 	if err != nil {
 		return 0, false
@@ -758,4 +776,106 @@ func parseOsReleaseField(line string) string {
 		return ""
 	}
 	return strings.Trim(parts[1], "'\"")
+}
+
+func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys []string) map[string]int {
+	if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
+		if val, err := bp.Eval(m.Settings.Get("static_node_count")); err == nil {
+			unmarked, _ := val.Unmark()
+			if unmarked.IsKnown() && !unmarked.IsNull() {
+				return map[string]int{}
+			}
+		}
+	}
+	counts := make(map[string]int)
+	topMachineType := getMachineTypeFromModule(m, bp)
+	inlineFound := false
+	for _, key := range staticNodeCountInlineKeys {
+		if processInlineKeyDynamic(m, bp, key, topMachineType, counts, targetKeys) {
+			inlineFound = true
+		}
+	}
+	if inlineFound {
+		return counts
+	}
+	if topMachineType != "" {
+		if count, found := getTopLevelDynamicNodeCount(m, bp, topMachineType, targetKeys); found {
+			counts[topMachineType] += count
+		}
+	}
+	return counts
+}
+
+func processInlineKeyDynamic(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int, targetKeys []string) bool {
+	if !m.Settings.Has(key) {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get(key))
+	if err != nil {
+		return false
+	}
+	unmarked, _ := val.Unmark()
+	if !unmarked.IsKnown() || unmarked.IsNull() {
+		return false
+	}
+	ty := unmarked.Type()
+	if !ty.IsListType() && !ty.IsTupleType() && !ty.IsSetType() {
+		return false
+	}
+	for _, item := range unmarked.AsValueSlice() {
+		processInlineItemDynamic(item, topMachineType, counts, targetKeys)
+	}
+	return true
+}
+
+func processInlineItemDynamic(item cty.Value, topMachineType string, counts map[string]int, targetKeys []string) {
+	item, _ = item.Unmark()
+	if !item.IsKnown() || item.IsNull() {
+		return
+	}
+	ty := item.Type()
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return
+	}
+	inlineMType := extractStringFromCtyMap(item, machineTypeSettings)
+	if inlineMType == "" {
+		inlineMType = topMachineType
+	}
+	if count, found := extractIntFromCtyMap(item, targetKeys); found && inlineMType != "" {
+		counts[inlineMType] += count
+	}
+}
+
+func getTopLevelDynamicNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
+	var baseCount int
+	var found bool
+	for _, key := range targetKeys {
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			baseCount = count
+			found = true
+			if key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
+				baseCount *= getZonalMultiplier(m, bp)
+			}
+			break
+		}
+	}
+	if !found {
+		if count, ok := getTPUNodeCount(m, bp, topMachineType); ok {
+			baseCount = count
+			found = true
+		}
+	}
+	if !found {
+		if count, ok := extractDefaultSetting[int](targetKeys, m); ok {
+			baseCount = count
+			found = true
+		}
+	}
+	if !found {
+		return 0, false
+	}
+	pools := getMultiplier("num_node_pools", m, bp)
+	slices := getMultiplier("num_slices", m, bp)
+	multiplier := max(slices, pools)
+	return baseCount * multiplier, true
 }

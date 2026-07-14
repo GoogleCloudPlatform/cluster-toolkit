@@ -44,6 +44,18 @@ var (
 		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
 		"target_size",       // Used by HTCondor execute points and MIGs for pool capacity.
 	}
+	dynamicMinNodeCountSettings = []string{
+		"autoscaling_min_node_count",
+		"autoscaling_total_min_nodes",
+		"system_node_pool_node_count.total_min_nodes", // Used by gke-cluster system node pools
+	}
+	dynamicMaxNodeCountSettings = []string{
+		"autoscaling_max_node_count",
+		"autoscaling_total_max_nodes",
+		"node_count_dynamic_max",
+		"max_size",                                    // Used by HTCondor execute points for unbounded scaling limit.
+		"system_node_pool_node_count.total_max_nodes", // Used by gke-cluster system node pools
+	}
 	staticNodeCountInlineKeys  = []string{"nodeset", "nodeset_tpu", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
@@ -80,6 +92,8 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
 	c.metadata[STATIC_NODE_COUNTS] = getStaticNodeCounts(c.blueprint)
+	c.metadata[DYNAMIC_NODE_COUNT_MIN] = getDynamicNodeCounts(c.blueprint, "min")
+	c.metadata[DYNAMIC_NODE_COUNT_MAX] = getDynamicNodeCounts(c.blueprint, "max")
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -396,4 +410,29 @@ func getIsTestData() string {
 
 func getLatencyMs(eventStartTime time.Time) int64 {
 	return time.Since(eventStartTime).Milliseconds()
+}
+
+func getDynamicNodeCounts(bp config.Blueprint, kind string) string {
+	counts := make(map[string]int)
+	targetKeys := dynamicMinNodeCountSettings
+	if kind == "max" {
+		targetKeys = dynamicMaxNodeCountSettings
+	}
+	config.GetAllBpModules(&bp)
+
+	for _, g := range bp.Groups {
+		for _, m := range g.Modules {
+			moduleCounts := getModuleDynamicNodeCounts(m, bp, targetKeys)
+			for mt, cnt := range moduleCounts {
+				if cnt > 0 {
+					counts[mt] += cnt
+				}
+			}
+		}
+	}
+	countsJSON, err := json.Marshal(counts)
+	if err != nil || len(counts) == 0 {
+		return ""
+	}
+	return strings.ReplaceAll(strings.Trim(string(countsJSON), "{}"), `"`, "")
 }

@@ -2151,3 +2151,262 @@ func TestGetStaticNodeCounts(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDynamicNodeCounts(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		kind string
+		want string
+	}{
+		{
+			name: "Extracts dynamic max nodes for GKE",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(15),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:15",
+		},
+		{
+			name: "Skips dynamic max nodes for GKE if static_node_count is set",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"static_node_count":           cty.NumberIntVal(5),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(15),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Extracts dynamic min nodes for GKE",
+			kind: "min",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:2",
+		},
+		{
+			name: "Extracts dynamic max nodes for Slurm partition",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "community/modules/compute/schedmd-slurm-gcp-v6-partition",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":           cty.StringVal("c2-standard-30"),
+									"node_count_dynamic_max": cty.NumberIntVal(100),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2-standard-30:100",
+		},
+		{
+			name: "Skips dynamic extraction for GKE if static_node_count is explicitly set to 0",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("e2-standard-4"),
+									"static_node_count": cty.NumberIntVal(0),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Aggregates dynamic min nodes across multiple GKE modules for the same machine type",
+			kind: "min",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n1-standard-8"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(5),
+								}),
+							},
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n1-standard-8"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(10),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n1-standard-8:15",
+		},
+		{
+			name: "Extracts dynamic max nodes from inline partition configuration in Slurm",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "community/modules/scheduler/schedmd-slurm-gcp-v6-controller",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-standard-2"),
+									"partition": cty.TupleVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"machine_type":           cty.StringVal("c2d-standard-112"),
+											"node_count_dynamic_max": cty.NumberIntVal(200),
+										}),
+										cty.ObjectVal(map[string]cty.Value{
+											"node_count_dynamic_max": cty.NumberIntVal(50),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2d-standard-112:200,e2-standard-2:50",
+		},
+		{
+			name: "Extracts max_size for dynamic bounded modules like HTCondor",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/htcondor-execute-point",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("n2-standard-4"),
+									"max_size":     cty.NumberIntVal(50),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2-standard-4:50",
+		},
+		{
+			name: "Skips dynamic max nodes for VM instance since there are none",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/vm-instance",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":   cty.StringVal("n1-standard-1"),
+									"instance_count": cty.NumberIntVal(10),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Extracts dot notation nested keys like system_node_pool_node_count.total_max_nodes",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-cluster",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c3-standard-4"),
+									"system_node_pool_node_count": cty.ObjectVal(map[string]cty.Value{
+										"total_min_nodes": cty.NumberIntVal(2),
+										"total_max_nodes": cty.NumberIntVal(10),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c3-standard-4:10",
+		},
+		{
+			name: "Zonal multiplier multiplies dynamic zonal bounds by number of elements in zones list",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":               cty.StringVal("n2d-standard-32"),
+									"autoscaling_max_node_count": cty.NumberIntVal(5),
+									"zones":                      cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2d-standard-32:10", // 5 bound max * 2 zones
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getDynamicNodeCounts(tc.bp, tc.kind)
+			if got != tc.want {
+				t.Errorf("getDynamicNodeCounts() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
