@@ -27,6 +27,7 @@ vars:
   a4x_cluster_size: # supply cluster size
   # Cluster env settings
   net0_range: 192.168.0.0/19
+  # filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/19
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
@@ -105,6 +106,21 @@ deployment_groups:
         count: 4
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
+
+  # - id: homefs
+  #   source: modules/file-system/filestore
+  #   use:
+  #   - a4x-slurm-net-0
+  #   settings:
+  #     filestore_tier: HIGH_SCALE_SSD
+  #     size_gb: 10240
+  #     local_mount: /home
+  #     reserved_ip_range: $(vars.filestore_ip_range)
+  #     deletion_protection:
+  #       enabled: true
+  #       reason: Avoid data loss
+  #   outputs:
+  #   - network_storage
 
   - id: private_service_access
     source: modules/network/private-service-access
