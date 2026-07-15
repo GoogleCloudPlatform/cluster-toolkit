@@ -237,11 +237,12 @@ func TestParseNVLinkErrorLine(t *testing.T) {
 		{"Link 2: Link recovery failed events: 1", true}, // Error condition!
 		{"Link 3: Effective Errors: 0", false},           // Count is 0, safe
 		{"Link 0: Symbol Errors: 2", true},               // Error condition!
+		{"Link 0: PLR Xmit Blocks: 1234567890", false},   // Safe ignore
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.line, func(t *testing.T) {
-			err := parseNVLinkErrorLine(tc.line)
+			err := parseNVLinkErrorLine("GPU X", tc.line)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("parseNVLinkErrorLine(%q) error = %v, wantErr %v", tc.line, err, tc.wantErr)
 			}
@@ -271,9 +272,115 @@ func TestCheckBERThreshold(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			err := checkBERThreshold(tc.tag, tc.val, "dummy line")
+			err := checkBERThreshold("GPU X", tc.tag, tc.val, "dummy line")
 			if (err != nil) != tc.wantErr {
 				t.Errorf("checkBERThreshold(%q, %q) error = %v, wantErr %v", tc.tag, tc.val, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestFormatGPUName(t *testing.T) {
+	tests := []struct {
+		desc     string
+		line     string
+		expected string
+	}{
+		{
+			desc:     "Valid GPU and UUID",
+			line:     "GPU 0: NVIDIA GB200 (UUID: GPU-4fa1a8a8-f788-6a1a-41be-dcb11f40a232)",
+			expected: "GPU 0 (UUID: GPU-4fa1a8a8-f788-6a1a-41be-dcb11f40a232)",
+		},
+		{
+			desc:     "Another valid GPU with different wording",
+			line:     "GPU 1: NVIDIA H100 (UUID: GPU-12345678)",
+			expected: "GPU 1 (UUID: GPU-12345678)",
+		},
+		{
+			desc:     "Invalid line format without UUID",
+			line:     "GPU 0: NVIDIA GB200",
+			expected: "GPU 0: NVIDIA GB200", // Fallback to TrimSpace
+		},
+		{
+			desc:     "Empty line",
+			line:     "   ",
+			expected: "", // Fallback to TrimSpace
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := formatGPUName(tc.line)
+			if got != tc.expected {
+				t.Errorf("formatGPUName(%q) = %q, expected %q", tc.line, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetConditionStatus(t *testing.T) {
+	unhealthyType := corev1.NodeConditionType(ConditionTypeGPUUnhealthy)
+
+	tests := []struct {
+		desc               string
+		conditions         []corev1.NodeCondition
+		wantHasIssue       bool
+		wantConditionExist bool
+		wantReason         string
+	}{
+		{
+			desc:               "No conditions",
+			conditions:         []corev1.NodeCondition{},
+			wantHasIssue:       false,
+			wantConditionExist: false,
+			wantReason:         "",
+		},
+		{
+			desc: "Irrelevant condition",
+			conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+			wantHasIssue:       false,
+			wantConditionExist: false,
+			wantReason:         "",
+		},
+		{
+			desc: "GPU unhealthy condition present but false",
+			conditions: []corev1.NodeCondition{
+				{Type: unhealthyType, Status: corev1.ConditionFalse, Reason: "Resolved"},
+			},
+			wantHasIssue:       false,
+			wantConditionExist: true,
+			wantReason:         "Resolved",
+		},
+		{
+			desc: "GPU unhealthy condition present and true",
+			conditions: []corev1.NodeCondition{
+				{Type: unhealthyType, Status: corev1.ConditionTrue, Reason: string(ReasonActiveTestFailed)},
+			},
+			wantHasIssue:       true,
+			wantConditionExist: true,
+			wantReason:         string(ReasonActiveTestFailed),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			node := &corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: tc.conditions,
+				},
+			}
+			gotHasIssue, gotConditionExist, gotReason := getConditionStatus(node)
+
+			if gotHasIssue != tc.wantHasIssue {
+				t.Errorf("hasIssue = %v, want %v", gotHasIssue, tc.wantHasIssue)
+			}
+			if gotConditionExist != tc.wantConditionExist {
+				t.Errorf("conditionExists = %v, want %v", gotConditionExist, tc.wantConditionExist)
+			}
+			if gotReason != tc.wantReason {
+				t.Errorf("currentReason = %v, want %v", gotReason, tc.wantReason)
 			}
 		})
 	}
