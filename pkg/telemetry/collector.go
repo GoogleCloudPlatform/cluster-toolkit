@@ -253,6 +253,24 @@ func getMachineType(bp config.Blueprint) string {
 	return strings.Join(machineTypes, ",")
 }
 
+func getStorageType(bp config.Blueprint) string {
+	var storageTypes []string
+	seen := make(map[string]bool)
+
+	for _, m := range config.GetAllBpModules(&bp) {
+		types := getStorageTypesFromModule(m, bp)
+		for _, t := range types {
+			if !seen[t] {
+				storageTypes = append(storageTypes, t)
+				seen[t] = true
+			}
+		}
+	}
+
+	slices.Sort(storageTypes)
+	return strings.Join(storageTypes, ",")
+}
+
 func getRegion(bp config.Blueprint) string {
 	return config.GetKeyFromBlueprint("region", bp)
 }
