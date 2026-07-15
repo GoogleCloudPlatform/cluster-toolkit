@@ -2544,7 +2544,6 @@ func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
 	}
 }
 
-
 func TestSharedReservationManifestGeneration(t *testing.T) {
 	orc := NewGKEOrchestrator()
 	orc.projectID = "my-consumer-project"
@@ -2687,7 +2686,7 @@ func TestGetJobLogs(t *testing.T) {
 			desc:               "explicit MainOnly=true uses coordinator-only selector (1 pod, succeeds)",
 			mainOnly:           &trueVal,
 			mockGetPods2Stdout: "pod-main-0-0\n",
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name in (main-job, pathways-head),jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
 		},
 		{
 			desc:               "explicit MainOnly=false with pods <= 10 uses all-job selector (succeeds)",
@@ -2713,14 +2712,14 @@ func TestGetJobLogs(t *testing.T) {
 			mainOnly:           nil,
 			mockGetPods1Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods total
 			mockGetPods2Stdout: "pod-main-0-0\n",                                           // 1 pod coordinator
-			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name in (main-job, pathways-head),jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			totalQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
-			filteredQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/replicatedjob-name in (main-job, pathways-head),jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --no-headers"
+			filteredQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --no-headers"
 			if tc.mainOnly != nil && !*tc.mainOnly {
 				filteredQuery = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
 			}

@@ -219,10 +219,9 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	}
 
 	// Proactively check pod count against GKE logs limits
-	podCount, _ := g.getJobPodCount(foundNamespace, selector)
-	if podCount > maxLogRequests {
+	if podCountForNotice > maxLogRequests && !mainOnly {
 		consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
-		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCountForNotice, maxLogRequests, consoleURL)
 	}
 
 	if opts.Follow {
@@ -281,21 +280,25 @@ func (g *GKEOrchestrator) getJobPodCount(ns, selector string) (int, error) {
 func (g *GKEOrchestrator) resolveLogsSelector(name, ns string, optsMainOnly *bool) (string, bool, int) {
 	mainOnly := false
 	podCount := 0
-	if optsMainOnly == nil {
-		totalSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
-		var err error
-		podCount, err = g.getJobPodCount(ns, totalSelector)
-		if err == nil && podCount > 5 {
-			mainOnly = true
-		}
-	} else {
+	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
+
+	if optsMainOnly != nil {
 		mainOnly = *optsMainOnly
 	}
 
-	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
-	if mainOnly {
-		selector = fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s,jobset.sigs.k8s.io/replicatedjob-name in (main-job, pathways-head),jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", name)
+	if !mainOnly {
+		var err error
+		podCount, err = g.getJobPodCount(ns, selector)
+
+		if optsMainOnly == nil && err == nil && podCount > 5 {
+			mainOnly = true
+		}
 	}
+
+	if mainOnly {
+		selector = fmt.Sprintf("%s,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0", selector)
+	}
+
 	return selector, mainOnly, podCount
 }
 
