@@ -253,23 +253,24 @@ func processInlineItem(item cty.Value, topMachineType string, counts map[string]
 	}
 }
 
-func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
-	var baseCount int
-	var found bool
-
+func extractTargetNodeCount(m config.Module, bp config.Blueprint, targetKeys []string) (int, bool) {
 	for _, key := range targetKeys {
 		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
-			baseCount = count
-			found = true
 			if key == "static_node_count" || key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
-				baseCount *= getZonalMultiplier(m, bp)
+				count *= getZonalMultiplier(m, bp)
 			}
-			break
+			return count, true
 		}
 	}
+	return 0, false
+}
+
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
+	baseCount, found := extractTargetNodeCount(m, bp, targetKeys)
 
 	// Static node count is calculated from the Topology for TPU machines.
-	if !found {
+	isStatic := len(targetKeys) > 0 && targetKeys[0] == "static_node_count"
+	if !found && isStatic {
 		if count, ok := getTPUNodeCount(m, bp, topMachineType); ok {
 			baseCount = count
 			found = true
