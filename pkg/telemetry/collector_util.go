@@ -186,9 +186,11 @@ func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorag
 	for _, key := range localSsdCountSettings {
 		if count, ok := extractExplicitIntSetting(key, m, bp); ok && count > 0 {
 			addStorageType("local-ssd")
-		} else if count, ok := extractDefaultSetting[int]([]string{key}, m); ok && count > 0 {
-			addStorageType("local-ssd")
+			return
 		}
+	}
+	if count, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
+		addStorageType("local-ssd")
 	}
 }
 
@@ -249,7 +251,7 @@ func extractAdditionalDisks(m config.Module, bp config.Blueprint, addStorageType
 }
 
 func extractInlineNodesets(m config.Module, bp config.Blueprint, addStorageType func(string)) {
-	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "login_nodes"} {
+	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "partition", "login_nodes"} {
 		if !m.Settings.Has(key) {
 			continue
 		}
