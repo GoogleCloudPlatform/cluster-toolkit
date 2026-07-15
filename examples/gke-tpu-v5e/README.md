@@ -138,7 +138,7 @@ This blueprint installs and configures [Kueue](https://kueue.sigs.k8s.io/) by de
 
 ## Running Pathways Workloads
 
-This blueprint supports **Pathways-on-Cloud** orchestration, allowing you to run JAX workloads distributed across remote TPU workers coordinated by a CPU-based head node. The sections below guide you through deploying and verifying a sample job that prints the active TPU device count over the coordinated Pathways network.
+This blueprint supports [**Pathways-on-Cloud**](https://github.com/AI-Hypercomputer/pathways-utils/) orchestration, allowing you to run JAX workloads distributed across remote TPU workers coordinated by a CPU-based head node. The sections below guide you through deploying and verifying a sample job that prints the active TPU device count over the coordinated Pathways network.
 
 ### 1. Enable Pathways in the Blueprint
 
