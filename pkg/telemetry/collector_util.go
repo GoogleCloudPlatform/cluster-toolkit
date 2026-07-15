@@ -194,18 +194,19 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 
 func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	src := string(m.Source)
+
+	extractAndAdd := func(moduleType, key string) {
+		if val := extractExplicitStringSetting(key, m, bp); val != "" {
+			addStorageType(moduleType + "-" + val)
+		} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found && val != "" {
+			addStorageType(moduleType + "-" + val)
+		}
+	}
+
 	if strings.Contains(src, "database/redis") {
-		if tier := extractExplicitStringSetting("tier", m, bp); tier != "" {
-			addStorageType("redis-" + tier)
-		} else if tier, _, found := extractDefaultSetting[string]([]string{"tier"}, m); found && tier != "" {
-			addStorageType("redis-" + tier)
-		}
+		extractAndAdd("redis", "tier")
 	} else if strings.Contains(src, "database/spanner") {
-		if edition := extractExplicitStringSetting("edition", m, bp); edition != "" {
-			addStorageType("spanner-" + edition)
-		} else if edition, _, found := extractDefaultSetting[string]([]string{"edition"}, m); found && edition != "" {
-			addStorageType("spanner-" + edition)
-		}
+		extractAndAdd("spanner", "edition")
 	}
 }
 
@@ -235,23 +236,28 @@ func extractControllerStateDiskStorage(m config.Module, bp config.Blueprint, add
 	}
 }
 
+func processCtyList(val cty.Value, processItem func(item cty.Value)) {
+	val, _ = val.Unmark()
+	if !val.IsKnown() || val.IsNull() || (!val.Type().IsListType() && !val.Type().IsTupleType() && !val.Type().IsSetType()) {
+		return
+	}
+	for _, item := range val.AsValueSlice() {
+		itemUnmarked, _ := item.Unmark()
+		if itemUnmarked.IsKnown() && !itemUnmarked.IsNull() && (itemUnmarked.Type().IsObjectType() || itemUnmarked.Type().IsMapType()) {
+			processItem(itemUnmarked)
+		}
+	}
+}
+
 func extractNetworkStorage(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	for _, key := range []string{"network_storage", "login_network_storage"} {
 		if m.Settings.Has(key) {
-			val, err := bp.Eval(m.Settings.Get(key))
-			if err == nil {
-				unmarked, _ := val.Unmark()
-				if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsListType() || unmarked.Type().IsTupleType() || unmarked.Type().IsSetType()) {
-					for _, item := range unmarked.AsValueSlice() {
-						itemUnmarked, _ := item.Unmark()
-						if !itemUnmarked.IsKnown() || itemUnmarked.IsNull() || (!itemUnmarked.Type().IsObjectType() && !itemUnmarked.Type().IsMapType()) {
-							continue
-						}
-						if fsType := extractStringFromCtyMap(itemUnmarked, []string{"fs_type"}); fsType != "" {
-							addStorageType(fsType)
-						}
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(item cty.Value) {
+					if fsType := extractStringFromCtyMap(item, []string{"fs_type"}); fsType != "" {
+						addStorageType(fsType)
 					}
-				}
+				})
 			}
 		}
 	}
@@ -259,74 +265,43 @@ func extractNetworkStorage(m config.Module, bp config.Blueprint, addStorageType 
 
 func extractAdditionalDisks(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	if m.Settings.Has("additional_disks") {
-		val, err := bp.Eval(m.Settings.Get("additional_disks"))
-		if err == nil {
-			unmarked, _ := val.Unmark()
-			if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsListType() || unmarked.Type().IsTupleType() || unmarked.Type().IsSetType()) {
-				for _, item := range unmarked.AsValueSlice() {
-					itemUnmarked, _ := item.Unmark()
-					if !itemUnmarked.IsKnown() || itemUnmarked.IsNull() || (!itemUnmarked.Type().IsObjectType() && !itemUnmarked.Type().IsMapType()) {
-						continue
-					}
-					if diskType := extractStringFromCtyMap(itemUnmarked, []string{"disk_type"}); diskType != "" {
-						addStorageType(diskType)
-					}
+		if val, err := bp.Eval(m.Settings.Get("additional_disks")); err == nil {
+			processCtyList(val, func(item cty.Value) {
+				if diskType := extractStringFromCtyMap(item, []string{"disk_type"}); diskType != "" {
+					addStorageType(diskType)
 				}
-			}
+			})
 		}
 	}
 }
 
 func extractInlineNodesets(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "partition", "login_nodes"} {
-		if !m.Settings.Has(key) {
-			continue
-		}
-		val, err := bp.Eval(m.Settings.Get(key))
-		if err == nil {
-			unmarked, _ := val.Unmark()
-			if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsListType() || unmarked.Type().IsTupleType() || unmarked.Type().IsSetType()) {
-				for _, item := range unmarked.AsValueSlice() {
-					itemUnmarked, _ := item.Unmark()
-					if !itemUnmarked.IsKnown() || itemUnmarked.IsNull() || (!itemUnmarked.Type().IsObjectType() && !itemUnmarked.Type().IsMapType()) {
-						continue
-					}
+		if m.Settings.Has(key) {
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(itemUnmarked cty.Value) {
 					if diskType := extractStringFromCtyMap(itemUnmarked, []string{"disk_type"}); diskType != "" {
 						addStorageType(diskType)
 					}
 					// network_storage in inline item
 					for _, nsKey := range []string{"network_storage", "login_network_storage"} {
 						if ns, exists := itemUnmarked.AsValueMap()[nsKey]; exists {
-							nsUnmarked, _ := ns.Unmark()
-							if nsUnmarked.IsKnown() && !nsUnmarked.IsNull() && (nsUnmarked.Type().IsListType() || nsUnmarked.Type().IsTupleType() || nsUnmarked.Type().IsSetType()) {
-								for _, nsItem := range nsUnmarked.AsValueSlice() {
-									nsItemUnmarked, _ := nsItem.Unmark()
-									if !nsItemUnmarked.IsKnown() || nsItemUnmarked.IsNull() || (!nsItemUnmarked.Type().IsObjectType() && !nsItemUnmarked.Type().IsMapType()) {
-										continue
-									}
-									if fsType := extractStringFromCtyMap(nsItemUnmarked, []string{"fs_type"}); fsType != "" {
-										addStorageType(fsType)
-									}
+							processCtyList(ns, func(nsItemUnmarked cty.Value) {
+								if fsType := extractStringFromCtyMap(nsItemUnmarked, []string{"fs_type"}); fsType != "" {
+									addStorageType(fsType)
 								}
-							}
+							})
 						}
 					}
 					// additional_disks in inline item
 					if ad, exists := itemUnmarked.AsValueMap()["additional_disks"]; exists {
-						adUnmarked, _ := ad.Unmark()
-						if adUnmarked.IsKnown() && !adUnmarked.IsNull() && (adUnmarked.Type().IsListType() || adUnmarked.Type().IsTupleType() || adUnmarked.Type().IsSetType()) {
-							for _, adItem := range adUnmarked.AsValueSlice() {
-								adItemUnmarked, _ := adItem.Unmark()
-								if !adItemUnmarked.IsKnown() || adItemUnmarked.IsNull() || (!adItemUnmarked.Type().IsObjectType() && !adItemUnmarked.Type().IsMapType()) {
-									continue
-								}
-								if diskType := extractStringFromCtyMap(adItemUnmarked, []string{"disk_type"}); diskType != "" {
-									addStorageType(diskType)
-								}
+						processCtyList(ad, func(adItemUnmarked cty.Value) {
+							if diskType := extractStringFromCtyMap(adItemUnmarked, []string{"disk_type"}); diskType != "" {
+								addStorageType(diskType)
 							}
-						}
+						})
 					}
-				}
+				})
 			}
 		}
 	}
