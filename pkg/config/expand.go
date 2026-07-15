@@ -580,7 +580,8 @@ func intersection(s1 []string, s2 []string) []string {
 }
 
 func isGKENodePool(m *Module) bool {
-	return strings.HasSuffix(m.Source, "modules/compute/gke-node-pool")
+	path := strings.Split(m.Source, "?")[0]
+	return strings.HasSuffix(path, "modules/compute/gke-node-pool")
 }
 
 func (bp *Blueprint) getEnableDranet(m *Module) bool {

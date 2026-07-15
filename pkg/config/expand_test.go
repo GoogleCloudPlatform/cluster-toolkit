@@ -708,4 +708,36 @@ func (s *zeroSuite) TestDeduplicateDranetTemplates(c *C) {
 		c.Check(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, false)
 		c.Check(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, false)
 	}
+
+	// Case 5: Remote module sources with query parameters should be correctly matched
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "pool-a",
+			Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/gke-node-pool?ref=v1.15.0&depth=1",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"),
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-b",
+			Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/gke-node-pool?ref=v1.15.0&depth=1",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"),
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		// Both should be correctly identified as GKE node pools, and deduplicated
+		c.Assert(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[0].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+
+		c.Assert(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[1].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(false))
+	}
+
 }

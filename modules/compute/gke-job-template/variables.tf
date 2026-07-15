@@ -215,7 +215,7 @@ variable "resource_claims" {
 }
 
 variable "claims" {
-  description = "A list of claims in the container resources block (e.g. [{ name = \"rdma\" }])."
+  description = "A list of claims in the container resources block (e.g. [{ name = \"dranet-network\" }])."
   type = list(object({
     name = string
   }))

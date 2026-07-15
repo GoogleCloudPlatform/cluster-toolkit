@@ -559,8 +559,9 @@ variable "dranet_device_class_name" {
 variable "install_dranet_template" {
   type        = bool
   default     = true
-  description = "If true, automatically deploys the DRANET ResourceClaimTemplate. Set to false if another node pool in the same cluster is already deploying it for the same device class."
+  description = "If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class."
 }
+
 
 variable "dranet_allocation_mode" {
   type        = string
