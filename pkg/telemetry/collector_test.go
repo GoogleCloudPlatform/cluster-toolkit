@@ -800,6 +800,59 @@ func TestGetStorageType(t *testing.T) {
 			},
 			want: "",
 		},
+		{
+			name: "Handles string casing, trims whitespace, and deduplicates identical underlying storage types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal(" pd-ssd  "),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.StringVal("PD-SSD"),
+									"storage_class": cty.StringVal(" sTandard"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node3"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcs-standard,pd-ssd",
+		},
+		{
+			name: "Ignores null values in primary attributes",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node_with_null"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.NullVal(cty.String),
+									"storage_class": cty.NullVal(cty.String),
+									"lustre":        cty.NullVal(cty.Bool),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {

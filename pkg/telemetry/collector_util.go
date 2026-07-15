@@ -151,7 +151,7 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	seen := make(map[string]bool)
 
 	addStorageType := func(t string) {
-		t = strings.ToLower(strings.Trim(t, "\""))
+		t = strings.ToLower(strings.TrimSpace(strings.Trim(t, "\"")))
 		if t != "" && !seen[t] {
 			storageTypes = append(storageTypes, t)
 			seen[t] = true
@@ -171,6 +171,7 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 
 func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	formatType := func(key, val string) string {
+		val = strings.TrimSpace(val)
 		if key == "storage_class" {
 			return "gcs-" + val
 		} else if key == "filestore_tier" {
@@ -210,7 +211,7 @@ func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorag
 		if val := extractExplicitStringSetting(key, m, bp); val != "" {
 			addStorageType(moduleType + "-" + val)
 		} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found && val != "" {
-			addStorageType(moduleType + "-" + val)
+			addStorageType(moduleType + "-" + strings.TrimSpace(val))
 		}
 	}
 
@@ -355,7 +356,7 @@ func extractExplicitStringSetting(key string, m config.Module, bp config.Bluepri
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
 	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-		return unmarkedKey.AsString()
+		return strings.TrimSpace(unmarkedKey.AsString())
 	}
 	return ""
 }
@@ -542,7 +543,7 @@ func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
-				return strings.Trim(v.AsString(), "\"")
+				return strings.TrimSpace(strings.Trim(v.AsString(), "\""))
 			}
 		}
 	}
