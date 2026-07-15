@@ -52,6 +52,10 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
+  - name: Set actual network name
+    ansible.builtin.set_fact:
+      actual_network: "{% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}"
+
   - name: Run Pre Deploy Tasks
     ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
     loop: "{{ pre_deploy_tasks | default([]) }}"
@@ -69,6 +73,8 @@
     - name: Clean up any existing PSA resources from previous runs
       ansible.builtin.include_tasks:
         file: tasks/cleanup_existing_psa.yml
+      vars:
+        network: "{{ actual_network | default(network) }}"
 
     - name: Create Cluster with gcluster
       register: deployment
@@ -145,7 +151,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}
+        - --network={{ actual_network }}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
