@@ -151,7 +151,7 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	seen := make(map[string]bool)
 
 	addStorageType := func(t string) {
-		t = strings.Trim(t, "\"")
+		t = strings.ToLower(strings.Trim(t, "\""))
 		if t != "" && !seen[t] {
 			storageTypes = append(storageTypes, t)
 			seen[t] = true

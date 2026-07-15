@@ -625,7 +625,7 @@ func TestGetStorageType(t *testing.T) {
 					},
 				},
 			},
-			want: "gcs-STANDARD",
+			want: "gcs-standard",
 		},
 		{
 			name: "Extracts filestore_tier from Filestore",
@@ -644,7 +644,7 @@ func TestGetStorageType(t *testing.T) {
 					},
 				},
 			},
-			want: "filestore-BASIC_HDD",
+			want: "filestore-basic_hdd",
 		},
 		{
 			name: "Extracts database tier/edition from Redis and Spanner",
@@ -671,7 +671,7 @@ func TestGetStorageType(t *testing.T) {
 					},
 				},
 			},
-			want: "redis-BASIC,spanner-ENTERPRISE",
+			want: "redis-basic,spanner-enterprise",
 		},
 		{
 			name: "Extracts fs_type from network_storage",
