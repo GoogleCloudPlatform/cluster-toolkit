@@ -625,7 +625,7 @@ func TestGetStorageType(t *testing.T) {
 					},
 				},
 			},
-			want: "STANDARD",
+			want: "gcs-STANDARD",
 		},
 		{
 			name: "Extracts filestore_tier from Filestore",
@@ -644,7 +644,34 @@ func TestGetStorageType(t *testing.T) {
 					},
 				},
 			},
-			want: "BASIC_HDD",
+			want: "filestore-BASIC_HDD",
+		},
+		{
+			name: "Extracts database tier/edition from Redis and Spanner",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("redis"),
+								Source: "modules/database/redis",
+								Settings: config.NewDict(map[string]cty.Value{
+									"tier": cty.StringVal("BASIC"),
+								}),
+							},
+							{
+								ID:     config.ModuleID("spanner"),
+								Source: "modules/database/spanner",
+								Settings: config.NewDict(map[string]cty.Value{
+									"edition": cty.StringVal("ENTERPRISE"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "redis-BASIC,spanner-ENTERPRISE",
 		},
 		{
 			name: "Extracts fs_type from network_storage",

@@ -164,21 +164,48 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	extractNetworkStorage(m, bp, addStorageType)
 	extractAdditionalDisks(m, bp, addStorageType)
 	extractInlineNodesets(m, bp, addStorageType)
+	extractDatabaseStorageTypes(m, bp, addStorageType)
 
 	return storageTypes
 }
 
 func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	formatType := func(key, val string) string {
+		if key == "storage_class" {
+			return "gcs-" + val
+		} else if key == "filestore_tier" {
+			return "filestore-" + val
+		}
+		return val
+	}
+
 	// Explicit string settings
 	for _, key := range storageTypeSettings {
 		if t := extractExplicitStringSetting(key, m, bp); t != "" {
-			addStorageType(t)
+			addStorageType(formatType(key, t))
 		}
 	}
 
 	// Default string settings
-	if t, found := extractDefaultSetting[string](storageTypeSettings, m); found && t != "" {
-		addStorageType(t)
+	if t, key, found := extractDefaultSetting[string](storageTypeSettings, m); found && t != "" {
+		addStorageType(formatType(key, t))
+	}
+}
+
+func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	src := string(m.Source)
+	if strings.Contains(src, "database/redis") {
+		if tier := extractExplicitStringSetting("tier", m, bp); tier != "" {
+			addStorageType("redis-" + tier)
+		} else if tier, _, found := extractDefaultSetting[string]([]string{"tier"}, m); found && tier != "" {
+			addStorageType("redis-" + tier)
+		}
+	} else if strings.Contains(src, "database/spanner") {
+		if edition := extractExplicitStringSetting("edition", m, bp); edition != "" {
+			addStorageType("spanner-" + edition)
+		} else if edition, _, found := extractDefaultSetting[string]([]string{"edition"}, m); found && edition != "" {
+			addStorageType("spanner-" + edition)
+		}
 	}
 }
 
@@ -189,7 +216,7 @@ func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorag
 			return
 		}
 	}
-	if count, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
+	if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
 		addStorageType("local-ssd")
 	}
 }
@@ -313,7 +340,7 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 		}
 	}
 	// 2. If no explicit setting, try defaults
-	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
+	if t, _, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
 		return strings.Trim(t, "\"")
 	}
 
@@ -436,7 +463,7 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 	}
 
 	if !found {
-		if count, ok := extractDefaultSetting[int](staticNodeCountSettings, m); ok {
+		if count, _, ok := extractDefaultSetting[int](staticNodeCountSettings, m); ok {
 			baseCount = count
 			found = true
 			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
@@ -484,7 +511,7 @@ func getMultiplier(key string, m config.Module, bp config.Blueprint) int {
 		}
 		return 1
 	}
-	if val, ok := extractDefaultSetting[int]([]string{key}, m); ok {
+	if val, _, ok := extractDefaultSetting[int]([]string{key}, m); ok {
 		if val > 0 {
 			return val
 		}
@@ -565,11 +592,11 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 }
 
 // extractDefaultSetting attempts to get a default setting from the module's source variables.
-func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
+func extractDefaultSetting[T any](keys []string, m config.Module) (T, string, bool) {
 	var zero T
 	kindStr, valid := isValidModuleKind(m)
 	if !valid {
-		return zero, false
+		return zero, "", false
 	}
 
 	resCh := make(chan result, 1)
@@ -586,20 +613,20 @@ func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return zero, false
+			return zero, "", false
 		}
 		// Iterate over keys to maintain precedence order
 		for _, key := range keys {
 			for _, input := range res.mi.Inputs {
 				if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
-					return val, true
+					return val, key, true
 				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	return zero, false
+	return zero, "", false
 }
 
 // isValidModuleKind checks if the module has a valid source and returns its kind.
