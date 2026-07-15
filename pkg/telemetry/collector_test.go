@@ -582,6 +582,131 @@ func TestGetCmdFlags(t *testing.T) {
 	}
 }
 
+// TestGetStorageType verifies that storage types are correctly extracted from the blueprint.
+func TestGetStorageType(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		want string
+	}{
+		{
+			name: "Extracts explicit disk_type",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-ssd"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-ssd",
+		},
+		{
+			name: "Extracts fs_type from network_storage",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("storage_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("nfs"),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "nfs",
+		},
+		{
+			name: "Extracts multiple storage options without duplicates properly sorted",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-balanced"),
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("lustre"),
+										}),
+									}),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_disk_type": cty.StringVal("pd-standard"),
+									"local_ssd_count_nvme":       cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "local-ssd,lustre,pd-balanced,pd-standard",
+		},
+		{
+			name: "Extracts fs_type from nodeset inline items for Slurm V6",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm_controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"nodeset": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"disk_type": cty.StringVal("pd-extreme"),
+											"network_storage": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"fs_type": cty.StringVal("gcsfuse"),
+												}),
+											}),
+											"additional_disks": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"disk_type": cty.StringVal("pd-ssd"),
+												}),
+											}),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcsfuse,pd-extreme,pd-ssd",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getStorageType(tt.bp)
+			if got != tt.want {
+				t.Errorf("getStorageType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {

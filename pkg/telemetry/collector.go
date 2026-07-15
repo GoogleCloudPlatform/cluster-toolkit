@@ -48,6 +48,20 @@ var (
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
+	storageTypeSettings        = []string{
+		"disk_type",
+		"system_node_pool_disk_type",
+		"filestore_tier",
+		"fs_type",
+		"storage_type",
+		"storage_class",
+	}
+	localSsdCountSettings = []string{
+		"local_ssd_count_ephemeral_storage",
+		"local_ssd_count_nvme",
+		"local_nvme_ssd_count",
+		"local_ssd_count",
+	}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -76,6 +90,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
+	c.metadata[STORAGE_TYPE] = getStorageType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
