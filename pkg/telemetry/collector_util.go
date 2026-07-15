@@ -46,6 +46,18 @@ type result struct {
 	err error
 }
 
+// Storage constants
+const (
+	StoragePrefixGCS       = "gcs"       // Prefix for Google Cloud Storage metrics
+	StoragePrefixFilestore = "filestore" // Prefix for Filestore tiers
+	StoragePrefixRedis     = "redis"     // Prefix for Redis database usage
+	StoragePrefixSpanner   = "spanner"   // Prefix for Spanner database usage
+	StorageTypeLocalSSD    = "local-ssd" // Standalone metric base for Local SSDs
+
+	ModuleSourceRedis   = "database/redis"   // Module origin to detect Redis
+	ModuleSourceSpanner = "database/spanner" // Module origin to detect Spanner
+)
+
 var (
 	machineTypeSettings = []string{
 		"machine_type",                  // Usual setting for specifying machine type.
@@ -202,9 +214,9 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 	formatType := func(key, val string) string {
 		val = strings.TrimSpace(val)
 		if key == "storage_class" {
-			return "gcs-" + val
+			return StoragePrefixGCS + "-" + val
 		} else if key == "filestore_tier" {
-			return "filestore-" + val
+			return StoragePrefixFilestore + "-" + val
 		}
 		return val
 	}
@@ -244,10 +256,10 @@ func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorag
 		}
 	}
 
-	if strings.Contains(src, "database/redis") {
-		extractAndAdd("redis", "tier")
-	} else if strings.Contains(src, "database/spanner") {
-		extractAndAdd("spanner", "edition")
+	if strings.Contains(src, ModuleSourceRedis) {
+		extractAndAdd(StoragePrefixRedis, "tier")
+	} else if strings.Contains(src, ModuleSourceSpanner) {
+		extractAndAdd(StoragePrefixSpanner, "edition")
 	}
 }
 
@@ -257,14 +269,14 @@ func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorag
 		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
 			hasExplicit = true
 			if count > 0 {
-				addStorageType("local-ssd")
+				addStorageType(StorageTypeLocalSSD)
 				return
 			}
 		}
 	}
 	if !hasExplicit {
 		if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
-			addStorageType("local-ssd")
+			addStorageType(StorageTypeLocalSSD)
 		}
 	}
 }
