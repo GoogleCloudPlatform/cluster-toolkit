@@ -180,8 +180,19 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 	}
 
 	// Explicit string settings
+	var remainingKeys []string
 	for _, key := range storageTypeSettings {
 		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			addStorageType(formatType(key, t))
+		}
+		if !m.Settings.Has(key) {
+			remainingKeys = append(remainingKeys, key)
+		}
+	}
+
+	// Default string settings
+	if len(remainingKeys) > 0 {
+		if t, key, found := extractDefaultSetting[string](remainingKeys, m); found && t != "" {
 			addStorageType(formatType(key, t))
 		}
 	}
@@ -211,14 +222,20 @@ func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorag
 }
 
 func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	hasExplicit := false
 	for _, key := range localSsdCountSettings {
-		if count, ok := extractExplicitIntSetting(key, m, bp); ok && count > 0 {
-			addStorageType("local-ssd")
-			return
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			hasExplicit = true
+			if count > 0 {
+				addStorageType("local-ssd")
+				return
+			}
 		}
 	}
-	if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
-		addStorageType("local-ssd")
+	if !hasExplicit {
+		if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
+			addStorageType("local-ssd")
+		}
 	}
 }
 
