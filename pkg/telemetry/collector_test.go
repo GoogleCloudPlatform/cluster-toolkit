@@ -609,6 +609,44 @@ func TestGetStorageType(t *testing.T) {
 			want: "pd-ssd",
 		},
 		{
+			name: "Extracts storage_class from GCS bucket",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("bucket"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "STANDARD",
+		},
+		{
+			name: "Extracts filestore_tier from Filestore",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("filestore"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"filestore_tier": cty.StringVal("BASIC_HDD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "BASIC_HDD",
+		},
+		{
 			name: "Extracts fs_type from network_storage",
 			bp: config.Blueprint{
 				Groups: []config.Group{
