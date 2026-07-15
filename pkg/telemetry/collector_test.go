@@ -760,6 +760,46 @@ func TestGetStorageType(t *testing.T) {
 			},
 			want: "gcsfuse,pd-extreme,pd-ssd",
 		},
+		{
+			name: "Extracts from controller_state_disk object",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm-controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"controller_state_disk": cty.ObjectVal(map[string]cty.Value{
+										"type": cty.StringVal("pd-standard"),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-standard",
+		},
+		{
+			name: "Returns empty when no storage settings are defined",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("empty_module"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"some_other_setting": cty.StringVal("value"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
