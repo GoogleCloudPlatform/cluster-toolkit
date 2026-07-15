@@ -2267,6 +2267,20 @@ func TestPopulateNAPFlavors(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Populate tpu7x",
+			napLimits: map[string]int64{
+				"tpu7x": 4,
+			},
+			wantFlavors: map[string]FlavorCapacity{
+				"flavor-tpu7x": {
+					NodeLabels: map[string]string{
+						"cloud.google.com/gke-tpu-accelerator": "tpu7x",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "Unknown accelerator label returns error",
 			napLimits: map[string]int64{
 				"unknown-gpu": 2,

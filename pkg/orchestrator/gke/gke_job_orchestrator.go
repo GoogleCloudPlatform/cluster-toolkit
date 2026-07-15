@@ -1151,30 +1151,6 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
-var machineFamilyToLabelMap = map[string]string{
-	"g2-standard":   "nvidia-l4",
-	"a3-highgpu":    "nvidia-h100-80gb",
-	"a3-megagpu":    "nvidia-h100-mega-80gb",
-	"a3-ultragpu":   "nvidia-h200-141gb",
-	"a4-highgpu":    "nvidia-b200",
-	"a4x-highgpu":   "nvidia-gb200",
-	"a2-highgpu":    "nvidia-tesla-a100",
-	"a2-ultragpu":   "nvidia-tesla-a100",
-	"a2-megagpu":    "nvidia-tesla-a100",
-	"g4-standard":   "nvidia-rtx-pro-6000",
-	"ct6e-standard": "tpu-v6e-slice",
-	"ct5lp-hightpu": "tpu-v5-lite-podslice",
-	"ct5p-hightpu":  "tpu-v5p-slice",
-	"ct4p-hightpu":  "tpu-v4-podslice",
-	"v6e":           "tpu-v6e-slice",
-	"v5litepod":     "tpu-v5-lite-podslice",
-	"v5p":           "tpu-v5p-slice",
-	"v4":            "tpu-v4-podslice",
-	"tpu7x":         "tpu7x",
-	"l4":            "nvidia-l4",
-	"rtx":           "nvidia-rtx-pro-6000",
-}
-
 // TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
 func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) string {
 	resolvedLower := strings.ToLower(acceleratorType)
@@ -1184,14 +1160,14 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	// Try matching first two parts (e.g., "g2-standard")
 	if len(parts) >= 2 {
 		family := parts[0] + "-" + parts[1]
-		if label, ok := machineFamilyToLabelMap[family]; ok {
+		if label, ok := config.GetMachineMappings().MachineFamilyToLabelMap[family]; ok {
 			return label
 		}
 	}
 
 	// Try matching first part (e.g., "v6e")
 	if len(parts) >= 1 {
-		if label, ok := machineFamilyToLabelMap[parts[0]]; ok {
+		if label, ok := config.GetMachineMappings().MachineFamilyToLabelMap[parts[0]]; ok {
 			return label
 		}
 	}
