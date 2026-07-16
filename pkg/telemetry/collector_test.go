@@ -2738,7 +2738,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 								Source: "modules/compute/gke-node-pool",
 								Settings: config.NewDict(map[string]cty.Value{
 									"machine_type":                cty.StringVal("a2-highgpu-1g"),
-									"autoscaling_total_min_nodes": cty.StringVal("((var.min_cluster_nodes))"),
+									"autoscaling_total_min_nodes": cty.StringVal("$(vars.min_cluster_nodes)"),
 								}),
 							},
 						},
