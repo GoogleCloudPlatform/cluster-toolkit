@@ -488,7 +488,9 @@ func processInlineItem(item cty.Value, topMachineType string, counts map[string]
 func extractTargetNodeCount(m config.Module, bp config.Blueprint, targetKeys []string) (int, bool) {
 	for _, key := range targetKeys {
 		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
-			if key == "static_node_count" || key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
+			// Apply zonal multipliers only to variables explicitly spanning a single zone natively.
+			// Global metrics (e.g. autoscaling_total_max_nodes) span the entire cluster and should not be multiplied.
+			if slices.Contains(zonalNodeCountSettings, key) {
 				count *= getZonalMultiplier(m, bp)
 			}
 			return count, true
