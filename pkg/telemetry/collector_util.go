@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -96,6 +97,11 @@ var (
 		"local_ssd_count_nvme",
 		"local_nvme_ssd_count",
 		"local_ssd_count",
+	}
+	zonalNodeCountSettings = []string{
+		"static_node_count",
+		"autoscaling_min_node_count",
+		"autoscaling_max_node_count",
 	}
 )
 
@@ -508,7 +514,9 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 			baseCount = count
 			found = true
 			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
-				if key == "static_node_count" || key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
+				// Apply zonal multipliers only to variables explicitly spanning a single zone natively.
+				// Global metrics (e.g. autoscaling_total_max_nodes) span the entire cluster and should not be multiplied.
+				if slices.Contains(zonalNodeCountSettings, key) {
 					baseCount *= getZonalMultiplier(m, bp)
 				}
 			}
