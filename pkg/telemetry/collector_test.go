@@ -2443,7 +2443,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 		want string
 	}{
 		{
-			name: "Extracts dynamic max nodes for GKE",
+			name: "Extracts global dynamic max nodes natively without applying zonal multiplication on GKE",
 			kind: "max",
 			bp: config.Blueprint{
 				Groups: []config.Group{
@@ -2454,6 +2454,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 								Settings: config.NewDict(map[string]cty.Value{
 									"machine_type":                cty.StringVal("e2-standard-4"),
 									"autoscaling_total_max_nodes": cty.NumberIntVal(15),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
 								}),
 							},
 						},
@@ -2484,7 +2485,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "Extracts dynamic min nodes for GKE",
+			name: "Extracts global dynamic min nodes natively without applying zonal multiplication on GKE",
 			kind: "min",
 			bp: config.Blueprint{
 				Groups: []config.Group{
@@ -2495,6 +2496,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 								Settings: config.NewDict(map[string]cty.Value{
 									"machine_type":                cty.StringVal("e2-standard-4"),
 									"autoscaling_total_min_nodes": cty.NumberIntVal(2),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
 								}),
 							},
 						},
