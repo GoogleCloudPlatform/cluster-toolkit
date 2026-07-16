@@ -13,16 +13,7 @@
 # limitations under the License.
 
 ---
-- name: Check for existing PSA Peering
-  register: existing_peering
-  changed_when: false
-  failed_when: false
-  ansible.builtin.shell: |
-    set -o pipefail
-    gcloud compute networks describe {{ network }} --project={{ project }} --format="value(peerings[].name)" 2>/dev/null | grep -q "servicenetworking-googleapis-com"
-  when: network is defined and network != "" and project is defined
-
-- name: Clean up existing PSA Peering
+- name: Clean up existing PSA Peering (Blind Delete)
   register: psa_deleted
   changed_when: psa_deleted.rc == 0
   failed_when: false
@@ -32,9 +23,8 @@
     --network={{ network }}
     --project={{ project }}
     --quiet
-  when: >-
-    network is defined and network != "" and project is defined and
-    existing_peering.rc is defined and existing_peering.rc == 0
+  # Run blindly to attempt clearing ghost peerings even if network is deleted
+  when: network is defined and network != "" and project is defined
 
 - name: Check for existing PSA address
   register: existing_psa_addr
@@ -60,5 +50,4 @@
   loop: "{{ existing_psa_addr.stdout_lines | default([]) }}"
   when: >-
     project is defined and
-    existing_psa_addr.rc is defined and existing_psa_addr.rc == 0 and
-    existing_psa_addr.stdout is defined and existing_psa_addr.stdout != ""
+    existing_psa_addr.rc is defined and existing_psa_addr.rc == 0
