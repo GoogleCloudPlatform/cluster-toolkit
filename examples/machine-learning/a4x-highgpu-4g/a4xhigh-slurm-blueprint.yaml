@@ -34,7 +34,7 @@ vars:
   disk_size_gb: 100 # It is recommended to have at least 100 GB per node.
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
-    project: advanced-compute-images-dev
+    project: advanced-compute-images
     family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
   a4x_reservation_name: "" # supply reservation name
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
