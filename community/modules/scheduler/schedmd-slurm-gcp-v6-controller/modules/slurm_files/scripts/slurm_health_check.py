@@ -47,6 +47,8 @@ SCONTROL_PATH = find_scontrol()
 
 
 class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
+    _is_backup: bool | None = None
+
     def log_message(self, format, *args):
         # Suppress logging of every routine GET probe to prevent log spam
         pass
@@ -82,20 +84,25 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             for line in output.splitlines()
         )
 
-        # Active-passive role determination based on hostname convention (-0 vs -1) and metadata fallback
-        is_backup = hostname.endswith("-1")
-        if not is_backup and not hostname.endswith("-0"):
-            # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
-            try:
-                req = urllib.request.Request(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_ha_role",
-                    headers={"Metadata-Flavor": "Google"}
-                )
-                with urllib.request.urlopen(req, timeout=1) as resp:
-                    if resp.read().decode().strip() == "backup":
-                        is_backup = True
-            except Exception:
-                pass
+        # Active-passive role determination based on hostname convention (-0 vs -1) and cached metadata fallback
+        is_backup = getattr(HealthCheckHandler, "_is_backup", None)
+        if is_backup is None:
+            is_backup = hostname.endswith("-1")
+            if not is_backup and not hostname.endswith("-0"):
+                # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
+                try:
+                    req = urllib.request.Request(
+                        "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_ha_role",
+                        headers={"Metadata-Flavor": "Google"}
+                    )
+                    with urllib.request.urlopen(req, timeout=1) as resp:
+                        if resp.read().decode().strip() == "backup":
+                            is_backup = True
+                except Exception:
+                    pass
+            if is_backup is None:
+                is_backup = False
+            HealthCheckHandler._is_backup = is_backup
 
         if not is_backup:
             if primary_up:
