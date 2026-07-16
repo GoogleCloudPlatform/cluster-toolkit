@@ -451,7 +451,7 @@ resource "google_compute_region_backend_service" "slurm_controller_backend" {
   dynamic "backend" {
     for_each = var.controller_ha_type == "regional" ? [1] : []
     content {
-      group          = google_compute_region_instance_group_manager.controller_regional_mig[0].instance_group
+      group          = one(google_compute_region_instance_group_manager.controller_regional_mig[*].instance_group)
       balancing_mode = "CONNECTION"
     }
   }
@@ -459,7 +459,7 @@ resource "google_compute_region_backend_service" "slurm_controller_backend" {
   dynamic "backend" {
     for_each = var.controller_ha_type == "zonal" ? [1] : []
     content {
-      group          = google_compute_instance_group_manager.controller_zonal_mig[0].instance_group
+      group          = one(google_compute_instance_group_manager.controller_zonal_mig[*].instance_group)
       balancing_mode = "CONNECTION"
     }
   }

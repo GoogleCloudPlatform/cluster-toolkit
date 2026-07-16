@@ -96,17 +96,33 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             else:
                 # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
                 try:
-                    req = urllib.request.Request(
-                        "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_ha_role",
+                    # Query instance name first as it is guaranteed to have the -0 / -1 suffix in GCP
+                    req_name = urllib.request.Request(
+                        "http://metadata.google.internal/computeMetadata/v1/instance/name",
                         headers={"Metadata-Flavor": "Google"}
                     )
-                    with urllib.request.urlopen(req, timeout=1) as resp:
-                        role = resp.read().decode().strip()
-                        is_backup = (role == "backup")
+                    with urllib.request.urlopen(req_name, timeout=1) as resp:
+                        inst_name = resp.read().decode().strip()
+                        if inst_name.endswith("-1"):
+                            is_backup = True
+                        elif inst_name.endswith("-0"):
+                            is_backup = False
+                        else:
+                            # Fallback to slurm_ha_role attribute
+                            req_role = urllib.request.Request(
+                                "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_ha_role",
+                                headers={"Metadata-Flavor": "Google"}
+                            )
+                            with urllib.request.urlopen(req_role, timeout=1) as resp_role:
+                                role = resp_role.read().decode().strip()
+                                is_backup = (role == "backup")
                         HealthCheckHandler._is_backup = is_backup
                 except Exception as e:
-                    log.warning(f"Failed to resolve role from metadata, will retry: {e}")
-                    is_backup = False  # Default to False for this request, but do NOT cache it
+                    log.error(f"Failed to resolve role from metadata: {e}")
+                    self.send_response(503)
+                    self.end_headers()
+                    self.wfile.write(f"Failed to resolve role: {e}\n".encode())
+                    return
 
         if not is_backup:
             if primary_up:
