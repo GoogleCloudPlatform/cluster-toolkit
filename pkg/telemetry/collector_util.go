@@ -292,8 +292,10 @@ func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStor
 	} else if strings.Contains(src, ModuleSourceNetappPool) {
 		if val := extractExplicitStringSetting("service_level", m, bp); val != "" {
 			addStorageType(StoragePrefixNetapp + "-" + val)
-		} else if val, _, found := extractDefaultSetting[string]([]string{"service_level"}, m); found && val != "" {
-			addStorageType(StoragePrefixNetapp + "-" + strings.TrimSpace(val))
+		} else if val, _, found := extractDefaultSetting[string]([]string{"service_level"}, m); found {
+			if trimmed := strings.TrimSpace(val); trimmed != "" {
+				addStorageType(StoragePrefixNetapp + "-" + trimmed)
+			}
 		}
 	}
 }
