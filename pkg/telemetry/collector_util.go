@@ -49,20 +49,14 @@ type result struct {
 
 // Storage constants
 const (
-	StoragePrefixGCS         = "gcs"            // Prefix for Google Cloud Storage metrics
-	StoragePrefixFilestore   = "filestore"      // Prefix for Filestore tiers
-	StoragePrefixRedis       = "redis"          // Prefix for Redis database usage
-	StoragePrefixSpanner     = "spanner"        // Prefix for Spanner database usage
-	StoragePrefixNetapp      = "netapp"         // Prefix for Netapp tiers
-	StorageTypeLocalSSD      = "local-ssd"      // Standalone metric base for Local SSDs
-	StorageTypeLustre        = "managed-lustre" // Standalone metric base for Managed Lustre
-	StorageTypeParallelstore = "parallelstore"  // Standalone metric base for Parallelstore
+	StoragePrefixGCS       = "gcs"       // Prefix for Google Cloud Storage metrics
+	StoragePrefixFilestore = "filestore" // Prefix for Filestore tiers
+	StoragePrefixRedis     = "redis"     // Prefix for Redis database usage
+	StoragePrefixSpanner   = "spanner"   // Prefix for Spanner database usage
+	StorageTypeLocalSSD    = "local-ssd" // Standalone metric base for Local SSDs
 
-	ModuleSourceRedis         = "database/redis"                  // Module origin to detect Redis
-	ModuleSourceSpanner       = "database/spanner"                // Module origin to detect Spanner
-	ModuleSourceLustre        = "file-system/managed-lustre"      // Module origin to detect Lustre
-	ModuleSourceParallelstore = "file-system/parallelstore"       // Module origin to detect Parallelstore
-	ModuleSourceNetappPool    = "file-system/netapp-storage-pool" // Module origin to detect Netapp
+	ModuleSourceRedis   = "database/redis"   // Module origin to detect Redis
+	ModuleSourceSpanner = "database/spanner" // Module origin to detect Spanner
 )
 
 var (
@@ -228,7 +222,6 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	extractAdditionalDisks(m, bp, addStorageType)
 	extractInlineNodesets(m, bp, addStorageType)
 	extractDatabaseStorageTypes(m, bp, addStorageType)
-	extractFileSystemStorageTypes(m, bp, addStorageType)
 
 	return storageTypes
 }
@@ -279,22 +272,6 @@ func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorag
 		extractAndAdd(StoragePrefixRedis, "tier")
 	} else if strings.Contains(src, ModuleSourceSpanner) {
 		extractAndAdd(StoragePrefixSpanner, "edition")
-	}
-}
-
-func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
-	src := string(m.Source)
-
-	if strings.Contains(src, ModuleSourceLustre) {
-		addStorageType(StorageTypeLustre)
-	} else if strings.Contains(src, ModuleSourceParallelstore) {
-		addStorageType(StorageTypeParallelstore)
-	} else if strings.Contains(src, ModuleSourceNetappPool) {
-		if val := extractExplicitStringSetting("service_level", m, bp); val != "" {
-			addStorageType(StoragePrefixNetapp + "-" + val)
-		} else if val, _, found := extractDefaultSetting[string]([]string{"service_level"}, m); found && val != "" {
-			addStorageType(StoragePrefixNetapp + "-" + strings.TrimSpace(val))
-		}
 	}
 }
 
