@@ -1056,28 +1056,33 @@ func (g *GKEOrchestrator) selectTopology(requested string, topologies map[string
 }
 
 func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies map[string]bool, accelType string) error {
-	if !topologies[requested] {
-		contained := false
-		for t := range topologies {
-			fit, err := config.CheckTopologyContainment(requested, t, accelType)
-			if err != nil {
-				return fmt.Errorf("failed to check topology containment: %w", err)
-			}
-			if fit {
-				contained = true
-				break
-			}
+	if topologies[requested] {
+		logging.Info("Validated provided Topology: %s", requested)
+		return nil
+	}
+
+	if g.napEnabled {
+		logging.Info("NAP is enabled. Allowing requested topology %s which differs from currently discovered limits (may trigger new node pool creation).", requested)
+		return nil
+	}
+
+	for t := range topologies {
+		fit, err := config.CheckTopologyContainment(requested, t, accelType)
+		if err != nil {
+			return fmt.Errorf("failed to check topology containment: %w", err)
 		}
-		if !contained {
-			var valid []string
-			for t := range topologies {
-				valid = append(valid, t)
-			}
-			return fmt.Errorf("requested topology %s is not valid for cluster. It must match or fit inside discovered limits: %v", requested, valid)
+		if fit {
+			logging.Info("Validated provided Topology: %s", requested)
+			return nil
 		}
 	}
-	logging.Info("Validated provided Topology: %s", requested)
-	return nil
+
+	var valid []string
+	for t := range topologies {
+		valid = append(valid, t)
+	}
+	slices.Sort(valid)
+	return fmt.Errorf("requested topology %s is not valid for cluster. It must match or fit inside discovered limits: %v", requested, valid)
 }
 
 func (g *GKEOrchestrator) resolveDynamicSlicingTopology(job *orchestrator.JobDefinition) (string, bool, error) {
