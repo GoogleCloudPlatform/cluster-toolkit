@@ -504,11 +504,13 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 	}
 
 	if !found {
-		if count, _, ok := extractDefaultSetting[int](targetKeys, m); ok {
+		if count, key, ok := extractDefaultSetting[int](targetKeys, m); ok {
 			baseCount = count
 			found = true
 			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
-				baseCount *= getZonalMultiplier(m, bp)
+				if key == "static_node_count" || key == "autoscaling_min_node_count" || key == "autoscaling_max_node_count" {
+					baseCount *= getZonalMultiplier(m, bp)
+				}
 			}
 		}
 	}
