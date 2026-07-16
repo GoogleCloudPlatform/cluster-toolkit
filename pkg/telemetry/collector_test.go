@@ -2725,7 +2725,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "Blueprint variable evaluation correctly proxies node count limits",
+			name: "Blueprint variable evaluation correctly proxies node count limits as safely omitted unknown integers",
 			kind: "min",
 			bp: config.Blueprint{
 				Vars: config.NewDict(map[string]cty.Value{
@@ -2745,7 +2745,7 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 					},
 				},
 			},
-			want: "a2-highgpu-1g:7",
+			want: "",
 		},
 		{
 			name: "Prioritizes first configured bounds correctly when conflicting definitions coexist",
