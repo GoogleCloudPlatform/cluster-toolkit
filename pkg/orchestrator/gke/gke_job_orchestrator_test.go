@@ -1329,7 +1329,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			if tt.mockResponses != nil {
 				if _, ok := tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"]; !ok {
 					tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"] = []shell.CommandResult{
-						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`},
 					}
 				}
 			}
@@ -1340,7 +1340,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			got, err := orc.verifyDynamicSlicingActive(tt.opts)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("verifySuperSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("verifyDynamicSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !tt.wantErr && got != tt.wantResult {
@@ -2035,7 +2035,7 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
 		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
 		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "8x8x8"}},
 		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                            {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
@@ -2116,7 +2116,7 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
 		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
 		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu7x": {{ExitCode: 0, Stdout: "8x8x8"}},
 		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                                                                          {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
@@ -2179,7 +2179,7 @@ func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}, {ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}, {ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`}, {ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`}},
 		"kubectl get nodes":                             {{ExitCode: 0, Stdout: "4x4"}, {ExitCode: 0, Stdout: "4x4"}},
 		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
 	}

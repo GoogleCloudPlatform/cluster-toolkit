@@ -1111,6 +1111,14 @@ func (g *GKEOrchestrator) validateRequestedTopology(requested string, topologies
 			return fmt.Errorf("failed to check topology containment: %w", err)
 		}
 		if fit {
+			if !g.hasSlicingTopologies() {
+				var valid []string
+				for t := range topologies {
+					valid = append(valid, t)
+				}
+				slices.Sort(valid)
+				return fmt.Errorf("requested topology %s fits inside discovered limits but no slicing labels found. It must match discovered limits exactly: %v", requested, valid)
+			}
 			logging.Info("Validated provided Topology: %s", requested)
 			return nil
 		}

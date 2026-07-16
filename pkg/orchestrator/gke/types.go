@@ -85,6 +85,7 @@ type GKEOrchestrator struct {
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
+	slicingTopologiesDetected   *bool
 }
 
 // Types for GetClusterInfo unmarshaling
