@@ -639,13 +639,14 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 		if ev, err := bp.Eval(keyValue); err == nil {
 			keyValue = ev
 		}
-		if !keyValue.IsKnown() || keyValue.IsNull() {
+		unmarked, _ := keyValue.Unmark()
+		if !unmarked.IsKnown() || unmarked.IsNull() {
 			return 0, false
 		}
-		if !keyValue.Type().IsObjectType() && !keyValue.Type().IsMapType() {
+		if !unmarked.Type().IsObjectType() && !unmarked.Type().IsMapType() {
 			return 0, false
 		}
-		asMap := keyValue.AsValueMap()
+		asMap := unmarked.AsValueMap()
 		if val, exists := asMap[keys[i]]; exists {
 			keyValue = val
 		} else {
