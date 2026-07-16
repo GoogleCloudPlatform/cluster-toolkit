@@ -134,11 +134,36 @@
       ansible.builtin.debug:
         msg: "Login IP: {{ login_ip }}, Private: {{ login_is_private }}"
 
+    - name: Set controller node name fact - Exact name provided
+      ansible.builtin.set_fact:
+        controller_node_name: "{{ controller_node }}"
+      when: '"*" not in controller_node'
+
+    - name: Get controller node name - Name pattern provided
+      changed_when: false
+      register: get_controller_name
+      ansible.builtin.command: >-
+        gcloud compute instances list
+        --format='value(name)' --limit=1
+        --filter=NAME:{{ controller_node }}
+      when: '"*" in controller_node'
+
+    - name: Set controller node name fact - Name pattern provided
+      ansible.builtin.set_fact:
+        controller_node_name: "{{ get_controller_name.stdout }}"
+      when: '"*" in controller_node'
+
+    - name: Check that controller node name is resolved
+      ansible.builtin.assert:
+        that:
+        - controller_node_name is defined
+        - controller_node_name != ""
+
     - name: Get Controller Nat IP
       changed_when: false
       register: get_controller_nat_ip
       ansible.builtin.command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node_name }}
         --format='value(networkInterfaces[0].accessConfigs[0].natIP)'
       failed_when: false
 
@@ -146,7 +171,7 @@
       changed_when: false
       register: get_controller_network_ip
       ansible.builtin.command: >-
-        gcloud compute instances describe --zone={{ zone }} {{ controller_node }}
+        gcloud compute instances describe --zone={{ zone }} {{ controller_node_name }}
         --format='value(networkInterfaces[0].networkIP)'
 
     - name: Set Controller IP facts
@@ -213,7 +238,7 @@
     - name: Add Controller node as host
       ansible.builtin.add_host:
         name: controller_node_host
-        ansible_host: "{{ controller_ip if not controller_is_private else controller_node }}"
+        ansible_host: "{{ controller_ip if not controller_is_private else controller_node_name }}"
         ansible_ssh_common_args: >-
           {% if controller_is_private %}
           -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
