@@ -240,7 +240,7 @@ resource "google_compute_firewall" "health_check_firewall_rule" {
 
   allow {
     protocol = "tcp"
-    ports    = compact([tostring(var.health_check.port), var.enable_controller_load_balancer ? "6821" : null])
+    ports    = concat([tostring(var.health_check.port)], var.enable_controller_load_balancer ? ["6821"] : [])
   }
 }
 

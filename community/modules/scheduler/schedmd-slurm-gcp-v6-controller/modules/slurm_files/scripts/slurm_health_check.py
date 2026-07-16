@@ -87,8 +87,13 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         # Active-passive role determination based on hostname convention (-0 vs -1) and cached metadata fallback
         is_backup = getattr(HealthCheckHandler, "_is_backup", None)
         if is_backup is None:
-            is_backup = hostname.endswith("-1")
-            if not is_backup and not hostname.endswith("-0"):
+            if hostname.endswith("-1"):
+                is_backup = True
+                HealthCheckHandler._is_backup = True
+            elif hostname.endswith("-0"):
+                is_backup = False
+                HealthCheckHandler._is_backup = False
+            else:
                 # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
                 try:
                     req = urllib.request.Request(
@@ -96,13 +101,12 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                         headers={"Metadata-Flavor": "Google"}
                     )
                     with urllib.request.urlopen(req, timeout=1) as resp:
-                        if resp.read().decode().strip() == "backup":
-                            is_backup = True
-                except Exception:
-                    pass
-            if is_backup is None:
-                is_backup = False
-            HealthCheckHandler._is_backup = is_backup
+                        role = resp.read().decode().strip()
+                        is_backup = (role == "backup")
+                        HealthCheckHandler._is_backup = is_backup
+                except Exception as e:
+                    log.warning(f"Failed to resolve role from metadata, will retry: {e}")
+                    is_backup = False  # Default to False for this request, but do NOT cache it
 
         if not is_backup:
             if primary_up:
