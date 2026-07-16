@@ -79,6 +79,12 @@ variable "slurm_backup_controller_ip" {
   default     = null
 }
 
+variable "enable_controller_load_balancer" {
+  type        = bool
+  description = "Whether an Internal Load Balancer is configured in front of the controllers."
+  default     = false
+}
+
 variable "accounting_storage_backup_host" {
   type        = string
   description = "The backup accounting storage host."

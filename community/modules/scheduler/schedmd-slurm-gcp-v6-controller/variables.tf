@@ -113,6 +113,22 @@ variable "backup_zone" {
   default     = null
 }
 
+variable "enable_controller_load_balancer" {
+  description = "Enables an Internal Load Balancer (ILB) in front of the controllers for stable Virtual IP and network-level failover."
+  type        = bool
+  default     = false
+  validation {
+    condition     = var.enable_controller_load_balancer == false || var.enable_backup_controller == true
+    error_message = "The Internal Load Balancer ('enable_controller_load_balancer') can only be enabled if High Availability ('enable_backup_controller') is enabled."
+  }
+}
+
+variable "controller_load_balancer_ip" {
+  description = "Optional static IP address to assign to the controller Internal Load Balancer (VIP). If null, one will be dynamically assigned from the subnetwork."
+  type        = string
+  default     = null
+}
+
 #########
 # LOGIN #
 #########

@@ -459,6 +459,42 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
     with blob.open('w') as f:
         f.write(yaml.dump(data))
 
+def setup_slurm_health_check_service(lkp: util.Lookup) -> None:
+    if not lkp.cfg.get("slurm_backup_controller_name") or not lkp.cfg.get("enable_controller_load_balancer"):
+        return
+    log.info("Setting up Slurm HA HTTP Health Check agent systemd service")
+    src_file = util.scripts_dir / "slurm_health_check.py"
+    if not src_file.exists():
+        log.warning(f"Health check script {src_file} not found; skipping service setup")
+        return
+
+    dst_file = Path("/usr/local/bin/slurm_health_check.py")
+    shutil.copyfile(src_file, dst_file)
+    os.chmod(dst_file, 0o755)
+
+    service_content = """[Unit]
+Description=Slurm HA HTTP Health Check Agent
+After=network.target slurmctld.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/slurm_health_check.py
+Restart=always
+RestartSec=3
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_path = Path("/etc/systemd/system/slurm-health-check.service")
+    service_path.write_text(service_content)
+    os.chmod(service_path, 0o644)
+
+    run("systemctl daemon-reload", timeout=30)
+    run("systemctl enable slurm-health-check.service", timeout=30)
+    run("systemctl restart slurm-health-check.service", timeout=30)
+
 def setup_controller(is_primary: bool):
     """Shared controller setup logic for both primary and backup."""
     role_name = "Primary" if is_primary else "Backup"
@@ -538,6 +574,8 @@ def setup_controller(is_primary: bool):
 
     run("systemctl enable slurmrestd", timeout=30)
     run("systemctl restart slurmrestd", timeout=30)
+
+    setup_slurm_health_check_service(lkp)
 
     # Export at the end to signal that everything is up
     run("systemctl enable nfs-server", timeout=30)

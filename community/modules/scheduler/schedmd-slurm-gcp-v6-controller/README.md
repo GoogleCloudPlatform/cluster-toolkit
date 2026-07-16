@@ -148,6 +148,23 @@ Example configuration overrides:
       create_firewall_rule: true
 ```
 
+### Internal Load Balancer (ILB) and Virtual IP (VIP)
+
+To provide stable network failover and avoid hardcoding individual controller IPs, an Internal Load Balancer (ILB) can be provisioned in front of the primary and backup controllers.
+
+To enable the Internal Load Balancer:
+1. Ensure `enable_backup_controller` is set to `true`.
+2. Set `enable_controller_load_balancer` to `true`.
+3. (Optional) Provide a static IP address using `controller_load_balancer_ip` to assign to the ILB's forwarding rule (VIP). If omitted, a dynamic IP is allocated from the subnetwork.
+
+#### Active-Passive HTTP Health Check Agent
+
+An Active-Passive HTTP health check agent automatically runs on port `6821` on each controller instance. The health check agent executes `scontrol ping` locally and reports status to the ILB:
+* **Primary Controller (`-0`)**: Returns HTTP `200 OK` if the primary controller is up and active, and `503 Service Unavailable` if offline.
+* **Backup Controller (`-1`)**: Returns HTTP `200 OK` only when the primary controller is down/offline and the backup controller is up and active. If the primary controller is up, the backup returns `503 Service Unavailable` (Standby) to prevent traffic routing to the standby instance.
+
+This setup ensures that all Slurm traffic is directed exclusively to the active controller node, enabling seamless and stable failover.
+
 ### Backward Compatibility
 
 The HA feature is **opt-in**. If `enable_backup_controller` is set to `false`
@@ -394,9 +411,12 @@ limitations under the License.
 | [google_compute_address.controller_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_firewall.health_check_firewall_rule](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
+| [google_compute_forwarding_rule.slurm_controller_vip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_forwarding_rule) | resource |
 | [google_compute_health_check.controller_health_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_health_check) | resource |
 | [google_compute_instance_group_manager.controller_zonal_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_group_manager) | resource |
 | [google_compute_per_instance_config.controller_zonal_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_per_instance_config) | resource |
+| [google_compute_region_backend_service.slurm_controller_backend](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_backend_service) | resource |
+| [google_compute_region_health_check.slurm_health_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_health_check) | resource |
 | [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
 | [google_compute_region_per_instance_config.controller_regional_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_per_instance_config) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
@@ -427,6 +447,7 @@ limitations under the License.
 | <a name="input_compute_startup_script"></a> [compute\_startup\_script](#input\_compute\_startup\_script) | DEPRECATED: `compute_startup_script` has been deprecated.<br/>Use `startup_script` of nodeset module instead. | `any` | `null` | no |
 | <a name="input_compute_startup_scripts_timeout"></a> [compute\_startup\_scripts\_timeout](#input\_compute\_startup\_scripts\_timeout) | The timeout (seconds) applied to each startup script in compute nodes. If<br/>any script exceeds this timeout, then the instance setup process is considered<br/>failed and handled accordingly.<br/><br/>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_controller_ha_type"></a> [controller\_ha\_type](#input\_controller\_ha\_type) | Type of Managed Instance Group for controllers: 'zonal' or 'regional'. | `string` | `"zonal"` | no |
+| <a name="input_controller_load_balancer_ip"></a> [controller\_load\_balancer\_ip](#input\_controller\_load\_balancer\_ip) | Optional static IP address to assign to the controller Internal Load Balancer (VIP). If null, one will be dynamically assigned from the subnetwork. | `string` | `null` | no |
 | <a name="input_controller_network_attachment"></a> [controller\_network\_attachment](#input\_controller\_network\_attachment) | SelfLink for NetworkAttachment to be attached to the controller, if any. | `string` | `null` | no |
 | <a name="input_controller_project_id"></a> [controller\_project\_id](#input\_controller\_project\_id) | Optionally. Provision controller and config bucket in the different project | `string` | `null` | no |
 | <a name="input_controller_startup_script"></a> [controller\_startup\_script](#input\_controller\_startup\_script) | Startup script used by the controller VM. | `string` | `"# no-op"` | no |
@@ -450,6 +471,7 @@ limitations under the License.
 | <a name="input_enable_chs_gpu_health_check_prolog"></a> [enable\_chs\_gpu\_health\_check\_prolog](#input\_enable\_chs\_gpu\_health\_check\_prolog) | Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:<br/>https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md | `bool` | `false` | no |
 | <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br/>placement groups) managed by this module, when cluster is destroyed.<br/><br/>*WARNING*: Toggling this off will impact the running workload.<br/>Deployed compute nodes will be destroyed. | `bool` | `true` | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
+| <a name="input_enable_controller_load_balancer"></a> [enable\_controller\_load\_balancer](#input\_enable\_controller\_load\_balancer) | Enables an Internal Load Balancer (ILB) in front of the controllers for stable Virtual IP and network-level failover. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
 | <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /opt/apps | `bool` | `true` | no |
