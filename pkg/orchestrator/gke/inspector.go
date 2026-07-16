@@ -382,7 +382,7 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 	sb.WriteString("Output:\n")
 
 	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "Jobset Name\tCreated Time\tPriority\tTPU VMs Needed\tTPU VMs Running/Ran\tTPU VMs Done\tStatus\tStatus Message\tStatus Time")
+	fmt.Fprintln(tw, "Jobset Name\tCreated Time\tPriority\tTPU VMs Needed\tTPU VMs Running/Ran\tTPU VMs Done\tStatus\tStatus Message\tStatus Time")
 
 	for _, wl := range filtered {
 		jobsetName := wl.Metadata.Name
@@ -421,7 +421,7 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 			statusTime = cond.LastTransitionTime
 		}
 
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",
 			jobsetName, createdTime, priority, needed, running, done, status, msg, statusTime)
 	}
 	_ = tw.Flush()
