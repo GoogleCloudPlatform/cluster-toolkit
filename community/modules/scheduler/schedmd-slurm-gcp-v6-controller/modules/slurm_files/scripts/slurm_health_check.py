@@ -20,6 +20,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import urllib.request
 
 PORT = 6821
 
@@ -68,21 +69,35 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(f"Failed to run scontrol ping: {e}\n".encode())
             return
 
-        primary_up = (
-            "primary controller: up" in output
-            or "primary controller(up)" in output
-            or "slurmctld(primary) at" in output
-            and "is up" in output
+        primary_up = any(
+            "primary controller: up" in line
+            or "primary controller(up)" in line
+            or ("slurmctld(primary) at" in line and "is up" in line)
+            for line in output.splitlines()
         )
-        backup_up = (
-            "backup controller: up" in output
-            or "backup controller(up)" in output
-            or "slurmctld(backup) at" in output
-            and "is up" in output
+        backup_up = any(
+            "backup controller: up" in line
+            or "backup controller(up)" in line
+            or ("slurmctld(backup) at" in line and "is up" in line)
+            for line in output.splitlines()
         )
 
-        # Active-passive role determination based on hostname convention (-0 vs -1)
-        if hostname.endswith("-0"):
+        # Active-passive role determination based on hostname convention (-0 vs -1) and metadata fallback
+        is_backup = hostname.endswith("-1")
+        if not is_backup and not hostname.endswith("-0"):
+            # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
+            try:
+                req = urllib.request.Request(
+                    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/slurm_ha_role",
+                    headers={"Metadata-Flavor": "Google"}
+                )
+                with urllib.request.urlopen(req, timeout=1) as resp:
+                    if resp.read().decode().strip() == "backup":
+                        is_backup = True
+            except Exception:
+                pass
+
+        if not is_backup:
             if primary_up:
                 self.send_response(200)
                 self.end_headers()
@@ -91,7 +106,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(503)
                 self.end_headers()
                 self.wfile.write(b"Primary Offline\n")
-        elif hostname.endswith("-1"):
+        else:
             if not primary_up and backup_up:
                 self.send_response(200)
                 self.end_headers()
@@ -100,16 +115,6 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(503)
                 self.end_headers()
                 self.wfile.write(b"Standby Backup\n")
-        else:
-            # Fallback for dynamic/non-standard hostname naming: check if scontrol ping succeeded at all
-            if primary_up or backup_up:
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"OK - Controller Active\n")
-            else:
-                self.send_response(503)
-                self.end_headers()
-                self.wfile.write(b"Controller Offline\n")
 
 
 class ReusableHTTPServer(http.server.HTTPServer):

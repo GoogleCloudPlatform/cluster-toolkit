@@ -446,7 +446,7 @@ resource "google_compute_region_backend_service" "slurm_controller_backend" {
   load_balancing_scheme           = "INTERNAL"
   protocol                        = "TCP"
   connection_draining_timeout_sec = 10
-  health_checks                   = [google_compute_region_health_check.slurm_health_check[0].id]
+  health_checks                   = google_compute_region_health_check.slurm_health_check[*].id
 
   dynamic "backend" {
     for_each = var.controller_ha_type == "regional" ? [1] : []
@@ -473,7 +473,7 @@ resource "google_compute_forwarding_rule" "slurm_controller_vip" {
   project               = local.controller_project_id
   region                = var.region
   load_balancing_scheme = "INTERNAL"
-  backend_service       = google_compute_region_backend_service.slurm_controller_backend[0].id
+  backend_service       = one(google_compute_region_backend_service.slurm_controller_backend[*].id)
   ip_protocol           = "TCP"
   all_ports             = true
   subnetwork            = var.subnetwork_self_link
