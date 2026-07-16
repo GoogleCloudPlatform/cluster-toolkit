@@ -770,7 +770,6 @@ func isA4x(node *corev1.Node) bool {
 	return strings.Contains(accel, "gb300") || strings.Contains(accel, "gb200") || strings.Contains(machine, "a4x")
 }
 
-
 var nvlinkStatusRegex = regexp.MustCompile(`^\s*Link\s+\d+:\s+([0-9.]+)\s+GB/s`)
 var gpuLineRegex = regexp.MustCompile(`^(GPU\s+\d+).*?\b(UUID:\s*[^)]+)`)
 
