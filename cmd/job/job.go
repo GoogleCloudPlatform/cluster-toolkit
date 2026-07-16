@@ -77,4 +77,5 @@ func init() {
 	JobCmd.AddCommand(ListWorkloadsCmd)
 	JobCmd.AddCommand(LogsCmd)
 	JobCmd.AddCommand(ConfigCmd)
+	JobCmd.AddCommand(InspectCmd)
 }

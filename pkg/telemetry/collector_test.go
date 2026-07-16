@@ -582,6 +582,289 @@ func TestGetCmdFlags(t *testing.T) {
 	}
 }
 
+// TestGetStorageType verifies that storage types are correctly extracted from the blueprint.
+func TestGetStorageType(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		want string
+	}{
+		{
+			name: "Extracts explicit disk_type",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-ssd"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-ssd",
+		},
+		{
+			name: "Extracts storage_class from GCS bucket",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("bucket"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcs-standard",
+		},
+		{
+			name: "Extracts filestore_tier from Filestore",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("filestore"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"filestore_tier": cty.StringVal("BASIC_HDD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "filestore-basic_hdd",
+		},
+		{
+			name: "Extracts database tier/edition from Redis and Spanner",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("redis"),
+								Source: "modules/database/redis",
+								Settings: config.NewDict(map[string]cty.Value{
+									"tier": cty.StringVal("BASIC"),
+								}),
+							},
+							{
+								ID:     config.ModuleID("spanner"),
+								Source: "modules/database/spanner",
+								Settings: config.NewDict(map[string]cty.Value{
+									"edition": cty.StringVal("ENTERPRISE"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "redis-basic,spanner-enterprise",
+		},
+		{
+			name: "Extracts fs_type from network_storage",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("storage_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("nfs"),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "nfs",
+		},
+		{
+			name: "Extracts multiple storage options without duplicates properly sorted",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-balanced"),
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("lustre"),
+										}),
+									}),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_disk_type": cty.StringVal("pd-standard"),
+									"local_ssd_count_nvme":       cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "local-ssd,lustre,pd-balanced,pd-standard",
+		},
+		{
+			name: "Extracts fs_type from nodeset inline items for Slurm V6",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm_controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"nodeset": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"disk_type": cty.StringVal("pd-extreme"),
+											"network_storage": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"fs_type": cty.StringVal("gcsfuse"),
+												}),
+											}),
+											"additional_disks": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"disk_type": cty.StringVal("pd-ssd"),
+												}),
+											}),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcsfuse,pd-extreme,pd-ssd",
+		},
+		{
+			name: "Extracts from controller_state_disk object",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm-controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"controller_state_disk": cty.ObjectVal(map[string]cty.Value{
+										"type": cty.StringVal("pd-standard"),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-standard",
+		},
+		{
+			name: "Returns empty when no storage settings are defined",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("empty_module"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"some_other_setting": cty.StringVal("value"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Handles string casing, trims whitespace, and deduplicates identical underlying storage types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal(" pd-ssd  "),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.StringVal("PD-SSD"),
+									"storage_class": cty.StringVal(" sTandard"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node3"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcs-standard,pd-ssd",
+		},
+		{
+			name: "Ignores null values in primary attributes",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node_with_null"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.NullVal(cty.String),
+									"storage_class": cty.NullVal(cty.String),
+									"lustre":        cty.NullVal(cty.Bool),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getStorageType(tt.bp)
+			if got != tt.want {
+				t.Errorf("getStorageType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {

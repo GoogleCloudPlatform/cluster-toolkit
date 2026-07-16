@@ -46,6 +46,59 @@ type result struct {
 	err error
 }
 
+// Storage constants
+const (
+	StoragePrefixGCS       = "gcs"       // Prefix for Google Cloud Storage metrics
+	StoragePrefixFilestore = "filestore" // Prefix for Filestore tiers
+	StoragePrefixRedis     = "redis"     // Prefix for Redis database usage
+	StoragePrefixSpanner   = "spanner"   // Prefix for Spanner database usage
+	StorageTypeLocalSSD    = "local-ssd" // Standalone metric base for Local SSDs
+
+	ModuleSourceRedis   = "database/redis"   // Module origin to detect Redis
+	ModuleSourceSpanner = "database/spanner" // Module origin to detect Spanner
+)
+
+var (
+	machineTypeSettings = []string{
+		"machine_type",                  // Usual setting for specifying machine type.
+		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
+		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
+	staticNodeCountSettings = []string{
+		"static_node_count", // Used in GKE node pool. If set, autoscaling will be disabled. Defaults to 0.
+		"node_count_static", // Standalone Slurm V6 CPU and TPU nodesets use 'node_count_static'. Defaults to 0.
+		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
+		"target_size",       // Used by HTCondor execute points and MIGs for pool capacity.
+	}
+	staticNodeCountInlineKeys   = []string{"nodeset", "nodeset_tpu", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
+	dynamicMinNodeCountSettings = []string{
+		"autoscaling_min_node_count",
+		"autoscaling_total_min_nodes",
+		"system_node_pool_node_count.total_min_nodes", // Used by gke-cluster system node pools
+	}
+	dynamicMaxNodeCountSettings = []string{
+		"autoscaling_max_node_count",
+		"autoscaling_total_max_nodes",
+		"node_count_dynamic_max",
+		"max_size",                                    // Used by HTCondor execute points for unbounded scaling limit.
+		"system_node_pool_node_count.total_max_nodes", // Used by gke-cluster system node pools
+	}
+	storageTypeSettings = []string{
+		"disk_type",
+		"system_node_pool_disk_type",
+		"filestore_tier",
+		"fs_type",
+		"storage_type",
+		"storage_class",
+	}
+	localSsdCountSettings = []string{
+		"local_ssd_count_ephemeral_storage",
+		"local_ssd_count_nvme",
+		"local_nvme_ssd_count",
+		"local_ssd_count",
+	}
+)
+
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
@@ -146,6 +199,179 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	return "false"
 }
 
+func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
+	var storageTypes []string
+
+	addStorageType := func(t string) {
+		t = strings.ToLower(strings.Trim(strings.TrimSpace(t), "\""))
+		if t != "" {
+			storageTypes = append(storageTypes, t)
+		}
+	}
+
+	extractExplicitAndDefaultStorageTypes(m, bp, addStorageType)
+	extractLocalSsdStorageTypes(m, bp, addStorageType)
+	extractControllerStateDiskStorage(m, bp, addStorageType)
+	extractNetworkStorage(m, bp, addStorageType)
+	extractAdditionalDisks(m, bp, addStorageType)
+	extractInlineNodesets(m, bp, addStorageType)
+	extractDatabaseStorageTypes(m, bp, addStorageType)
+
+	return storageTypes
+}
+
+func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	formatType := func(key, val string) string {
+		val = strings.TrimSpace(val)
+		switch key {
+		case "storage_class":
+			return StoragePrefixGCS + "-" + val
+		case "filestore_tier":
+			return StoragePrefixFilestore + "-" + val
+		}
+		return val
+	}
+
+	// Explicit string settings
+	var remainingKeys []string
+	for _, key := range storageTypeSettings {
+		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			addStorageType(formatType(key, t))
+		}
+		if !m.Settings.Has(key) {
+			remainingKeys = append(remainingKeys, key)
+		}
+	}
+
+	// Default string settings
+	if len(remainingKeys) > 0 {
+		if t, key, found := extractDefaultSetting[string](remainingKeys, m); found && t != "" {
+			addStorageType(formatType(key, t))
+		}
+	}
+}
+
+func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	src := string(m.Source)
+
+	extractAndAdd := func(moduleType, key string) {
+		if val := extractExplicitStringSetting(key, m, bp); val != "" {
+			addStorageType(moduleType + "-" + val)
+		} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found && val != "" {
+			addStorageType(moduleType + "-" + strings.TrimSpace(val))
+		}
+	}
+
+	if strings.Contains(src, ModuleSourceRedis) {
+		extractAndAdd(StoragePrefixRedis, "tier")
+	} else if strings.Contains(src, ModuleSourceSpanner) {
+		extractAndAdd(StoragePrefixSpanner, "edition")
+	}
+}
+
+func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	hasExplicit := false
+	for _, key := range localSsdCountSettings {
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			hasExplicit = true
+			if count > 0 {
+				addStorageType(StorageTypeLocalSSD)
+				return
+			}
+		}
+	}
+	if !hasExplicit {
+		if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
+			addStorageType(StorageTypeLocalSSD)
+		}
+	}
+}
+
+func extractControllerStateDiskStorage(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if m.Settings.Has("controller_state_disk") {
+		val, err := bp.Eval(m.Settings.Get("controller_state_disk"))
+		if err == nil {
+			unmarked, _ := val.Unmark()
+			if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsObjectType() || unmarked.Type().IsMapType()) {
+				if diskType := extractStringFromCtyMap(unmarked, []string{"type"}); diskType != "" {
+					addStorageType(diskType)
+				}
+			}
+		}
+	}
+}
+
+func processCtyList(val cty.Value, processItem func(item cty.Value)) {
+	val, _ = val.Unmark()
+	if !val.IsKnown() || val.IsNull() || (!val.Type().IsListType() && !val.Type().IsTupleType() && !val.Type().IsSetType()) {
+		return
+	}
+	for _, item := range val.AsValueSlice() {
+		itemUnmarked, _ := item.Unmark()
+		if itemUnmarked.IsKnown() && !itemUnmarked.IsNull() && (itemUnmarked.Type().IsObjectType() || itemUnmarked.Type().IsMapType()) {
+			processItem(itemUnmarked)
+		}
+	}
+}
+
+func extractNetworkStorage(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	for _, key := range []string{"network_storage", "login_network_storage"} {
+		if m.Settings.Has(key) {
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(item cty.Value) {
+					if fsType := extractStringFromCtyMap(item, []string{"fs_type"}); fsType != "" {
+						addStorageType(fsType)
+					}
+				})
+			}
+		}
+	}
+}
+
+func extractAdditionalDisks(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if m.Settings.Has("additional_disks") {
+		if val, err := bp.Eval(m.Settings.Get("additional_disks")); err == nil {
+			processCtyList(val, func(item cty.Value) {
+				if diskType := extractStringFromCtyMap(item, []string{"disk_type"}); diskType != "" {
+					addStorageType(diskType)
+				}
+			})
+		}
+	}
+}
+
+func extractInlineNodesets(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "partition", "login_nodes"} {
+		if m.Settings.Has(key) {
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(itemUnmarked cty.Value) {
+					if diskType := extractStringFromCtyMap(itemUnmarked, []string{"disk_type"}); diskType != "" {
+						addStorageType(diskType)
+					}
+					// network_storage in inline item
+					for _, nsKey := range []string{"network_storage", "login_network_storage"} {
+						if ns, exists := itemUnmarked.AsValueMap()[nsKey]; exists {
+							processCtyList(ns, func(nsItemUnmarked cty.Value) {
+								if fsType := extractStringFromCtyMap(nsItemUnmarked, []string{"fs_type"}); fsType != "" {
+									addStorageType(fsType)
+								}
+							})
+						}
+					}
+					// additional_disks in inline item
+					if ad, exists := itemUnmarked.AsValueMap()["additional_disks"]; exists {
+						processCtyList(ad, func(adItemUnmarked cty.Value) {
+							if diskType := extractStringFromCtyMap(adItemUnmarked, []string{"disk_type"}); diskType != "" {
+								addStorageType(diskType)
+							}
+						})
+					}
+				})
+			}
+		}
+	}
+}
+
 func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 	// 1. Try explicit settings first
 	for _, key := range machineTypeSettings {
@@ -154,7 +380,7 @@ func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
 		}
 	}
 	// 2. If no explicit setting, try defaults
-	if t, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
+	if t, _, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
 		return strings.Trim(t, "\"")
 	}
 
@@ -177,7 +403,7 @@ func extractExplicitStringSetting(key string, m config.Module, bp config.Bluepri
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
 	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-		return unmarkedKey.AsString()
+		return strings.TrimSpace(unmarkedKey.AsString())
 	}
 	return ""
 }
@@ -278,7 +504,7 @@ func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType s
 	}
 
 	if !found {
-		if count, ok := extractDefaultSetting[int](targetKeys, m); ok {
+		if count, _, ok := extractDefaultSetting[int](targetKeys, m); ok {
 			baseCount = count
 			found = true
 			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
@@ -326,7 +552,7 @@ func getMultiplier(key string, m config.Module, bp config.Blueprint) int {
 		}
 		return 1
 	}
-	if val, ok := extractDefaultSetting[int]([]string{key}, m); ok {
+	if val, _, ok := extractDefaultSetting[int]([]string{key}, m); ok {
 		if val > 0 {
 			return val
 		}
@@ -365,7 +591,7 @@ func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
 		if v, exists := valMap[key]; exists {
 			v, _ = v.Unmark()
 			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
-				return strings.Trim(v.AsString(), "\"")
+				return strings.TrimSpace(strings.Trim(v.AsString(), "\""))
 			}
 		}
 	}
@@ -428,11 +654,11 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 }
 
 // extractDefaultSetting attempts to get a default setting from the module's source variables.
-func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
+func extractDefaultSetting[T any](keys []string, m config.Module) (T, string, bool) {
 	var zero T
 	kindStr, valid := isValidModuleKind(m)
 	if !valid {
-		return zero, false
+		return zero, "", false
 	}
 
 	resCh := make(chan result, 1)
@@ -449,20 +675,20 @@ func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return zero, false
+			return zero, "", false
 		}
 		// Iterate over keys to maintain precedence order
 		for _, key := range keys {
 			for _, input := range res.mi.Inputs {
 				if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
-					return val, true
+					return val, key, true
 				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	return zero, false
+	return zero, "", false
 }
 
 // isValidModuleKind checks if the module has a valid source and returns its kind.

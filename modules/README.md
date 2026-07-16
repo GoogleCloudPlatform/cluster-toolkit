@@ -148,6 +148,12 @@ Modules that are still in development and less stable are labeled with the
 
 [dashboard]: monitoring/dashboard/README.md
 
+### Diagnostics
+
+* **[cluster-health-check]** ![community-badge] : Performs passive health checks on NVIDIA GPUs within a GKE cluster using DCGM (Data Center GPU Manager) and NVML.
+
+[cluster-health-check]: ../community/cluster-health-check/README.md
+
 ### Network
 
 * **[vpc]** ![core-badge] : Creates a

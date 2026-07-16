@@ -393,6 +393,18 @@ variable "experimental" {
   nullable = false
 }
 
+variable "enable_expedited_requeue" {
+  description = "Enables Expedited Requeue, which automatically requeues eligible jobs and grants them the highest priority upon node failure. (Usage: sbatch --requeue=expedite)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_health_check_start_only" {
+  description = "Adjusts the Slurm HealthCheckNodeState behavior to run health checks solely upon node initialization. This prevents continuous health check polling."
+  type        = bool
+  default     = false
+}
+
 ##########
 # HYBRID #
 ##########

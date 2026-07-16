@@ -46,6 +46,7 @@ type KubeClient interface {
 	ListWorkloads(namespace string, workloadName string) ([]string, error)
 	DeleteJobSet(namespace string, name string) error
 	ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error)
+	GetCurrentNamespace() (string, error)
 }
 
 type MachineTypeClient interface {
@@ -350,6 +351,71 @@ type jobSetTemplateData struct {
 	PathwaysWorkerEnv             []EnvVar
 	IsTPU                         bool
 	IsGPU                         bool
+}
+
+// Types for parsing kubectl get nodes -o json
+
+type kubernetesNodeList struct {
+	Items []kubernetesNode `json:"items"`
+}
+
+type kubernetesNode struct {
+	Metadata kubernetesNodeMetadata `json:"metadata"`
+	Status   kubernetesNodeStatus   `json:"status"`
+}
+
+type kubernetesNodeMetadata struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels"`
+}
+
+type kubernetesNodeStatus struct {
+	Conditions []kubernetesNodeCondition `json:"conditions"`
+}
+
+type kubernetesNodeCondition struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+}
+
+type kueueWorkloadCondition struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Message            string `json:"message"`
+	LastTransitionTime string `json:"lastTransitionTime"`
+}
+
+type kueueWorkloadPodSet struct {
+	Count int `json:"count"`
+}
+
+type kueueWorkloadOwnerRef struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+type kueueWorkload struct {
+	Metadata struct {
+		Name              string                  `json:"name"`
+		Namespace         string                  `json:"namespace"`
+		CreationTimestamp string                  `json:"creationTimestamp"`
+		OwnerReferences   []kueueWorkloadOwnerRef `json:"ownerReferences"`
+	} `json:"metadata"`
+	Spec struct {
+		PriorityClassName string                `json:"priorityClassName"`
+		PodSets           []kueueWorkloadPodSet `json:"podSets"`
+	} `json:"spec"`
+	Status struct {
+		Admission *struct {
+			PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+		} `json:"admission"`
+		ReclaimablePods []kueueWorkloadPodSet    `json:"reclaimablePods"`
+		Conditions      []kueueWorkloadCondition `json:"conditions"`
+	} `json:"status"`
+}
+
+type kueueWorkloadList struct {
+	Items []kueueWorkload `json:"items"`
 }
 
 // parsedReservation holds the extracted components of a GCE reservation URI/path.

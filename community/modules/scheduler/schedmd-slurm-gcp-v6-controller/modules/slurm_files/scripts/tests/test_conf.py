@@ -242,7 +242,55 @@ def test_conflines_async_reply(mock_slurm_version, version, expect_async):
         # Validate exact expected output structure for older versions without async reply
         assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
 
+@pytest.mark.parametrize(
+    "version,expect_feature",
+    [
+        ("24.11", False),
+        ("25.05", False),
+        ("25.11", True),
+    ]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_expedited_requeue(mock_slurm_version, version, expect_feature):
+    cfg = TstCfg(
+        install_dir="ukulele",
+        enable_expedited_requeue=True,
+    )
+    mock_slurm_version.return_value = version
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    
+    res = conf.conflines(lkp)
+    if expect_feature:
+        assert "enable_expedited_requeue" in res
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_expedited_requeue" in res
+    else:
+        assert "enable_expedited_requeue" not in res
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
 
+@pytest.mark.parametrize(
+    "version,expect_feature",
+    [
+        ("24.11", False),
+        ("25.05", False),
+        ("25.11", True),
+    ]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_health_check_start_only(mock_slurm_version, version, expect_feature):
+    cfg = TstCfg(
+        install_dir="ukulele",
+        enable_health_check_start_only=True,
+    )
+    mock_slurm_version.return_value = version
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    
+    res = conf.conflines(lkp)
+    if expect_feature:
+        assert "HealthCheckNodeState=START_ONLY" in res
+    else:
+        assert "HealthCheckNodeState=START_ONLY" not in res
 
 
 @pytest.mark.parametrize(

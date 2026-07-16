@@ -58,6 +58,8 @@ class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
+    enable_health_check_start_only: bool = False
+    enable_expedited_requeue: bool = False
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)

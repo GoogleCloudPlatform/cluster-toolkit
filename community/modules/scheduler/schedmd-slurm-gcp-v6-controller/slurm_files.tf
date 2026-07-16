@@ -164,12 +164,14 @@ module "slurm_files" {
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
 
-  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
-  slurm_conf_tpl      = var.slurm_conf_tpl
-  slurm_conf_template = var.slurm_conf_template
-  cgroup_conf_tpl     = var.cgroup_conf_tpl
-  cloud_parameters    = var.cloud_parameters
-  experimental        = var.experimental
+  slurmdbd_conf_tpl              = var.slurmdbd_conf_tpl
+  slurm_conf_tpl                 = var.slurm_conf_tpl
+  slurm_conf_template            = var.slurm_conf_template
+  cgroup_conf_tpl                = var.cgroup_conf_tpl
+  cloud_parameters               = var.cloud_parameters
+  experimental                   = var.experimental
+  enable_expedited_requeue       = var.enable_expedited_requeue
+  enable_health_check_start_only = var.enable_health_check_start_only
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)

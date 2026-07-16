@@ -73,3 +73,6 @@ venv*/
 
 # Ignore Gemini memories
 GEMINI.md
+
+# Ignore Antigravity agents customizations
+.agents/

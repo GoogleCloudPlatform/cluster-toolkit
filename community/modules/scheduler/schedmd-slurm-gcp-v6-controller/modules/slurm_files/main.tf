@@ -68,12 +68,14 @@ locals {
     slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
-    prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
-    epilog_scripts      = [for k, v in google_storage_bucket_object.epilog_scripts : k]
-    task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
-    task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
-    cloud_parameters    = var.cloud_parameters
-    experimental        = var.experimental
+    prolog_scripts                 = [for k, v in google_storage_bucket_object.prolog_scripts : k]
+    epilog_scripts                 = [for k, v in google_storage_bucket_object.epilog_scripts : k]
+    task_prolog_scripts            = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
+    task_epilog_scripts            = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
+    cloud_parameters               = var.cloud_parameters
+    experimental                   = var.experimental
+    enable_expedited_requeue       = var.enable_expedited_requeue
+    enable_health_check_start_only = var.enable_health_check_start_only
 
     # hybrid
     hybrid                        = var.enable_hybrid

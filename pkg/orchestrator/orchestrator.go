@@ -42,6 +42,10 @@ type PathwaysJobDefinition struct {
 	ColocatedPythonSidecarImage string // Default: ""
 
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
+
+	// Multi-Tier Checkpointing (MTC)
+	MTCEnabled       bool
+	RamdiskDirectory string
 }
 
 type VolumeDefinition struct {
@@ -127,13 +131,26 @@ type LogsOptions struct {
 	ClusterName     string
 	ClusterLocation string
 	Follow          bool
+	MainOnly        *bool
 }
 
+// InspectOptions defines configuration for GKE cluster diagnostic sweeps.
+type InspectOptions struct {
+	ProjectID       string
+	ClusterName     string
+	ClusterLocation string
+	WorkloadName    string
+	OutputPath      string
+	Show            bool
+}
+
+// JobOrchestrator defines the interface to interact with job orchestrators like GKE.
 type JobOrchestrator interface {
 	SubmitJob(job JobDefinition) error
 	ListJobs(opts ListOptions) ([]JobStatus, error)
 	CancelJob(name string, opts CancelOptions) error
 	GetJobLogs(name string, opts LogsOptions) (string, error)
+	InspectCluster(opts InspectOptions) error
 }
 
 type ClusterStatus struct {

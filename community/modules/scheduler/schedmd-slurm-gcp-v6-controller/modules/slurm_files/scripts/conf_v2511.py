@@ -24,17 +24,31 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
     def get_conf_options(self) -> dict:
         conf_options = super().get_conf_options()
         
+        slurmctld_params = []
+        
         # Add experimental enable_async_reply feature if requested
         experimental = self.lkp.cfg.experimental or {}
         enable_async_reply = experimental.get("enable_async_reply", False)
-        
         if enable_async_reply:
-            params = conf_options.get("SlurmctldParameters", [])
+            slurmctld_params.append("enable_async_reply")
+            
+        # Enable expedited requeue for high priority workload recovery
+        enable_expedited_requeue = self.lkp.cfg.get("enable_expedited_requeue", False)
+        if enable_expedited_requeue:
+            slurmctld_params.append("enable_expedited_requeue")
+
+        if slurmctld_params and "SlurmctldParameters" in conf_options:
+            params = conf_options["SlurmctldParameters"]
             if isinstance(params, list):
-                if "enable_async_reply" not in params:
-                    params.append("enable_async_reply")
-                conf_options["SlurmctldParameters"] = params
-                
+                for new_param in slurmctld_params:
+                    if new_param not in params:
+                        params.append(new_param)
+
+        # Configure Node health checks to execute only at node startup
+        enable_health_check_start_only = self.lkp.cfg.get("enable_health_check_start_only", False)
+        if enable_health_check_start_only:
+            conf_options["HealthCheckNodeState"] = "START_ONLY"
+
         return conf_options
 
 
