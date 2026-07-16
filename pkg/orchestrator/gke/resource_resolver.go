@@ -288,16 +288,18 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 }
 
 func (g *GKEOrchestrator) hasSlicingTopologies() bool {
-	if g.slicingTopologiesDetected != nil {
-		return *g.slicingTopologiesDetected
+	if g.slicingTopologiesChecked {
+		return g.slicingTopologiesDetected
 	}
+
+	defer func() {
+		g.slicingTopologiesChecked = true
+	}()
 
 	tResult := g.executor.ExecuteCommand("kubectl", "get", "topologies.kueue.x-k8s.io", "-o", "json")
 	if tResult.ExitCode != 0 {
 		logging.Warn("Failed to query Kueue topologies. Assuming dynamic-slicing not active.")
-		val := false
-		g.slicingTopologiesDetected = &val
-		return val
+		return false
 	}
 
 	var tList struct {
@@ -312,37 +314,25 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 	if err := json.Unmarshal([]byte(tResult.Stdout), &tList); err != nil {
 		logging.Warn("Failed to parse Kueue topologies JSON: %v. Assuming dynamic-slicing not active.", err)
-		val := false
-		g.slicingTopologiesDetected = &val
-		return val
+		return false
 	}
 
 	if len(tList.Items) == 0 {
 		logging.Info("No Kueue topology resources found. Dynamic-slicing not active.")
-		val := false
-		g.slicingTopologiesDetected = &val
-		return val
+		return false
 	}
 
 	for _, t := range tList.Items {
 		for _, l := range t.Spec.Levels {
-			if strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-slice-") && strings.HasSuffix(l.NodeLabel, "-id") {
-				val := true
-				g.slicingTopologiesDetected = &val
-				return val
-			}
-			if strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-partition-") && strings.HasSuffix(l.NodeLabel, "-id") {
-				val := true
-				g.slicingTopologiesDetected = &val
-				return val
+			if (strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-slice-") || strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-partition-")) && strings.HasSuffix(l.NodeLabel, "-id") {
+				g.slicingTopologiesDetected = true
+				return true
 			}
 		}
 	}
 
-	logging.Info("Kueue topologies found but they do not contain legacy slice/partition labels. Assuming dynamic-slicing not active.")
-	val := false
-	g.slicingTopologiesDetected = &val
-	return val
+	logging.Info("Kueue topologies found but they do not contain slice/partition labels. Assuming dynamic-slicing not active.")
+	return false
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
