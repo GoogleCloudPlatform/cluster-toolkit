@@ -26,6 +26,7 @@ vars:
   zone: ## A4X Reservation Zone ##
   a4x_cluster_size: # supply cluster size
   # Cluster env settings
+  # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
   # filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/19
@@ -272,20 +273,24 @@ deployment_groups:
           - name: Install and Configure CUDA 13 / DCGM
             hosts: all
             become: true
+            vars:
+              cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux_sbsa.run"
+              cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux_sbsa.run"
+              dcgm_version: "1:4.6.0-1"
             tasks:
               - name: Download CUDA runfile
                 ansible.builtin.get_url:
-                  url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux_sbsa.run
-                  dest: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run
+                  url: "{{ cuda_installer_url }}"
+                  dest: "{{ cuda_installer_file }}"
                   mode: '0755'
 
               - name: Install CUDA toolkit via runfile
                 ansible.builtin.command:
-                  cmd: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run --silent --toolkit
+                  cmd: "{{ cuda_installer_file }} --silent --toolkit"
 
               - name: Remove CUDA runfile
                 ansible.builtin.file:
-                  path: /tmp/cuda_13.0.0_580.65.06_linux_sbsa.run
+                  path: "{{ cuda_installer_file }}"
                   state: absent
 
               - name: Install NVIDIA repository keyring
@@ -300,9 +305,9 @@ deployment_groups:
               - name: Install DCGM packages
                 ansible.builtin.apt:
                   name:
-                    - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-                    - datacenter-gpu-manager-4-dev=1:4.6.0-1
-                    - datacenter-gpu-manager-4-core=1:4.6.0-1
+                    - "datacenter-gpu-manager-4-cuda13={{ dcgm_version }}"
+                    - "datacenter-gpu-manager-4-dev={{ dcgm_version }}"
+                    - "datacenter-gpu-manager-4-core={{ dcgm_version }}"
                   state: present
 
               - name: Freeze DCGM packages
@@ -378,6 +383,7 @@ deployment_groups:
       enable_placement: true
       accelerator_topology: 1x72
       disk_type: hyperdisk-balanced
+      disk_size_gb: $(vars.disk_size_gb)
       instance_image_custom: true
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4x_reservation_name)
@@ -416,6 +422,7 @@ deployment_groups:
       enable_login_public_ips: true
       instance_image_custom: true
       disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
       machine_type: t2a-standard-2
 
   - id: controller_startup
@@ -485,6 +492,7 @@ deployment_groups:
       machine_type: t2a-standard-2
       zone: $(vars.zone)
       disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
       instance_image_custom: true
       cloud_parameters:
         prolog_flags: Alloc,DeferBatch,NoHold
