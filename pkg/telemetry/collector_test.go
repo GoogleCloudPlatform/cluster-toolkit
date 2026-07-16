@@ -2682,6 +2682,46 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 			},
 			want: "n2d-standard-32:10", // 5 bound max * 2 zones
 		},
+		{
+			name: "Skips zonal multiplier for global default auto-scaling limits",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "../../modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-standard-4"),
+									"zones":        cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:1000",
+		},
+		{
+			name: "Applies zonal multiplier to per-zone default limits",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "./testdata/modules/compute/dummy-gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-standard-4"),
+									"zones":        cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:10",
+		},
 	}
 
 	for _, tc := range tests {
