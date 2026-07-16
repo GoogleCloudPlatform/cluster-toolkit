@@ -479,14 +479,6 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
 	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
 
-	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
-	if err != nil {
-		return err
-	}
-	g.capacity = capacity
-	g.nodePoolSAs = nodePoolSAs
-	logging.Info("Calculated cluster capacity: %+v", g.capacity)
-
 	if job.IsPathwaysJob {
 		if job.Pathways.HeadNodePool != "" {
 			g.resolvedHeadNodePool = job.Pathways.HeadNodePool
@@ -498,6 +490,14 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		}
 		job.Pathways.HeadNodePool = g.resolvedHeadNodePool
 	}
+
+	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
+	if err != nil {
+		return err
+	}
+	g.capacity = capacity
+	g.nodePoolSAs = nodePoolSAs
+	logging.Info("Calculated cluster capacity: %+v", g.capacity)
 
 	return nil
 }
@@ -512,6 +512,9 @@ func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
 }
 
 func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
+	if np.Name == "system" {
+		return true
+	}
 	for _, taint := range np.Config.Taints {
 		if taint.Key == "components.gke.io/gke-managed-components" && taint.Value == "true" {
 			return true
@@ -554,6 +557,9 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 
 	g.machineTypeToThreadsPerCore = make(map[string]string)
 	for _, np := range clusterDesc.NodePools {
+		if g.isSystemPool(np) {
+			continue
+		}
 		if np.Config.AdvancedMachineFeatures != nil {
 			g.machineTypeToThreadsPerCore[np.Config.MachineType] = np.Config.AdvancedMachineFeatures.ThreadsPerCore
 		}
@@ -625,33 +631,70 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	if np.Name == g.resolvedHeadNodePool {
 		flavor = "pathways-flavor"
 	}
-	if len(np.Config.Accelerators) > 0 {
-		var err error
-		gpus, tpus, flavor, nodeLabels, err = g.processAccelerators(np.Config.Accelerators, nodeCount, np.Config.MachineType)
-		if err != nil {
-			return 0, 0, 0, 0, "flavor-default", nodeLabels, sa, fmt.Errorf("in node pool %s: %w", np.Name, err)
-		}
+
+	accGpus, accTpus, accFlavor, accLabels, err := g.resolveAccelerators(np, cap, nodeCount)
+	if err != nil {
+		return 0, 0, 0, 0, "flavor-default", nil, sa, err
+	}
+	gpus = accGpus
+	tpus = accTpus
+	nodeLabels = accLabels
+	if accFlavor != "flavor-default" {
+		flavor = accFlavor
 	}
 
-	if len(np.Config.Accelerators) == 0 && len(cap.Accelerators) > 0 {
-		count := cap.Accelerators[0].Count
-		accType := cap.Accelerators[0].Type
-		if strings.Contains(strings.ToLower(accType), "tpu") {
-			tpus += count * nodeCount
-			flavor = "flavor-" + strings.ToLower(accType)
-			nodeLabels["cloud.google.com/gke-tpu-accelerator"] = accType
-		} else {
-			gpus += count * nodeCount
-			flavor = "flavor-" + strings.ToLower(accType)
-			nodeLabels["cloud.google.com/gke-accelerator"] = accType
-		}
-		if g.acceleratorToMachineType == nil {
-			g.acceleratorToMachineType = make(map[string]string)
-		}
-		g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
+	isHardwareAccel := len(np.Config.Accelerators) > 0 || len(cap.Accelerators) > 0
+	if !isHardwareAccel && !g.isSystemPool(np) {
+		nodeLabels["cloud.google.com/gke-nodepool"] = np.Name
 	}
 
 	return cpus, memMb, gpus, tpus, flavor, nodeLabels, sa, nil
+}
+
+func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string, err error) {
+	nodeLabels = make(map[string]string)
+	if len(np.Config.Accelerators) > 0 {
+		gpus, tpus, flavor, nodeLabels, err = g.processAccelerators(np.Config.Accelerators, nodeCount, np.Config.MachineType)
+		if err != nil {
+			return 0, 0, "flavor-default", nil, fmt.Errorf("in node pool %s: %w", np.Name, err)
+		}
+		if np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
+			nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
+		}
+		return gpus, tpus, flavor, nodeLabels, nil
+	}
+
+	if len(cap.Accelerators) > 0 {
+		gpus, tpus, flavor, nodeLabels = g.processCapabilitiesAccelerators(np, cap, nodeCount)
+		return gpus, tpus, flavor, nodeLabels, nil
+	}
+
+	return 0, 0, "flavor-default", nodeLabels, nil
+}
+
+func (g *GKEOrchestrator) processCapabilitiesAccelerators(np gkeJobNodePool, cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string) {
+	nodeLabels = make(map[string]string)
+	if len(cap.Accelerators) == 0 {
+		return 0, 0, "flavor-default", nodeLabels
+	}
+	count := cap.Accelerators[0].Count
+	accType := cap.Accelerators[0].Type
+	flavor = "flavor-" + strings.ToLower(accType)
+	if strings.Contains(strings.ToLower(accType), "tpu") {
+		tpus = count * nodeCount
+		nodeLabels["cloud.google.com/gke-tpu-accelerator"] = accType
+		if np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
+			nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
+		}
+	} else {
+		gpus = count * nodeCount
+		nodeLabels["cloud.google.com/gke-accelerator"] = accType
+	}
+	if g.acceleratorToMachineType == nil {
+		g.acceleratorToMachineType = make(map[string]string)
+	}
+	g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
+	return gpus, tpus, flavor, nodeLabels
 }
 
 func (g *GKEOrchestrator) getNodeCount(np gkeJobNodePool) int {

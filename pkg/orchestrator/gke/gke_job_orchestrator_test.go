@@ -2938,3 +2938,151 @@ func TestGeneratePathwaysManifest_Headless(t *testing.T) {
 		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
 	}
 }
+
+func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name                 string
+		np                   gkeJobNodePool
+		resolvedHeadNodePool string
+		mockResponses        map[string][]shell.CommandResult
+		wantFlavor           string
+		wantLabels           map[string]string
+		wantErr              bool
+	}{
+		{
+			name: "CPU Pool (Non-head)",
+			np: gkeJobNodePool{
+				Name:             "cpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				InitialNodeCount: 1,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "cpu-np",
+			},
+			wantErr: false,
+		},
+		{
+			name: "CPU Pool (Head)",
+			np: gkeJobNodePool{
+				Name:             "cpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				InitialNodeCount: 1,
+			},
+			resolvedHeadNodePool: "cpu-np",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "pathways-flavor",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "cpu-np",
+			},
+			wantErr: false,
+		},
+		{
+			name: "TPU Pool with Topology",
+			np: gkeJobNodePool{
+				Name:             "tpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "ct5lp-hightpu-4t"},
+				InitialNodeCount: 1,
+				PlacementPolicy: &gkePlacementPolicy{
+					TpuTopology: "2x2",
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe ct5lp-hightpu-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 16, "memoryMb": 64000, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`},
+				},
+			},
+			wantFlavor: "flavor-tpu-v5-lite-podslice",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-tpu-accelerator": "tpu-v5-lite-podslice",
+				"cloud.google.com/gke-tpu-topology":    "2x2",
+			},
+			wantErr: false,
+		},
+		{
+			name: "System Pool (Tainted)",
+			np: gkeJobNodePool{
+				Name:             "system-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints: []gkeTaint{
+						{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"},
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{}, // Should NOT have gke-nodepool label
+			wantErr:    false,
+		},
+		{
+			name: "System Pool (Named system)",
+			np: gkeJobNodePool{
+				Name:             "system",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{}, // Should NOT have gke-nodepool label
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.projectID = "mock-project"
+			orc.resolvedHeadNodePool = tt.resolvedHeadNodePool
+
+			_, _, _, _, flavor, labels, _, err := orc.processNodePoolCapacity(tt.np, "us-central1-a")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, but got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if flavor != tt.wantFlavor {
+				t.Errorf("flavor = %q, want %q", flavor, tt.wantFlavor)
+			}
+
+			if len(labels) != len(tt.wantLabels) {
+				t.Errorf("labels len = %d, want %d (labels: %+v)", len(labels), len(tt.wantLabels), labels)
+			}
+			for k, v := range tt.wantLabels {
+				if labels[k] != v {
+					t.Errorf("label %q = %q, want %q", k, labels[k], v)
+				}
+			}
+		})
+	}
+}
