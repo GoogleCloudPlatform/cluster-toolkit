@@ -189,13 +189,11 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 
 func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	var storageTypes []string
-	seen := make(map[string]bool)
 
 	addStorageType := func(t string) {
-		t = strings.ToLower(strings.TrimSpace(strings.Trim(t, "\"")))
-		if t != "" && !seen[t] {
+		t = strings.ToLower(strings.Trim(strings.TrimSpace(t), "\""))
+		if t != "" {
 			storageTypes = append(storageTypes, t)
-			seen[t] = true
 		}
 	}
 
@@ -237,11 +235,6 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 		if t, key, found := extractDefaultSetting[string](remainingKeys, m); found && t != "" {
 			addStorageType(formatType(key, t))
 		}
-	}
-
-	// Default string settings
-	if t, key, found := extractDefaultSetting[string](storageTypeSettings, m); found && t != "" {
-		addStorageType(formatType(key, t))
 	}
 }
 
