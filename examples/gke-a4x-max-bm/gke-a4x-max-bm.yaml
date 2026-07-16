@@ -54,6 +54,10 @@ vars:
   system_node_pool_disk_size_gb: 200
   a4x_max_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
+
+  # Installs NCCL library and Google NCCL plugin
+  # Runs an init container on all GB300 GPU nodes with the NCCL plugin image
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   asapd_lite_installer_path: $(ghpc_stage("./asapd-lite-installer.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -253,6 +257,25 @@ deployment_groups:
         install: true
         version: "v25.8.0"
         accelerator_type: $(vars.accelerator_type)
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
+          version: v1.1.2
+          accelerator_count: 4
+          node_affinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: cloud.google.com/gke-accelerator
+                  operator: In
+                  values:
+                  - $(vars.accelerator_type)
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - arm64
       apply_manifests:
       - source: $(vars.nvidia_dra_driver_path)
 
