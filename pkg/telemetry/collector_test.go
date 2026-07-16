@@ -2705,6 +2705,70 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 			want: "e2-standard-4:1000",
 		},
 
+		{
+			name: "Skips tracking missing machine types completely when collecting properties organically",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_count_dynamic_max": cty.NumberIntVal(5),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Blueprint variable evaluation correctly proxies node count limits",
+			kind: "min",
+			bp: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"min_cluster_nodes": cty.NumberIntVal(7),
+				}),
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("a2-highgpu-1g"),
+									"autoscaling_total_min_nodes": cty.StringVal("((var.min_cluster_nodes))"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "a2-highgpu-1g:7",
+		},
+		{
+			name: "Prioritizes first configured bounds correctly when conflicting definitions coexist",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n2d-standard-8"),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(100),
+									"autoscaling_max_node_count":  cty.NumberIntVal(5),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2d-standard-8:10",
+		},
 	}
 
 	for _, tc := range tests {
