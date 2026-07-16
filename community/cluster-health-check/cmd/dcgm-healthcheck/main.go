@@ -222,9 +222,16 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 		{"GPU temperature", checkTemperature},
 		// {"HCA Firmware", checkHCAFW},
 		// {"GPU Power draw", checkPower},
-		{"NVLink health", func(ctx context.Context) (string, error) {
+		{"NVLink bandwidth", func(ctx context.Context) (string, error) {
 			if isA4x(node) {
-				return checkNVLinkSmi(ctx)
+				return checkNVLinkBandwidth(ctx)
+			} else {
+				return "", nil
+			}
+		}},
+		{"NVLink errors", func(ctx context.Context) (string, error) {
+			if isA4x(node) {
+				return checkNVLinkErrors(ctx)
 			} else {
 				return "", nil
 			}
@@ -337,7 +344,8 @@ func runDcgmiHealth(ctx context.Context) (string, error) {
 
 	if overallHealthVal != "Healthy" {
 		severity := SeverityWarning
-		if strings.ToLower(overallHealthVal) == SeverityFailure {
+		normalizedSev := strings.ToLower(strings.TrimSpace(overallHealthVal))
+		if normalizedSev == SeverityFailure {
 			severity = SeverityFailure
 		}
 
@@ -762,12 +770,6 @@ func isA4x(node *corev1.Node) bool {
 	return strings.Contains(accel, "gb300") || strings.Contains(accel, "gb200") || strings.Contains(machine, "a4x")
 }
 
-func checkNVLinkSmi(ctx context.Context) (string, error) {
-	if sev, err := checkNVLinkBandwidth(ctx); err != nil {
-		return sev, err
-	}
-	return checkNVLinkErrors(ctx)
-}
 
 var nvlinkStatusRegex = regexp.MustCompile(`^\s*Link\s+\d+:\s+([0-9.]+)\s+GB/s`)
 var gpuLineRegex = regexp.MustCompile(`^(GPU\s+\d+).*?\b(UUID:\s*[^)]+)`)

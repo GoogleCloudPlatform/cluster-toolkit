@@ -385,3 +385,61 @@ func TestGetConditionStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestNvlinkStatusRegex(t *testing.T) {
+	tests := []struct {
+		desc  string
+		line  string
+		want  string
+		match bool
+	}{
+		{
+			desc:  "Exact match",
+			line:  "Link 0: 50.0 GB/s",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "Extra trailing whitespace",
+			line:  "Link 2: 45.5 GB/s    ",
+			want:  "45.5",
+			match: true,
+		},
+		{
+			desc:  "Trailing text",
+			line:  "Link 3: 50.0 GB/s (active)",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "Leading whitespace and trailing text",
+			line:  "    Link 1: 50.0 GB/s with more words",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "No match - incorrect format",
+			line:  "Link 0: 50.0 MB/s",
+			match: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			matches := nvlinkStatusRegex.FindStringSubmatch(tc.line)
+			if tc.match {
+				if len(matches) < 2 {
+					t.Fatalf("expected match, got none for line: %q", tc.line)
+				}
+				got := matches[1]
+				if got != tc.want {
+					t.Errorf("got bandwidth %q, want %q", got, tc.want)
+				}
+			} else {
+				if len(matches) > 0 {
+					t.Errorf("expected no match, but got %v", matches)
+				}
+			}
+		})
+	}
+}
