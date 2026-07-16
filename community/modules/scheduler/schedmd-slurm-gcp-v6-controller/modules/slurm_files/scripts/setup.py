@@ -469,6 +469,11 @@ def setup_slurm_health_check_service(lkp: util.Lookup) -> None:
         return
 
     dst_file = Path("/usr/local/bin/slurm_health_check.py")
+    if dst_file.exists():
+        try:
+            dst_file.unlink()
+        except Exception as e:
+            log.warning(f"Failed to unlink existing health check script: {e}")
     shutil.copyfile(src_file, dst_file)
     os.chmod(dst_file, 0o755)
 

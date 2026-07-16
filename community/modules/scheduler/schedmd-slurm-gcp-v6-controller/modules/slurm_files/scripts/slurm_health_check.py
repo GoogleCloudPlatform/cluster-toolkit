@@ -89,10 +89,8 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         if is_backup is None:
             if hostname.endswith("-1"):
                 is_backup = True
-                HealthCheckHandler._is_backup = True
             elif hostname.endswith("-0"):
                 is_backup = False
-                HealthCheckHandler._is_backup = False
             else:
                 # If hostname does not follow -0 / -1 convention, query instance metadata as fallback
                 try:
@@ -115,14 +113,20 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                             )
                             with urllib.request.urlopen(req_role, timeout=1) as resp_role:
                                 role = resp_role.read().decode().strip()
-                                is_backup = (role == "backup")
-                        HealthCheckHandler._is_backup = is_backup
+                                if role == "backup":
+                                    is_backup = True
+                                elif role == "primary":
+                                    is_backup = False
+                                else:
+                                    # Align with setup.py: assume backup if neither hostname nor inst_name ends with -0
+                                    is_backup = not (hostname.endswith("-0") or inst_name.endswith("-0"))
                 except Exception as e:
                     log.error(f"Failed to resolve role from metadata: {e}")
                     self.send_response(503)
                     self.end_headers()
                     self.wfile.write(f"Failed to resolve role: {e}\n".encode())
                     return
+            HealthCheckHandler._is_backup = is_backup
 
         if not is_backup:
             if primary_up:
