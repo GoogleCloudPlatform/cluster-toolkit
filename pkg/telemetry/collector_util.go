@@ -1023,10 +1023,12 @@ func parseOsReleaseField(line string) string {
 
 func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys []string) map[string]int {
 	if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
-		if val, err := bp.Eval(m.Settings.Get("static_node_count")); err == nil {
-			unmarked, _ := val.Unmark()
-			if unmarked.IsKnown() && !unmarked.IsNull() {
-				return map[string]int{}
+		if m.Settings.Has("static_node_count") {
+			if val, err := bp.Eval(m.Settings.Get("static_node_count")); err == nil {
+				unmarked, _ := val.Unmark()
+				if unmarked.IsKnown() && !unmarked.IsNull() {
+					return map[string]int{}
+				}
 			}
 		}
 	}
