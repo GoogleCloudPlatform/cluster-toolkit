@@ -529,6 +529,37 @@ dragon: "Lews Therin Telamon"`))
 	c.Check(err, NotNil)
 }
 
+func (s *zeroSuite) TestParseBlueprint_AiAssisted(c *C) {
+	// Case 1: ai_assisted is true
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+ai_assisted: true
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AiAssisted, Equals, true)
+	}
+
+	// Case 2: ai_assisted is false
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+ai_assisted: false
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AiAssisted, Equals, false)
+	}
+
+	// Case 3: ai_assisted is missing (should default to false, no error)
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AiAssisted, Equals, false)
+	}
+}
+
 func (s *zeroSuite) TestExportBlueprint(c *C) {
 	bp := Blueprint{BlueprintName: "goo"}
 	outFilename := c.TestName() + ".yaml"
