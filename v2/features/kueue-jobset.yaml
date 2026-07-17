@@ -1,0 +1,44 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ABSORBED THE FORMER `kubectl-apply` FEATURE.
+# Both features wrapped the same module, `modules/management/kubectl-apply`; this one was
+# only that module with `kueue.install` / `jobset.install` preset, while `kubectl-apply`
+# was the same module with nothing preset. Two features
+# for one module meant two places to fix anything, so they are now one.
+#
+# Consequences worth knowing:
+#   - This is the ONLY feature that may install cluster-wide controllers. Compute
+#     archetypes also emit a `{pool}_manager` kubectl-apply for silicon enablement (gIB,
+#     TCPX/TCPXO, DRA); two modules installing the same DaemonSet is a Terraform race, so
+#     do not add silicon enablement here.
+#   - Settings route to `{name}_manager`, so every input the module declares is reachable
+#     from a cluster-config -- including `apply_manifests` for arbitrary YAML.
+#   - Job overlays do NOT install these controllers themselves. A config using a job overlay
+#     must also list `type: kueue-jobset`.
+name: kueue-jobset
+description: "Installs Kueue job queuing and JobSet batch scheduling on GKE; also the carrier for arbitrary kubectl-apply manifests."
+config_base:
+  gke:
+    deployment_groups:
+    - group: auto
+      modules:
+      - id: "{name}_manager"
+        source: modules/management/kubectl-apply
+        use: [cluster]
+        settings:
+          kueue:
+            install: true
+          jobset:
+            install: true

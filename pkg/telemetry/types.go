@@ -42,7 +42,11 @@ type Collector struct {
 	eventStartTime   time.Time
 	blueprint        config.Blueprint
 	installationMode string
-	metadata         map[string]string
+	// isV2 records whether this command is a v2 compiler run
+	isV2 bool
+
+	// metadata holds the standard blueprint metrics. Only CollectMetrics writes here.
+	metadata map[string]string
 
 	mu sync.Mutex // Protects state against concurrent access
 }
@@ -105,4 +109,5 @@ const (
 	IS_TEST_DATA            = "CLUSTER_TOOLKIT_IS_TEST_DATA"
 	EXIT_CODE               = "CLUSTER_TOOLKIT_EXIT_CODE"
 	ERROR_TYPE              = "CLUSTER_TOOLKIT_ERROR_TYPE"
+	IS_V2                   = "CLUSTER_TOOLKIT_IS_V2"
 )

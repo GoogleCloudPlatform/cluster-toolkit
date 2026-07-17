@@ -40,6 +40,7 @@ func TestPath(t *testing.T) {
 		{r.Provider, "terraform_providers"},
 		{r.ToolkitModulesURL, "toolkit_modules_url"},
 		{r.ToolkitModulesVersion, "toolkit_modules_version"},
+		{r.V2ConfigBase, "v2_config_base"},
 
 		{r.Validators.At(2), "validators[2]"},
 		{r.Validators.At(2).Validator, "validators[2].validator"},

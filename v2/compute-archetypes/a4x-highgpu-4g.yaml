@@ -1,0 +1,682 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: a4x-highgpu-4g
+description: NVIDIA GB200 NVL72 (4x Grace Blackwell GPU) compute archetype with 4x 800Gbps GPUDirect-RDMA networking.
+
+vars:
+  disk_size_gb: 100
+
+config_base:
+  slurm:
+    vars:
+      local_ssd_mountpoint: /mnt/localssd
+      benchmark_dir: $(ghpc_stage("examples/machine-learning/a4x-highgpu-4g/system_benchmarks"))
+      rdma_mtu: 8896
+      a4x_cluster_size: 2
+      a4x_dws_flex_enabled: false
+      a4x_enable_spot_vm: false
+      nic_count: 4
+      a4x_reservation_name: "" # supply reservation name
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: controller_startup
+        source: modules/scripts/startup-script
+        settings:
+          runners:
+          - type: shell
+            destination: ensure_mnt_localssd_permissions.sh
+            content: |
+              #!/bin/bash
+              mkdir -p $(vars.local_ssd_mountpoint)
+              chmod 1777 $(vars.local_ssd_mountpoint)
+          - type: data
+            destination: /etc/enroot/enroot.conf
+            content: |
+              ENROOT_CONFIG_PATH     ${HOME}/.enroot
+              ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+              ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+              ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+              ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+          - type: shell
+            destination: stage_scripts.sh
+            content: |
+              #!/bin/bash
+              SLURM_ROOT=/opt/apps/adm/slurm
+              PARTITION_NAME=$({name}_partition.partitions[0].partition_name)
+              mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+              # enable a GPU health check
+              mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+              ln -sf "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+              # enable the use of password-free sudo
+              mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+              mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+              curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+                  https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+              chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+              ln -sf "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+              ln -sf "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+              curl -s -o "${SLURM_ROOT}/scripts/imex_prolog" \
+                  https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_prolog
+              chmod 0755 "${SLURM_ROOT}/scripts/imex_prolog"
+              ln -sf "${SLURM_ROOT}/scripts/imex_prolog" "${SLURM_ROOT}/prolog_slurmd.d/imex_prolog.prolog_slurmd"
+              curl -s -o "${SLURM_ROOT}/scripts/imex_epilog" \
+                  https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/imex_epilog
+              chmod 0755 "${SLURM_ROOT}/scripts/imex_epilog"
+              ln -sf "${SLURM_ROOT}/scripts/imex_epilog" "${SLURM_ROOT}/epilog_slurmd.d/imex_epilog.epilog_slurmd"
+          - type: data
+            destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+            source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+          - type: data
+            destination: /opt/apps/system_benchmarks/README.md
+            source: $(vars.benchmark_dir)/README.md
+      - id: slurm_controller
+        source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+        settings:
+          machine_type: t2a-standard-2
+          disk_type: pd-balanced
+          controller_state_disk: null
+          instance_image_custom: true
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
+          enable_external_prolog_epilog: true
+          compute_startup_scripts_timeout: 1800
+          cloud_parameters:
+            prolog_flags: Alloc,DeferBatch,NoHold
+            switch_type: switch/nvidia_imex
+      - id: slurm_login
+        source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+        settings:
+          machine_type: t2a-standard-2
+          disk_type: pd-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          instance_image_custom: true
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
+    - group: cluster-env
+      modules:
+      - id: net-1
+        source: modules/network/vpc
+        settings:
+          network_name: "$(vars.deployment_name)-net-1"
+          mtu: $(vars.rdma_mtu)
+          enable_internal_traffic: false
+          subnetworks:
+          - subnet_name: "$(vars.deployment_name)-sub-1"
+            subnet_region: "$(vars.region)"
+            subnet_ip: 192.168.64.0/19
+          firewall_rules:
+          - name: "$(vars.deployment_name)-internal-1"
+            ranges: ["192.168.64.0/19"]
+            allow:
+            - protocol: tcp
+            - protocol: udp
+            - protocol: icmp
+      - id: rdma-net
+        source: modules/network/gpu-rdma-vpc
+        settings:
+          network_name: "$(vars.deployment_name)-rdma-net"
+          network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+          network_routing_mode: REGIONAL
+          subnetworks_template:
+            name_prefix: "$(vars.deployment_name)-mrdma-sub"
+            count: $(vars.nic_count)
+            ip_range: 192.168.128.0/18
+            region: "$(vars.region)"
+    - group: cluster
+      modules:
+      - id: "{name}_nodeset"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+        export: true
+        use: [network, "{name}_a4x_startup"]
+        settings:
+          name: "{name}"
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-arm64
+          instance_image_custom: true
+          bandwidth_tier: gvnic_enabled
+          machine_type: a4x-highgpu-4g
+          enable_public_ips: true
+          node_count_static: $(vars.a4x_cluster_size)
+          node_count_dynamic_max: 0
+          enable_placement: true
+          accelerator_topology: 1x72
+          disk_type: hyperdisk-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          on_host_maintenance: TERMINATE
+          reservation_name: $(vars.a4x_reservation_name)
+          enable_spot_vm: $(vars.a4x_enable_spot_vm)
+          dws_flex:
+            enabled: $(vars.a4x_dws_flex_enabled)
+          advanced_machine_features:
+            threads_per_core: null
+          node_conf:
+            CoresPerSocket: 70
+            SocketsPerBoard: 2
+            ThreadsPerCore: 1
+          additional_networks:
+            $(concat(
+              [{
+                network=null,
+                subnetwork=net-1.subnetwork_self_link,
+                subnetwork_project=vars.project_id,
+                nic_type="GVNIC",
+                queue_count=null,
+                network_ip="",
+                stack_type=null,
+                access_config=[],
+                ipv6_access_config=[],
+                alias_ip_range=[]
+              }],
+              rdma-net.subnetwork_interfaces
+            ))
+      - id: "{name}_partition"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+        export: true
+        use: ["{name}_nodeset"]
+        settings:
+          partition_name: "{name}"
+          exclusive: false
+          is_default: true
+          partition_conf:
+            OverSubscribe: EXCLUSIVE
+            ResumeTimeout: 3600
+            SuspendTimeout: 600
+      - id: "{name}_a4x_startup"
+        source: modules/scripts/startup-script
+        export: true
+        settings:
+          local_ssd_filesystem:
+            mountpoint: $(vars.local_ssd_mountpoint)
+            permissions: "1777"
+          docker:
+            enabled: true
+            world_writable: true
+            daemon_config: |
+              {
+                "data-root": "$(vars.local_ssd_mountpoint)/docker"
+              }
+          runners:
+          - type: shell
+            destination: ensure_mnt_localssd_permissions.sh
+            content: |
+              #!/bin/bash
+              mkdir -p $(vars.local_ssd_mountpoint)
+              chmod 1777 $(vars.local_ssd_mountpoint)
+          - type: shell
+            destination: ensure_etc_hostname_created.sh
+            content: |
+              #!/bin/bash
+              hostname -s | sudo tee /etc/hostname > /dev/null
+          - type: data
+            destination: /etc/slurm/plugstack.conf.d/pyxis.conf
+            content: |
+              optional /usr/lib/aarch64-linux-gnu/slurm/spank_pyxis.so
+          - type: data
+            destination: /etc/enroot/enroot.conf
+            content: |
+              ENROOT_CONFIG_PATH     ${HOME}/.enroot
+              ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+              ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+              ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+              ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+          - type: ansible-local
+            destination: install_cuda_and_dcgm.yml
+            content: |
+              ---
+              - name: Install and Configure CUDA 13 / DCGM
+                hosts: all
+                become: true
+                vars:
+                  cuda_installer_url: "https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux_sbsa.run"
+                  cuda_installer_file: "/tmp/cuda_13.0.0_580.65.06_linux_sbsa.run"
+                  dcgm_version: "1:4.6.1-1"
+                tasks:
+                  - name: Download CUDA runfile
+                    ansible.builtin.get_url:
+                      url: "{{ cuda_installer_url }}"
+                      dest: "{{ cuda_installer_file }}"
+                      mode: '0755'
+                  - name: Install CUDA toolkit via runfile
+                    ansible.builtin.command:
+                      cmd: "{{ cuda_installer_file }} --silent --toolkit"
+                  - name: Remove CUDA runfile
+                    ansible.builtin.file:
+                      path: "{{ cuda_installer_file }}"
+                      state: absent
+                  - name: Install NVIDIA repository keyring
+                    ansible.builtin.apt:
+                      deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-keyring_1.1-1_all.deb
+                      state: present
+                  - name: Update apt cache
+                    ansible.builtin.apt:
+                      update_cache: yes
+                  - name: Install DCGM packages
+                    ansible.builtin.apt:
+                      name:
+                        - "datacenter-gpu-manager-4-cuda13={{ dcgm_version }}"
+                        - "datacenter-gpu-manager-4-dev={{ dcgm_version }}"
+                        - "datacenter-gpu-manager-4-core={{ dcgm_version }}"
+                      state: present
+                      allow_downgrade: yes
+                  - name: Freeze DCGM packages
+                    ansible.builtin.dpkg_selections:
+                      name: "{{ item }}"
+                      selection: hold
+                    loop:
+                      - datacenter-gpu-manager-4-cuda13
+                      - datacenter-gpu-manager-4-dev
+                      - datacenter-gpu-manager-4-core
+          - type: ansible-local
+            destination: enable_dcgm.yml
+            content: |
+              ---
+              - name: Enable NVIDIA DCGM on GPU nodes
+                hosts: all
+                become: true
+                vars:
+                  enable_ops_agent: true
+                  enable_nvidia_dcgm: true
+                tasks:
+                  - name: Update Ops Agent configuration
+                    ansible.builtin.blockinfile:
+                      path: /etc/google-cloud-ops-agent/config.yaml
+                      insertafter: EOF
+                      block: |
+                        metrics:
+                          receivers:
+                            dcgm:
+                              type: dcgm
+                          service:
+                            pipelines:
+                              dcgm:
+                                receivers:
+                                  - dcgm
+                    notify:
+                      - Restart Google Cloud Ops Agent
+                handlers:
+                  - name: Restart Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                post_tasks:
+                  - name: Enable Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                  - name: Enable NVIDIA DCGM
+                    ansible.builtin.service:
+                      name: nvidia-dcgm.service
+                      state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                      enabled: "{{ enable_nvidia_dcgm }}"
+                  - name: Enable nvidia-persistenced
+                    ansible.builtin.service:
+                      name: nvidia-persistenced.service
+                      state: started
+                      enabled: true
+
+  gke:
+    vars:
+      gpu_count: 4
+      a4x_cluster_size: 2
+      # Staged template path is a property of the A4X platform, not a user choice.
+      # Kept here so a cluster-config carries no repo-relative paths.
+      kueue_configuration_path: $(ghpc_stage("examples/gke-a4x/kueue-configuration.yaml.tftpl"))
+      # Consumption model. Defaults to on-demand; set at most one of these.
+      a4x_enable_spot_vm: false
+      a4x_dws_flex_enabled: false
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          enable_dcgm_monitoring: true
+          enable_gcsfuse_csi: true
+          enable_dataplane_v2: true
+          enable_k8s_beta_apis:
+          - "resource.k8s.io/v1beta1/deviceclasses"
+          - "resource.k8s.io/v1beta1/resourceclaims"
+          - "resource.k8s.io/v1beta1/resourceclaimtemplates"
+          - "resource.k8s.io/v1beta1/resourceslices"
+          release_channel: REGULAR
+          system_node_pool_machine_type: n2d-standard-16
+          system_node_pool_disk_size_gb: 200
+          system_node_pool_taints: []
+      - id: "{name}_workload_policy"
+        source: modules/compute/resource-policy
+        settings:
+          name: "$(vars.deployment_name)-{name}-a4x-workload-policy"
+          project_id: $(vars.project_id)
+          region: $(vars.region)
+          workload_policy:
+            accelerator_topology: "1x72"
+            type: "HIGH_THROUGHPUT"
+      - id: workload_manager
+        source: modules/management/kubectl-apply
+        use: [cluster]
+        settings:
+          target_architecture: arm64
+          gib:
+            install: true
+            path: $(ghpc_stage("examples/gke-a4x/nccl-installer.yaml.tftpl"))
+            template_vars:
+              version: v1.1.2
+              accelerator_count: 4
+              image: "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64"
+              node_affinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: cloud.google.com/gke-accelerator
+                      operator: In
+                      values:
+                      - nvidia-gb200
+                    - key: kubernetes.io/arch
+                      operator: In
+                      values:
+                      - arm64
+          nvidia_dra_driver:
+            install: true
+          apply_manifests:
+          - source: $(ghpc_stage("examples/gke-a4x/nvidia-dra-driver.yaml"))
+      - id: "{name}_pool"
+        source: modules/compute/gke-node-pool
+        export: true
+        use: [cluster, node_pool_service_account, "{name}_workload_policy"]
+        settings:
+          machine_type: a4x-highgpu-4g
+          auto_upgrade: true
+          auto_repair: $(!vars.a4x_dws_flex_enabled)
+          zones: [$(vars.zone)]
+          disk_type: hyperdisk-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          local_ssd_count_ephemeral_storage: 32
+          static_node_count: $(vars.a4x_cluster_size)
+          guest_accelerator:
+          - type: nvidia-gb200
+            count: $(vars.gpu_count)
+          enable_dranet: true
+          spot: $(vars.a4x_enable_spot_vm)
+          enable_flex_start: $(vars.a4x_dws_flex_enabled)
+        outputs:
+        - instructions
+
+  jbvm:
+    vars:
+      rdma_mtu: 8896
+      nic_count: 4
+      a4x_reservation_name: "" # supply reservation name
+      # Consumption model: STANDARD (on-demand), SPOT, or RESERVATION_BOUND.
+      a4x_provisioning_model: STANDARD
+      number_of_vms: 2
+    deployment_groups:
+    - group: cluster-env
+      modules:
+      - id: net-1
+        source: modules/network/vpc
+        settings:
+          network_name: "$(vars.deployment_name)-net-1"
+          mtu: $(vars.rdma_mtu)
+          subnetworks:
+          - subnet_name: "$(vars.deployment_name)-sub-1"
+            subnet_region: "$(vars.region)"
+            subnet_ip: 192.168.64.0/19
+          firewall_rules:
+          - name: "$(vars.deployment_name)-internal-1"
+            ranges: [192.168.64.0/19]
+            allow:
+            - protocol: tcp
+            - protocol: udp
+            - protocol: icmp
+      - id: rdma-net
+        source: modules/network/gpu-rdma-vpc
+        settings:
+          network_name: "$(vars.deployment_name)-rdma-net"
+          network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+          network_routing_mode: REGIONAL
+          subnetworks_template:
+            name_prefix: "$(vars.deployment_name)-mrdma-sub"
+            count: $(vars.nic_count)
+            ip_range: 192.168.128.0/18
+            region: "$(vars.region)"
+    - group: cluster
+      modules:
+      - id: "{name}_instance"
+        source: modules/compute/vm-instance
+        use: ["{name}_startup_script"]
+        settings:
+          instance_image:
+            project: ubuntu-os-accelerator-images
+            name: ubuntu-accelerator-2404-arm64-with-nvidia-580-v20260218
+          machine_type: a4x-highgpu-4g
+          name_prefix: "$(vars.deployment_name)"
+          placement_policy:
+            collocation: COLLOCATED
+            gpu_topology: "1x72"
+          disk_type: hyperdisk-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          automatic_restart: false
+          instance_count: $(vars.number_of_vms)
+          on_host_maintenance: TERMINATE
+
+          reservation_name: $(vars.a4x_reservation_name)
+          provisioning_model: $(vars.a4x_provisioning_model)
+
+          network_interfaces:
+            $(concat(
+              [
+              merge(network.instance_additional_networks[0],
+              { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] }),
+              merge(net-1.instance_additional_networks[0],
+              { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
+              ],
+              rdma-net.subnetwork_interfaces
+            ))
+      - id: "{name}_startup_script"
+        source: modules/scripts/startup-script
+        settings:
+          # The reference (a4x-vm.yaml) bakes this stack into a Packer image built
+          # on the same accelerator base image. v2 cannot express `kind: packer`,
+          # so the same runners execute at boot instead -- the approach the a3-ultra
+          # and a4 JBVM archetypes (and their references) already use.
+          install_ansible: true
+          # Allow ssh between nodes
+          configure_ssh_host_patterns:
+          - "$(vars.deployment_name)-*"
+          runners:
+          - type: ansible-local
+            destination: setup_nvidia_cuda_environment.yml
+            content: |
+              # ---
+              - name: Install NVIDIA repository packages
+                hosts: all
+                become: true
+                vars:
+                  distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+                  cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
+                  cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
+                  enable_nvidia_dcgm: false
+                  nvidia_packages:
+                  - nvidia-container-toolkit
+                  - cuda-toolkit-13
+                  - datacenter-gpu-manager-4-cuda13
+                tasks:
+                # Download the NVIDIA repo
+                - name: Download NVIDIA CUDA repository keyring
+                  ansible.builtin.get_url:
+                    url: "{{ cuda_repo_url }}"
+                    dest: "{{ cuda_repo_filename }}"
+                # Install the NVIDIA repo
+                - name: Installing NVIDIA CUDA repository keyring
+                  ansible.builtin.apt:
+                    deb: "{{ cuda_repo_filename }}"
+                    state: present
+                # Update apt cache
+                - name: Update apt cache
+                  ansible.builtin.apt:
+                    update_cache: true
+                # Install the package
+                - name: Install NVIDIA fabric and CUDA
+                  ansible.builtin.apt:
+                    name: "{{ item }}"
+                    state: present
+                  loop: "{{ nvidia_packages }}"
+                # Freeze NVIDIA fabric and CUDA
+                - name: Freeze NVIDIA fabric and CUDA
+                  ansible.builtin.dpkg_selections:
+                    name: "{{ item }}"
+                    selection: hold
+                  loop: "{{ nvidia_packages }}"
+                post_tasks:
+                - name: Enable NVIDIA DCGM by default
+                  ansible.builtin.service:
+                    name: nvidia-dcgm.service
+                    state: started
+                    enabled: true
+          # Install ibverbs-utils
+          - type: ansible-local
+            destination: install_ibverbs_packages.yml
+            content: |
+              ---
+              - name: Install ibverbs-utils
+                hosts: all
+                become: true
+                tasks:
+                - name: Install ibverbs
+                  ansible.builtin.package:
+                    name:
+                    - ibverbs-utils
+                    state: present
+         # Prerequisites for Mellanox/DOCA
+          - type: ansible-local
+            destination: install_mellanox_deps.yml
+            content: |
+              ---
+              - name: Install Mellanox Prerequisites
+                hosts: all
+                become: true
+                tasks:
+                - name: Install build-essential, dkms, and kernel headers
+                  ansible.builtin.apt:
+                    name:
+                    - dkms
+                    - build-essential
+                    - "linux-headers-{{ ansible_kernel }}"
+                    state: present
+                    update_cache: true
+          # Install DOCA-OFED
+          - type: shell
+            destination: install_mellanox.sh
+            content: |
+              #!/bin/bash
+              set -e -o pipefail
+              DEBIAN_FRONTEND=noninteractive
+              mkdir -p /opt/src
+              cd /opt/src
+              wget https://www.mellanox.com/downloads/MFT/mft-4.34.0-145-aarch64-deb.tgz
+              tar -xvf mft-4.34.0-145-aarch64-deb.tgz
+              ./mft-4.34.0-145-aarch64-deb/install.sh
+              rm -rf mft-4.34.0-145-aarch64-deb
+              DOCA_URL="https://linux.mellanox.com/public/repo/doca/3.2.0/ubuntu24.04/arm64-sbsa/"
+              BASE_URL=https://linux.mellanox.com/public/repo/doca
+              DOCA_SUFFIX=3.2.0/ubuntu24.04/arm64-sbsa/
+              DOCA_URL="$BASE_URL/$DOCA_SUFFIX"
+              curl $BASE_URL/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
+              echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
+              sudo apt-get update
+              sudo apt-get -y install doca-ofed
+
+          # Install OpenMPI from source.
+          - type: shell
+            destination: install_openmpi.sh
+            content: |
+              #!/bin/bash
+              set -e -o pipefail
+              DEBIAN_FRONTEND=noninteractive
+
+              mkdir -p /opt/src
+              cd /opt/src
+
+              wget https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-5.0.8.tar.bz2
+              tar -xvf openmpi-5.0.8.tar.bz2
+              cd openmpi-5.0.8
+              ./configure --with-cuda=/usr/local/cuda-13/targets/sbsa-linux
+              make -j
+              make install
+              cd ../
+              rm -rf openmpi-5.0.8.tar.bz2 openmpi-5.0.8
+
+          # Install NCCL-GIB network plugin as per nccl-gib specification for a4x
+          - type: ansible-local
+            destination: install_nccl_gib.yml
+            content: |
+              ---
+              - name: Install Google NCCL-GIB Plugin
+                hosts: localhost
+                become: true
+                tasks:
+                - name: Add artifact registry gpg key for us-apt.pkg.dev
+                  ansible.builtin.apt_key:
+                    url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
+                    state: present
+                - name: Add artifact registry gpg key for packages.cloud.google.com
+                  ansible.builtin.apt_key:
+                    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+                    state: present
+                - name: Install Apt Transport AR Apt Repo
+                  apt_repository:
+                    repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
+                    state: present
+                - name: Install AR transport
+                  ansible.builtin.apt:
+                    name: "apt-transport-artifact-registry"
+                    update_cache: true
+                - name: Install Google NCCL-GIB Plugin
+                  apt_repository:
+                    repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
+                    state: present
+                - name: Install NCCL-GIB Plugin
+                  ansible.builtin.apt:
+                    name: "nccl-gib"
+                    update_cache: true
+                - name: Freeze NCCL GIB Plugin
+                  ansible.builtin.dpkg_selections:
+                    name: "nccl-gib"
+                    selection: hold
+          - type: data
+            destination: /etc/ld.so.conf.d/000_nccl-gib.conf
+            content: |
+              /usr/local/gib/lib64
+          - type: ansible-local
+            destination: update_ldconfig.yml
+            content: |
+              ---
+              - name: Update ldconfig
+                hosts: localhost
+                become: true
+                tasks:
+                - name: Configure ldconfig
+                  ansible.builtin.command: /usr/sbin/ldconfig
+      - id: "{name}_wait"
+        source: community/modules/scripts/wait-for-startup
+        settings:
+          instance_names: ((module.{name}_instance.name))
+          timeout: 7200

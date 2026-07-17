@@ -1,0 +1,50 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: filestore
+description: "Configures and mounts a Google Cloud Filestore instance."
+deployment_groups:
+- group: auto
+  modules:
+    # 1. CONDITIONAL PREREQUISITE
+  - id: "private_service_access"
+    source: modules/network/private-service-access
+    condition: "settings.connect_mode == 'PRIVATE_SERVICE_ACCESS'"
+    use: [network]
+    settings:
+      prefix_length: 22
+  # 2. PRIMARY FEATURE MODULE (Receives user settings)
+  - id: "{name}"
+    source: modules/file-system/filestore
+    export: true
+    use: [network, "private_service_access"]
+# BASE-SPECIFIC EXTENSIONS
+config_base:
+  gke:
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          enable_filestore_csi: true
+    - group: auto
+      modules:
+      - id: "{name}_volume_mapping"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}", cluster]
+        settings:
+          gcs_bucket_name: null
+          lustre_id: null

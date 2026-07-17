@@ -1,0 +1,37 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# Owns the wiring for a Kubernetes batch Job/JobSet on GKE. Overlays (or power users
+# specifying `settings.image`) supply the container workload (`image`, `command`, `node_count`).
+name: gke-job-template
+description: Runs a containerised batch job on a GKE node pool; an overlay supplies the job
+
+assertions:
+- rule: 'settings.image != "" && settings.image != "debian"'
+  message: 'feature "gke-job-template" requires `settings.image` (or list a workload overlay under `overlays:` such as `run-nvidia-smi`, `fio-bench-job`, or `nccl-jobset-test`).'
+
+config_base:
+  gke:
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: "{name}"
+        source: modules/compute/gke-job-template
+        export: true
+        outputs: [instructions]
+        settings:
+          name: "{name}"
+          k8s_service_account_name: workload-identity-k8s-sa

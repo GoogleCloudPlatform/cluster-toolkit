@@ -1,0 +1,134 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Universal CPU compute archetype template for the v2 intent compiler
+name: cpu
+description: Universal Google Cloud CPU compute archetype supporting all standard GCE machine families.
+match_patterns:
+- "*"
+
+# Accelerator families that must NEVER fall back to this archetype.
+#
+# This archetype is the catch-all for any valid Google Cloud CPU machine type, so it is
+# reached whenever nothing else claims a machine type. Without this list, a request for
+# `a2-ultragpu-8g` would quietly produce a nodeset with no GPU, no driver installer and
+# no accelerator networking -- and compile, expand and `terraform validate` would all pass.
+#
+# A prefix listed here produces a hard error naming the available accelerator archetypes.
+# Remove a prefix only when a real archetype for that family exists.
+excluded_prefixes:
+- a2-       # A100 40GB / 80GB   -- no archetype yet
+- a3-       # H100 / H200        -- archetypes exist; guards typos e.g. a3-ultragpu-8gg
+- a4-       # B200
+- a4x-      # GB200 / GB300
+- g2-       # L4                 -- no archetype yet
+- g4-       # RTX PRO 6000 Blackwell
+- h4d-      # Cloud RDMA
+- ct4p-     # TPU v4
+- ct5l-     # TPU v5e single-host (ct5l-hightpu-*); ct5lp- does not match these
+- ct5lp-    # TPU v5e
+- ct5p-     # TPU v5p
+- ct6e-     # TPU v6e
+- tpu       # TPU, generic
+- v3-       # TPU v3
+- v4-       # TPU v4
+- v5e-      # TPU v5e
+- v5p-      # TPU v5p
+- v6e-      # TPU v6e
+
+# NOTE: `disk_size_gb` is declared per-base, not archetype-wide. The Batch base has no
+# consumer for it -- modules/scheduler/batch-job-template exposes no boot-disk input --
+# and an unused deployment variable is a hard validator failure.
+config_base:
+  slurm:
+    vars:
+      disk_size_gb: 100
+      # Consumption model. Defaults to on-demand; set at most one of these.
+      cpu_enable_spot_vm: false
+      cpu_reservation_name: ""
+      cpu_dws_flex_enabled: false
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: "{name}_nodeset"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+        export: true
+        use: [network]
+        settings:
+          name: "{name}"
+          machine_type: "{machine_type}"
+          node_count_dynamic_max: 10
+          disk_type: pd-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          enable_public_ips: true
+          allow_automatic_updates: false
+          enable_placement: false
+          on_host_maintenance: MIGRATE
+          enable_spot_vm: $(vars.cpu_enable_spot_vm)
+          reservation_name: $(vars.cpu_reservation_name)
+          dws_flex:
+            enabled: $(vars.cpu_dws_flex_enabled)
+      - id: "{name}_partition"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+        export: true
+        use: ["{name}_nodeset"]
+        settings:
+          partition_name: "{name}"
+          is_default: true
+          exclusive: false
+  gke:
+    vars:
+      disk_size_gb: 100
+      # Consumption model. Defaults to on-demand; set at most one of these.
+      cpu_enable_spot_vm: false
+      cpu_dws_flex_enabled: false
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: "{name}_pool"
+        source: modules/compute/gke-node-pool
+        export: true
+        use: [cluster, node_pool_service_account]
+        settings:
+          name: "{name}"
+          machine_type: "{machine_type}"
+          auto_upgrade: true
+          auto_repair: $(!vars.cpu_dws_flex_enabled)
+          zones: [$(vars.zone)]
+          disk_size_gb: $(vars.disk_size_gb)
+          spot: $(vars.cpu_enable_spot_vm)
+          enable_flex_start: $(vars.cpu_dws_flex_enabled)
+        outputs:
+        - instructions
+  jbvm:
+    vars:
+      disk_size_gb: 100
+      number_of_vms: 1
+      cpu_reservation_name: "" # supply reservation name
+      # Consumption model: STANDARD (on-demand), SPOT, or RESERVATION_BOUND.
+      cpu_provisioning_model: STANDARD
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: "{name}_instance"
+        source: modules/compute/vm-instance
+        use: [network]
+        settings:
+          name_prefix: "{name}"
+          machine_type: "{machine_type}"
+          instance_count: $(vars.number_of_vms)
+          disk_type: pd-balanced
+          disk_size_gb: $(vars.disk_size_gb)
+          provisioning_model: $(vars.cpu_provisioning_model)
+          reservation_name: $(vars.cpu_reservation_name)

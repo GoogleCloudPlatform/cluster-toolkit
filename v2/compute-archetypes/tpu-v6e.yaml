@@ -1,0 +1,92 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+name: tpu-v6e
+description: Google Cloud TPU v6e Trillium (4-chip slice) compute archetype for GKE.
+match_patterns:
+- ct6e-standard-4t
+- ct6e-standard-*
+
+vars:
+  # Chip layout of the slice. Must be consistent with static_node_count:
+  # v6e packs 4 chips per node, so 2x4 (8 chips) implies 2 nodes.
+  # See https://docs.cloud.google.com/tpu/docs/v6e
+  tpu_topology: 2x4
+  tpu_num_slices: 1
+  tpu_cluster_size: 2
+  # Consumption model. Defaults to on-demand; set at most one of these.
+  tpu_enable_spot_vm: false
+  tpu_dws_flex_enabled: false
+  kueue_accelerator_type: tpu-v6e-slice
+
+config_base:
+  gke:
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: workload_service_account
+        settings:
+          name: gke-wl-sa
+          project_roles:
+          - logging.logWriter
+          - monitoring.metricWriter
+          - monitoring.viewer
+          - stackdriver.resourceMetadata.writer
+          - storage.objectAdmin
+          - artifactregistry.reader
+          - container.admin
+          - hypercomputecluster.editor
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          enable_gcsfuse_csi: true
+          release_channel: REGULAR
+          # TPU-specific cluster toggles from gke-tpu-v6e.yaml.
+          enable_pathways_for_tpus: true
+          enable_ml_diagnostics: true
+          # Unlike the GPU archetypes this is NOT redundant: no additional_networks
+          # are passed here, so gke-cluster would otherwise derive LEGACY datapath.
+          enable_dataplane_v2: true
+      - id: "{name}_pool"
+        source: modules/compute/gke-node-pool
+        export: true
+        use: [cluster, node_pool_service_account]
+        settings:
+          name: "{name}"
+          machine_type: "{machine_type}"
+          auto_upgrade: true
+          auto_repair: $(!vars.tpu_dws_flex_enabled)
+          enable_dranet: true
+          zones: [$(vars.zone)]
+          disk_type: hyperdisk-balanced
+          static_node_count: $(vars.tpu_cluster_size)
+          num_slices: $(vars.tpu_num_slices)
+          # COMPACT + tpu_topology is what turns a bag of nodes into a
+          # addressable TPU slice. This is the single most important thing
+          # generic-tpu is missing.
+          placement_policy:
+            type: COMPACT
+            tpu_topology: $(vars.tpu_topology)
+          spot: $(vars.tpu_enable_spot_vm)
+          enable_flex_start: $(vars.tpu_dws_flex_enabled)
+          # To consume a reservation instead of Spot, set this in the
+          # cluster-config's archetype `settings:` rather than here, so the
+          # archetype does not force a `reservation` var on every user:
+          #   reservation_affinity:
+          #     consume_reservation_type: SPECIFIC_RESERVATION
+          #     specific_reservations:
+          #       - name: "your-v6e-reservation"
+        outputs:
+        - instructions

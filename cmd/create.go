@@ -23,6 +23,9 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/intent"
+	"hpc-toolkit/pkg/intent/ast"
+	"hpc-toolkit/pkg/intent/engine"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
@@ -34,6 +37,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 func addCreateFlags(c *cobra.Command) *cobra.Command {
@@ -174,6 +178,12 @@ func detectUsername(ctx context.Context) string {
 }
 
 func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
+	isV2, err := intent.IsV2ConfigFile(path)
+	checkErr(err, nil)
+	if isV2 {
+		return compileIntentConfig(cmd, path)
+	}
+
 	bp, ctx, err := config.NewBlueprint(path)
 	checkErr(err, ctx)
 
@@ -195,29 +205,134 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)
 
-	if bp.GhpcVersion != "" {
-		logging.Info("ghpc_version setting is ignored.")
-	}
-	bp.GhpcVersion = GitCommitInfo
-
-	if cmd.Flags().Changed("add-creator-label") {
-		bp.AddCreatorLabel = expandFlags.addCreatorLabel
-		if bp.AddCreatorLabel {
-			bp.CreatorUsername = detectUsername(cmd.Context())
-		}
-	} else {
-		username := detectUsername(cmd.Context())
-		if strings.HasSuffix(username, "@google.com") {
-			bp.AddCreatorLabel = true
-			bp.CreatorUsername = username
-		}
-	}
+	applyCommonBlueprintSettings(cmd, &bp)
 
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
 	validateMaybeDie(bp, *ctx)
 
 	return bp, ctx
+}
+
+func compileIntentConfig(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
+	userConfig, err := ast.UnmarshalClusterConfigFile(path)
+	if err != nil {
+		logging.Fatal("%s", boldRed(fmt.Sprintf("Error in %s: %v", path, err)))
+	}
+
+	if userConfig.Vars == nil {
+		userConfig.Vars = make(map[string]any)
+	}
+
+	ds, cliAndDepVars := mergeDeploymentAndCLIVars(&userConfig)
+
+	toolkitPath := intent.ToolkitPath()
+	compiler := engine.NewCompiler(toolkitPath)
+	compiledGroups, err := compiler.Compile(userConfig)
+	if err != nil {
+		logging.Fatal("%s", boldRed(fmt.Sprintf("Error: %v", err)))
+	}
+
+	propagatePostCompileCLIOverrides(&userConfig, cliAndDepVars)
+
+	serializedYAML, err := engine.Serialize(userConfig.ConfigBase.Type, userConfig.Vars, compiledGroups)
+	if err != nil {
+		logging.Fatal("Failed to serialize intent blueprint: %v", err)
+	}
+
+	bp, ctx, err := config.NewBlueprintFromYamlBytes([]byte(serializedYAML))
+	if err != nil {
+		logging.Fatal("Failed to construct blueprint from compiled YAML: %v", err)
+	}
+
+	if err := bp.SetPath(path); err != nil {
+		logging.Fatal("Failed to set blueprint path: %v", err)
+	}
+
+	// Persisted so that later `deploy`/`destroy` runs, which only ever see the expanded
+	// blueprint, can still be attributed to v2.
+	bp.V2ConfigBase = userConfig.ConfigBase.Type
+
+	// Apply --backend-config settings if provided via CLI (or -d deployment file)
+	if err := setBackendConfig(&ds, expandFlags.cliBEConfigVars); err != nil {
+		logging.Fatal("Failed to set the backend config at CLI: %v", err)
+	}
+	if ds.TerraformBackendDefaults.Type != "" {
+		bp.TerraformBackendDefaults = ds.TerraformBackendDefaults
+	}
+
+	applyCommonBlueprintSettings(cmd, &bp)
+
+	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
+	skipValidators(&bp)
+	checkErr(bp.Expand(), ctx)
+
+	// Must follow Expand: it has a pointer receiver and mutates bp in place, so a copy
+	// taken earlier would still hold unresolved $(vars.*) references and the standard
+	// metrics would be computed from it. A v2 cluster-config is not a blueprint, so
+	// until this point the collector only holds an empty one.
+	if telemetryCollector != nil {
+		telemetryCollector.SetBlueprint(bp)
+	}
+
+	validateMaybeDie(bp, *ctx)
+
+	return bp, ctx
+}
+
+func mergeDeploymentAndCLIVars(userConfig *ast.ClusterConfig) (config.DeploymentSettings, map[string]any) {
+	var ds config.DeploymentSettings
+	var dCtx config.YamlCtx
+	cliAndDepVars := make(map[string]any)
+
+	if expandFlags.deploymentFile != "" {
+		var err error
+		ds, dCtx, err = config.NewDeploymentSettings(expandFlags.deploymentFile)
+		checkErr(err, &dCtx)
+
+		rawDep, err := os.ReadFile(expandFlags.deploymentFile)
+		if err != nil {
+			logging.Fatal("%s", boldRed(fmt.Sprintf("Failed to read deployment file %s: %v", expandFlags.deploymentFile, err)))
+		}
+		var depVars struct {
+			Vars map[string]any `yaml:"vars"`
+		}
+		if err := yaml.Unmarshal(rawDep, &depVars); err != nil {
+			logging.Fatal("%s", boldRed(fmt.Sprintf("Failed to parse deployment file %s: %v", expandFlags.deploymentFile, err)))
+		}
+		for k, v := range depVars.Vars {
+			userConfig.Vars[k] = v
+			cliAndDepVars[k] = v
+		}
+	}
+
+	for _, cliVar := range expandFlags.cliVariables {
+		arr := strings.SplitN(cliVar, "=", 2)
+		if len(arr) != 2 {
+			logging.Fatal("%s", boldRed(fmt.Sprintf("invalid format: '%s' should follow the 'name=value' format", cliVar)))
+		}
+		var v any
+		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
+			logging.Fatal("%s", boldRed(fmt.Sprintf("invalid input: unable to parse CLI var '%s'", cliVar)))
+		}
+		if arr[1] == "" && v == nil {
+			v = ""
+		}
+		userConfig.Vars[arr[0]] = v
+		cliAndDepVars[arr[0]] = v
+	}
+	return ds, cliAndDepVars
+}
+
+func propagatePostCompileCLIOverrides(userConfig *ast.ClusterConfig, cliAndDepVars map[string]any) {
+	for k, v := range cliAndDepVars {
+		if _, hasBaseOverride := userConfig.ConfigBase.Settings[k]; hasBaseOverride {
+			continue
+		}
+		if _, ok := userConfig.Vars[k]; ok {
+			userConfig.Vars[k] = v
+		}
+	}
 }
 
 func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
@@ -291,4 +406,26 @@ func artifactBlueprintOrDie(artDir string) (config.Blueprint, *config.YamlCtx) {
 	checkErr(err, ctx)
 	checkErr(bp.Materialize(), ctx)
 	return bp, ctx
+}
+
+// applyCommonBlueprintSettings applies fields like ghpc_version and creator labels
+// that must be attached to both legacy and v2 blueprints prior to expansion.
+func applyCommonBlueprintSettings(cmd *cobra.Command, bp *config.Blueprint) {
+	if bp.GhpcVersion != "" {
+		logging.Info("ghpc_version setting is ignored.")
+	}
+	bp.GhpcVersion = GitCommitInfo
+
+	if cmd.Flags().Changed("add-creator-label") {
+		bp.AddCreatorLabel = expandFlags.addCreatorLabel
+		if bp.AddCreatorLabel {
+			bp.CreatorUsername = detectUsername(cmd.Context())
+		}
+	} else {
+		username := detectUsername(cmd.Context())
+		if strings.HasSuffix(username, "@google.com") {
+			bp.AddCreatorLabel = true
+			bp.CreatorUsername = username
+		}
+	}
 }

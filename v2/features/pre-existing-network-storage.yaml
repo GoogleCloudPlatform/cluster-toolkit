@@ -1,0 +1,58 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: pre-existing-network-storage
+description: "Mounts existing network storage. \nWhen using GKE, you MUST specify\
+  \ exactly one backend ID in your settings block.\n(e.g., settings.gcs_bucket_name,\
+  \ settings.filestore_id, or settings.lustre_id)\nWhen using Slurm/JBVM, you MUST\
+  \ specify server_ip and remote_mount.\n"
+deployment_groups:
+- group: auto
+  modules:
+  - id: '{name}'
+    source: modules/file-system/pre-existing-network-storage
+    export: true
+    settings:
+      remote_mount: /mock-export
+config_base:
+  gke:
+    deployment_groups:
+    - group: auto
+      modules:
+      - id: '{name}_volume_mapping'
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use:
+        - '{name}'
+        - cluster
+        settings:
+          capacity_gib: 1024
+          gcs_bucket_name: null
+          filestore_id: null
+          lustre_id: null
+          pv_name: '{name}-pv'
+          pvc_name: '{name}-pvc'
+    assertions:
+    - rule: (has(settings.gcs_bucket_name) && settings.gcs_bucket_name != null && settings.gcs_bucket_name != '') || (has(settings.filestore_id) && settings.filestore_id != null && settings.filestore_id != '') || (has(settings.lustre_id) && settings.lustre_id != null && settings.lustre_id != '')
+      message: You must explicitly declare exactly one target volume ID (gcs_bucket_name,
+        filestore_id, or lustre_id). when using GKE.
+
+  slurm:
+    assertions:
+    - rule: (has(settings.fs_type) && settings.fs_type == 'gcsfuse') || (has(settings.server_ip) && settings.server_ip != null && settings.server_ip != '' && has(settings.remote_mount) && settings.remote_mount != null && settings.remote_mount != '' && settings.remote_mount != '/mock-export')
+      message: You must explicitly specify server_ip and remote_mount when using Slurm (unless fs_type is gcsfuse).
+  jbvm:
+    assertions:
+    - rule: (has(settings.fs_type) && settings.fs_type == 'gcsfuse') || (has(settings.server_ip) && settings.server_ip != null && settings.server_ip != '' && has(settings.remote_mount) && settings.remote_mount != null && settings.remote_mount != '' && settings.remote_mount != '/mock-export')
+      message: You must explicitly specify server_ip and remote_mount when using JBVM (unless fs_type is gcsfuse).

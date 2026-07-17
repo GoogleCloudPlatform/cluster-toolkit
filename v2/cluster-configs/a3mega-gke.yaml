@@ -1,0 +1,59 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+config_base: gke
+
+vars:
+  deployment_name: a3mega-gke # supply unique deployment name
+  project_id: # supply project id
+  region: # supply region with a3-megagpu-8g capacity
+  zone: # supply zone with a3-megagpu-8g capacity
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+  version_prefix: "1.35."
+  a3mega_cluster_size: 1 # supply node count
+  # Uncomment and set it to consume a reservation instead of Spot, mutually exclusive with a3mega_enable_spot_vm
+  # a3mega_reservation_name: "" # supply a3-megagpu-8g reservation name
+  a3mega_enable_spot_vm: false # mutually exclusive with a3mega_reservation_name
+
+compute_archetypes:
+- name: a3mega-compute
+  machine_type: a3-megagpu-8g
+  settings:
+    static_node_count: $(vars.a3mega_cluster_size)
+    # To consume a reservation instead of Spot, uncomment the block below
+    # and set `a3mega_enable_spot_vm: false`. The two are mutually exclusive.
+    # reservation_affinity:
+    #   consume_reservation_type: SPECIFIC_RESERVATION
+    #   specific_reservations:
+    #     - name: $(vars.a3mega_reservation_name)
+    spot: $(vars.a3mega_enable_spot_vm)
+
+features:
+  # gke-a3-megagpu.yaml:workload_manager_install -- kueue + jobset only.
+  # No `gib` block: TCPXO is installed by the archetype's own manifests.
+- name: ai-workload
+  type: kueue-jobset
+  settings:
+    kueue:
+      wait: true
+      install: true
+      config_path: $(vars.kueue_configuration_path)
+      config_template_vars:
+        num_gpus: ((module.a3mega-compute_pool.static_gpu_count))
+        accelerator_type: nvidia-h100-mega-80gb
+    jobset:
+      install: true

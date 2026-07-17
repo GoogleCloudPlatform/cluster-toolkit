@@ -40,15 +40,17 @@ var (
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
-func NewCollector(cmd *cobra.Command, args []string, installationMode string) *Collector {
-	return &Collector{
+func NewCollector(cmd *cobra.Command, args []string, installationMode string, isV2 bool) *Collector {
+	c := &Collector{
 		eventCmd:         cmd,
 		eventArgs:        args,
 		eventStartTime:   time.Now(),
 		blueprint:        getBlueprint(cmd, args),
 		installationMode: installationMode,
+		isV2:             isV2,
 		metadata:         make(map[string]string),
 	}
+	return c
 }
 
 // Main function for collecting Telemetry metrics.
@@ -60,7 +62,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	projectID := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
-	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
+	c.metadata[BLUEPRINT] = c.blueprintNameForTelemetryLocked()
 	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
@@ -78,6 +80,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
+	c.metadata[IS_V2] = strconv.FormatBool(c.isV2)
 	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(c.blueprint.AIAssisted)
 	c.metadata[IS_TEST_DATA] = getIsTestData(projectID)
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)

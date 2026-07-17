@@ -16,6 +16,7 @@ gcluster [SUBCOMMAND]
 
 * [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
 * [`create`](#gcluster-create): Create a new deployment
+* [`catalog`](#gcluster-catalog): Browse building blocks for cluster-configs
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command
@@ -30,6 +31,36 @@ gcluster [SUBCOMMAND]
 
 ```bash
 gcluster --version
+```
+
+## gcluster catalog
+
+`gcluster catalog` is a read-only browser for the building blocks of a
+cluster-config: config bases, compute archetypes, features, overlays and
+ready-made examples. It works offline and needs no Google Cloud project. The
+catalog is read from the `v2/` directory next to the `gcluster` binary, which is
+the same catalog `gcluster create` uses.
+
+### Usage - catalog
+
+```bash
+gcluster catalog                  # one-screen overview
+gcluster catalog bases            # values for config_base
+gcluster catalog archetypes       # values for compute_archetypes[].machine_type
+gcluster catalog features         # values for features[].type
+gcluster catalog overlays         # values for overlays[].type
+gcluster catalog examples         # ready-made cluster-configs
+
+# Only what works with one config base (archetypes, features, overlays, examples):
+gcluster catalog features --base gke       # adds a PRIMARY MODULE column
+gcluster catalog archetypes --base slurm
+```
+
+### Example - catalog
+
+```bash
+gcluster catalog examples --base slurm
+cp v2/cluster-configs/a4high-slurm.yaml my-cluster.yaml
 ```
 
 ## gcluster deploy

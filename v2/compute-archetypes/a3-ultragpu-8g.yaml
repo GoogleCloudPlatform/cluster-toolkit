@@ -1,0 +1,494 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: a3-ultragpu-8g
+description: NVIDIA H200 (8x 141GB GPU) compute archetype with 8x 400Gbps GPUDirect-RDMA (RoCEv2) networking.
+
+config_base:
+  slurm:
+    vars:
+      disk_size_gb: 300
+      nic_count: 8
+      rdma_mtu: 8896
+      local_ssd_mountpoint: /mnt/localssd
+      a3u_cluster_size: 2
+      #Provisioning models (set to true or fill in reservation name, pick only one)
+      a3u_reservation_name: "" # supply reservation name
+      a3u_dws_flex_enabled: false
+      a3u_enable_spot_vm: false
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: controller_startup
+        source: modules/scripts/startup-script
+        settings:
+          runners:
+          - type: shell
+            destination: restart_nfs.sh
+            content: |
+              #!/bin/bash
+              systemctl restart nfs-server || systemctl restart nfs-kernel-server
+          - type: shell
+            destination: ensure_mnt_localssd_permissions.sh
+            content: |
+              #!/bin/bash
+              mkdir -p $(vars.local_ssd_mountpoint)
+              chmod 1777 $(vars.local_ssd_mountpoint)
+          - type: data
+            destination: /etc/enroot/enroot.conf
+            content: |
+              ENROOT_CONFIG_PATH     ${HOME}/.enroot
+              ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+              ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+              ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+              ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+          - type: shell
+            destination: stage_scripts.sh
+            content: |
+              #!/bin/bash
+              SLURM_ROOT=/opt/apps/adm/slurm
+              PARTITION_NAME=$({name}_partition.partitions[0].partition_name)
+              mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+              mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+              ln -sf "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+              mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+              mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+              curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+                  https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+              chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+              ln -sf "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+              ln -sf "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+      - id: slurm_controller
+        source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+        settings:
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+          disk_type: pd-extreme
+          disk_size_gb: 300
+          machine_type: n2d-standard-16
+          enable_external_prolog_epilog: true
+          compute_startup_scripts_timeout: 1800
+      - id: slurm_login
+        source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+        settings:
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+          machine_type: n2-standard-8
+    - group: cluster-env
+      modules:
+      - id: net-1
+        source: modules/network/vpc
+        settings:
+          network_name: "$(vars.deployment_name)-net-1"
+          mtu: $(vars.rdma_mtu)
+          enable_internal_traffic: false
+          subnetworks:
+          - subnet_name: "$(vars.deployment_name)-sub-1"
+            subnet_region: "$(vars.region)"
+            subnet_ip: 192.168.64.0/18
+          firewall_rules:
+          - name: "$(vars.deployment_name)-internal-1"
+            ranges: ["192.168.64.0/18"]
+            allow:
+            - protocol: tcp
+            - protocol: udp
+            - protocol: icmp
+      - id: rdma-net
+        source: modules/network/gpu-rdma-vpc
+        settings:
+          network_name: "$(vars.deployment_name)-rdma-net"
+          network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+          network_routing_mode: REGIONAL
+          subnetworks_template:
+            name_prefix: "$(vars.deployment_name)-mrdma-sub"
+            count: $(vars.nic_count)
+            ip_range: 192.168.128.0/18
+            region: "$(vars.region)"
+    - group: cluster
+      modules:
+      - id: "{name}_nodeset"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+        export: true
+        use: [network, "{name}_a3u_startup"]
+        settings:
+          name: "{name}"
+          instance_image:
+            project: advanced-compute-images
+            family: aci-gpu-u2404-slurm-2511-cuda-130-nvidia-580-amd64
+          machine_type: a3-ultragpu-8g
+          bandwidth_tier: gvnic_enabled
+          disk_type: hyperdisk-balanced
+          on_host_maintenance: TERMINATE
+
+          #Provisioning models
+          reservation_name: $(vars.a3u_reservation_name)
+          enable_spot_vm: $(vars.a3u_enable_spot_vm)
+          dws_flex:
+            enabled: $(vars.a3u_dws_flex_enabled)
+
+          enable_public_ips: true
+          allow_automatic_updates: false
+          node_count_static: $(vars.a3u_cluster_size)
+          node_count_dynamic_max: 0
+          enable_placement: false
+          disk_size_gb: $(vars.disk_size_gb)
+
+          advanced_machine_features:
+            threads_per_core: null
+          node_conf:
+            CoresPerSocket: 56
+            SocketsPerBoard: 2
+            ThreadsPerCore: 2
+          additional_networks:
+            $(concat(
+              [{
+                network=null,
+                subnetwork=net-1.subnetwork_self_link,
+                subnetwork_project=vars.project_id,
+                nic_type="GVNIC",
+                queue_count=null,
+                network_ip="",
+                stack_type=null,
+                access_config=[],
+                ipv6_access_config=[],
+                alias_ip_range=[]
+              }],
+              rdma-net.subnetwork_interfaces
+            ))
+      - id: "{name}_partition"
+        source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+        export: true
+        use: ["{name}_nodeset"]
+        settings:
+          partition_name: "{name}"
+          exclusive: false
+          is_default: true
+          partition_conf:
+            OverSubscribe: EXCLUSIVE
+            ResumeTimeout: 1200
+            SuspendTimeout: 1200
+      - id: "{name}_a3u_startup"
+        source: modules/scripts/startup-script
+        export: true
+        settings:
+          install_ansible: true
+          local_ssd_filesystem:
+            mountpoint: $(vars.local_ssd_mountpoint)
+            permissions: "1777"
+          docker:
+            enabled: true
+            world_writable: true
+            daemon_config: |
+              {
+                "data-root": "$(vars.local_ssd_mountpoint)/docker"
+              }
+          runners:
+          - type: data
+            destination: /etc/enroot/enroot.conf
+            content: |
+              ENROOT_CONFIG_PATH     ${HOME}/.enroot
+              ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+              ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+              ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+              ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+          - type: shell
+            destination: fix_enroot_env.sh
+            content: |
+              #!/bin/bash
+              if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+                sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+                echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
+              fi
+              if [ ! -f /etc/hostname ]; then
+                hostname > /etc/hostname
+              fi
+          - type: ansible-local
+            destination: install_cuda_and_dcgm.yml
+            content: |
+              ---
+              - name: Install and Configure CUDA 13 / DCGM
+                hosts: all
+                become: true
+                tasks:
+                  - name: Download CUDA runfile
+                    ansible.builtin.get_url:
+                      url: https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda_13.0.0_580.65.06_linux.run
+                      dest: /tmp/cuda_13.0.0_580.65.06_linux.run
+                      mode: '0755'
+                  - name: Install CUDA toolkit via runfile
+                    ansible.builtin.command:
+                      cmd: /tmp/cuda_13.0.0_580.65.06_linux.run --silent --toolkit
+                  - name: Remove CUDA runfile
+                    ansible.builtin.file:
+                      path: /tmp/cuda_13.0.0_580.65.06_linux.run
+                      state: absent
+                  - name: Install NVIDIA repository keyring
+                    ansible.builtin.apt:
+                      deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+                      state: present
+                  - name: Update apt cache
+                    ansible.builtin.apt:
+                      update_cache: yes
+                  - name: Install DCGM packages
+                    ansible.builtin.apt:
+                      name:
+                        - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
+                        - datacenter-gpu-manager-4-dev=1:4.6.1-1
+                        - datacenter-gpu-manager-4-core=1:4.6.1-1
+                      state: present
+                      allow_downgrade: yes
+                  - name: Freeze DCGM packages
+                    ansible.builtin.dpkg_selections:
+                      name: "{{ item }}"
+                      selection: hold
+                    loop:
+                      - datacenter-gpu-manager-4-cuda13
+                      - datacenter-gpu-manager-4-dev
+                      - datacenter-gpu-manager-4-core
+          - type: ansible-local
+            destination: enable_dcgm.yml
+            content: |
+              ---
+              - name: Enable NVIDIA DCGM on GPU nodes
+                hosts: all
+                become: true
+                vars:
+                  enable_ops_agent: true
+                  enable_nvidia_dcgm: true
+                  enable_nvidia_persistenced: true
+                tasks:
+                  - name: Update Ops Agent configuration
+                    ansible.builtin.blockinfile:
+                      path: /etc/google-cloud-ops-agent/config.yaml
+                      insertafter: EOF
+                      block: |
+                        metrics:
+                          receivers:
+                            dcgm:
+                              type: dcgm
+                          service:
+                            pipelines:
+                              dcgm:
+                                receivers:
+                                  - dcgm
+                    notify:
+                      - Restart Google Cloud Ops Agent
+                handlers:
+                  - name: Restart Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                post_tasks:
+                  - name: Enable Google Cloud Ops Agent
+                    ansible.builtin.service:
+                      name: google-cloud-ops-agent.service
+                      state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                      enabled: "{{ enable_ops_agent }}"
+                  - name: Enable NVIDIA DCGM
+                    ansible.builtin.service:
+                      name: nvidia-dcgm.service
+                      state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                      enabled: "{{ enable_nvidia_dcgm }}"
+                  - name: Enable NVIDIA Persistence Daemon
+                    ansible.builtin.service:
+                      name: nvidia-persistenced.service
+                      state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                      enabled: "{{ enable_nvidia_persistenced }}"
+  gke:
+    vars:
+      gpu_count: 8
+      nic_count: 8
+      a3u_cluster_size: 1
+      # Staged template paths are a property of the A3-Ultra platform, not a user choice.
+      # They live here so a cluster-config carries no repo-relative paths and stays valid
+      # when copied outside the toolkit tree. Users may still override either var.
+      kueue_configuration_path: $(ghpc_stage("examples/gke-a3-ultragpu/kueue-configuration.yaml.tftpl"))
+      gib_installer_path: $(ghpc_stage("examples/gke-a3-ultragpu/nccl-installer.yaml.tftpl"))
+      # Consumption model. Defaults to on-demand; set at most one of these.
+      a3u_enable_spot_vm: false
+      a3u_dws_flex_enabled: false
+      disk_size_gb: 100
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          system_node_pool_machine_type: n2d-standard-16
+          system_node_pool_disk_size_gb: 200
+          enable_dcgm_monitoring: true
+          enable_gcsfuse_csi: true
+          enable_dataplane_v2: true
+          release_channel: REGULAR
+          additional_networks:
+            $(concat(net-1.instance_additional_networks,
+             rdma-net.subnetwork_interfaces_gke
+            ))
+      - id: net-1
+        source: modules/network/vpc
+        settings:
+          network_name: "$(vars.deployment_name)-net-1"
+          ips_per_nat: 6
+          subnetworks:
+          - subnet_name: "$(vars.deployment_name)-sub-1"
+            subnet_region: "$(vars.region)"
+            subnet_ip: 192.168.64.0/18
+          firewall_rules:
+          - name: "$(vars.deployment_name)-internal-1"
+            ranges: [192.168.0.0/16]
+            allow:
+            - protocol: tcp
+              ports: ["0-65535"]
+            - protocol: udp
+              ports: ["0-65535"]
+            - protocol: icmp
+      - id: rdma-net
+        source: modules/network/gpu-rdma-vpc
+        settings:
+          network_name: $(vars.deployment_name)-rdma-net
+          network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+          network_routing_mode: REGIONAL
+          subnetworks_template:
+            name_prefix: $(vars.deployment_name)-rdma-sub
+            count: $(vars.nic_count)
+            ip_range: 192.168.128.0/18
+            region: $(vars.region)
+      - id: workload_manager
+        source: modules/management/kubectl-apply
+        use: [cluster]
+        settings:
+          gib:
+            install: true
+            # `path` and `template_vars` are required attributes of the `gib`
+            # object type; `install` alone fails blueprint construction.
+            path: $(vars.gib_installer_path)
+            template_vars:
+              version: v1.1.2
+              accelerator_count: 8
+      - id: "{name}_pool"
+        source: modules/compute/gke-node-pool
+        export: true
+        use: [cluster, node_pool_service_account]
+        settings:
+          machine_type: a3-ultragpu-8g
+          auto_upgrade: true
+          auto_repair: $(!vars.a3u_dws_flex_enabled)
+          enable_dranet: true
+          zones: [$(vars.zone)]
+          disk_size_gb: $(vars.disk_size_gb)
+          static_node_count: $(vars.a3u_cluster_size)
+          guest_accelerator:
+          - type: nvidia-h200-141gb
+            count: $(vars.gpu_count)
+          spot: $(vars.a3u_enable_spot_vm)
+          enable_flex_start: $(vars.a3u_dws_flex_enabled)
+        outputs:
+        - instructions
+  jbvm:
+    vars:
+      gpu_count: 8
+      nic_count: 8
+      rdma_mtu: 8896
+      hostname_prefix: "$(vars.deployment_name)-beowulf"
+      # Empty means "no reservation", matching the slurm section above. Declaring the name
+      # with no value made every jbvm config that did not set it fail with
+      # `deployment variable "a3u_reservation_name" was not set`.
+      a3u_reservation_name: "" # supply reservation name
+      # Consumption model: STANDARD (on-demand), SPOT, or RESERVATION_BOUND.
+      a3u_provisioning_model: STANDARD
+      number_of_vms: 2
+    deployment_groups:
+    - group: cluster-env
+      modules:
+      - id: net-1
+        source: modules/network/vpc
+        settings:
+          network_name: "$(vars.deployment_name)-net-1"
+          mtu: $(vars.rdma_mtu)
+          subnetworks:
+          - subnet_name: "$(vars.deployment_name)-sub-1"
+            subnet_region: "$(vars.region)"
+            subnet_ip: 192.168.64.0/18
+          firewall_rules:
+          - name: "$(vars.deployment_name)-internal-1"
+            ranges: [192.168.64.0/18]
+            allow:
+            - protocol: tcp
+            - protocol: udp
+            - protocol: icmp
+      - id: rdma-net
+        source: modules/network/gpu-rdma-vpc
+        settings:
+          network_name: $(vars.deployment_name)-rdma-net
+          network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+          network_routing_mode: REGIONAL
+          subnetworks_template:
+            name_prefix: $(vars.deployment_name)-rdma-sub
+            count: $(vars.nic_count)
+            ip_range: 192.168.128.0/18
+            region: $(vars.region)
+    - group: cluster
+      modules:
+      - id: "{name}_instance"
+        source: modules/compute/vm-instance
+        use: ["{name}_startup_script"]
+        settings:
+          instance_image:
+            project: ubuntu-os-accelerator-images
+            name: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20260210
+          machine_type: a3-ultragpu-8g
+          name_prefix: $(vars.hostname_prefix)
+          disk_type: hyperdisk-balanced
+          automatic_restart: false
+          on_host_maintenance: TERMINATE
+          instance_count: $(vars.number_of_vms)
+
+          # Consumption of a3u resource
+          provisioning_model: $(vars.a3u_provisioning_model)
+          reservation_name: $(vars.a3u_reservation_name)
+
+          guest_accelerator:
+          - type: nvidia-h200-141gb
+            count: $(vars.gpu_count)
+          network_interfaces:
+            $(concat(
+              [
+              merge(network.instance_additional_networks[0],
+              { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] }),
+              merge(net-1.instance_additional_networks[0],
+              { access_config = [{ nat_ip = null, public_ptr_domain_name = null, network_tier = null }] })
+              ],
+              rdma-net.subnetwork_interfaces
+            ))
+      - id: "{name}_startup_script"
+        source: modules/scripts/startup-script
+        settings:
+          configure_ssh_host_patterns:
+          - "$(vars.hostname_prefix)-*"
+          runners:
+          - type: shell
+            destination: install-cuda-toolkit.sh
+            content: |
+              #!/bin/bash
+              set -e -o pipefail
+              add-nvidia-repositories -y
+              apt install -y cuda-toolkit-12-8
+      - id: "{name}_wait"
+        source: community/modules/scripts/wait-for-startup
+        settings:
+          instance_names: ((module.{name}_instance.name))
+          timeout: 7200

@@ -1,0 +1,60 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+name: netapp-volume
+description: Google Cloud NetApp Storage Pool and NetApp Volume
+
+# BASE SUPPORT MATRIX
+#
+# A NetApp volume is consumed by mounting it on the node OS, which is how Slurm and jbvm
+# use it. GKE has no such consumer: nothing here emits a PersistentVolume or
+# PersistentVolumeClaim, so on GKE this would provision a 2 TiB storage pool and a 1 TiB
+# volume that no pod can ever reach, and bill for both.
+#
+# The groups are declared per-base rather than at the top level on purpose. The compiler
+# only reports "does not support config_base" when a feature has no base-agnostic
+# deployment_groups to fall back on, so moving them here is what turns GKE into a clean
+# compile error. Adding a support list alongside top-level groups would not do it.
+#
+# Both bases wire the volume identically, so slurm owns the definition and jbvm aliases it.
+config_base:
+  slurm: &netapp_groups
+    deployment_groups:
+    - group: auto
+      modules:
+      - id: netapp_private_service_access
+        source: modules/network/private-service-access
+        use: [network]
+        settings:
+          service_name: "netapp.servicenetworking.goog"
+          prefix_length: 24
+          name: "psconnect-netapp-$(vars.deployment_name)"
+          deletion_policy: "ABANDON"
+      - id: "{name}_pool"
+        source: modules/file-system/netapp-storage-pool
+        use: ["netapp_private_service_access", network]
+        settings:
+          service_level: FLEX
+          capacity_gib: 2048
+      - id: "{name}"
+        source: modules/file-system/netapp-volume
+        use: ["{name}_pool"]
+        export: true
+        settings:
+          volume_name: '((module.{name}_pool.service_level == "FLEX" ? "${replace(var.deployment_name, "-", "_")}_${replace("{name}", "-", "_")}_vol" : "${replace(var.deployment_name, "_", "-")}-{name}-vol"))'
+          capacity_gib: 1024
+          local_mount: /mnt/netapp
+  jbvm: *netapp_groups

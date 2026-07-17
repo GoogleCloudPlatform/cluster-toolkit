@@ -1,0 +1,63 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+name: fio-bench-job
+description: FIO throughput benchmark against mounted GCSFuse / Lustre PVs and local-SSD scratch
+config_base: gke
+
+features:
+- name: fio-bench-job
+  type: gke-job-template
+  settings:
+    image: ubuntu:22.04
+    k8s_service_account_name: workload-identity-k8s-sa
+    # root is required to apt-install fio inside the job container
+    security_context:
+    - {key: runAsUser, value: 0}
+    - {key: runAsGroup, value: 100}
+    - {key: fsGroup, value: 100}
+    tolerations:
+    - key: kubernetes.io/arch
+      operator: Equal
+      value: arm64
+      effect: NoSchedule
+    command:
+    - bash
+    - -c
+    - |
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+      apt update -y && apt install -y fio
+      # `\$(...)` escapes the Cluster Toolkit expression syntax so command substitution stays literal shell.
+      TAG=\$(date +%s)
+      df -h
+      TARGETS=()
+      for d in /mnt/filestore /mnt/lustre /lustre /data /gcs /gcs-training /gcs-checkpoint /gcs-training-data /gcs-checkpoints /training-data /checkpoint-data /shared /scratch-data; do
+        if [ -d "${d}" ]; then
+          TARGETS+=("${d}")
+        fi
+      done
+      if [ ${#TARGETS[@]} -eq 0 ]; then
+        TARGETS=("/tmp")
+      fi
+      for dir in "${TARGETS[@]}"; do
+        mkdir -p "${dir}/fio-${TAG}"
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=30s \
+          --numjobs=8 --create_serialize=0 --direct=1 --verify=0 --randrepeat=0 \
+          --group_reporting --directory="${dir}/fio-${TAG}" \
+          --name=bench --blocksize=1m --iodepth=16 --readwrite=write
+        rm -rf "${dir}/fio-${TAG}"
+      done

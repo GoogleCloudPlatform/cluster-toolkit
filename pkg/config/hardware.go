@@ -207,19 +207,8 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 	}
 
 	mtStr, ok := evalString(bp, mod.Settings.Get("machine_type"))
-	if !ok {
+	if !ok || !IsTPU(mtStr) || hasConflictingProvisioningOrAutoscaling(bp, mod) {
 		return nil
-	}
-
-	if !IsTPU(mtStr) {
-		return nil
-	}
-
-	if mod.Settings.Has("enable_flex_start") {
-		val, err := bp.Eval(mod.Settings.Get("enable_flex_start"))
-		if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
-			return nil
-		}
 	}
 
 	nodes, err := CalculateAcceleratorNodes(mtStr, tpuTopologyStr, 0)
@@ -230,6 +219,23 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 	mod.Settings = mod.Settings.With("static_node_count", cty.NumberIntVal(int64(nodes)))
 
 	return nil
+}
+
+func hasConflictingProvisioningOrAutoscaling(bp Blueprint, mod *Module) bool {
+	for _, bKey := range []string{"enable_flex_start", "enable_queued_provisioning"} {
+		if mod.Settings.Has(bKey) {
+			val, err := bp.Eval(mod.Settings.Get(bKey))
+			if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
+				return true
+			}
+		}
+	}
+	for _, aKey := range []string{"autoscaling_total_min_nodes", "autoscaling_total_max_nodes", "autoscaling_min_node_count", "autoscaling_max_node_count", "initial_node_count"} {
+		if mod.Settings.Has(aKey) {
+			return true
+		}
+	}
+	return false
 }
 
 // CalculateAcceleratorNodes derives the node count from topology and machine type.

@@ -304,6 +304,7 @@ type Blueprint struct {
 	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
 	ToolkitModulesURL        string                       `yaml:"toolkit_modules_url,omitempty"`
 	ToolkitModulesVersion    string                       `yaml:"toolkit_modules_version,omitempty"`
+	V2ConfigBase             string                       `yaml:"v2_config_base,omitempty"`
 
 	// internal & non-serializable fields
 
@@ -318,6 +319,16 @@ type Blueprint struct {
 	AddCreatorLabel bool `yaml:"-"`
 	// CreatorUsername is the username to use for the creator label
 	CreatorUsername string `yaml:"-"`
+}
+
+// SetPath sets the absolute path from which the Blueprint originated
+func (bp *Blueprint) SetPath(path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	bp.path = absPath
+	return nil
 }
 
 func (bp *Blueprint) Clone() Blueprint {
@@ -502,6 +513,16 @@ func NewBlueprint(path string) (Blueprint, *YamlCtx, error) {
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
 	return parseYamlFile[DeploymentSettings](deploymentFilename)
+}
+
+// NewBlueprintFromYamlBytes is a constructor for Blueprint from in-memory YAML bytes.
+func NewBlueprintFromYamlBytes(y []byte) (Blueprint, *YamlCtx, error) {
+	bp, ctx, err := parseYaml[Blueprint](y)
+	if err != nil {
+		return Blueprint{}, &ctx, err
+	}
+	bp.YamlCtx = &ctx
+	return bp, &ctx, nil
 }
 
 // Export exports the internal representation of a blueprint config

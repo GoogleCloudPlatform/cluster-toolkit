@@ -17,6 +17,7 @@ package cmd
 import (
 	"context"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/intent/ast"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"path/filepath"
@@ -218,4 +219,32 @@ func (s *MySuite) TestVerifyGcsBucketsEmptyBucket(c *C) {
 	err = verifyGcsBuckets(context.Background(), bp)
 	c.Assert(err, NotNil)
 	c.Check(err.Error(), Equals, "GCS backend bucket name for group \"group1\" cannot be empty")
+}
+
+func (s *MySuite) TestPropagatePostCompileCLIOverridesPreservesPoolSettings(c *C) {
+	userConfig := ast.ClusterConfig{
+		ConfigBase: ast.ConfigBaseReference{
+			Type:     "slurm",
+			Settings: map[string]any{"enable_reconfigure": true},
+		},
+		Vars: map[string]any{
+			"project_id":         "my-project",
+			"disk_size_gb":       150,
+			"pool1_disk_size_gb": 300,
+			"enable_reconfigure": true,
+		},
+	}
+	cliAndDepVars := map[string]any{
+		"disk_size_gb":       500,
+		"enable_reconfigure": false,
+		"unused_cli_var":     999,
+	}
+
+	propagatePostCompileCLIOverrides(&userConfig, cliAndDepVars)
+
+	c.Check(userConfig.Vars["disk_size_gb"], Equals, 500)
+	c.Check(userConfig.Vars["pool1_disk_size_gb"], Equals, 300)
+	c.Check(userConfig.Vars["enable_reconfigure"], Equals, true)
+	_, hasUnused := userConfig.Vars["unused_cli_var"]
+	c.Check(hasUnused, Equals, false)
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 
+	"hpc-toolkit/cmd/catalog"
 	"hpc-toolkit/cmd/cluster"
 	"hpc-toolkit/cmd/job"
 )
@@ -79,6 +80,7 @@ func init() {
 		initTelemetry(cmd, args)
 	}
 
+	rootCmd.AddCommand(catalog.CatalogCmd)
 	rootCmd.AddCommand(cluster.ClusterCmd)
 	rootCmd.AddCommand(job.JobCmd)
 }
@@ -149,7 +151,11 @@ Commit info: {{index .Annotations "commitInfo"}}
 
 func initTelemetry(cmd *cobra.Command, args []string) {
 	if err := config.InitUserConfig(); err == nil {
-		telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
+		// Route: decide up front whether this is a v2 run. The collector
+		// is still created here for both flows so that latency is measured from the start
+		// of the command and failed runs are still reported.
+		isV2 := telemetry.IsV2Invocation(args)
+		telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode, isV2)
 		userConfigExists = true
 
 		// Register the fatal hook to flush telemetry on hard failures

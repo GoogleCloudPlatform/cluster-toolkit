@@ -1,0 +1,78 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: slurm
+description: SchedMD Slurm on Google Cloud orchestrator foundation with controller, login node, and VPC networking.
+
+aliases:
+  controller: slurm_controller
+  login: slurm_login
+
+# Default floor for a minimal cluster-config.
+#
+# Only `project_id` is genuinely mandatory: it is declared null here so the compiler can
+# detect its absence and fail with an actionable message rather than emitting a blueprint
+# that dies at terraform plan. Everything else has a working default, so the smallest
+# valid cluster-config is `config_base` + `project_id` + one compute archetype.
+vars:
+  project_id: null
+  deployment_name: slurm-cluster
+  # Defaulted so a minimal cluster-config compiles without naming a location. Accelerator
+  # archetypes are validated against the zone, so a GPU pool that is unavailable here
+  # still fails with an explicit "machine type does not exist in zone" error.
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: cluster-env
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: "$(vars.deployment_name)-net-0"
+      enable_internal_traffic: false
+      subnetworks:
+      - subnet_name: "$(vars.deployment_name)-sub-0"
+        subnet_region: "$(vars.region)"
+        subnet_ip: "192.168.0.0/19"
+      firewall_rules:
+      - name: "$(vars.deployment_name)-internal-0"
+        ranges: ["192.168.0.0/19"]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+- group: cluster
+  modules:
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-8
+      enable_login_public_ips: true
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: []
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, slurm_login]
+    settings:
+      controller_startup_script: $(controller_startup.startup_script)
+      machine_type: n2-standard-8
+      enable_slurm_auth: true
+      enable_controller_public_ips: true
+    outputs:
+    - instructions

@@ -178,6 +178,18 @@ func SetModuleInfo(source string, kind string, info ModuleInfo) {
 	modInfoCache[sourceAndKind{source, kind}] = info
 }
 
+// ClearModuleInfoCache drops every memoised ModuleInfo.
+// NOTE: This is only used for testing.
+//
+// modInfoCache is process-global and keyed solely by (source, kind), so it is NOT
+// invalidated when a test swaps sourcereader.ModuleFS. Without this reset, a test that
+// installs a mock filesystem leaves fabricated schemas cached under real module paths
+// (e.g. "modules/file-system/managed-lustre" with zero inputs), and every subsequent test
+// in the same package silently reads those fakes instead of the real variables.tf.
+func ClearModuleInfoCache() {
+	modInfoCache = map[sourceAndKind]ModuleInfo{}
+}
+
 // ModReader is a module reader interface
 type ModReader interface {
 	GetInfo(path string) (ModuleInfo, error)

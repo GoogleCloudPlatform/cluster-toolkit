@@ -360,13 +360,13 @@ func (s *zeroSuite) TestWriteProviders(c *C) {
 	// Setup
 	dir := c.MkDir()
 	providers := map[string]config.TerraformProvider{
-		"elephant": config.TerraformProvider{
+		"elephant": {
 			Source:  "savannah/elephant",
 			Version: "~> 8",
 			Configuration: config.NewDict(map[string]cty.Value{
 				"smeller":   config.GlobalRef("long").AsValue(),
 				"listeners": config.GlobalRef("spacious").AsValue()})},
-		"zebra": config.TerraformProvider{
+		"zebra": {
 			Source:        "hashicorp/zebra",
 			Version:       "~> 2",
 			Configuration: config.Dict{}}}
@@ -394,13 +394,13 @@ func (s *zeroSuite) TestWriteVersions(c *C) {
 	// Setup
 	dir := c.MkDir()
 	providers := map[string]config.TerraformProvider{
-		"elephant": config.TerraformProvider{
+		"elephant": {
 			Source:  "savannah/elephant",
 			Version: "~> 8",
 			Configuration: config.NewDict(map[string]cty.Value{
 				"smeller":   config.GlobalRef("long").AsValue(),
 				"listeners": config.GlobalRef("spacious").AsValue()})},
-		"zebra": config.TerraformProvider{
+		"zebra": {
 			Source:        "hashicorp/zebra",
 			Version:       "~> 2",
 			Configuration: config.Dict{}}}

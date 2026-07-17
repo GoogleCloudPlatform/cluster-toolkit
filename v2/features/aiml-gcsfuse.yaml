@@ -1,0 +1,157 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: aiml-gcsfuse
+description: "Provisions AIML GCS Buckets (Training, Checkpointing, Model Serving) with gcsfuse performance tuning."
+deployment_groups:
+- group: auto
+  modules:
+  - id: "{name}_bucket"
+    source: modules/file-system/cloud-storage-bucket
+    export: true
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit_dirs,metadata_cache_negative_ttl_secs=0,metadata_cache_ttl_secs=-1,stat_cache_max_size_mb=-1,type_cache_max_size_mb=-1,dir_mode=777,file_mode=777,allow_other"
+  - id: "{name}_checkpoints"
+    source: modules/file-system/pre-existing-network-storage
+    export: false
+    settings:
+      remote_mount: $({name}_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-checkpointing,cache_dir=/mnt/localssd,dir_mode=777,file_mode=777,allow_other"
+  - id: "{name}_training_data"
+    source: modules/file-system/pre-existing-network-storage
+    export: false
+    settings:
+      remote_mount: $({name}_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-training,dir_mode=777,file_mode=777,allow_other"
+  - id: "{name}_model_serving"
+    source: modules/file-system/pre-existing-network-storage
+    export: false
+    settings:
+      remote_mount: $({name}_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "profile=aiml-serving,cache_dir=/mnt/localssd,dir_mode=777,file_mode=777,allow_other"
+config_base:
+  slurm:
+    deployment_groups:
+    - group: auto
+      modules:
+      - id: "{name}_mount_startup"
+        source: modules/scripts/startup-script
+        export: true
+        settings:
+          runners:
+          - $({name}_checkpoints.client_install_runner)
+          - $({name}_checkpoints.mount_runner)
+          - $({name}_training_data.client_install_runner)
+          - $({name}_training_data.mount_runner)
+          - $({name}_model_serving.client_install_runner)
+          - $({name}_model_serving.mount_runner)
+  jbvm:
+    deployment_groups:
+    - group: auto
+      modules:
+      - id: "{name}_mount_startup"
+        source: modules/scripts/startup-script
+        export: true
+        settings:
+          runners:
+          - $({name}_checkpoints.client_install_runner)
+          - $({name}_checkpoints.mount_runner)
+          - $({name}_training_data.client_install_runner)
+          - $({name}_training_data.mount_runner)
+          - $({name}_model_serving.client_install_runner)
+          - $({name}_model_serving.mount_runner)
+  gke:
+    deployment_groups:
+      # LAYERING RULE: the capability that needs a cluster-level toggle owns it.
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          enable_gcsfuse_csi: true
+    - group: auto
+      modules:
+      - id: "{name}_bucket"
+        source: modules/file-system/cloud-storage-bucket
+        settings:
+          mount_options: "defaults,_netdev,implicit-dirs"
+      - id: "{name}_checkpoints"
+        source: modules/file-system/pre-existing-network-storage
+        settings:
+          mount_options: "defaults,_netdev,implicit_dirs"
+      - id: "{name}_training_data"
+        source: modules/file-system/pre-existing-network-storage
+        settings:
+          mount_options: "defaults,_netdev,implicit_dirs"
+      - id: "{name}_model_serving"
+        source: modules/file-system/pre-existing-network-storage
+        settings:
+          mount_options: "defaults,_netdev,implicit_dirs"
+      - id: "{name}_bucket_pv"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}_bucket", cluster]
+        settings:
+          capacity_gib: 1000000
+          lustre_id: null
+          filestore_id: null
+          pv_name: "{name}-bucket-pv"
+          pvc_name: "{name}-bucket-pvc"
+
+      - id: "{name}_checkpoints_pv"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}_checkpoints", "{name}_bucket", cluster]
+        settings:
+          capacity_gib: 1000000
+          lustre_id: null
+          filestore_id: null
+          pv_name: "{name}-checkpoints-pv"
+          pvc_name: "{name}-checkpoints-pvc"
+          gcsfuse_storage_class_name: gcsfusecsi-checkpointing
+
+      - id: "{name}_training_pv"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}_training_data", "{name}_bucket", cluster]
+        settings:
+          capacity_gib: 1000000
+          lustre_id: null
+          filestore_id: null
+          pv_name: "{name}-training-pv"
+          pvc_name: "{name}-training-pvc"
+          gcsfuse_storage_class_name: gcsfusecsi-training
+          grant_gcsfuse_service_agent_role: false
+
+      - id: "{name}_serving_pv"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}_model_serving", "{name}_bucket", cluster]
+        settings:
+          capacity_gib: 1000000
+          lustre_id: null
+          filestore_id: null
+          pv_name: "{name}-serving-pv"
+          pvc_name: "{name}-serving-pvc"
+          gcsfuse_storage_class_name: gcsfusecsi-serving
+          grant_gcsfuse_service_agent_role: false

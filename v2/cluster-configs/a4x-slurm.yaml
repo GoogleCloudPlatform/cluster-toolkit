@@ -1,0 +1,55 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+config_base: slurm
+
+vars:
+  deployment_name: a4x-slurm # supply unique deployment name
+  project_id: # supply project id
+  region: # supply region with a4x-highgpu-4g capacity
+  zone: # supply zone with a4x-highgpu-4g capacity
+  a4x_cluster_size: 2 # supply node count
+  a4x_reservation_name: "" # optional: supply a4x-highgpu-4g reservation name
+
+  # Additional provisioning models (pick only one), can be used to substitute `a4x_reservation_name`:
+  #
+  # a4x_dws_flex_enabled: true
+  #
+  # To make use of DWS Flex, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+  #
+  # a4x_enable_spot_vm: true
+  #
+  # To make use of spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+compute_archetypes:
+- name: a4x-compute
+  machine_type: a4x-highgpu-4g
+  settings:
+    node_count_static: $(vars.a4x_cluster_size)
+
+features:
+- name: ml-data
+  type: aiml-gcsfuse
+  settings:
+    enable_hierarchical_namespace: true
+    local_mount: /gcs
+    random_suffix: true
+    mount_options: "implicit_dirs,metadata_cache_negative_ttl_secs=0,metadata_cache_ttl_secs=-1,stat_cache_max_size_mb=-1,type_cache_max_size_mb=-1,dir_mode=777,file_mode=777,allow_other"
+
+- name: homefs
+  type: managed-lustre
+  settings:
+    size_gib: 36000
+    per_unit_storage_throughput: 500
+    local_mount: /home

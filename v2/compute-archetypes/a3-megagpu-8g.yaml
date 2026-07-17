@@ -1,0 +1,117 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+name: a3-megagpu-8g
+description: NVIDIA H100 (8x 80GB GPU) compute archetype with 8x 200Gbps GPUDirect-TCPXO networking.
+
+vars:
+  disk_size_gb: 200
+
+config_base:
+  gke:
+    vars:
+      # Staged here, not in the cluster-config: ghpc_stage() resolves relative
+      # paths against the USER's config file, so a repo-relative path only works
+      # from inside the catalog.
+      kueue_configuration_path: $(ghpc_stage("examples/gke-a3-megagpu/kueue-configuration.yaml.tftpl"))
+      gpu_count: 8
+      nic_count: 8
+      a3mega_cluster_size: 1
+      # Consumption model. Defaults to on-demand; set at most one of these.
+      a3mega_enable_spot_vm: false
+      a3mega_dws_flex_enabled: false
+    deployment_groups:
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        # `use: [gpu-net]` rather than an explicit additional_networks reference:
+        # modules/network/multivpc exports `additional_networks`, NOT
+        # `subnetwork_interfaces_gke` (that output belongs to gpu-rdma-vpc, which
+        # A4/A4X use). This mirrors gke-a3-highgpu.yaml:116 / gke-a3-megagpu.yaml:116.
+        #
+        # This `use` was silently discarded until mergeGroups() was fixed to union
+        # `use` on an ID collision instead of letting the config-base's list win
+        # (pkg/intent/engine/compiler.go). Without it the cluster gets
+        # additional_networks=[], so gke-cluster derives multi_networking=false ->
+        # LEGACY_DATAPATH -> no Network CRs -> pods come up with eth0 only and
+        # GPUDirect-TCPXO silently degrades to single-NIC TCP.
+        use: [gpu-net]
+        settings:
+          system_node_pool_machine_type: n2d-standard-16
+          system_node_pool_disk_size_gb: 200
+          enable_dcgm_monitoring: true
+          enable_gcsfuse_csi: true
+          enable_managed_lustre_csi: true
+          release_channel: REGULAR
+          # Names the generated Network / GKENetworkParamSet CRs vpc1..vpc8, matching
+          # gke-a3-megagpu.yaml:120-122. The module default (`gvnic-`, start index 1)
+          # would yield gvnic-1..gvnic-8, which does not match the
+          # networking.gke.io/interfaces annotations in the shipped
+          # examples/gke-a3-megagpu/nccl-test-latest.yaml.
+          k8s_network_names:
+            gvnic_prefix: vpc
+            gvnic_start_index: 1
+      - id: gpu-net
+        source: modules/network/multivpc
+        settings:
+          network_name_prefix: "$(vars.deployment_name)-gpunet"
+          global_ip_address_range: 192.168.64.0/18
+          network_count: $(vars.nic_count)
+          subnetwork_cidr_suffix: 24
+          mtu: 8244
+      - id: workload_manager
+        source: modules/management/kubectl-apply
+        use: [cluster]
+        settings:
+          # A3-Mega uses GPUDirect TCPX-O, not the NCCL gIB plugin. The RxDM /
+          # NRI device injector DaemonSets are applied as raw manifests.
+          # Ported from examples/gke-a3-megagpu/gke-a3-megagpu.yaml.
+          apply_manifests:
+          - source: $(ghpc_stage("examples/gke-a3-megagpu/nri-device-injector.yaml"))
+          - source: $(ghpc_stage("examples/gke-a3-megagpu/nccl-tcpxo-installer.yaml.tftpl"))
+            template_vars:
+              accelerator_type: nvidia-h100-mega-80gb
+              version: v1.0.15
+      - id: "{name}_pool"
+        source: modules/compute/gke-node-pool
+        export: true
+        use: [cluster, node_pool_service_account, gpu-net]
+        settings:
+          install_gpu_direct_manifests: false
+          machine_type: a3-megagpu-8g
+          run_workload_script: false
+          auto_upgrade: true
+          auto_repair: $(!vars.a3mega_dws_flex_enabled)
+          zones: [$(vars.zone)]
+          disk_size_gb: $(vars.disk_size_gb)
+          static_node_count: $(vars.a3mega_cluster_size)
+          guest_accelerator:
+          - type: nvidia-h100-mega-80gb
+            count: $(vars.gpu_count)
+          spot: $(vars.a3mega_enable_spot_vm)
+          enable_flex_start: $(vars.a3mega_dws_flex_enabled)
+        outputs:
+        - instructions
+
+  # NO jbvm SECTION.
+  #
+  # There is no plain-VM reference blueprint for this hardware -- only the Slurm and
+  # GKE ones -- so the section that used to sit here was written from scratch and had
+  # never been expanded. It failed `gcluster expand` outright. Rather than invent a
+  # wiring no shipped blueprint validates, the base is simply not offered: naming this
+  # machine type under `config_base: jbvm` now fails at resolution with the list of
+  # bases that do exist.

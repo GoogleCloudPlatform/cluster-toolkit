@@ -1,0 +1,40 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+name: nccl-jobset-test
+description: Multi-node NCCL all_reduce_perf bandwidth test over GPUDirect RDMA / TCPX-O
+config_base: gke
+
+features:
+- name: nccl-jobset-test
+  type: gke-job-template
+  settings:
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.2
+    node_count: 2
+    k8s_service_account_name: workload-identity-k8s-sa
+    tolerations:
+    - key: kubernetes.io/arch
+      operator: Equal
+      value: arm64
+      effect: NoSchedule
+    command:
+    - /bin/bash
+    - -c
+    - |
+      set -ex
+      /usr/local/nvidia/bin/nvidia-smi -L
+      NUM_GPUS=\$(/usr/local/nvidia/bin/nvidia-smi -L | wc -l)
+      /third_party/nccl-tests/build/all_reduce_perf -b 8M -e 8G -f 2 -g "${NUM_GPUS:-1}"

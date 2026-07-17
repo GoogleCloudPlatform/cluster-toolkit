@@ -38,7 +38,7 @@ import (
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	// Passing nil for args prevents getBlueprint from attempting to read a file
-	c := NewCollector(cmd, nil, SOURCE)
+	c := NewCollector(cmd, nil, SOURCE, false)
 
 	if c == nil {
 		t.Fatal("Expected NewCollector to return a valid Collector, got nil")
@@ -193,7 +193,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Initialize the collector
-			c := NewCollector(cmd, []string{}, tt.installationMode)
+			c := NewCollector(cmd, []string{}, tt.installationMode, false)
 
 			// Execute the setup function to apply the blueprint state to the collector
 			if tt.setupCollector != nil {
@@ -349,7 +349,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	childCmd := &cobra.Command{Use: "deploy"}
 	rootCmd.AddCommand(childCmd)
 
-	c := NewCollector(childCmd, nil, SOURCE)
+	c := NewCollector(childCmd, nil, SOURCE, false)
 	c.CollectMetrics(0, nil)
 
 	event := c.BuildConcordEvent()

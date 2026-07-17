@@ -1,0 +1,47 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+config_base: gke
+
+vars:
+  deployment_name: tpu-v6e-gke # supply unique deployment name
+  project_id: # supply project id
+  region: # supply region with ct6e-standard-4t capacity
+  zone: # supply zone with ct6e-standard-4t capacity
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+  version_prefix: "1.35."
+  tpu_cluster_size: 2 # supply node count
+  tpu_num_slices: 2 # supply number of node pools
+  tpu_enable_spot_vm: false
+
+compute_archetypes:
+- name: tpu-compute
+  machine_type: ct6e-standard-4t
+  settings:
+    static_node_count: $(vars.tpu_cluster_size)
+    tpu_num_slices: $(vars.tpu_num_slices)
+    spot: $(vars.tpu_enable_spot_vm)
+
+features:
+- name: kueue
+  type: kueue-jobset
+  settings:
+    kueue:
+      version: 0.17.1
+      config_template_vars:
+        accelerator_type: tpu-v6e-slice
+        tpu_quota: $(vars.tpu_num_slices * vars.tpu_cluster_size * tpu-compute_pool.tpu_chips_per_node)

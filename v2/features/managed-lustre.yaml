@@ -1,0 +1,66 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: managed-lustre
+description: "Provisions Google Cloud Managed Lustre parallel filesystem and auto-wires mount configs."
+deployment_groups:
+- group: auto
+  modules:
+    # 1. MANDATORY PREREQUISITE: Managed Lustre always requires Private Service Access
+  - id: "private_service_access"
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 22
+  # Firewall rule moved to global scope so Slurm/JBVM get it too
+  - id: "{name}_firewall"
+    source: modules/network/firewall-rules
+    use: [network]
+    settings:
+      ingress_rules:
+      - name: "$(vars.deployment_name)-{name}-allow-lustre-traffic"
+        description: "Allow Managed Lustre traffic"
+        source_ranges: ["$(private_service_access.cidr_range)"]
+        allow:
+        - protocol: tcp
+          ports: ["988"]
+  # 2. PRIMARY FEATURE MODULE (Receives user settings)
+  - id: "{name}"
+    source: modules/file-system/managed-lustre
+    export: true
+    use: [network, "private_service_access"]
+    settings:
+      name: "$(vars.deployment_name)-{name}-lustre"
+      remote_mount: lustrefs
+config_base:
+  gke:
+    deployment_groups:
+      # LAYERING RULE: the capability that needs a cluster-level toggle owns it.
+      # Merged by module ID into the config-base `cluster` module.
+    - group: cluster
+      modules:
+      - id: cluster
+        source: modules/scheduler/gke-cluster
+        settings:
+          enable_managed_lustre_csi: true
+    - group: auto
+      modules:
+        # Kubernetes Persistent Volume Mapping for GKE workloads
+      - id: "{name}_volume_mapping"
+        source: modules/file-system/gke-persistent-volume
+        export: true
+        use: ["{name}", cluster]
+        settings:
+          gcs_bucket_name: null
+          filestore_id: null

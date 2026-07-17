@@ -139,6 +139,7 @@ type rootPath struct {
 	Provider              mapPath[providerPath]       `path:"terraform_providers"`
 	ToolkitModulesURL     basePath                    `path:"toolkit_modules_url"`
 	ToolkitModulesVersion basePath                    `path:"toolkit_modules_version"`
+	V2ConfigBase          basePath                    `path:"v2_config_base"`
 }
 
 type validatorCfgPath struct {
