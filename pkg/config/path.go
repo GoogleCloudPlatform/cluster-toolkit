@@ -130,6 +130,7 @@ type rootPath struct {
 	basePath
 	BlueprintName         basePath                    `path:"blueprint_name"`
 	GhpcVersion           basePath                    `path:"ghpc_version"`
+	AiAssisted            basePath                    `path:"ai_assisted"`
 	Validators            arrayPath[validatorCfgPath] `path:"validators"`
 	ValidationLevel       basePath                    `path:"validation_level"`
 	Vars                  dictPath                    `path:"vars"`
