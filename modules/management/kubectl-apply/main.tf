@@ -36,6 +36,7 @@ locals {
       tpu_flavor_cpu_quota    = "999999" # High default to avoid limiting TPU pods by CPU
       tpu_flavor_memory_quota = "999999T"
       tpu_quota               = "999999" # Default high value if not set
+      tpu_topology            = ""
     },
     var.kueue.config_template_vars != null ? var.kueue.config_template_vars : {}
   )

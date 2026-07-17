@@ -634,8 +634,9 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 
 	accGpus, accTpus, accFlavor, accLabels, err := g.resolveAccelerators(np, cap, nodeCount)
 	if err != nil {
-		return 0, 0, 0, 0, "flavor-default", nil, sa, err
+		return 0, 0, 0, 0, "flavor-default", nodeLabels, sa, err
 	}
+
 	gpus = accGpus
 	tpus = accTpus
 	nodeLabels = accLabels
@@ -652,24 +653,22 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 }
 
 func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string, err error) {
-	nodeLabels = make(map[string]string)
 	if len(np.Config.Accelerators) > 0 {
 		gpus, tpus, flavor, nodeLabels, err = g.processAccelerators(np.Config.Accelerators, nodeCount, np.Config.MachineType)
 		if err != nil {
 			return 0, 0, "flavor-default", nil, fmt.Errorf("in node pool %s: %w", np.Name, err)
 		}
-		if np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
-			nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
-		}
-		return gpus, tpus, flavor, nodeLabels, nil
-	}
-
-	if len(cap.Accelerators) > 0 {
+	} else if len(cap.Accelerators) > 0 {
 		gpus, tpus, flavor, nodeLabels = g.processCapabilitiesAccelerators(np, cap, nodeCount)
-		return gpus, tpus, flavor, nodeLabels, nil
+	} else {
+		return 0, 0, "flavor-default", make(map[string]string), nil
 	}
 
-	return 0, 0, "flavor-default", nodeLabels, nil
+	if tpus > 0 && np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
+		nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
+	}
+
+	return gpus, tpus, flavor, nodeLabels, nil
 }
 
 func (g *GKEOrchestrator) processCapabilitiesAccelerators(np gkeJobNodePool, cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string) {
@@ -683,9 +682,6 @@ func (g *GKEOrchestrator) processCapabilitiesAccelerators(np gkeJobNodePool, cap
 	if strings.Contains(strings.ToLower(accType), "tpu") {
 		tpus = count * nodeCount
 		nodeLabels["cloud.google.com/gke-tpu-accelerator"] = accType
-		if np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
-			nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
-		}
 	} else {
 		gpus = count * nodeCount
 		nodeLabels["cloud.google.com/gke-accelerator"] = accType
