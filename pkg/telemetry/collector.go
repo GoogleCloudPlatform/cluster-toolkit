@@ -304,6 +304,28 @@ func getStaticNodeCounts(bp config.Blueprint) string {
 
 }
 
+func getDynamicNodeCounts(bp config.Blueprint, kind string) string {
+	counts := make(map[string]int)
+	targetKeys := dynamicMinNodeCountSettings
+	if kind == "max" {
+		targetKeys = dynamicMaxNodeCountSettings
+	}
+
+	for _, m := range config.GetAllBpModules(&bp) {
+		moduleCounts := getModuleDynamicNodeCounts(m, bp, targetKeys)
+		for mt, cnt := range moduleCounts {
+			if cnt > 0 {
+				counts[mt] += cnt
+			}
+		}
+	}
+	countsJSON, err := json.Marshal(counts)
+	if err != nil || len(counts) == 0 {
+		return ""
+	}
+	return strings.ReplaceAll(strings.Trim(string(countsJSON), "{}"), "\"", "")
+}
+
 func getOSName() string {
 	return runtime.GOOS
 }
@@ -404,29 +426,4 @@ func getIsTestData() string {
 
 func getLatencyMs(eventStartTime time.Time) int64 {
 	return time.Since(eventStartTime).Milliseconds()
-}
-
-func getDynamicNodeCounts(bp config.Blueprint, kind string) string {
-	counts := make(map[string]int)
-	targetKeys := dynamicMinNodeCountSettings
-	if kind == "max" {
-		targetKeys = dynamicMaxNodeCountSettings
-	}
-	config.GetAllBpModules(&bp)
-
-	for _, g := range bp.Groups {
-		for _, m := range g.Modules {
-			moduleCounts := getModuleDynamicNodeCounts(m, bp, targetKeys)
-			for mt, cnt := range moduleCounts {
-				if cnt > 0 {
-					counts[mt] += cnt
-				}
-			}
-		}
-	}
-	countsJSON, err := json.Marshal(counts)
-	if err != nil || len(counts) == 0 {
-		return ""
-	}
-	return strings.ReplaceAll(strings.Trim(string(countsJSON), "{}"), `"`, "")
 }
