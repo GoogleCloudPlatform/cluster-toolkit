@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -2806,7 +2807,7 @@ func TestGetIsAIAssisted(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := getIsAIAssisted(tt.bp)
+			actual := strconv.FormatBool(tt.bp.AIAssisted)
 			if actual != tt.expected {
 				t.Errorf("getIsAIAssisted() = %v, want %v", actual, tt.expected)
 			}
