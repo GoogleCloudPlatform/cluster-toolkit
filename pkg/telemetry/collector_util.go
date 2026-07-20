@@ -264,21 +264,24 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 	}
 }
 
+// extractPrefixedSetting is a helper function that extracts explicit or default settings and prepends a prefix.
+func extractPrefixedSetting(prefix, key string, m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if val := extractExplicitStringSetting(key, m, bp); val != "" {
+		addStorageType(prefix + "-" + val)
+	} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found {
+		if trimmed := strings.TrimSpace(val); trimmed != "" {
+			addStorageType(prefix + "-" + trimmed)
+		}
+	}
+}
+
 func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	src := string(m.Source)
 
-	extractAndAdd := func(moduleType, key string) {
-		if val := extractExplicitStringSetting(key, m, bp); val != "" {
-			addStorageType(moduleType + "-" + val)
-		} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found && val != "" {
-			addStorageType(moduleType + "-" + strings.TrimSpace(val))
-		}
-	}
-
 	if strings.Contains(src, ModuleSourceRedis) {
-		extractAndAdd(StoragePrefixRedis, "tier")
+		extractPrefixedSetting(StoragePrefixRedis, "tier", m, bp, addStorageType)
 	} else if strings.Contains(src, ModuleSourceSpanner) {
-		extractAndAdd(StoragePrefixSpanner, "edition")
+		extractPrefixedSetting(StoragePrefixSpanner, "edition", m, bp, addStorageType)
 	}
 }
 
@@ -290,13 +293,7 @@ func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStor
 	} else if strings.Contains(src, ModuleSourceParallelstore) {
 		addStorageType(StorageTypeParallelstore)
 	} else if strings.Contains(src, ModuleSourceNetappPool) {
-		if val := extractExplicitStringSetting("service_level", m, bp); val != "" {
-			addStorageType(StoragePrefixNetapp + "-" + val)
-		} else if val, _, found := extractDefaultSetting[string]([]string{"service_level"}, m); found {
-			if trimmed := strings.TrimSpace(val); trimmed != "" {
-				addStorageType(StoragePrefixNetapp + "-" + trimmed)
-			}
-		}
+		extractPrefixedSetting(StoragePrefixNetapp, "service_level", m, bp, addStorageType)
 	}
 }
 

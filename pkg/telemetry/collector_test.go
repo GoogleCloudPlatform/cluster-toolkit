@@ -609,6 +609,27 @@ func TestGetStorageType(t *testing.T) {
 			want: "pd-ssd",
 		},
 		{
+			name: "Extracts multiple standalone file-system modules sorted",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("ps"),
+								Source: "modules/file-system/parallelstore",
+							},
+							{
+								ID:     config.ModuleID("lustre"),
+								Source: "modules/file-system/managed-lustre",
+							},
+						},
+					},
+				},
+			},
+			want: "managed-lustre,parallelstore",
+		},
+		{
 			name: "Extracts standalone Managed Lustre source",
 			bp: config.Blueprint{
 				Groups: []config.Group{
