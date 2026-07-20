@@ -217,7 +217,8 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 		// {"NIC heartbeat", checkNICHeartbeat},
 		{"XID/SXID monitoring", func(ctx context.Context) (string, error) { return checkKernelLogsForXidSxid(ctx, fatalXids, startTime) }},
 		{"ECC errors", checkECCErrors},
-		{"PCIe link health", checkPCIe},
+		// PCIe link width is not dependable on A4x family machines.
+		// {"PCIe link health", checkPCIe},
 		{"InfiniBand links", checkIB},
 		{"GPU temperature", checkTemperature},
 		// {"HCA Firmware", checkHCAFW},
