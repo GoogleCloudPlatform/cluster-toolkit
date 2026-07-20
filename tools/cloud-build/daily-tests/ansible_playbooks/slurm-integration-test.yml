@@ -74,7 +74,7 @@
       ansible.builtin.include_tasks:
         file: tasks/cleanup_existing_psa.yml
       vars:
-        network: "{{ actual_network | default(network) }}"
+        psa_network: "{{ actual_network | default(network) }}"
 
     - name: Create Cluster with gcluster
       register: deployment
