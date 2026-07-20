@@ -13,10 +13,16 @@
 # limitations under the License.
 
 ---
+- name: Debug PSA cleanup vars
+  ansible.builtin.debug:
+    msg: "Cleaning up PSA for network: {{ network }}, project: {{ project }}"
+  when: network is defined and project is defined
+
 - name: Clean up existing PSA Peering (Blind Delete)
   register: psa_deleted
   changed_when: psa_deleted.rc == 0
   failed_when: false
+  delegate_to: localhost
   ansible.builtin.command: >-
     gcloud services vpc-peerings delete
     --service=servicenetworking.googleapis.com
@@ -25,6 +31,14 @@
     --quiet
   # Run blindly to attempt clearing ghost peerings even if network is deleted
   when: network is defined and network != "" and project is defined
+
+- name: Debug Peering deletion output
+  ansible.builtin.debug:
+    msg:
+    - "rc: {{ psa_deleted.rc }}"
+    - "stdout: {{ psa_deleted.stdout }}"
+    - "stderr: {{ psa_deleted.stderr }}"
+  when: psa_deleted is defined and psa_deleted.rc is defined and psa_deleted.rc != 0
 
 - name: Check for existing PSA address
   register: existing_psa_addr
