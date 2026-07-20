@@ -62,7 +62,8 @@ const (
 	ModuleSourceSpanner       = "database/spanner"                // Module origin to detect Spanner
 	ModuleSourceLustre        = "file-system/managed-lustre"      // Module origin to detect Lustre
 	ModuleSourceParallelstore = "file-system/parallelstore"       // Module origin to detect Parallelstore
-	ModuleSourceNetappPool    = "file-system/netapp-storage-pool" // Module origin to detect Netapp
+	ModuleSourceNetappPool    = "file-system/netapp-storage-pool" // Module origin to detect Netapp Pool
+	ModuleSourceNetappVolume  = "file-system/netapp-volume"       // Module origin to detect Netapp Volume
 )
 
 var (
@@ -294,6 +295,8 @@ func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStor
 		addStorageType(StorageTypeParallelstore)
 	} else if strings.Contains(src, ModuleSourceNetappPool) {
 		extractPrefixedSetting(StoragePrefixNetapp, "service_level", m, bp, addStorageType)
+	} else if strings.Contains(src, ModuleSourceNetappVolume) {
+		addStorageType(StoragePrefixNetapp)
 	}
 }
 

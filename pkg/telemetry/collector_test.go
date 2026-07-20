@@ -609,6 +609,23 @@ func TestGetStorageType(t *testing.T) {
 			want: "pd-ssd",
 		},
 		{
+			name: "Extracts standalone Netapp Volume source",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-vol"),
+								Source: "modules/file-system/netapp-volume",
+							},
+						},
+					},
+				},
+			},
+			want: "netapp",
+		},
+		{
 			name: "Extracts multiple standalone file-system modules sorted",
 			bp: config.Blueprint{
 				Groups: []config.Group{
