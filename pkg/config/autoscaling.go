@@ -16,7 +16,9 @@ package config
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -27,6 +29,28 @@ import (
 
 //go:embed machine_mappings.json
 var machineMappingsJSON []byte
+
+type MachineMappings struct {
+	MachineFamilyToLabelMap map[string]string `json:"machine_family_to_label_map"`
+	AcceleratorShorthandMap map[string]string `json:"accelerator_shorthand_map"`
+	CpuMachineFamilies      []string          `json:"cpu_machine_families"`
+}
+
+var (
+	parsedMachineMappings    *MachineMappings
+	parseMachineMappingsOnce sync.Once
+)
+
+func GetMachineMappings() *MachineMappings {
+	parseMachineMappingsOnce.Do(func() {
+		parsedMachineMappings = &MachineMappings{}
+		err := json.Unmarshal(machineMappingsJSON, parsedMachineMappings)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to parse machine_mappings.json: %v", err))
+		}
+	})
+	return parsedMachineMappings
+}
 
 // ExpandClusterAutoscaling intercepts the cluster_autoscaling variable,
 // parses machine_type in Go, and injects internal variables for maximum chips and accelerator type.

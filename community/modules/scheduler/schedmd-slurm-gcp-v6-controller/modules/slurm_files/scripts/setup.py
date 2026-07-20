@@ -459,6 +459,47 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
     with blob.open('w') as f:
         f.write(yaml.dump(data))
 
+def setup_slurm_health_check_service(lkp: util.Lookup) -> None:
+    if not lkp.cfg.get("slurm_backup_controller_name") or not lkp.cfg.get("enable_controller_load_balancer"):
+        return
+    log.info("Setting up Slurm HA HTTP Health Check agent systemd service")
+    src_file = util.scripts_dir / "slurm_health_check.py"
+    if not src_file.exists():
+        log.warning(f"Health check script {src_file} not found; skipping service setup")
+        return
+
+    dst_file = Path("/usr/local/bin/slurm_health_check.py")
+    if dst_file.exists():
+        try:
+            dst_file.unlink()
+        except Exception as e:
+            log.warning(f"Failed to unlink existing health check script: {e}")
+    shutil.copyfile(src_file, dst_file)
+    os.chmod(dst_file, 0o755)
+
+    service_content = """[Unit]
+Description=Slurm HA HTTP Health Check Agent
+After=network.target slurmctld.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/slurm_health_check.py
+Restart=always
+RestartSec=3
+User=slurm
+Group=slurm
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_path = Path("/etc/systemd/system/slurm-health-check.service")
+    service_path.write_text(service_content)
+    os.chmod(service_path, 0o644)
+
+    run("systemctl daemon-reload", timeout=30)
+    run("systemctl enable slurm-health-check.service", timeout=30)
+    run("systemctl restart slurm-health-check.service", timeout=30)
+
 def setup_controller(is_primary: bool):
     """Shared controller setup logic for both primary and backup."""
     role_name = "Primary" if is_primary else "Backup"
@@ -538,6 +579,8 @@ def setup_controller(is_primary: bool):
 
     run("systemctl enable slurmrestd", timeout=30)
     run("systemctl restart slurmrestd", timeout=30)
+
+    setup_slurm_health_check_service(lkp)
 
     # Export at the end to signal that everything is up
     run("systemctl enable nfs-server", timeout=30)
@@ -715,6 +758,27 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
     primary_ip = lkp.cfg.get("slurm_control_addr")
     backup_name = lkp.cfg.get("slurm_backup_controller_name")
     backup_ip = lkp.cfg.get("slurm_backup_controller_ip")
+
+    if lkp.is_controller and lkp.cfg.get("enable_controller_load_balancer"):
+        # Controllers must use their real IPs in /etc/hosts, not the Load Balancer VIP
+        # This prevents loopback routing loops when backup controller pings primary controller
+        log.info("Node is a controller and load balancer is enabled; resolving real IPs for controllers")
+        import json
+        controller_names = [name for name in (primary_name, backup_name) if name]
+        if controller_names:
+            names_filter = " ".join(controller_names)
+            cmd = ["gcloud", "compute", "instances", "list", f"--project={lkp.project}", f"--filter=name=({names_filter})", "--format=json(name,networkInterfaces[0].networkIP)"]
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                data = json.loads(res.stdout)
+                ips = {item['name']: item['networkInterfaces'][0]['networkIP'] for item in data if 'networkInterfaces' in item and item['networkInterfaces']}
+                if primary_name in ips:
+                    log.info(f"Overriding primary_ip from VIP {primary_ip} to real IP {ips[primary_name]}")
+                    primary_ip = ips[primary_name]
+                if backup_name in ips:
+                    backup_ip = ips[backup_name]
+            except Exception as e:
+                log.error(f"Failed to query real controller IPs via gcloud: {e}")
 
     hosts_path = Path("/etc/hosts")
     if not hosts_path.exists():

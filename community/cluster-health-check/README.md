@@ -115,3 +115,15 @@ bash build-and-push-cluster-health-check.sh \
     -l "us-east1" \
     -v "0.0.3"
 ```
+
+## Tests and Logs
+
+The healthcheck daemon actively monitors the following items by running specific commands on the node:
+
+- **dcgmi health**: Detects hardware issues via DCGM using `dcgmi health -c -j`.
+- **XID/SXID monitoring**: Scans kernel logs for NVIDIA XID and NVSwitch SXID errors via `dmesg --since <daemon-start-time>`.
+- **ECC errors**: Checks for uncorrectable ECC memory errors via `nvidia-smi --query-gpu=ecc.errors.corrected.volatile.total,ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits`.
+- **PCIe link health**: Monitors PCIe link width consistency via `nvidia-smi --query-gpu=pcie.link.width.current,pcie.link.width.max --format=csv,noheader,nounits`.
+- **InfiniBand links**: Verifies InfiniBand port state and link layer status via `ibstat`.
+- **GPU temperature**: Monitors GPU temperatures against predefined thermal limits via `nvidia-smi --query-gpu=temperature.gpu,temperature.gpu.tlimit --format=csv,noheader,nounits`.
+- **NVLink health**: Checks for fatal NVLink errors and alignment issues via `nvidia-smi nvlink -s` and `nvidia-smi nvlink -e` (A4x family nodes only).

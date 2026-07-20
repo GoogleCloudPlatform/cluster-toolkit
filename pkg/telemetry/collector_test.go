@@ -582,6 +582,289 @@ func TestGetCmdFlags(t *testing.T) {
 	}
 }
 
+// TestGetStorageType verifies that storage types are correctly extracted from the blueprint.
+func TestGetStorageType(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		want string
+	}{
+		{
+			name: "Extracts explicit disk_type",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-ssd"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-ssd",
+		},
+		{
+			name: "Extracts storage_class from GCS bucket",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("bucket"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcs-standard",
+		},
+		{
+			name: "Extracts filestore_tier from Filestore",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("filestore"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"filestore_tier": cty.StringVal("BASIC_HDD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "filestore-basic_hdd",
+		},
+		{
+			name: "Extracts database tier/edition from Redis and Spanner",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("redis"),
+								Source: "modules/database/redis",
+								Settings: config.NewDict(map[string]cty.Value{
+									"tier": cty.StringVal("BASIC"),
+								}),
+							},
+							{
+								ID:     config.ModuleID("spanner"),
+								Source: "modules/database/spanner",
+								Settings: config.NewDict(map[string]cty.Value{
+									"edition": cty.StringVal("ENTERPRISE"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "redis-basic,spanner-enterprise",
+		},
+		{
+			name: "Extracts fs_type from network_storage",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("storage_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("nfs"),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "nfs",
+		},
+		{
+			name: "Extracts multiple storage options without duplicates properly sorted",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-balanced"),
+									"network_storage": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"fs_type": cty.StringVal("lustre"),
+										}),
+									}),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"system_node_pool_disk_type": cty.StringVal("pd-standard"),
+									"local_ssd_count_nvme":       cty.NumberIntVal(2),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "local-ssd,lustre,pd-balanced,pd-standard",
+		},
+		{
+			name: "Extracts fs_type from nodeset inline items for Slurm V6",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm_controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"nodeset": cty.ListVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"disk_type": cty.StringVal("pd-extreme"),
+											"network_storage": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"fs_type": cty.StringVal("gcsfuse"),
+												}),
+											}),
+											"additional_disks": cty.ListVal([]cty.Value{
+												cty.ObjectVal(map[string]cty.Value{
+													"disk_type": cty.StringVal("pd-ssd"),
+												}),
+											}),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcsfuse,pd-extreme,pd-ssd",
+		},
+		{
+			name: "Extracts from controller_state_disk object",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("slurm-controller"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"controller_state_disk": cty.ObjectVal(map[string]cty.Value{
+										"type": cty.StringVal("pd-standard"),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "pd-standard",
+		},
+		{
+			name: "Returns empty when no storage settings are defined",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("empty_module"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"some_other_setting": cty.StringVal("value"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Handles string casing, trims whitespace, and deduplicates identical underlying storage types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal(" pd-ssd  "),
+								}),
+							},
+							{
+								ID: config.ModuleID("node2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.StringVal("PD-SSD"),
+									"storage_class": cty.StringVal(" sTandard"),
+								}),
+							},
+							{
+								ID: config.ModuleID("node3"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_class": cty.StringVal("STANDARD"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "gcs-standard,pd-ssd",
+		},
+		{
+			name: "Ignores null values in primary attributes",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("node_with_null"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type":     cty.NullVal(cty.String),
+									"storage_class": cty.NullVal(cty.String),
+									"lustre":        cty.NullVal(cty.Bool),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getStorageType(tt.bp)
+			if got != tt.want {
+				t.Errorf("getStorageType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestGetMachineType verifies that machine types are correctly extracted from the blueprint.
 func TestGetMachineType(t *testing.T) {
 	tests := []struct {
@@ -2147,6 +2430,352 @@ func TestGetStaticNodeCounts(t *testing.T) {
 			got := getStaticNodeCounts(tc.bp)
 			if got != tc.want {
 				t.Errorf("getStaticNodeCounts() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetDynamicNodeCounts(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		kind string
+		want string
+	}{
+		{
+			name: "Extracts global dynamic max nodes natively without applying zonal multiplication on GKE",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(15),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:15",
+		},
+		{
+			name: "Skips dynamic max nodes for GKE if static_node_count is set",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"static_node_count":           cty.NumberIntVal(5),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(15),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Extracts global dynamic min nodes natively without applying zonal multiplication on GKE",
+			kind: "min",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("e2-standard-4"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(2),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:2",
+		},
+		{
+			name: "Extracts dynamic max nodes for Slurm partition",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "community/modules/compute/schedmd-slurm-gcp-v6-partition",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":           cty.StringVal("c2-standard-30"),
+									"node_count_dynamic_max": cty.NumberIntVal(100),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2-standard-30:100",
+		},
+		{
+			name: "Skips dynamic extraction for GKE if static_node_count is explicitly set to 0",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":      cty.StringVal("e2-standard-4"),
+									"static_node_count": cty.NumberIntVal(0),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Aggregates dynamic min nodes across multiple GKE modules for the same machine type",
+			kind: "min",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n1-standard-8"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(5),
+								}),
+							},
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n1-standard-8"),
+									"autoscaling_total_min_nodes": cty.NumberIntVal(10),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n1-standard-8:15",
+		},
+		{
+			name: "Extracts dynamic max nodes from inline partition configuration in Slurm",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "community/modules/scheduler/schedmd-slurm-gcp-v6-controller",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-standard-2"),
+									"partition": cty.TupleVal([]cty.Value{
+										cty.ObjectVal(map[string]cty.Value{
+											"machine_type":           cty.StringVal("c2d-standard-112"),
+											"node_count_dynamic_max": cty.NumberIntVal(200),
+										}),
+										cty.ObjectVal(map[string]cty.Value{
+											"node_count_dynamic_max": cty.NumberIntVal(50),
+										}),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c2d-standard-112:200,e2-standard-2:50",
+		},
+		{
+			name: "Extracts max_size for dynamic bounded modules like HTCondor",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/htcondor-execute-point",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("n2-standard-4"),
+									"max_size":     cty.NumberIntVal(50),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2-standard-4:50",
+		},
+		{
+			name: "Skips dynamic max nodes for VM instance since there are none",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/vm-instance",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":   cty.StringVal("n1-standard-1"),
+									"instance_count": cty.NumberIntVal(10),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Extracts dot notation nested keys like system_node_pool_node_count.total_max_nodes",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-cluster",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c3-standard-4"),
+									"system_node_pool_node_count": cty.ObjectVal(map[string]cty.Value{
+										"total_min_nodes": cty.NumberIntVal(2),
+										"total_max_nodes": cty.NumberIntVal(10),
+									}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "c3-standard-4:10",
+		},
+		{
+			name: "Zonal multiplier multiplies dynamic zonal bounds by number of elements in zones list",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":               cty.StringVal("n2d-standard-32"),
+									"autoscaling_max_node_count": cty.NumberIntVal(5),
+									"zones":                      cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2d-standard-32:10", // 5 bound max * 2 zones
+		},
+		{
+			name: "Skips zonal multiplier for global default auto-scaling limits",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "../../modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-standard-4"),
+									"zones":        cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-standard-4:1000",
+		},
+
+		{
+			name: "Skips tracking missing machine types completely when collecting properties organically",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"node_count_dynamic_max": cty.NumberIntVal(5),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Blueprint variable evaluation correctly proxies node count limits as safely omitted unknown integers",
+			kind: "min",
+			bp: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"min_cluster_nodes": cty.NumberIntVal(7),
+				}),
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("a2-highgpu-1g"),
+									"autoscaling_total_min_nodes": cty.StringVal("$(vars.min_cluster_nodes)"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Prioritizes first configured bounds correctly when conflicting definitions coexist",
+			kind: "max",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: []config.Module{
+							{
+								Source: "modules/compute/gke-node-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type":                cty.StringVal("n2d-standard-8"),
+									"autoscaling_total_max_nodes": cty.NumberIntVal(100),
+									"autoscaling_max_node_count":  cty.NumberIntVal(5),
+									"zones":                       cty.TupleVal([]cty.Value{cty.StringVal("z1"), cty.StringVal("z2")}),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "n2d-standard-8:10",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getDynamicNodeCounts(tc.bp, tc.kind)
+			if got != tc.want {
+				t.Errorf("getDynamicNodeCounts() = %q; want %q", got, tc.want)
 			}
 		})
 	}

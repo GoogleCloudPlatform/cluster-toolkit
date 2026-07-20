@@ -240,7 +240,7 @@ resource "google_compute_firewall" "health_check_firewall_rule" {
 
   allow {
     protocol = "tcp"
-    ports    = [tostring(var.health_check.port)]
+    ports    = concat([tostring(var.health_check.port)], var.enable_controller_load_balancer ? ["6821"] : [])
   }
 }
 
@@ -415,6 +415,70 @@ resource "google_compute_region_per_instance_config" "controller_regional_statef
       }
     }
   }
+}
+
+# INTERNAL LOAD BALANCER: REGIONAL HTTP HEALTH CHECK (PORT 6821)
+resource "google_compute_region_health_check" "slurm_health_check" {
+  count       = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name        = "${local.slurm_cluster_name}-slurm-hc"
+  description = "Active-Passive HTTP health check for Slurm controllers (scontrol ping on port 6821)"
+  project     = local.controller_project_id
+  region      = var.region
+
+  check_interval_sec  = 10
+  timeout_sec         = 5
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+
+  http_health_check {
+    port         = 6821
+    request_path = "/"
+  }
+}
+
+# INTERNAL LOAD BALANCER: REGIONAL BACKEND SERVICE (L4 TCP)
+resource "google_compute_region_backend_service" "slurm_controller_backend" {
+  count                           = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name                            = "${local.slurm_cluster_name}-controller-backend"
+  description                     = "Internal L4 backend service for Slurm controllers VIP"
+  project                         = local.controller_project_id
+  region                          = var.region
+  load_balancing_scheme           = "INTERNAL"
+  protocol                        = "TCP"
+  connection_draining_timeout_sec = 10
+  health_checks                   = google_compute_region_health_check.slurm_health_check[*].id
+
+  dynamic "backend" {
+    for_each = var.controller_ha_type == "regional" ? [1] : []
+    content {
+      group          = one(google_compute_region_instance_group_manager.controller_regional_mig[*].instance_group)
+      balancing_mode = "CONNECTION"
+    }
+  }
+
+  dynamic "backend" {
+    for_each = var.controller_ha_type == "zonal" ? [1] : []
+    content {
+      group          = one(google_compute_instance_group_manager.controller_zonal_mig[*].instance_group)
+      balancing_mode = "CONNECTION"
+    }
+  }
+}
+
+# INTERNAL LOAD BALANCER: FORWARDING RULE (VIP)
+resource "google_compute_forwarding_rule" "slurm_controller_vip" {
+  count                 = (var.enable_backup_controller && var.enable_controller_load_balancer) ? 1 : 0
+  name                  = "${local.slurm_cluster_name}-controller-vip"
+  description           = "Virtual IP forwarding rule for Slurm controllers (ports 6817/6818)"
+  project               = local.controller_project_id
+  region                = var.region
+  load_balancing_scheme = "INTERNAL"
+  backend_service       = one(google_compute_region_backend_service.slurm_controller_backend[*].id)
+  ip_protocol           = "TCP"
+  all_ports             = true
+  subnetwork            = var.subnetwork_self_link
+  ip_address            = var.controller_load_balancer_ip
+  allow_global_access   = true
 }
 
 moved {

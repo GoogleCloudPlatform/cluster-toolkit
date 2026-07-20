@@ -288,7 +288,7 @@ deployment_groups:
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured
-      enable_login_public_ips: true
+      enable_login_public_ips: false
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -307,7 +307,7 @@ deployment_groups:
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured
-      enable_controller_public_ips: true
+      enable_controller_public_ips: false
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

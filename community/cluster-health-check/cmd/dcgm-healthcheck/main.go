@@ -57,6 +57,8 @@ const (
 	SeverityFailure = "failure"
 	SeverityFatal   = "fatal"
 	SeverityInfo    = "info"
+
+	A4xExpectedNvlinkSpeed = 50.0
 )
 
 func main() {
@@ -189,6 +191,12 @@ func parseFatalXids(data []byte) map[int]struct{} {
 }
 
 func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, nodeLister corev1listers.NodeLister, nodeName string, startTime time.Time) {
+	node, err := nodeLister.Get(nodeName)
+	if err != nil {
+		log.Printf("Failed to get node %s from cache: %v", nodeName, err)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(mainCtx, 5*time.Minute)
 	defer cancel()
 
@@ -207,13 +215,27 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 	}{
 		{"dcgmi health", runDcgmiHealth},
 		// {"NIC heartbeat", checkNICHeartbeat},
-		{"XID/SXID monitoring", func(c context.Context) (string, error) { return checkKernelLogsForXidSxid(c, fatalXids, startTime) }},
+		{"XID/SXID monitoring", func(ctx context.Context) (string, error) { return checkKernelLogsForXidSxid(ctx, fatalXids, startTime) }},
 		{"ECC errors", checkECCErrors},
 		{"PCIe link health", checkPCIe},
 		{"InfiniBand links", checkIB},
 		{"GPU temperature", checkTemperature},
 		// {"HCA Firmware", checkHCAFW},
 		// {"GPU Power draw", checkPower},
+		{"NVLink bandwidth", func(ctx context.Context) (string, error) {
+			if isA4x(node) {
+				return checkNVLinkBandwidth(ctx)
+			} else {
+				return "", nil
+			}
+		}},
+		{"NVLink errors", func(ctx context.Context) (string, error) {
+			if isA4x(node) {
+				return checkNVLinkErrors(ctx)
+			} else {
+				return "", nil
+			}
+		}},
 	}
 	for _, chk := range passiveChecks {
 		sev, err := chk.fn(ctx)
@@ -224,25 +246,7 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 		errorMessages = append(errorMessages, fmt.Sprintf("%s: %v", chk.name, err))
 	}
 
-	node, err := nodeLister.Get(nodeName)
-	if err != nil {
-		log.Printf("Failed to get node %s from cache: %v", nodeName, err)
-		return
-	}
-
-	hasIssue := false
-	conditionExists := false
-	var currentReason string
-	for _, condition := range node.Status.Conditions {
-		if condition.Type == corev1.NodeConditionType(ConditionTypeGPUUnhealthy) {
-			conditionExists = true
-			if condition.Status == corev1.ConditionTrue {
-				hasIssue = true
-			}
-			currentReason = string(condition.Reason)
-			break
-		}
-	}
+	hasIssue, conditionExists, currentReason := getConditionStatus(node)
 
 	_, hasStatus := node.Labels[LabelHealthStatus]
 
@@ -266,6 +270,20 @@ func runHealthCheck(mainCtx context.Context, clientset *kubernetes.Clientset, no
 	}
 
 	updateNodeHealth(ctx, clientset, node, reason, highestSeverity, desiredMessage)
+}
+
+func getConditionStatus(node *corev1.Node) (hasIssue bool, conditionExists bool, currentReason string) {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == corev1.NodeConditionType(ConditionTypeGPUUnhealthy) {
+			conditionExists = true
+			if condition.Status == corev1.ConditionTrue {
+				hasIssue = true
+			}
+			currentReason = string(condition.Reason)
+			break
+		}
+	}
+	return hasIssue, conditionExists, currentReason
 }
 
 func extractOverflowMessages(v interface{}) []string {
@@ -326,7 +344,8 @@ func runDcgmiHealth(ctx context.Context) (string, error) {
 
 	if overallHealthVal != "Healthy" {
 		severity := SeverityWarning
-		if strings.ToLower(overallHealthVal) == SeverityFailure {
+		normalizedSev := strings.ToLower(strings.TrimSpace(overallHealthVal))
+		if normalizedSev == SeverityFailure {
 			severity = SeverityFailure
 		}
 
@@ -740,4 +759,118 @@ func clearNodeHealth(ctx context.Context, clientset *kubernetes.Clientset, nodeN
 			log.Printf("Info: Attempted to clear health labels on node %s: %v", nodeName, err)
 		}
 	}
+}
+
+func isA4x(node *corev1.Node) bool {
+	if node == nil || node.Labels == nil {
+		return false
+	}
+	accel := strings.ToLower(node.Labels["cloud.google.com/gke-accelerator"])
+	machine := strings.ToLower(node.Labels["cloud.google.com/machine-family"])
+	return strings.Contains(accel, "gb300") || strings.Contains(accel, "gb200") || strings.Contains(machine, "a4x")
+}
+
+var nvlinkStatusRegex = regexp.MustCompile(`^\s*Link\s+\d+:\s+([0-9.]+)\s+GB/s`)
+var gpuLineRegex = regexp.MustCompile(`^(GPU\s+\d+).*?\b(UUID:\s*[^)]+)`)
+
+func formatGPUName(line string) string {
+	matches := gpuLineRegex.FindStringSubmatch(line)
+	if len(matches) == 3 {
+		return fmt.Sprintf("%s (%s)", matches[1], matches[2])
+	}
+	return strings.TrimSpace(line)
+}
+
+func checkNVLinkBandwidth(ctx context.Context) (string, error) {
+	outS, err := exec.CommandContext(ctx, nvidiaSmiPath(), "nvlink", "-s").CombinedOutput()
+	if err != nil {
+		return SeverityWarning, fmt.Errorf("nvidia-smi nvlink -s failed: %v", err)
+	}
+
+	currentGPU := "Unknown GPU"
+	for _, line := range strings.Split(string(outS), "\n") {
+		if strings.HasPrefix(line, "GPU ") {
+			currentGPU = formatGPUName(line)
+			continue
+		}
+		matches := nvlinkStatusRegex.FindStringSubmatch(line)
+		if len(matches) > 1 {
+			if speed, err := strconv.ParseFloat(matches[1], 64); err == nil {
+				if speed < A4xExpectedNvlinkSpeed {
+					return SeverityWarning, fmt.Errorf("unexpected nvlink bandwidth on %s: got %v GB/s, expected %v GB/s", currentGPU, speed, A4xExpectedNvlinkSpeed)
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func checkNVLinkErrors(ctx context.Context) (string, error) {
+	outE, err := exec.CommandContext(ctx, nvidiaSmiPath(), "nvlink", "-e").CombinedOutput()
+	if err != nil {
+		return SeverityWarning, fmt.Errorf("nvidia-smi nvlink -e failed: %v", err)
+	}
+
+	currentGPU := "Unknown GPU"
+	for _, line := range strings.Split(string(outE), "\n") {
+		if strings.HasPrefix(line, "GPU ") {
+			currentGPU = formatGPUName(line)
+			continue
+		}
+		if err := parseNVLinkErrorLine(currentGPU, line); err != nil {
+			return SeverityWarning, err
+		}
+	}
+
+	return "", nil
+}
+
+func parseNVLinkErrorLine(gpu, line string) error {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "Link ") {
+		return nil
+	}
+
+	parts := strings.SplitN(line, ":", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+
+	metricName := strings.TrimSpace(parts[1])
+	valStr := strings.TrimSpace(parts[2])
+
+	if strings.HasPrefix(metricName, "FEC Errors") {
+		return nil
+	}
+
+	if metricName == "Effective BER" || metricName == "Symbol BER" {
+		return checkBERThreshold(gpu, metricName, valStr, line)
+	}
+
+	if metricName == "PLR Xmit Blocks" {
+		return nil
+	}
+
+	if !strings.Contains(metricName, "packets") && !strings.Contains(metricName, "bytes") {
+		if val, err := strconv.ParseInt(valStr, 10, 64); err == nil && val > 0 {
+			return fmt.Errorf("nvlink error detected on %s: %s", gpu, line)
+		}
+	}
+
+	return nil
+}
+
+func checkBERThreshold(gpu, metricName, valStr, line string) error {
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return nil
+	}
+	if metricName == "Effective BER" && val > 1e-9 {
+		return fmt.Errorf("nvlink effective BER degraded on %s: %s", gpu, line)
+	}
+	if metricName == "Symbol BER" && val > 1e-25 {
+		return fmt.Errorf("nvlink symbol BER active breakdown on %s: %s", gpu, line)
+	}
+	return nil
 }

@@ -466,11 +466,14 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
     # Resolve IPs for SlurmctldHost to ensure correct HA configuration (requires name(IP) format)
     # and use multiple lines for Slurm 23.02+ syntax compliance if HA is enabled.
     control_host = lkp.control_host
-    try:
-        control_ip = socket.gethostbyname(control_host)
-    except Exception as e:
-        log.warning(f"Failed to resolve control_host {control_host}: {e}")
-        control_ip = lkp.control_addr if lkp.control_addr else control_host
+    if lkp.cfg.get("enable_controller_load_balancer"):
+        control_ip = control_host
+    else:
+        try:
+            control_ip = socket.gethostbyname(control_host)
+        except Exception as e:
+            log.warning(f"Failed to resolve control_host {control_host}: {e}")
+            control_ip = lkp.control_addr if lkp.control_addr else control_host
 
     slurmctld_hosts_str = f"SlurmctldHost={control_host}({control_ip})"
 

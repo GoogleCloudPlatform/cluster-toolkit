@@ -21,7 +21,6 @@ tags:
 - m.schedmd-slurm-gcp-v6-partition
 - m.startup-script
 - m.vpc
-- m.custom-image
 - m.cloud-storage-bucket
 - m.gpu-rdma-vpc
 - m.pre-existing-network-storage

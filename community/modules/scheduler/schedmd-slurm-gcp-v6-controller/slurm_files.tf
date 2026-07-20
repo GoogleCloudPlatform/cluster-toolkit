@@ -154,23 +154,26 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id                    = var.project_id
-  slurm_cluster_name            = local.slurm_cluster_name
-  slurm_control_host            = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
-  slurm_control_addr            = var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null
-  slurm_backup_controller_name  = var.enable_backup_controller ? local.slurm_backup_controller_name : null
-  slurm_backup_controller_ip    = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
-  bucket_dir                    = var.bucket_dir
-  bucket_name                   = local.bucket_name
-  controller_network_attachment = var.controller_network_attachment
-  slurm_control_host_port       = var.slurm_control_host_port
+  project_id                      = var.project_id
+  slurm_cluster_name              = local.slurm_cluster_name
+  slurm_control_host              = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
+  slurm_control_addr              = (var.enable_backup_controller && var.enable_controller_load_balancer) ? one(google_compute_forwarding_rule.slurm_controller_vip[*].ip_address) : (var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null)
+  slurm_backup_controller_name    = var.enable_backup_controller ? local.slurm_backup_controller_name : null
+  slurm_backup_controller_ip      = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
+  enable_controller_load_balancer = var.enable_controller_load_balancer
+  bucket_dir                      = var.bucket_dir
+  bucket_name                     = local.bucket_name
+  controller_network_attachment   = var.controller_network_attachment
+  slurm_control_host_port         = var.slurm_control_host_port
 
-  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
-  slurm_conf_tpl      = var.slurm_conf_tpl
-  slurm_conf_template = var.slurm_conf_template
-  cgroup_conf_tpl     = var.cgroup_conf_tpl
-  cloud_parameters    = var.cloud_parameters
-  experimental        = var.experimental
+  slurmdbd_conf_tpl              = var.slurmdbd_conf_tpl
+  slurm_conf_tpl                 = var.slurm_conf_tpl
+  slurm_conf_template            = var.slurm_conf_template
+  cgroup_conf_tpl                = var.cgroup_conf_tpl
+  cloud_parameters               = var.cloud_parameters
+  experimental                   = var.experimental
+  enable_expedited_requeue       = var.enable_expedited_requeue
+  enable_health_check_start_only = var.enable_health_check_start_only
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)

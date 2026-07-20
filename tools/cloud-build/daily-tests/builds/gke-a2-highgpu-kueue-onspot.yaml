@@ -41,7 +41,7 @@ steps:
   - "PROJECT_ID=$PROJECT_ID"
   - "NUM_NODES=12"
   - "MIN_NODES=6"
-  - "ZONE=us-central1-b"
+  - "ZONE=us-central1-a"
   - "PROVISIONING_MODEL=SPOT"
   - "MACHINE_TYPE=a2-highgpu-2g"
   - "INSTANCE_PREFIX=a2hspgke"

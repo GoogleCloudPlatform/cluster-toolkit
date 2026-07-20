@@ -29,19 +29,27 @@ var LogsCmd = &cobra.Command{
 }
 
 var follow bool
+var mainOnly bool
 
 func init() {
 	LogsCmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream logs continuously")
+	LogsCmd.Flags().BoolVar(&mainOnly, "main-only", false, "Fetch logs only for the main replicated job (main-job or pathways-head)")
 }
 
 func runLogsCmd(cmd *cobra.Command, args []string) error {
 	jobName := args[0]
+
+	var mainOnlyPtr *bool
+	if cmd.Flags().Changed("main-only") {
+		mainOnlyPtr = &mainOnly
+	}
 
 	opts := orchestrator.LogsOptions{
 		ClusterName:     clusterName,
 		ClusterLocation: location,
 		ProjectID:       projectID,
 		Follow:          follow,
+		MainOnly:        mainOnlyPtr,
 	}
 
 	output, err := orc.GetJobLogs(jobName, opts)

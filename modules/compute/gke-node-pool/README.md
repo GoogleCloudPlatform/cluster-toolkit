@@ -303,6 +303,7 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 7.24.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -323,6 +324,7 @@ limitations under the License.
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [terraform_data.validate_dranet_allocation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_compute_machine_types.machine_info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
 | [google_compute_region_instance_template.instance_template](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_region_instance_template) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
@@ -347,7 +349,8 @@ limitations under the License.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
 | <a name="input_dranet_allocation_mode"></a> [dranet\_allocation\_mode](#input\_dranet\_allocation\_mode) | Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount'). | `string` | `"All"` | no |
-| <a name="input_dranet_device_class_name"></a> [dranet\_device\_class\_name](#input\_dranet\_device\_class\_name) | DRA device class name. Default is mrdma.google.com (RDMA). Set to netdev.google.com for non-RDMA machines. | `string` | `"mrdma.google.com"` | no |
+| <a name="input_dranet_device_class_name"></a> [dranet\_device\_class\_name](#input\_dranet\_device\_class\_name) | DRA device class name. If null, automatically detected based on machine type. Default is mrdma.google.com (RDMA) for RDMA-supported machines, netdev.google.com for others. | `string` | `null` | no |
+| <a name="input_dranet_device_count"></a> [dranet\_device\_count](#input\_dranet\_device\_count) | Device count for the auto-applied DRANET ResourceClaimTemplate. Required if dranet\_allocation\_mode is 'ExactCount'. | `number` | `null` | no |
 | <a name="input_enable_confidential_nodes"></a> [enable\_confidential\_nodes](#input\_enable\_confidential\_nodes) | Enable Confidential Nodes for this node pool. | `bool` | `false` | no |
 | <a name="input_enable_confidential_storage"></a> [enable\_confidential\_storage](#input\_enable\_confidential\_storage) | Enable Confidential Storage on the node pool. Node boot disks will be encrypted using keys protected by the Confidential VM. | `bool` | `false` | no |
 | <a name="input_enable_dranet"></a> [enable\_dranet](#input\_enable\_dranet) | Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). When set to true, this enables the driver for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster. | `bool` | `false` | no |
@@ -362,6 +365,7 @@ limitations under the License.
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
+| <a name="input_install_dranet_template"></a> [install\_dranet\_template](#input\_install\_dranet\_template) | If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class. | `bool` | `true` | no |
 | <a name="input_install_gpu_direct_manifests"></a> [install\_gpu\_direct\_manifests](#input\_install\_gpu\_direct\_manifests) | If true, automatically downloads and applies GPUDirect (NCCL and NRI) manifests from GitHub for A3 High/Mega GPUs. Set to false if you are applying these manifests manually. | `bool` | `true` | no |
 | <a name="input_internal_ghpc_module_id"></a> [internal\_ghpc\_module\_id](#input\_internal\_ghpc\_module\_id) | DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide). | `string` | n/a | yes |
 | <a name="input_is_reservation_active"></a> [is\_reservation\_active](#input\_is\_reservation\_active) | Whether the specified reservation is already created. When is\_reservation\_active is set to false, static\_node\_count, autoscaling\_min\_node\_count, autoscaling\_max\_node\_count, and initial\_node\_count must all be either null or 0. | `bool` | `true` | no |
@@ -403,6 +407,7 @@ limitations under the License.
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_dranet_template_name"></a> [dranet\_template\_name](#output\_dranet\_template\_name) | The name of the DRANET ResourceClaimTemplate deployed for this node pool. |
 | <a name="output_enable_dranet"></a> [enable\_dranet](#output\_enable\_dranet) | Boolean indicating whether managed DRANET is enabled on this node pool. |
 | <a name="output_guest_accelerator"></a> [guest\_accelerator](#output\_guest\_accelerator) | The accelerator type of the nodes. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |

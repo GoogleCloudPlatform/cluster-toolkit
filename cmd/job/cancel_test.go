@@ -80,6 +80,13 @@ func (m *mockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobSt
 	return []orchestrator.JobStatus{}, m.err
 }
 
+func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
+	if m.namespace != "" {
+		return m.namespace, nil
+	}
+	return "default", m.err
+}
+
 func TestCancelCmd_MissingArgs(t *testing.T) {
 	resetSubmitCmdFlags()
 

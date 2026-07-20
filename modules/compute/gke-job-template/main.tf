@@ -125,8 +125,11 @@ locals {
     pvc.storage_type == "gcs"
   ])
 
-  default_resource_claims = anytrue(var.enable_dranet) ? [{ name = "rdma", resource_claim_template_name = "default-rdma" }] : []
-  default_claims          = anytrue(var.enable_dranet) ? [{ name = "rdma" }] : []
+  dranet_template_name_distinct = distinct(compact(var.dranet_template_name))
+  dranet_template_name_actual   = length(local.dranet_template_name_distinct) > 0 ? local.dranet_template_name_distinct[0] : "default-rdma"
+
+  default_resource_claims = anytrue(var.enable_dranet) ? [{ name = "dranet-network", resource_claim_template_name = local.dranet_template_name_actual }] : []
+  default_claims          = anytrue(var.enable_dranet) ? [{ name = "dranet-network" }] : []
 
   resource_claims_actual = length(var.resource_claims) > 0 ? var.resource_claims : local.default_resource_claims
   claims_actual          = length(var.claims) > 0 ? var.claims : local.default_claims

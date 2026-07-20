@@ -58,6 +58,8 @@ class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
+    enable_health_check_start_only: bool = False
+    enable_expedited_requeue: bool = False
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
@@ -66,6 +68,18 @@ class TstCfg:
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
+
+    enable_controller_load_balancer: bool = False
+    slurm_control_host: Optional[str] = None
+    slurm_control_addr: Optional[str] = None
+    slurm_conf_tpl: Optional[str] = None
+    ompi_version: Optional[str] = None
+    controller_network_attachment: bool = False
+    enable_slurm_auth: bool = False
+    accounting_storage_backup_host: Optional[str] = None
+    slurm_backup_controller_name: Optional[str] = None
+    slurm_backup_controller_ip: Optional[str] = None
+    slurm_control_host_port: Optional[str] = None
 
     def get(self, key, default=None):
         return getattr(self, key, default)

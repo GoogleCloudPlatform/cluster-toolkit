@@ -5,7 +5,10 @@ metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+  annotations:
+    jobset.sigs.k8s.io/hack: "true"
 spec:
+  suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   network:
     enableDNSHostnames: true
@@ -22,7 +25,7 @@ spec:
 {{- end }}
   failurePolicy:
     maxRestarts: {{.MaxRestarts}}
-    restartStrategy: Recreate
+    restartStrategy: BlockingRecreate
     rules:
       - action: FailJobSet
         onJobFailureReasons:
@@ -45,8 +48,9 @@ spec:
 {{- end }}
         template:
           metadata:
-{{- if .GCSFuseEnabled }}
             annotations:
+              kueue.x-k8s.io/safe-to-forcefully-delete: "true"
+{{- if .GCSFuseEnabled }}
               gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
@@ -72,6 +76,7 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29000
               args:
@@ -104,6 +109,7 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29001
               - containerPort: 29002
@@ -148,6 +154,7 @@ spec:
             containers:
             - name: workload-container
               image: {{.FullImageName}}
+              imagePullPolicy: Always
               securityContext:
                 privileged: true
               resources:
@@ -202,16 +209,11 @@ spec:
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
-            {{- if .Pathways.ColocatedPythonSidecarImage}}
-            - name: python-sidecar
-              image: {{.Pathways.ColocatedPythonSidecarImage}}
-              volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
-            {{- end}}
             volumes:
             - name: shared-tmp
-              emptyDir: {}
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}
@@ -226,6 +228,9 @@ spec:
         parallelism: {{.NodesPerSlice}}
         completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
+        backoffLimitPerIndex: 4000
+        podReplacementPolicy: Failed
+        maxFailedIndexes: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
 {{(StructuralData .PodFailurePolicy)}}
@@ -234,14 +239,14 @@ spec:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
-{{- if or .TopologyAnnotation .GCSFuseEnabled }}
             annotations:
+                kueue.x-k8s.io/safe-to-forcefully-delete: "true"
+                cloud.google.com/skip-tpu-webhook-check: "true"
 {{- if .TopologyAnnotation }}
 {{(StructuralData .TopologyAnnotation)}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
-              gke-gcsfuse/volumes: "true"
-{{- end }}
+                gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
             hostNetwork: true
@@ -258,9 +263,39 @@ spec:
             priorityClassName: {{.PriorityClassName}}
 {{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
+            {{- if .Pathways.ColocatedPythonSidecarImage}}
+            initContainers:
+            - name: colocated-python-sidecar
+              image: {{.Pathways.ColocatedPythonSidecarImage}}
+              imagePullPolicy: Always
+              restartPolicy: Always
+              ports:
+              - containerPort: 50051
+                protocol: TCP
+              resources: {}
+              env:
+              - name: TCMALLOC_RELEASE_RATE
+                value: "10"
+              - name: GRPC_SERVER_ADDRESS
+                value: '0.0.0.0:50051'
+              - name: CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY
+                value: /tmp/sidecar
+              - name: PYTHONUNBUFFERED
+                value: "1"
+              volumeMounts:
+              - name: shared-tmp
+                mountPath: /tmp
+              {{- if .Pathways.MTCEnabled}}
+              - name: cache
+                mountPath: {{.Pathways.RamdiskDirectory}}
+              - name: sidecar-shared-memory
+                mountPath: /tmp/sidecar
+              {{- end}}
+            {{- end}}
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29005
               - containerPort: 29006
@@ -270,6 +305,9 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
+                {{- if .Pathways.MTCEnabled}}
+                - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
+                {{- end}}
                 {{- range .WorkerArgsList }}
                 - {{.}}
                 {{- end }}
@@ -318,12 +356,28 @@ spec:
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
+              {{- if .Pathways.MTCEnabled}}
+              - name: cache
+                mountPath: {{.Pathways.RamdiskDirectory}}
+              - name: sidecar-shared-memory
+                mountPath: /tmp/sidecar
+              {{- end}}
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             volumes:
             - name: shared-tmp
-              emptyDir: {}
+              hostPath:
+                path: /tmp
+                type: DirectoryOrCreate
+            {{- if .Pathways.MTCEnabled}}
+            - name: cache
+              csi:
+                driver: multitier-checkpoint.csi.storage.gke.io
+            - name: sidecar-shared-memory
+              emptyDir:
+                medium: Memory
+            {{- end}}
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

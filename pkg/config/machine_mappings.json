@@ -11,15 +11,17 @@
     "a2-megagpu": "nvidia-tesla-a100",
     "g4-standard": "nvidia-rtx-pro-6000",
     "ct6e-standard": "tpu-v6e-slice",
-    "ct5lp-hightpu": "tpu-v5e-slice",
+    "ct5lp-hightpu": "tpu-v5-lite-podslice",
     "ct5p-hightpu": "tpu-v5p-slice",
     "ct4p-hightpu": "tpu-v4-podslice",
     "v6e": "tpu-v6e-slice",
-    "v5e": "tpu-v5e-slice",
-    "v5litepod": "tpu-v5e-slice",
+    "v5e": "tpu-v5-lite-podslice",
+    "v5litepod": "tpu-v5-lite-podslice",
     "v5p": "tpu-v5p-slice",
     "v4": "tpu-v4-podslice",
-    "l4": "nvidia-l4"
+    "tpu7x": "tpu7x",
+    "l4": "nvidia-l4",
+    "rtx": "nvidia-rtx-pro-6000"
   },
   "accelerator_shorthand_map": {
     "l4-1": "g2-standard-12",
@@ -59,7 +61,8 @@
     "v5litepod-8": "ct5lp-hightpu-8t",
     "v6e-1": "ct6e-standard-1t",
     "v6e-4": "ct6e-standard-4t",
-    "v6e-8": "ct6e-standard-8t"
+    "v6e-8": "ct6e-standard-8t",
+    "tpu7x": "tpu7x-standard-4t"
   },
   "cpu_machine_families": [
     "n1-",

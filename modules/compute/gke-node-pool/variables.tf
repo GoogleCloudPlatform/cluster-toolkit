@@ -552,14 +552,27 @@ variable "machine_configs" {
 
 variable "dranet_device_class_name" {
   type        = string
-  default     = "mrdma.google.com"
-  description = "DRA device class name. Default is mrdma.google.com (RDMA). Set to netdev.google.com for non-RDMA machines."
+  default     = null
+  description = "DRA device class name. If null, automatically detected based on machine type. Default is mrdma.google.com (RDMA) for RDMA-supported machines, netdev.google.com for others."
 }
+
+variable "install_dranet_template" {
+  type        = bool
+  default     = true
+  description = "If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class."
+}
+
 
 variable "dranet_allocation_mode" {
   type        = string
   default     = "All"
   description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
+}
+
+variable "dranet_device_count" {
+  type        = number
+  default     = null
+  description = "Device count for the auto-applied DRANET ResourceClaimTemplate. Required if dranet_allocation_mode is 'ExactCount'."
 }
 
 variable "enable_confidential_nodes" {

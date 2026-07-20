@@ -17,6 +17,9 @@ package main
 import (
 	"reflect"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGetSeverity(t *testing.T) {
@@ -153,5 +156,290 @@ func TestParseFatalXids(t *testing.T) {
 		if got := parseFatalXids(test.input); !reflect.DeepEqual(got, test.expected) {
 			t.Errorf("parseFatalXids(%s) = %v, expected %v", test.desc, got, test.expected)
 		}
+	}
+}
+
+func TestIsA4x(t *testing.T) {
+	tests := []struct {
+		desc     string
+		labels   map[string]string
+		expected bool
+	}{
+		{
+			desc:     "A4X Accelerator label",
+			labels:   map[string]string{"cloud.google.com/gke-accelerator": "nvidia-gb200"},
+			expected: true,
+		},
+		{
+			desc:     "A4X Max Accelerator label",
+			labels:   map[string]string{"cloud.google.com/gke-accelerator": "nvidia-gb300"},
+			expected: true,
+		},
+		{
+			desc:     "A4X Machine Family",
+			labels:   map[string]string{"cloud.google.com/machine-family": "a4x"},
+			expected: true,
+		},
+		{
+			desc:     "A4X Max Machine Type",
+			labels:   map[string]string{"cloud.google.com/machine-family": "a4x", "cloud.google.com/gke-accelerator": "nvidia-gb300"},
+			expected: true,
+		},
+		{
+			desc:     "B200 / A4 Machine Family",
+			labels:   map[string]string{"cloud.google.com/machine-family": "a4", "cloud.google.com/gke-accelerator": "nvidia-b200"},
+			expected: false,
+		},
+		{
+			desc:     "No matching labels",
+			labels:   map[string]string{"cloud.google.com/machine-family": "a3-megagpu-8g"},
+			expected: false,
+		},
+		{
+			desc:     "Empty Map",
+			labels:   map[string]string{},
+			expected: false,
+		},
+		{
+			desc:     "Nil Node",
+			labels:   nil,
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			var node *corev1.Node
+			if tc.desc != "Nil Node" {
+				node = &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: tc.labels,
+					},
+				}
+			}
+			if got := isA4x(node); got != tc.expected {
+				t.Errorf("isA4x() = %v, expected %v", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestParseNVLinkErrorLine(t *testing.T) {
+	tests := []struct {
+		line    string
+		wantErr bool
+	}{
+		{"Link 0: FEC Errors - 0: 17941761", false},      // Safe ignore
+		{"Link 0: Tx packets: 12345", false},             // Ignore non-error metric
+		{"GPU 0: unhandled format", false},               // Unhandled syntax
+		{"Link 0: Buffer overrun Errors: 1", true},       // Error condition!
+		{"Link 1: Rx Errors: 50", true},                  // Error condition!
+		{"Link 2: Link recovery failed events: 1", true}, // Error condition!
+		{"Link 3: Effective Errors: 0", false},           // Count is 0, safe
+		{"Link 0: Symbol Errors: 2", true},               // Error condition!
+		{"Link 0: PLR Xmit Blocks: 1234567890", false},   // Safe ignore
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.line, func(t *testing.T) {
+			err := parseNVLinkErrorLine("GPU X", tc.line)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("parseNVLinkErrorLine(%q) error = %v, wantErr %v", tc.line, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCheckBERThreshold(t *testing.T) {
+	tests := []struct {
+		desc    string
+		tag     string
+		val     string
+		wantErr bool
+	}{
+		{"Effective BER safely under edge", "Effective BER", "1e-10", false},
+		{"Effective BER exactly at edge", "Effective BER", "1e-9", false},
+		{"Effective BER slightly over edge", "Effective BER", "1.1e-9", true},
+		{"Effective BER significantly over", "Effective BER", "5e-6", true},
+
+		{"Symbol BER safely under edge", "Symbol BER", "1e-26", false},
+		{"Symbol BER exactly at edge", "Symbol BER", "1e-25", false},
+		{"Symbol BER slightly over edge", "Symbol BER", "2e-25", true},
+
+		{"Invalid float parsing", "Effective BER", "NaN", false}, // Fails parse, should ignore cleanly
+		{"Unknown tag bypass", "Unknown BER", "1e-5", false},     // Ignored threshold type
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			err := checkBERThreshold("GPU X", tc.tag, tc.val, "dummy line")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("checkBERThreshold(%q, %q) error = %v, wantErr %v", tc.tag, tc.val, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestFormatGPUName(t *testing.T) {
+	tests := []struct {
+		desc     string
+		line     string
+		expected string
+	}{
+		{
+			desc:     "Valid GPU and UUID",
+			line:     "GPU 0: NVIDIA GB200 (UUID: GPU-4fa1a8a8-f788-6a1a-41be-dcb11f40a232)",
+			expected: "GPU 0 (UUID: GPU-4fa1a8a8-f788-6a1a-41be-dcb11f40a232)",
+		},
+		{
+			desc:     "Another valid GPU with different wording",
+			line:     "GPU 1: NVIDIA H100 (UUID: GPU-12345678)",
+			expected: "GPU 1 (UUID: GPU-12345678)",
+		},
+		{
+			desc:     "Invalid line format without UUID",
+			line:     "GPU 0: NVIDIA GB200",
+			expected: "GPU 0: NVIDIA GB200", // Fallback to TrimSpace
+		},
+		{
+			desc:     "Empty line",
+			line:     "   ",
+			expected: "", // Fallback to TrimSpace
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := formatGPUName(tc.line)
+			if got != tc.expected {
+				t.Errorf("formatGPUName(%q) = %q, expected %q", tc.line, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetConditionStatus(t *testing.T) {
+	unhealthyType := corev1.NodeConditionType(ConditionTypeGPUUnhealthy)
+
+	tests := []struct {
+		desc               string
+		conditions         []corev1.NodeCondition
+		wantHasIssue       bool
+		wantConditionExist bool
+		wantReason         string
+	}{
+		{
+			desc:               "No conditions",
+			conditions:         []corev1.NodeCondition{},
+			wantHasIssue:       false,
+			wantConditionExist: false,
+			wantReason:         "",
+		},
+		{
+			desc: "Irrelevant condition",
+			conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+			wantHasIssue:       false,
+			wantConditionExist: false,
+			wantReason:         "",
+		},
+		{
+			desc: "GPU unhealthy condition present but false",
+			conditions: []corev1.NodeCondition{
+				{Type: unhealthyType, Status: corev1.ConditionFalse, Reason: "Resolved"},
+			},
+			wantHasIssue:       false,
+			wantConditionExist: true,
+			wantReason:         "Resolved",
+		},
+		{
+			desc: "GPU unhealthy condition present and true",
+			conditions: []corev1.NodeCondition{
+				{Type: unhealthyType, Status: corev1.ConditionTrue, Reason: string(ReasonActiveTestFailed)},
+			},
+			wantHasIssue:       true,
+			wantConditionExist: true,
+			wantReason:         string(ReasonActiveTestFailed),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			node := &corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: tc.conditions,
+				},
+			}
+			gotHasIssue, gotConditionExist, gotReason := getConditionStatus(node)
+
+			if gotHasIssue != tc.wantHasIssue {
+				t.Errorf("hasIssue = %v, want %v", gotHasIssue, tc.wantHasIssue)
+			}
+			if gotConditionExist != tc.wantConditionExist {
+				t.Errorf("conditionExists = %v, want %v", gotConditionExist, tc.wantConditionExist)
+			}
+			if gotReason != tc.wantReason {
+				t.Errorf("currentReason = %v, want %v", gotReason, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestNvlinkStatusRegex(t *testing.T) {
+	tests := []struct {
+		desc  string
+		line  string
+		want  string
+		match bool
+	}{
+		{
+			desc:  "Exact match",
+			line:  "Link 0: 50.0 GB/s",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "Extra trailing whitespace",
+			line:  "Link 2: 45.5 GB/s    ",
+			want:  "45.5",
+			match: true,
+		},
+		{
+			desc:  "Trailing text",
+			line:  "Link 3: 50.0 GB/s (active)",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "Leading whitespace and trailing text",
+			line:  "    Link 1: 50.0 GB/s with more words",
+			want:  "50.0",
+			match: true,
+		},
+		{
+			desc:  "No match - incorrect format",
+			line:  "Link 0: 50.0 MB/s",
+			match: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			matches := nvlinkStatusRegex.FindStringSubmatch(tc.line)
+			if tc.match {
+				if len(matches) < 2 {
+					t.Fatalf("expected match, got none for line: %q", tc.line)
+				}
+				got := matches[1]
+				if got != tc.want {
+					t.Errorf("got bandwidth %q, want %q", got, tc.want)
+				}
+			} else {
+				if len(matches) > 0 {
+					t.Errorf("expected no match, but got %v", matches)
+				}
+			}
+		})
 	}
 }

@@ -31,6 +31,7 @@ func TestPath(t *testing.T) {
 		{r, ""},
 		{r.BlueprintName, "blueprint_name"},
 		{r.GhpcVersion, "ghpc_version"},
+		{r.AiAssisted, "ai_assisted"},
 		{r.Validators, "validators"},
 		{r.ValidationLevel, "validation_level"},
 		{r.Vars, "vars"},

@@ -589,3 +589,155 @@ func (s *zeroSuite) TestCheckInputValueMatchesType_Panic(c *C) {
 	c.Assert(err, NotNil)
 	c.Check(err, ErrorMatches, ".*panic during type conversion for \"bad_input\".*")
 }
+
+func (s *zeroSuite) TestDeduplicateDranetTemplates(c *C) {
+	// Case 1: Standard deduplication for same device class (netdev.google.com)
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "pool-a",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"), // auto-detects to netdev.google.com
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-b",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"), // auto-detects to netdev.google.com
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		// pool-a is first, should install
+		c.Assert(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[0].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+
+		// pool-b is second of same class, should NOT install
+		c.Assert(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[1].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(false))
+	}
+
+	// Case 2: Different device classes (mrdma.google.com vs netdev.google.com) - both should install
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "pool-a",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("a3-ultragpu-8g"), // auto-detects to mrdma.google.com
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-b",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"), // auto-detects to netdev.google.com
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		// Both are first of their class, both should install
+		c.Assert(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[0].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+
+		c.Assert(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[1].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+	}
+
+	// Case 3: Explicit device class name overrides auto-detect
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "pool-a",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet":            cty.BoolVal(true),
+				"dranet_device_class_name": cty.StringVal("custom.google.com"),
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-b",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet":            cty.BoolVal(true),
+				"dranet_device_class_name": cty.StringVal("custom.google.com"),
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		c.Assert(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[0].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+
+		c.Assert(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[1].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(false))
+	}
+
+	// Case 4: Non-GKE node pool module or enable_dranet=false should be ignored
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "not-gke-pool",
+			Source: "community/modules/compute/gke-cluster",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-a",
+			Source: "community/modules/compute/gke-node-pool",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(false),
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		c.Check(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, false)
+		c.Check(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, false)
+	}
+
+	// Case 5: Remote module sources with query parameters should be correctly matched
+	{
+		bp := &Blueprint{}
+		m1 := Module{
+			ID:     "pool-a",
+			Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/gke-node-pool?ref=v1.15.0&depth=1",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"),
+			}),
+		}
+		m2 := Module{
+			ID:     "pool-b",
+			Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/gke-node-pool?ref=v1.15.0&depth=1",
+			Settings: NewDict(map[string]cty.Value{
+				"enable_dranet": cty.BoolVal(true),
+				"machine_type":  cty.StringVal("ct6e-standard-4t"),
+			}),
+		}
+		bp.Groups = []Group{{Modules: []Module{m1, m2}}}
+
+		bp.deduplicateDranetTemplates()
+
+		// Both should be correctly identified as GKE node pools, and deduplicated
+		c.Assert(bp.Groups[0].Modules[0].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[0].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(true))
+
+		c.Assert(bp.Groups[0].Modules[1].Settings.Has("install_dranet_template"), Equals, true)
+		c.Check(bp.Groups[0].Modules[1].Settings.Get("install_dranet_template"), DeepEquals, cty.BoolVal(false))
+	}
+
+}

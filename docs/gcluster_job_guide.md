@@ -253,6 +253,35 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
 
     Verify it's gone by running `gcluster job list` again.
 
+* **Inspect Cluster and Workload Health:**
+    If you encounter scheduling delays, errors, or suspect resource exhaustion, you can run `gcluster job inspect` to capture a comprehensive diagnostic sweep of your cluster state and active workloads.
+
+    ```bash
+    ./gcluster job inspect
+    ```
+
+    To debug a specific workload, provide its name to fetch details like Kueue Workload status and JobSet configurations:
+
+    ```bash
+    ./gcluster job inspect --name my-python-app-job
+    ```
+
+    To view logs output in the console in addition to saving them to the diagnostic file, add the `--show` (or `-s`) flag:
+
+    ```bash
+    ./gcluster job inspect --name my-python-app-job --show
+    ```
+
+    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory containing:
+
+  * **Local Setup**: Gcloud version and active configuration.
+  * **GKE Infra**: GKE cluster descriptions, node-pool listings, and metadata/resources ConfigMaps.
+  * **Node Status**: Wide listing of nodes, along with Go-calculated counts of total and healthy nodes per node pool.
+  * **Kueue / JobSet**: Configurations and logs for Kueue and JobSet controller managers.
+  * **Slice Controller**: Slice controller deployment details and manager logs (if GKE Kueue dynamic slicing is active).
+  * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
+  * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
+
 ## 6. Advanced Workloads
 
 *Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
@@ -981,6 +1010,19 @@ When the `--pathways` flag is specified, GCluster automatically refactors the Jo
 
 All GCS pathways artifact locations, elastic slice configurations, and proxy command arguments are dynamically compiled into the manifest based on your `--pathways-*` flags.
 
+#### Headless Pathways Orchestration
+
+When `--pathways-headless` is enabled, GCluster deploys the Pathways infrastructure without running a workload container inside the cluster:
+* **Optional Image and Command Flags**: Since no client workload container is deployed inside GKE, the `--image`, `--base-image`, and `--command` flags are **not required**.
+* **Infrastructure-Only Manifest**: The manifest compiles `pathways-rm` and `pathways-proxy` as direct main containers inside the coordinator replicatedJob (`pathways-head`). No `workload-container` is generated.
+* **External Client Connection**: You can connect to the running Pathways cluster externally (e.g. from a local notebook or Vertex AI development instance) by port-forwarding the proxy server container port `29000`:
+
+  ```bash
+  kubectl port-forward <pathways-head-pod> 29000:29000
+  ```
+
+  And then initializing JAX/Pathways client pointing to `grpc://127.0.0.1:29000`.
+
 ---
 
 ### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
@@ -1082,6 +1124,8 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). |
 | `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
+| `--pathways-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the Pathways workload. |
+| `--pathways-ramdisk-directory` | `string` | The ramdisk directory path for local checkpoints in MTC (defaults to `/tmp/mtc_checkpoints`). |
 
 #### 9.3.3 GPU Related Flags
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*
@@ -1121,6 +1165,10 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-f, --follow` | `flag` | Stream logs continuously (like `tail -f`). |
+| `--main-only` | `bool` | Fetch logs only for the coordinator/leader pod (Rank 0) of the main replicated job (e.g. `main-job` or `pathways-head`). |
+
+> [!NOTE]
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. You can override this to stream logs from all pods by explicitly passing `--main-only=false`.
 
 ## 10. Troubleshooting: ImagePullBackOff
 

@@ -76,6 +76,7 @@ func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
 func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 	return &GKEOrchestrator{
 		executor:                 executor,
+		kubeClient:               &MockKubeClient{Namespace: "default"},
 		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
@@ -129,6 +130,13 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 
 func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) GetCurrentNamespace() (string, error) {
+	if m.Namespace != "" {
+		return m.Namespace, nil
+	}
+	return "default", m.Err
 }
 
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
@@ -484,7 +492,7 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "100Gi"`,
 		`cpu: "8"`,
 		`memory: "32Gi"`,
-		"restartStrategy: Recreate",
+		"restartStrategy: BlockingRecreate",
 		"privileged: true",
 		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
 		`cpu: "24"`,
@@ -493,14 +501,92 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		"kill -SIGTERM $PID",
 		"echo \"Exit code: $EXIT_CODE\"",
 		"name: shared-tmp",
-		"emptyDir: {}",
+		"hostPath:",
+		"path: /tmp",
+		"type: DirectoryOrCreate",
 		"mountPath: /tmp",
+		"jobset.sigs.k8s.io/hack: \"true\"",
+		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
+		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
+		"backoffLimitPerIndex: 4000",
+		"podReplacementPolicy: Failed",
+		"maxFailedIndexes: 0",
 	}
 
 	for _, substr := range expectedSubstrs {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
+	}
+}
+
+func TestGeneratePathwaysManifest_MTC(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-mtc-test",
+		CommandToRun:    "echo hello",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage:            "proxy:latest",
+			ServerImage:                 "server:latest",
+			WorkerImage:                 "worker:latest",
+			ColocatedPythonSidecarImage: "sidecar:latest",
+			GCSLocation:                 "gs://my-bucket",
+			HeadNodePool:                "pathways-np",
+			MTCEnabled:                  true,
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-mtc-test",
+		"colocated-python-sidecar",
+		"restartPolicy: Always",
+		"driver: multitier-checkpoint.csi.storage.gke.io",
+		"name: sidecar-shared-memory",
+		"medium: Memory",
+		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
+		"mountPath: /tmp/mtc_checkpoints",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	parts := strings.Split(manifest, "name: worker")
+	if len(parts) < 2 {
+		t.Fatalf("failed to split manifest into head and worker parts")
+	}
+	headPart := parts[0]
+	workerPart := parts[1]
+
+	if strings.Contains(headPart, "colocated-python-sidecar") {
+		t.Errorf("headPart should not contain colocated-python-sidecar container")
+	}
+	if !strings.Contains(workerPart, "colocated-python-sidecar") {
+		t.Errorf("workerPart should contain colocated-python-sidecar container")
 	}
 }
 
@@ -2267,6 +2353,20 @@ func TestPopulateNAPFlavors(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Populate tpu7x",
+			napLimits: map[string]int64{
+				"tpu7x": 4,
+			},
+			wantFlavors: map[string]FlavorCapacity{
+				"flavor-tpu7x": {
+					NodeLabels: map[string]string{
+						"cloud.google.com/gke-tpu-accelerator": "tpu7x",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "Unknown accelerator label returns error",
 			napLimits: map[string]int64{
 				"unknown-gpu": 2,
@@ -2667,6 +2767,174 @@ func TestSharedReservationSubblockManifestGeneration(t *testing.T) {
 		if !strings.Contains(manifest, label) {
 			t.Errorf("Expected manifest to contain nodeSelector label %q, but it was missing.\nManifest:\n%s", label, manifest)
 		}
+	}
+}
+func TestGetJobLogs(t *testing.T) {
+	jobName := "test-job"
+	trueVal := true
+	falseVal := false
 
+	tests := []struct {
+		desc               string
+		mainOnly           *bool
+		mockGetPods1Stdout string // response for total count check
+		mockGetPods2Stdout string // response for filtered count check
+		expectedCmdLogsKey string
+		expectErrorContain string
+	}{
+		{
+			desc:               "explicit MainOnly=true uses coordinator-only selector (1 pod, succeeds)",
+			mainOnly:           &trueVal,
+			mockGetPods2Stdout: "pod-main-0-0\n",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "explicit MainOnly=false with pods <= 10 uses all-job selector (succeeds)",
+			mainOnly:           &falseVal,
+			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "explicit MainOnly=false with pods > 10 fails proactively with Console URL",
+			mainOnly:           &falseVal,
+			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\npod-9\npod-10\npod-11\npod-12\n", // 12 pods
+			expectErrorContain: "exceeds the max fetch limit (10). Please view logs directly in the Google Cloud Console",
+		},
+		{
+			desc:               "implicit MainOnly (nil) with pods <= 5 defaults to all pods (succeeds)",
+			mainOnly:           nil,
+			mockGetPods1Stdout: "pod-1\npod-2\n", // 2 pods (total)
+			mockGetPods2Stdout: "pod-1\npod-2\n", // 2 pods (filtered)
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "implicit MainOnly (nil) with pods > 5 defaults to coordinator-only (succeeds)",
+			mainOnly:           nil,
+			mockGetPods1Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods total
+			mockGetPods2Stdout: "pod-main-0-0\n",                                           // 1 pod coordinator
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			totalQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+			filteredQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --no-headers"
+			if tc.mainOnly != nil && !*tc.mainOnly {
+				filteredQuery = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0, Stdout: ""}},
+				"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			}
+			if totalQuery == filteredQuery {
+				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
+			} else {
+				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods1Stdout}, {ExitCode: 0, Stdout: tc.mockGetPods1Stdout}}
+				mockResponses[filteredQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
+			}
+			if tc.expectedCmdLogsKey != "" {
+				mockResponses[tc.expectedCmdLogsKey] = []shell.CommandResult{{ExitCode: 0, Stdout: "mock-logs-content"}}
+			}
+
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeClient = &MockKubeClient{Namespace: "default"}
+
+			opts := orchestrator.LogsOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				Follow:          false,
+				MainOnly:        tc.mainOnly,
+			}
+
+			logs, err := orc.GetJobLogs(jobName, opts)
+
+			if tc.expectErrorContain != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.expectErrorContain)
+				}
+				if !strings.Contains(err.Error(), tc.expectErrorContain) {
+					t.Errorf("error %q does not contain %q", err.Error(), tc.expectErrorContain)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("GetJobLogs failed: %v", err)
+			}
+
+			if logs != "mock-logs-content" {
+				t.Errorf("expected logs %q, got %q", "mock-logs-content", logs)
+			}
+
+			if mockExec.callCount[tc.expectedCmdLogsKey] != 1 {
+				t.Errorf("expected command %q to be called exactly once, call count: %d", tc.expectedCmdLogsKey, mockExec.callCount[tc.expectedCmdLogsKey])
+			}
+		})
+
+	}
+}
+
+func TestGeneratePathwaysManifest_Headless(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-headless-test",
+		NumSlices:       1,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			Headless:         true,
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-headless-test",
+		"image: proxy:latest",
+		"image: server:latest",
+		"--gcs_scratch_location=gs://my-bucket",
+		"cloud.google.com/gke-nodepool: pathways-np",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	// In headless mode, the workload-container must NOT be present.
+	if strings.Contains(manifest, "workload-container") {
+		t.Errorf("manifest contains 'workload-container', which is unexpected in headless mode")
+	}
+
+	// In headless mode, the command template block must NOT be present.
+	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
+		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
 	}
 }

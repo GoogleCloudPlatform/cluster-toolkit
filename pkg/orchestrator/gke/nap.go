@@ -173,7 +173,7 @@ func isSpecificGPUKey(key string) bool {
 }
 
 func isSpecificTPUKey(key string) bool {
-	return strings.HasPrefix(key, "tpu-")
+	return strings.HasPrefix(key, "tpu-") || strings.HasPrefix(key, "tpu7")
 }
 
 func isKnownGKEAccelerator(key string) bool {
@@ -181,7 +181,7 @@ func isKnownGKEAccelerator(key string) bool {
 	case "nvidia-tesla-t4", "nvidia-tesla-v100":
 		return true
 	}
-	for _, val := range machineFamilyToLabelMap {
+	for _, val := range config.GetMachineMappings().MachineFamilyToLabelMap {
 		if val == key {
 			return true
 		}
@@ -234,7 +234,7 @@ func resolveFlavorFromResource(resName string) (string, map[string]string, error
 		nodeLabels = map[string]string{
 			"cloud.google.com/gke-accelerator": resName,
 		}
-	case strings.HasPrefix(resName, "tpu-"):
+	case strings.HasPrefix(resName, "tpu-") || strings.HasPrefix(resName, "tpu7"):
 		flavorName = "flavor-" + resName
 		nodeLabels = map[string]string{
 			"cloud.google.com/gke-tpu-accelerator": resName,
