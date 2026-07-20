@@ -14,7 +14,7 @@
 # limitations under the License.
 
 set -ex
-REQ_PYTHON3_VERSION=9
+REQ_PYTHON3_VERSION="9
 
 # Path to hashed requirements file
 BUILD_TOOLS_REQ_FILE="$(dirname "$0")/build-tools.txt"
