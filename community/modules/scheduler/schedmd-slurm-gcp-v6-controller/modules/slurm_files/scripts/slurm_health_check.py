@@ -156,7 +156,6 @@ class ReusableHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
 
-
 def main():
     log.info(
         f"Starting Slurm HA HTTP Health Check agent on port {PORT} using scontrol at {SCONTROL_PATH}"
