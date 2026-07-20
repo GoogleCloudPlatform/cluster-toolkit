@@ -66,7 +66,7 @@ type GroupName string
 // Validate checks that the group name is valid
 func (n GroupName) Validate() error {
 	if n == "" {
-		return EmptyGroupName
+		return EmptGroupName
 	}
 
 	if n == ".ghpc" || string(n) == SharedModulesDirName {
