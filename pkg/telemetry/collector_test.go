@@ -786,6 +786,47 @@ func TestGetStorageType(t *testing.T) {
 			want: "redis-basic,spanner-enterprise",
 		},
 		{
+			name: "Extracts database tier/edition defaults for Redis and Spanner",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("redis-def"),
+								Source: "../../modules/database/redis",
+							},
+							{
+								ID:     config.ModuleID("spanner-def"),
+								Source: "../../modules/database/spanner",
+							},
+						},
+					},
+				},
+			},
+			want: "redis-basic,spanner-standard",
+		},
+		{
+			name: "Extracts Netapp service_level explicitly with trimmed whitespace",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-pool"),
+								Source: "modules/file-system/netapp-storage-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"service_level": cty.StringVal("  extreme  "),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "netapp-extreme",
+		},
+		{
 			name: "Extracts fs_type from network_storage",
 			bp: config.Blueprint{
 				Groups: []config.Group{
