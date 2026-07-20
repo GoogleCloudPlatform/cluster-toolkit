@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import http.server
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import logging
 import os
 import shutil
@@ -46,7 +46,7 @@ def find_scontrol():
 SCONTROL_PATH = find_scontrol()
 
 
-class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
+class HealthCheckHandler(BaseHTTPRequestHandler):
     _is_backup: bool | None = None
 
     def log_message(self, format, *args):
@@ -56,11 +56,12 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         hostname = socket.gethostname().split(".")[0]
         try:
+            # Timeout is 3s (lower than 5s LB probe timeout to prevent race condition/TCP teardown)
             res = subprocess.run(
                 [SCONTROL_PATH, "ping"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=3,
                 check=False,
             )
             output = (res.stdout + res.stderr).lower()
@@ -85,6 +86,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         )
 
         # Active-passive role determination based on hostname convention (-0 vs -1) and cached metadata fallback
+        # Note: Role is cached once determined, but health probe failures are not cached so subsequent probes retry on every request.
         is_backup = getattr(HealthCheckHandler, "_is_backup", None)
         if is_backup is None:
             if hostname.endswith("-1"):
@@ -148,7 +150,7 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(b"Standby Backup\n")
 
 
-class ReusableHTTPServer(http.server.HTTPServer):
+class ReusableHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
 

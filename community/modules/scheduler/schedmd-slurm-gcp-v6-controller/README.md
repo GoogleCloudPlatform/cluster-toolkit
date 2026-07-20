@@ -165,6 +165,13 @@ An Active-Passive HTTP health check agent automatically runs on port `6821` on e
 
 This setup ensures that all Slurm traffic is directed exclusively to the active controller node, enabling seamless and stable failover.
 
+#### Health Check and Network Integration Details
+
+* **Bypassing Loopback Routing Loops**: When `enable_controller_load_balancer` is active, the primary and backup controllers are configured with their real internal IPs mapped in `/etc/hosts`. This ensures that they can communicate directly with each other and bypasses potential loopback routing loops through the load balancer VIP. Non-controller nodes (such as login and compute nodes) map the controller hostname directly to the Load Balancer VIP.
+* **Multi-Threaded Probing**: The health check service uses a multi-threaded HTTPServer (`ThreadingHTTPServer`) to support simultaneous, concurrent probes from multiple Google Cloud load-balancer IP ranges without blocking or timing out.
+* **Optimized Local Timeout**: The health check agent executes `scontrol ping` with a reduced timeout of `3` seconds (down from `5` seconds). This ensures that if the local Slurm daemon hangs, the health check agent times out *before* the load balancer's typical 5-second probe timeout, returning a clean `503 Service Unavailable` response and preventing abrupt TCP teardowns.
+* **Security & Least Privilege**: The `slurm_health_check.service` systemd unit runs under the dedicated `slurm` user and group rather than `root`, adhering to security best practices.
+
 ### Backward Compatibility
 
 The HA feature is **opt-in**. If `enable_backup_controller` is set to `false`

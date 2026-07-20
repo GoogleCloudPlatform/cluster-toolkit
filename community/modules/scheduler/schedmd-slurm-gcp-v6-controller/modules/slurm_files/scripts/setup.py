@@ -486,8 +486,8 @@ Type=simple
 ExecStart=/usr/local/bin/slurm_health_check.py
 Restart=always
 RestartSec=3
-User=root
-Group=root
+User=slurm
+Group=slurm
 
 [Install]
 WantedBy=multi-user.target
@@ -758,6 +758,27 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
     primary_ip = lkp.cfg.get("slurm_control_addr")
     backup_name = lkp.cfg.get("slurm_backup_controller_name")
     backup_ip = lkp.cfg.get("slurm_backup_controller_ip")
+
+    if lkp.is_controller and lkp.cfg.get("enable_controller_load_balancer"):
+        # Controllers must use their real IPs in /etc/hosts, not the Load Balancer VIP
+        # This prevents loopback routing loops when backup controller pings primary controller
+        log.info("Node is a controller and load balancer is enabled; resolving real IPs for controllers")
+        import json
+        controller_names = [name for name in (primary_name, backup_name) if name]
+        if controller_names:
+            names_filter = " ".join(controller_names)
+            cmd = ["gcloud", "compute", "instances", "list", f"--project={lkp.project}", f"--filter=name=({names_filter})", "--format=json(name,networkInterfaces[0].networkIP)"]
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                data = json.loads(res.stdout)
+                ips = {item['name']: item['networkInterfaces'][0]['networkIP'] for item in data if 'networkInterfaces' in item and item['networkInterfaces']}
+                if primary_name in ips:
+                    log.info(f"Overriding primary_ip from VIP {primary_ip} to real IP {ips[primary_name]}")
+                    primary_ip = ips[primary_name]
+                if backup_name in ips:
+                    backup_ip = ips[backup_name]
+            except Exception as e:
+                log.error(f"Failed to query real controller IPs via gcloud: {e}")
 
     hosts_path = Path("/etc/hosts")
     if not hosts_path.exists():
