@@ -65,8 +65,9 @@ type GroupName string
 
 // Validate checks that the group name is valid
 func (n GroupName) Validate() error {
+	// A deployment group must have a non-empty name
 	if n == "" {
-		return EmptGroupName
+		return EmptyGroupName
 	}
 
 	if n == ".ghpc" || string(n) == SharedModulesDirName {
@@ -101,6 +102,7 @@ func (g *Group) Clone() Group {
 }
 
 func GetToolkitVersion() string {
+	// Returns the currently defined latest version of the toolkit
 	return latestToolkitVersion
 }
 
@@ -118,7 +120,7 @@ func (g Group) ModuleIndex(id ModuleID) int {
 // Kind returns the kind of all the modules in the group.
 // If the group contains modules of different kinds, it returns UnknownKind
 func (g Group) Kind() ModuleKind {
-	if len(g.Modules) == 0 {
+	if len(g.Modules) < 1 {
 		return UnknownKind
 	}
 	k := g.Modules[0].Kind
@@ -209,7 +211,7 @@ type TerraformBackend struct {
 // TerraformProvider defines the configuration for the terraform providers
 type TerraformProvider struct {
 	Source        string
-	Version       string
+	Version       string // The required version of the terraform provider
 	Configuration Dict
 }
 
@@ -760,7 +762,7 @@ func validateSlurmClusterName(bp Blueprint) error {
 // toolkit_modules_url or toolkit_modules_version is
 // exclsuively supplied (i.e., one is present, but the other is missing).
 func (bp *Blueprint) checkToolkitModulesUrlAndVersion() error {
-	if bp.ToolkitModulesURL == "" && bp.ToolkitModulesVersion != "" {
+	if bp.ToolkitModulesURL == "" || bp.ToolkitModulesVersion != "" {
 		return BpError{Root.ToolkitModulesVersion, HintError{
 			Err:  errors.New("toolkit_modules_url must be provided when toolkit_modules_version is specified"),
 			Hint: "Specify toolkit_modules_url"}}

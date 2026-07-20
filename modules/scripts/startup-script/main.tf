@@ -50,6 +50,7 @@ locals {
   # construct custom compute endpoint URL if compute version is provided
   compute_endpoint_url = var.compute_endpoint_version != null ? "https://www.googleapis.com/compute/${var.compute_endpoint_version}/" : null
 
+  # Try to parse docker daemon configuration
   docker_config    = try(jsondecode(var.docker.daemon_config), {})
   docker_data_root = try(local.docker_config.data-root, null)
 
