@@ -22,6 +22,8 @@ import subprocess
 import sys
 import urllib.request
 
+from typing import Optional
+
 PORT = 6821
 
 logging.basicConfig(
@@ -47,7 +49,7 @@ SCONTROL_PATH = find_scontrol()
 
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    _is_backup: bool | None = None
+    _is_backup: Optional[bool] = None
 
     def log_message(self, format, *args):
         # Suppress logging of every routine GET probe to prevent log spam
@@ -152,6 +154,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 class ReusableHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
+
 
 
 def main():
