@@ -75,6 +75,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
+	c.metadata[IS_AI_ASSISTED] = getIsAIAssisted(c.blueprint)
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 	c.metadata[ERROR_TYPE] = getErrorType(err)
@@ -353,6 +354,13 @@ func getTerraformVersion() string {
 		return ""
 	}
 	return version
+}
+
+func getIsAIAssisted(bp config.Blueprint) string {
+	if bp.AIAssisted {
+		return "true"
+	}
+	return "false"
 }
 
 func getBillingAccountId(projectID string) string {
