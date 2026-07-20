@@ -3032,7 +3032,7 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name: "System Pool (Named system)",
+			name: "System Pool (Named system) - No taints, treated as workload pool",
 			np: gkeJobNodePool{
 				Name:             "system",
 				InitialNodeCount: 1,
@@ -3046,8 +3046,10 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 				},
 			},
 			wantFlavor: "flavor-default",
-			wantLabels: map[string]string{}, // Should NOT have gke-nodepool label
-			wantErr:    false,
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "system",
+			},
+			wantErr: false,
 		},
 	}
 
@@ -3084,5 +3086,47 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-test",
+		CommandToRun:    `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`,
+		NumSlices:       1,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
+	if !strings.Contains(manifest, expectedCommand) {
+		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
 	}
 }

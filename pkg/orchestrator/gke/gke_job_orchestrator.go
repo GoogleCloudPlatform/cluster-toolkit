@@ -512,9 +512,6 @@ func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
 }
 
 func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
-	if np.Name == "system" {
-		return true
-	}
 	for _, taint := range np.Config.Taints {
 		if taint.Key == "components.gke.io/gke-managed-components" && taint.Value == "true" {
 			return true
@@ -658,8 +655,19 @@ func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineType
 		if err != nil {
 			return 0, 0, "flavor-default", nil, fmt.Errorf("in node pool %s: %w", np.Name, err)
 		}
+		for _, acc := range np.Config.Accelerators {
+			if g.acceleratorToMachineType == nil {
+				g.acceleratorToMachineType = make(map[string]string)
+			}
+			g.acceleratorToMachineType[strings.ToLower(acc.AcceleratorType)] = np.Config.MachineType
+		}
 	} else if len(cap.Accelerators) > 0 {
-		gpus, tpus, flavor, nodeLabels = g.processCapabilitiesAccelerators(np, cap, nodeCount)
+		gpus, tpus, flavor, nodeLabels = g.processCapabilitiesAccelerators(cap, nodeCount)
+		accType := cap.Accelerators[0].Type
+		if g.acceleratorToMachineType == nil {
+			g.acceleratorToMachineType = make(map[string]string)
+		}
+		g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
 	} else {
 		return 0, 0, "flavor-default", make(map[string]string), nil
 	}
@@ -671,7 +679,7 @@ func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineType
 	return gpus, tpus, flavor, nodeLabels, nil
 }
 
-func (g *GKEOrchestrator) processCapabilitiesAccelerators(np gkeJobNodePool, cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string) {
+func (g *GKEOrchestrator) processCapabilitiesAccelerators(cap MachineTypeCap, nodeCount int) (gpus, tpus int, flavor string, nodeLabels map[string]string) {
 	nodeLabels = make(map[string]string)
 	if len(cap.Accelerators) == 0 {
 		return 0, 0, "flavor-default", nodeLabels
@@ -686,10 +694,6 @@ func (g *GKEOrchestrator) processCapabilitiesAccelerators(np gkeJobNodePool, cap
 		gpus = count * nodeCount
 		nodeLabels["cloud.google.com/gke-accelerator"] = accType
 	}
-	if g.acceleratorToMachineType == nil {
-		g.acceleratorToMachineType = make(map[string]string)
-	}
-	g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
 	return gpus, tpus, flavor, nodeLabels
 }
 
@@ -734,10 +738,6 @@ func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nod
 			flavor = "flavor-" + strings.ToLower(acc.AcceleratorType)
 			nodeLabels["cloud.google.com/gke-accelerator"] = acc.AcceleratorType
 		}
-		if g.acceleratorToMachineType == nil {
-			g.acceleratorToMachineType = make(map[string]string)
-		}
-		g.acceleratorToMachineType[strings.ToLower(acc.AcceleratorType)] = machineType
 	}
 	return gpus, tpus, flavor, nodeLabels, nil
 }
