@@ -530,30 +530,62 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
             jobs_to_requeue.append(job)
 
     if jobs_to_requeue:
-        # Wait up to 10 seconds for all jobs to natively requeue to PENDING
         pending_jobs = set()
+        parent_job_ids = {}
+        
+        # Wait up to 10 seconds for jobs to natively requeue to PENDING
         for _ in range(10):
-            for job in jobs_to_requeue:
-                if job.job_id in pending_jobs:
-                    continue
+            remaining_ids = [str(job.job_id) for job in jobs_to_requeue if str(job.job_id) not in pending_jobs]
+            if not remaining_ids:
+                break
+
+            for ids_chunk in util.chunked(remaining_ids, 1000):
                 try:
-                    res = run(f"{lookup().scontrol} show job {job.job_id}", check=False)
-                    if res and "JobState=PENDING" in res.stdout:
-                        pending_jobs.add(job.job_id)
-                except Exception:
-                    pass
+                    res = run(f"{lookup().scontrol} show job {','.join(ids_chunk)} --json", check=False)
+                    if not (res and res.stdout): 
+                        raise RuntimeError(f"scontrol show job returned empty output. (code={getattr(res, 'returncode', 'None')}, stderr={getattr(res, 'stderr', 'None')})")
+                        
+                    data = json.loads(res.stdout)
+                    for job_dict in data.get("jobs", []):
+                        state = job_dict.get("job_state", "")
+                        # Unlike sbatch, interactive srun jobs fail immediately and won't be in PENDING state
+                        if "PENDING" in state:
+                            job_id = str(job_dict.get("job_id"))
+                            pending_jobs.add(job_id)
+                            parent_job_ids[job_id] = str(job_dict.get("array_job_id") or job_dict.get("pack_job_id") or job_id)
+                except Exception as e:
+                    log.debug(f"Failed to query job states: {e}")
+
             if len(pending_jobs) == len(jobs_to_requeue):
                 break
             time.sleep(1)
 
+        jobs_by_backoff_time = collections.defaultdict(list)
+        # Define globally so grouped jobs share the exact same backoff time
+        base_timestamp = datetime.now().replace(microsecond=0)
+
         for job in jobs_to_requeue:
-            # To prevent the requeued job from immediately retrying and hammering
-            # the GCP API during a stockout, we calculate a randomized backoff (e.g. 3-5 mins) and
+            job_id = str(job.job_id)
+            if job_id not in pending_jobs:
+                continue
+
+            # Use parent job ID (array/pack) as seed value so grouped jobs generate identical random backoffs
+            seed_val = parent_job_ids.get(job_id, job_id)
+            random_generator = random.Random(seed_val)
+
+            # To prevent the requeued jobs from immediately retrying and hammering
+            # the GCP API during a stockout, we calculate a randomized backoff (e.g. 1-2 mins) and
             # explicitly delay the job's next evaluation via the StartTime parameter.
-            delay_seconds = random.randint(180, 300)
-            backoff_time = (datetime.now() + timedelta(seconds=delay_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
-            log.info(f"Setting job {job.job_id} backoff: {delay_seconds}s (until {backoff_time})")
-            run(f"{lookup().scontrol} update JobId={job.job_id} StartTime={backoff_time}", check=False)
+            delay_seconds = random_generator.randint(60, 120)
+
+            backoff_time = (base_timestamp + timedelta(seconds=delay_seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+            jobs_by_backoff_time[backoff_time].append(job_id)
+            log.info(f"Setting job {job_id} backoff: {delay_seconds}s (until {backoff_time})")
+
+        # Batch execute the StartTime updates to prevent massive subprocess generation
+        for backoff_time, job_ids in jobs_by_backoff_time.items():
+            for ids_chunk in util.chunked(job_ids, 1000):
+                run(f"{lookup().scontrol} update JobId={','.join(ids_chunk)} StartTime={backoff_time}", check=False)
 
 
 def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str], is_flex: bool = False):

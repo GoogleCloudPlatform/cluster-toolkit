@@ -32,7 +32,7 @@ def classify_gcp_error(error_code: str, error_message: str) -> tuple[Action, str
         return Action.REQUEUE, f"GCP Quota Exceeded: {error_message}"
         
     # 2. Capacity Errors -> Transient, require REQUEUE
-    capacity_codes = ["zone_resource_pool_exhausted", "vm_min_count_not_reached", "insufficient_resource_capacity"]
+    capacity_codes = ["zone_resource_pool_exhausted", "vm_min_count_not_reached", "insufficient_resource_capacity", "rate_limit_exceeded", "resource_exhausted"]
     if any(code in code_lower for code in capacity_codes) or "sufficient capacity" in msg_lower:
         return Action.REQUEUE, f"GCP Capacity Exhausted: {error_message}"
         
