@@ -126,13 +126,6 @@ resource "google_compute_disk" "additional_disks" {
   labels       = local.labels
   zone         = var.zone
   storage_pool = var.additional_persistent_disks.storage_pool
-
-  lifecycle {
-    precondition {
-      condition     = var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
-      error_message = "Storage pools are only supported with Hyperdisk types."
-    }
-  }
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -342,6 +335,14 @@ resource "google_compute_instance" "compute_vm" {
         "h3-:pd-ssd",
       ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
       error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || can(regex("^hyperdisk-", var.disk_type))
+      error_message = "Storage pools are only supported with Hyperdisk types."
+    }
+    precondition {
+      condition     = var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
+      error_message = "Storage pools are only supported with Hyperdisk types."
     }
   }
 }
