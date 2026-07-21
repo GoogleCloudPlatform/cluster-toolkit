@@ -109,7 +109,7 @@ The `gcluster job submit` command provides a unified interface to submit batch a
 Ensure your environment is set up before submitting jobs:
 - A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
-- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name.
+- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool automatically constructs the regional path using the cluster's location and project ID.
 
 ### Submitting Jobs
 
@@ -181,18 +181,25 @@ Mount Cloud Storage, Filestore, existing PVCs, or host paths using `--mount "<sr
 Manage submitted jobs directly from the `gcluster` CLI:
 
 - **List Jobs**: Check workload status across the cluster:
+
   ```bash
   ./gcluster job list
   ```
+
 - **View Job Logs**: View container stdout/stderr logs:
+
   ```bash
   ./gcluster job logs my-job
   ```
+
 - **Cancel a Job**: Clean up a running workload:
+
   ```bash
   ./gcluster job cancel my-job
   ```
+
 - **Inspect Cluster & Workload Health**: Perform a diagnostic sweep:
+
   ```bash
   ./gcluster job inspect --name my-job --show
   ```
@@ -207,7 +214,7 @@ Avoid repeating common flags by setting CLI defaults:
 ./gcluster job config set location <REGION_OR_ZONE>
 ```
 
-For complete step-by-step tutorials, advanced node constraint strategies, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gcluster_job_guide.md) (or [local guide](docs/gcluster_job_guide.md)).
+For complete step-by-step tutorials, advanced node constraint strategies, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
 
 ## Prerequisites
 
@@ -285,7 +292,7 @@ To track the costs of your deployment, use the [Cloud Billing Reports](https://c
 ## Troubleshooting
 
 ### Authentication
-Ensure you have properly [setup Google Cloud credentials](#gcp-credentials).
+Ensure you have properly [set up Google Cloud credentials](#gcp-credentials).
 
 ### Slurm Clusters
 See [Slurm Troubleshooting](docs/slurm-troubleshooting.md).
