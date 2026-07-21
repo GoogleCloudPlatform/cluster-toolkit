@@ -8,7 +8,7 @@ Cluster Toolkit is highly customizable and extensible, addressing the deployment
 
 ## Detailed documentation and main components
 
-The Toolkit comes with a suite of [tutorials](docs/tutorials/README.md), [examples](examples/README.md), and full documentation for [modules](modules/README.md) designed for AI/ML and HPC use cases.
+Cluster Toolkit comes with a suite of [tutorials](docs/tutorials/README.md), [examples](examples/README.md), and full documentation for [modules](modules/README.md) designed for AI/ML and HPC use cases.
 
 The main components of the Cluster Toolkit include:
 
@@ -25,9 +25,20 @@ The Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer](https
 
 ## Quickstart
 
-Running through the [Slurm quickstart tutorial](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster) is the recommended path to get started.
+To get started with Cluster Toolkit quickly, we recommend that you follow the quickstart tutorial [Deploy an HPC cluster with Slurm](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster).
 
----
+## Install Cluster Toolkit
+
+To create a cluster using the Cluster Toolkit, you can use either Cloud Shell, or a workstation that is running Linux or macOS.
+
+Cloud Shell is an interactive development and operations environment that is accessible from your web browser. If you use Cloud Shell, the following dependencies are already pre-installed and you don't need to manually install dependencies.
+
+If you want to work from a Linux or macOS client or workstation, you must follow the steps in [Install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) before you continue.
+
+You can use two different methods to install Cluster Toolkit:
+
+* [Using the Pre-built Bundle (Recommended)](#using-the-pre-built-bundle-recommended)
+* [Building from Source](#building-from-source)
 
 ### Using the Pre-built Bundle (Recommended)
 
@@ -100,20 +111,44 @@ make
 
 Note: You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command will fail.
 
+## Cluster Creation and Management
+
+After installing `gcluster`, you can deploy, manage, and destroy infrastructure using Cluster Blueprints:
+
+1. **Create Deployment Folder**: Process a blueprint YAML file to generate deployment files:
+
+   ```bash
+   ./gcluster create examples/hpc-slurm.yaml
+   ```
+
+2. **Deploy Cluster**: Provision infrastructure with Terraform:
+
+   ```bash
+   ./gcluster deploy hpc-slurm
+   ```
+
+3. **Destroy Cluster**: Clean up provisioned resources:
+
+   ```bash
+   ./gcluster destroy hpc-slurm
+   ```
+
+For detailed guides, blueprint syntax, and configuration options, see the [Google Cloud documentation site](https://cloud.google.com/cluster-toolkit/docs/overview).
+
 ## Job Submission (gcluster job submit)
 
-The `gcluster job submit` command provides a unified interface to submit batch and distributed containerized workloads (JobSets) to your GKE clusters. It automatically resolves machine types, calculates resource requests, configures accelerator topologies (GPUs/TPUs), and can build container images on-the-fly.
+The `gcluster job submit` command provides a unified interface to submit batch and distributed containerized workloads (JobSets) to your GKE clusters.
 
 ### Prerequisites for Job Submission
 
 Ensure your environment is set up before submitting jobs:
 - A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
-- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool automatically constructs the regional path using the cluster's location and project ID.
+- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`).
 
-### Submitting Jobs
+### Submitting a Job
 
-#### 1. Submitting with a Pre-built Image
+**Submitting with a Pre-built Image**:
 
 ```bash
 ./gcluster job submit \
@@ -126,9 +161,7 @@ Ensure your environment is set up before submitting jobs:
   --compute-type n2-standard-32
 ```
 
-#### 2. Submitting with On-the-Fly Image Building
-
-If you have local application code (e.g., in `./app_dir`), `gcluster` packages it into a container image and pushes it to Artifact Registry automatically without requiring a Dockerfile:
+**Submitting with On-the-Fly Image Building**:
 
 ```bash
 ./gcluster job submit \
@@ -142,43 +175,7 @@ If you have local application code (e.g., in `./app_dir`), `gcluster` packages i
   --compute-type n2-standard-32
 ```
 
-#### 3. Submitting Multi-Slice GPU / TPU Workloads
-
-For distributed training across multiple groups or slices of nodes, specify `--num-slices` and `--num-nodes`:
-
-```bash
-./gcluster job submit \
-  --name my-multi-slice-job \
-  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
-  --command "python train.py" \
-  --compute-type v6e-8 \
-  --num-slices 2 \
-  --num-nodes 4
-```
-
-#### 4. Mounting Persistent Storage (`--mount`)
-
-Mount Cloud Storage, Filestore, existing PVCs, or host paths using `--mount "<src>:<dest>[:rw]"`:
-
-- **Cloud Storage (GCS Fuse)**: `--mount "gs://my-bucket:/data:rw"`
-- **Filestore**: `--mount "filestore://my-filestore-ip/share:/data"`
-- **Existing PVC**: `--mount "my-pvc:/data"`
-- **Host Path**: `--mount "/host/path:/data"`
-
-#### 5. Passing Custom Environment Variables (`--env`)
-
-```bash
-./gcluster job submit \
-  --name my-env-job \
-  --command "python app.py" \
-  --compute-type n2-standard-32 \
-  --env "TRAINING_EPOCHS=10" \
-  --env "DEBUG=true"
-```
-
-### Managing Jobs and Diagnostics
-
-Manage submitted jobs directly from the `gcluster` CLI:
+### Managing Jobs
 
 - **List Jobs**: Check workload status across the cluster:
 
@@ -198,23 +195,7 @@ Manage submitted jobs directly from the `gcluster` CLI:
   ./gcluster job cancel my-job
   ```
 
-- **Inspect Cluster & Workload Health**: Perform a diagnostic sweep:
-
-  ```bash
-  ./gcluster job inspect --name my-job --show
-  ```
-
-### Setting Default Configurations
-
-Avoid repeating common flags by setting CLI defaults:
-
-```bash
-./gcluster job config set project <PROJECT_ID>
-./gcluster job config set cluster <CLUSTER_NAME>
-./gcluster job config set location <REGION_OR_ZONE>
-```
-
-For complete step-by-step tutorials, advanced node constraint strategies, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
+For complete step-by-step tutorials, advanced multi-slice topologies, storage mounts, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
 
 ## Prerequisites
 
@@ -232,7 +213,17 @@ See the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/
 
 ### Quotas
 
-HPC and AI workloads often require significant resources. You might need to request additional quota (e.g., for specific GPU types or Filestore capacity) to deploy your cluster. See [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/cluster-blueprint#request-quota) for guidance.
+HPC and AI workloads often require significant resources. You might need to request additional quota to deploy your cluster. For more information, see [Request additional quotas](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota).
+
+### Telemetry and Privacy Notice
+
+To help improve Cluster Toolkit, feature usage statistics are collected and sent to Google. You can opt-out at any time by executing the following command:
+
+```bash
+./gcluster telemetry off
+```
+
+Cluster Toolkit telemetry overall is handled in accordance with the [Google Privacy Policy](https://policies.google.com/privacy). When you use Cluster Toolkit to interact with or utilize GCP Services, your information is handled in accordance with the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
 
 ## GCP credentials
 
@@ -279,7 +270,7 @@ For more details, see [VM Image Support](docs/vm-images.md).
 
 ## Blueprint validation
 
-A **Cluster Blueprint** is the core configuration file (YAML) for your deployment. The Toolkit includes **validator** functions that perform basic tests on the blueprint to ensure variables are valid and resources can be provisioned. See [Blueprint Validation](docs/blueprint-validation.md) for more details.
+A **Cluster Blueprint** is the core configuration file (YAML) for your deployment. Cluster Toolkit includes **validator** functions that perform basic tests on the blueprint to ensure variables are valid and resources can be provisioned. See [Blueprint Validation](docs/blueprint-validation.md) for more details.
 
 ## Billing reports
 
