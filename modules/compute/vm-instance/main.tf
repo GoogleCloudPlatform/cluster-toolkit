@@ -119,12 +119,20 @@ resource "google_compute_disk" "additional_disks" {
   count = var.instance_count * var.additional_persistent_disks.count
 
   # NB: this resource array must be sliced accounting for var.instance_count
+  provider     = google-beta
   name         = "${local.resource_prefix}-disk-${count.index}"
   type         = var.additional_persistent_disks.type
   size         = var.additional_persistent_disks.size
   labels       = local.labels
   zone         = var.zone
   storage_pool = var.additional_persistent_disks.storage_pool
+
+  lifecycle {
+    precondition {
+      condition     = var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
+      error_message = "Storage pools are only supported with Hyperdisk types."
+    }
+  }
 }
 
 resource "google_compute_resource_policy" "placement_policy" {

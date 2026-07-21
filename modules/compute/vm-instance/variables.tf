@@ -63,7 +63,7 @@ variable "auto_delete_boot_disk" {
 }
 
 variable "disk_storage_pool" {
-  description = "Storage pool to use for the boot disk."
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types."
   type        = string
   default     = null
 }
@@ -81,7 +81,7 @@ variable "local_ssd_interface" {
 }
 
 variable "additional_persistent_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes."
+  description = "Configurations of additional disks to be included on the partition nodes. Note that storage_pool is only supported with Hyperdisk types."
   type = object({
     count        = optional(number, 0)
     type         = optional(string, "pd-balanced")
