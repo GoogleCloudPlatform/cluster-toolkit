@@ -119,11 +119,12 @@ resource "google_compute_disk" "additional_disks" {
   count = var.instance_count * var.additional_persistent_disks.count
 
   # NB: this resource array must be sliced accounting for var.instance_count
-  name   = "${local.resource_prefix}-disk-${count.index}"
-  type   = var.additional_persistent_disks.type
-  size   = var.additional_persistent_disks.size
-  labels = local.labels
-  zone   = var.zone
+  name         = "${local.resource_prefix}-disk-${count.index}"
+  type         = var.additional_persistent_disks.type
+  size         = var.additional_persistent_disks.size
+  labels       = local.labels
+  zone         = var.zone
+  storage_pool = var.additional_persistent_disks.storage_pool
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -188,10 +189,11 @@ resource "google_compute_instance" "compute_vm" {
 
   boot_disk {
     initialize_params {
-      image  = data.google_compute_image.compute_image.self_link
-      size   = var.disk_size_gb
-      type   = var.disk_type
-      labels = local.labels
+      image        = data.google_compute_image.compute_image.self_link
+      size         = var.disk_size_gb
+      type         = var.disk_type
+      labels       = local.labels
+      storage_pool = var.disk_storage_pool
     }
 
     device_name = "${local.resource_prefix}-boot-disk-${count.index}"
