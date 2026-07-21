@@ -244,6 +244,7 @@
           -o ProxyCommand="gcloud compute start-iap-tunnel %h %p --listen-on-stdin --project={{ project }} --zone={{ zone }} --verbosity=warning"
           {% endif %}
         groups: [remote_host]
+        actual_network: "{{ actual_network }}"
 
     - name: Add Controller node as host
       ansible.builtin.add_host:
