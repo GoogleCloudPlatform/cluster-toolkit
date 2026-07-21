@@ -276,9 +276,18 @@ type gkeClusterAutoscaling struct {
 }
 
 type gkeCluster struct {
-	Locations   []string              `json:"locations"`
-	NodePools   []gkeJobNodePool      `json:"nodePools"`
-	Autoscaling gkeClusterAutoscaling `json:"autoscaling"`
+	Locations                   []string                     `json:"locations"`
+	NodePools                   []gkeJobNodePool             `json:"nodePools"`
+	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
+	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
+}
+
+type controlPlaneEndpointsConfig struct {
+	DnsEndpointConfig *dnsEndpointConfig `json:"dnsEndpointConfig,omitempty"`
+}
+
+type dnsEndpointConfig struct {
+	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
 }
 
 // Types for JobSet status unmarshaling
