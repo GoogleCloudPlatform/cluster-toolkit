@@ -111,6 +111,54 @@ make
 
 Note: You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command will fail.
 
+## Prerequisites
+
+Before deploying your first cluster, ensure the following are configured in your Google Cloud project.
+
+### Enable APIs
+
+Several APIs must be enabled to deploy your cluster. While Terraform will identify missing APIs during `terraform apply`, enabling them upfront saves time. Required APIs typically include:
+- Compute Engine API
+- Filestore API
+- Cloud Storage API
+- Service Usage API
+
+See the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis) for detailed instructions.
+
+### Quotas
+
+HPC and AI workloads often require significant resources. You might need to request additional quota to deploy your cluster. For more information, see [Request additional quotas](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota).
+
+### GCP Credentials
+
+Terraform can provide credentials for authenticating to Google Cloud in several ways. We recommend using `gcloud` on your workstation or using service accounts attached to cloud environments.
+
+**Warning**: We do not recommend downloading or using service account JSON keys. These keys are long-lived credentials that pose a significant security risk if leaked. Instead, use short-lived credentials via Application Default Credentials (ADC).
+
+On your local terminal or Cloud Workstations terminal, generate credentials associated with your Google Cloud account:
+
+```bash
+gcloud auth application-default login
+```
+
+Follow the prompts in your browser to authenticate. You will be provided a token to copy and paste back into your terminal to complete the process. Once finished, Terraform will automatically use these "Application Default Credentials."
+
+If you receive "quota project" errors, set the quota project to your current project ID:
+
+```bash
+gcloud auth application-default set-quota-project ${PROJECT_ID}
+```
+
+### Telemetry and Privacy Notice
+
+To help improve Cluster Toolkit, feature usage statistics are collected and sent to Google. You can opt-out at any time by executing the following command:
+
+```bash
+./gcluster telemetry off
+```
+
+Cluster Toolkit telemetry overall is handled in accordance with the [Google Privacy Policy](https://policies.google.com/privacy). When you use Cluster Toolkit to interact with or utilize GCP Services, your information is handled in accordance with the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
+
 ## Cluster Creation and Management
 
 After installing `gcluster`, you can deploy, manage, and destroy infrastructure using Cluster Blueprints:
@@ -196,62 +244,6 @@ Ensure your environment is set up before submitting jobs:
   ```
 
 For complete step-by-step tutorials, advanced multi-slice topologies, storage mounts, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
-
-## Prerequisites
-
-Before deploying your first cluster, ensure the following are configured in your Google Cloud project.
-
-### Enable APIs
-
-Several APIs must be enabled to deploy your cluster. While Terraform will identify missing APIs during `terraform apply`, enabling them upfront saves time. Required APIs typically include:
-- Compute Engine API
-- Filestore API
-- Cloud Storage API
-- Service Usage API
-
-See the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis) for detailed instructions.
-
-### Quotas
-
-HPC and AI workloads often require significant resources. You might need to request additional quota to deploy your cluster. For more information, see [Request additional quotas](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota).
-
-### Telemetry and Privacy Notice
-
-To help improve Cluster Toolkit, feature usage statistics are collected and sent to Google. You can opt-out at any time by executing the following command:
-
-```bash
-./gcluster telemetry off
-```
-
-Cluster Toolkit telemetry overall is handled in accordance with the [Google Privacy Policy](https://policies.google.com/privacy). When you use Cluster Toolkit to interact with or utilize GCP Services, your information is handled in accordance with the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
-
-## GCP credentials
-
-### Provide cloud credentials to Terraform
-
-Terraform can provide credentials for authenticating to Google Cloud in several ways. We recommend using `gcloud` on your workstation or using service accounts attached to cloud environments.
-
-**Warning**: We do not recommend downloading or using service account JSON keys. These keys are long-lived credentials that pose a significant security risk if leaked. Instead, use short-lived credentials via Application Default Credentials (ADC).
-
-### Cloud credentials on your workstation
-
-On your local terminal or Cloud Workstations terminal, generate credentials associated with your Google Cloud account:
-
-```bash
-gcloud auth application-default login
-```
-
-Follow the prompts in your browser to authenticate. You will be provided a token to copy and paste back into your terminal to complete the process. Once finished, Terraform will automatically use these "Application Default Credentials."
-
-If you receive "quota project" errors, set the quota project to your current project ID:
-
-```bash
-gcloud auth application-default set-quota-project ${PROJECT_ID}
-```
-
-### Cloud credentials in virtualized environments
-
-Cloud Shell is an excellent environment for prototyping and interactively running examples. However, because it is designed for session-based work and has a 20-minute inactivity timeout, we recommend using a persistent environment (like a Compute Engine VM or Cloud Workstation) for deployments that are long-running or require significant resources.
 
 ## VM Image support
 
