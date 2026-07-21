@@ -341,7 +341,7 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "Storage pools are only supported with Hyperdisk types."
     }
     precondition {
-      condition     = var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
+      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
       error_message = "Storage pools are only supported with Hyperdisk types."
     }
   }
