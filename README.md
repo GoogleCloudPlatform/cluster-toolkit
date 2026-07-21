@@ -109,9 +109,11 @@ The `gcluster job submit` command provides a unified interface to submit batch a
 Ensure your environment is set up before submitting jobs:
 - A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
-- For on-the-fly builds (`--build-context`), specify your Artifact Registry repository via `export GCLUSTER_IMAGE_REPO=<repository-name>`.
+- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name.
 
-### Submitting a Job with a Pre-built Image
+### Submitting Jobs
+
+#### 1. Submitting with a Pre-built Image
 
 ```bash
 ./gcluster job submit \
@@ -124,9 +126,9 @@ Ensure your environment is set up before submitting jobs:
   --compute-type n2-standard-32
 ```
 
-### Submitting a Job with On-the-Fly Image Building
+#### 2. Submitting with On-the-Fly Image Building
 
-If you have local source code (e.g., in `./app_dir`), `gcluster` can package it into a container image and push it to Artifact Registry automatically without requiring a Dockerfile:
+If you have local application code (e.g., in `./app_dir`), `gcluster` packages it into a container image and pushes it to Artifact Registry automatically without requiring a Dockerfile:
 
 ```bash
 ./gcluster job submit \
@@ -140,9 +142,64 @@ If you have local source code (e.g., in `./app_dir`), `gcluster` can package it 
   --compute-type n2-standard-32
 ```
 
+#### 3. Submitting Multi-Slice GPU / TPU Workloads
+
+For distributed training across multiple groups or slices of nodes, specify `--num-slices` and `--num-nodes`:
+
+```bash
+./gcluster job submit \
+  --name my-multi-slice-job \
+  --image us-docker.pkg.dev/my-project/my-repo/my-image:latest \
+  --command "python train.py" \
+  --compute-type v6e-8 \
+  --num-slices 2 \
+  --num-nodes 4
+```
+
+#### 4. Mounting Persistent Storage (`--mount`)
+
+Mount Cloud Storage, Filestore, existing PVCs, or host paths using `--mount "<src>:<dest>[:rw]"`:
+
+- **Cloud Storage (GCS Fuse)**: `--mount "gs://my-bucket:/data:rw"`
+- **Filestore**: `--mount "filestore://my-filestore-ip/share:/data"`
+- **Existing PVC**: `--mount "my-pvc:/data"`
+- **Host Path**: `--mount "/host/path:/data"`
+
+#### 5. Passing Custom Environment Variables (`--env`)
+
+```bash
+./gcluster job submit \
+  --name my-env-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --env "TRAINING_EPOCHS=10" \
+  --env "DEBUG=true"
+```
+
+### Managing Jobs and Diagnostics
+
+Manage submitted jobs directly from the `gcluster` CLI:
+
+- **List Jobs**: Check workload status across the cluster:
+  ```bash
+  ./gcluster job list
+  ```
+- **View Job Logs**: View container stdout/stderr logs:
+  ```bash
+  ./gcluster job logs my-job
+  ```
+- **Cancel a Job**: Clean up a running workload:
+  ```bash
+  ./gcluster job cancel my-job
+  ```
+- **Inspect Cluster & Workload Health**: Perform a diagnostic sweep:
+  ```bash
+  ./gcluster job inspect --name my-job --show
+  ```
+
 ### Setting Default Configurations
 
-To avoid specifying common flags on every command, set defaults using `gcluster job config`:
+Avoid repeating common flags by setting CLI defaults:
 
 ```bash
 ./gcluster job config set project <PROJECT_ID>
@@ -150,7 +207,7 @@ To avoid specifying common flags on every command, set defaults using `gcluster 
 ./gcluster job config set location <REGION_OR_ZONE>
 ```
 
-For advanced features such as mounting persistent storage (Cloud Storage, Filestore, PVCs), submitting multi-slice TPU/GPU jobs, or Kueue priority queues, see the [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
+For complete step-by-step tutorials, advanced node constraint strategies, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/gcluster_job_guide.md) (or [local guide](docs/gcluster_job_guide.md)).
 
 ## Prerequisites
 
