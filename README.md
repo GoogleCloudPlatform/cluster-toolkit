@@ -37,8 +37,8 @@ If you want to work from a Linux or macOS client or workstation, you must follow
 
 You can use two different methods to install Cluster Toolkit:
 
-* [Using the Pre-built Bundle (Recommended)](#using-the-pre-built-bundle-recommended)
-* [Building from Source](#building-from-source)
+- [Using the Pre-built Bundle (Recommended)](#using-the-pre-built-bundle-recommended)
+- [Building from Source](#building-from-source)
 
 ### Using the Pre-built Bundle (Recommended)
 
