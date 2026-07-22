@@ -146,6 +146,7 @@ type InspectOptions struct {
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.
 type JobOrchestrator interface {
+	// Initialize fetches cluster metadata and resolves the cluster location.
 	Initialize(clusterName, location, projectID string) (resolvedLocation string, err error)
 	SubmitJob(job JobDefinition) error
 	ListJobs(opts ListOptions) ([]JobStatus, error)

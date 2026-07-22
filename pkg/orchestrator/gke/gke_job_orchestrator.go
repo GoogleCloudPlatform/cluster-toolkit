@@ -428,6 +428,8 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 	return nil
 }
 
+// Initialize fetches GKE cluster metadata and resolves the cluster location,
+// handling regional fallback if necessary.
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
 

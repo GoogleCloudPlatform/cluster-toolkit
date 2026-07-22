@@ -69,7 +69,6 @@ var JobCmd = &cobra.Command{
 			return err
 		}
 		location = resolvedLoc
-		location = resolvedLoc
 
 		return nil
 	},
