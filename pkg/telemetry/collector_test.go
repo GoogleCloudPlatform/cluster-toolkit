@@ -118,7 +118,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "0",
 				COMMAND_FLAGS:      "force,project",
 				REGION:             "us-central1",
@@ -147,7 +147,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "1",
 				COMMAND_FLAGS:      "",
 				REGION:             "",
@@ -442,8 +442,34 @@ func TestGetReleaseVersion(t *testing.T) {
 }
 
 func TestGetIsTestData(t *testing.T) {
-	if got := getIsTestData(); got != "true" {
-		t.Errorf("getIsTestData() = %v, want true", got)
+	tests := []struct {
+		name      string
+		projectID string
+		want      string
+	}{
+		{
+			name:      "dev project",
+			projectID: "hpc-toolkit-dev",
+			want:      "true",
+		},
+		{
+			name:      "prod project",
+			projectID: "some-other-project",
+			want:      "false",
+		},
+		{
+			name:      "empty project",
+			projectID: "",
+			want:      "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsTestData(tt.projectID); got != tt.want {
+				t.Errorf("getIsTestData() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

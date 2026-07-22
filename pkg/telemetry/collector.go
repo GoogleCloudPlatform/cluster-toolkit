@@ -36,6 +36,7 @@ var (
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
+	testProjects               = []string{"hpc-toolkit-dev"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -56,6 +57,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	defer c.mu.Unlock()
 
 	bpModulesList := getBpModulesList(c.blueprint)
+	project_id := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
@@ -76,7 +78,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(c.blueprint.AIAssisted)
-	c.metadata[IS_TEST_DATA] = getIsTestData()
+	c.metadata[IS_TEST_DATA] = getIsTestData(project_id)
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 	c.metadata[ERROR_TYPE] = getErrorType(err)
 }
@@ -420,9 +422,12 @@ func getErrorType(err error) string {
 	return ErrTypeUnknown
 }
 
-// This method intentionally returns "true", as all telemetry is in testing phase currently.
-func getIsTestData() string {
-	return "true" // do not modify
+// This method returns "true" for test projects, and "false" otherwise.
+func getIsTestData(projectID string) string {
+	if slices.Contains(testProjects, projectID) {
+		return "true"
+	}
+	return "false"
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
