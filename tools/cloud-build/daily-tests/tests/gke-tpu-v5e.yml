@@ -41,11 +41,12 @@ custom_vars:
   tpu_type: v5litepod-4
   num_slices: 1
   workload_image: "us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest"
-  workload_command: "pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print(\"JAX Device count:\", jax.device_count())'"
-  expected_log_output: "JAX Device count: 4"
+  workload_command: >-
+    pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == 4, f"Expected 4 devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("JAX TPU Result:", a)'
+  expected_log_output: "JAX TPU Result:"
 instance_type: "tpuv5e"
 scheduler: "gke"
 post_deploy_tests:
-# - test-validation/test-gke-tpu.yml
-# - test-validation/test-gke-ml-diagnostics.yml
+- test-validation/test-gke-tpu.yml
+- test-validation/test-gke-ml-diagnostics.yml
 - test-validation/test-gcluster-job-pathways.yml

@@ -135,7 +135,7 @@
   delegate_to: localhost
   ansible.builtin.command:
     argv:
-    - "{{ workspace} }/gcluster"
+    - "{{ workspace }}/gcluster"
     - "job"
     - "submit"
     - "--pathways"
@@ -162,41 +162,55 @@
 
 - name: Block to wait for job completion, assert logs and clean up on failure
   block:
-  - name: Wait for JobSet execution to complete (GCluster)
+  - name: Wait for Pathways JobSet resource creation
     delegate_to: localhost
-    ansible.builtin.command: >
-      {{ workspace }}/gcluster job list
-      --name-contains "{{ job_name }}"
-      --cluster {{ deployment_name }}
-      --location {{ region }}
-      --project {{ custom_vars.project }}
-    register: job_list_output
-    until:
-    - job_list_output.rc == 0
-    - "'Succeeded' in job_list_output.stdout"
-    retries: 30
-    delay: 20
-
-  - name: Get job logs using GCluster CLI
-    delegate_to: localhost
-    ansible.builtin.command: >
-      {{ workspace }}/gcluster job logs "{{ job_name }}"
-      --main-only
-      --cluster {{ deployment_name }}
-      --location {{ region }}
-      --project {{ custom_vars.project }}
-    register: workload_logs
+    ansible.builtin.command: kubectl get jobset "{{ job_name }}"
+    register: jobset_check
+    until: jobset_check.rc == 0
+    retries: 12
+    delay: 5
     changed_when: false
 
-  - name: Print workload logs
-    ansible.builtin.debug:
-      msg: "{{ workload_logs.stdout }}"
+  - name: Wait for Pathways Proxy and RM sidecars to initialize
+    delegate_to: localhost
+    ansible.builtin.command: kubectl wait --for=condition=Initialized pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }} --timeout=600s
+    changed_when: false
 
-  - name: Assert correct JAX device count or success message in logs
+  - name: Wait for Pathways Workload container to start running
+    delegate_to: localhost
+    ansible.builtin.shell: >
+      kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }}
+      -o jsonpath='{.items[*].status.containerStatuses[?(@.name=="workload-container")].state}'
+      | grep -E "running|terminated"
+    register: workload_state
+    until: workload_state.rc == 0
+    retries: 60
+    delay: 5
+    changed_when: false
+
+  - name: Stream Pathways Workload logs for JAX TPU execution result
+    delegate_to: localhost
+    ansible.builtin.shell: >
+      timeout 600 bash -c '
+      {{ workspace }}/gcluster job logs "{{ job_name }}" -f
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+      --main-only
+      | grep -m 1 "JAX TPU Result"
+      '
+    register: streaming_logs
+
+  - name: Print streaming logs result
+    ansible.builtin.debug:
+      msg: "{{ streaming_logs.stdout }}"
+
+  - name: Assert JAX TPU computation and device count verification
     ansible.builtin.assert:
       that:
-      - custom_vars.expected_log_output in workload_logs.stdout
-      fail_msg: "Failed to find '{{ custom_vars.expected_log_output }}' in workload logs."
+      - streaming_logs.stdout is search("JAX TPU Result")
+      - streaming_logs.stdout is search(custom_vars.expected_log_output)
+      fail_msg: "Failed to find expected JAX output in streaming logs."
 
   rescue:
   - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."
