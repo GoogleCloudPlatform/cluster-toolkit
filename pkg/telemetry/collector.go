@@ -57,7 +57,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	defer c.mu.Unlock()
 
 	bpModulesList := getBpModulesList(c.blueprint)
-	project_id := config.GetKeyFromBlueprint("project_id", c.blueprint)
+	projectID := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
@@ -78,7 +78,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(c.blueprint.AIAssisted)
-	c.metadata[IS_TEST_DATA] = getIsTestData(project_id)
+	c.metadata[IS_TEST_DATA] = getIsTestData(projectID)
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 	c.metadata[ERROR_TYPE] = getErrorType(err)
 }
@@ -88,16 +88,16 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	project_id := config.GetKeyFromBlueprint("project_id", c.blueprint)
+	projectID := config.GetKeyFromBlueprint("project_id", c.blueprint)
 
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
 		EventType:        "gclusterCLI",
 		EventName:        getCommandName(c.eventCmd),
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:    getProjectNumber(project_id),
+		ProjectNumber:    getProjectNumber(projectID),
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: getBillingAccountId(project_id),
+		BillingAccountId: getBillingAccountId(projectID),
 		ReleaseVersion:   getReleaseVersion(),
 		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
