@@ -29,6 +29,12 @@ If you use `--build-context` to build images on-the-fly, you must set:
 >
 > Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects.
 
+### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
+
+If you plan to use Multi-Tier Checkpointing (`--mtc-enabled` flag), ensure that your cluster was created with `enable_multi_tier_checkpointing = true` (or `stateful_ha_config { enabled = true }`).
+
+To use this feature, the cluster administrator must deploy the required `CheckpointConfiguration` Custom Resource globally at cluster creation. This is done by specifying the `mtc_target_bucket` variable in the Terraform blueprint. Job submitters then only need to pass `--mtc-enabled` to their jobs.
+
 ## 2. Prepare Sample Application Code
 
 Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool will package all files in this directory and add them to the image.
@@ -1098,6 +1104,8 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
+| `--mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
+| `--mtc-ramdisk-directory` | `string` | The ramdisk directory path for local checkpoints in MTC (defaults to `/tmp/mtc_checkpoints`). |
 | `--verbose` | `bool` | Enable verbose logging for the workload. |
 
 *(Note: `--cluster`, `--location`, and `--project` are also supported as common flags, see 9.1)*
@@ -1124,8 +1132,6 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). |
 | `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
-| `--pathways-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the Pathways workload. |
-| `--pathways-ramdisk-directory` | `string` | The ramdisk directory path for local checkpoints in MTC (defaults to `/tmp/mtc_checkpoints`). |
 
 #### 9.3.3 GPU Related Flags
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*

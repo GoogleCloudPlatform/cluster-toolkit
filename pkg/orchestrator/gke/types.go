@@ -179,6 +179,9 @@ type ManifestOptions struct {
 	IsStaticSlicing               bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
+	IsPathwaysJob                 bool
+	MTCEnabled                    bool
+	RamdiskDirectory              string
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -280,6 +283,7 @@ type gkeCluster struct {
 	NodePools                   []gkeJobNodePool             `json:"nodePools"`
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
+	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
 }
 
 type controlPlaneEndpointsConfig struct {
@@ -287,7 +291,16 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type dnsEndpointConfig struct {
-	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
+	AllowExternalTraffic bool             `json:"allowExternalTraffic,omitempty"`
+	AddonsConfig         *gkeAddonsConfig `json:"addonsConfig,omitempty"`
+}
+
+type gkeAddonsConfig struct {
+	StatefulHaConfig *gkeStatefulHaConfig `json:"statefulHaConfig,omitempty"`
+}
+
+type gkeStatefulHaConfig struct {
+	Enabled bool `json:"enabled"`
 }
 
 // Types for JobSet status unmarshaling
@@ -362,6 +375,8 @@ type jobSetTemplateData struct {
 	PathwaysWorkerEnv             []EnvVar
 	IsTPU                         bool
 	IsGPU                         bool
+	MTCEnabled                    bool
+	RamdiskDirectory              string
 }
 
 // Types for parsing kubectl get nodes -o json

@@ -289,10 +289,6 @@ func sanitizePVCName(name string) string {
 
 // AddVolumeOptions marshals and indents the volume and volume mount specifications into the manifest options.
 func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountInfo) {
-	if len(vols) == 0 {
-		return
-	}
-
 	var volSpecs []map[string]interface{}
 	var mountSpecs []map[string]interface{}
 	gcsFuseEnabled := false
@@ -303,6 +299,24 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		if v.Type == "gcsfuse" {
 			gcsFuseEnabled = true
 		}
+	}
+
+	if opts.MTCEnabled {
+		mountSpecs = append(mountSpecs,
+			map[string]interface{}{"name": "cache", "mountPath": opts.RamdiskDirectory},
+		)
+		volSpecs = append(volSpecs,
+			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},
+		)
+
+		if opts.IsPathwaysJob {
+			mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
+			volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
+		}
+	}
+
+	if len(volSpecs) == 0 {
+		return
 	}
 
 	opts.GCSFuseEnabled = gcsFuseEnabled

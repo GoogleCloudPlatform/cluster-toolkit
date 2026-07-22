@@ -203,17 +203,17 @@ spec:
                 echo "Exit code: $EXIT_CODE"
                 exit $EXIT_CODE
               volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
+                - name: shared-tmp
+                  mountPath: /tmp
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
+              - name: shared-tmp
+                hostPath:
+                  path: /tmp
+                  type: DirectoryOrCreate
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}
@@ -285,9 +285,9 @@ spec:
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
-              {{- if .Pathways.MTCEnabled}}
+              {{- if .MTCEnabled}}
               - name: cache
-                mountPath: {{.Pathways.RamdiskDirectory}}
+                mountPath: {{.RamdiskDirectory}}
               - name: sidecar-shared-memory
                 mountPath: /tmp/sidecar
               {{- end}}
@@ -305,7 +305,7 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-                {{- if .Pathways.MTCEnabled}}
+                {{- if .MTCEnabled}}
                 - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
                 {{- end}}
                 {{- range .WorkerArgsList }}
@@ -354,30 +354,17 @@ spec:
               {{- end }}
 {{(StructuralData .ResourcesString)}}
               volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
-              {{- if .Pathways.MTCEnabled}}
-              - name: cache
-                mountPath: {{.Pathways.RamdiskDirectory}}
-              - name: sidecar-shared-memory
-                mountPath: /tmp/sidecar
-              {{- end}}
+                - name: shared-tmp
+                  mountPath: /tmp
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
-            {{- if .Pathways.MTCEnabled}}
-            - name: cache
-              csi:
-                driver: multitier-checkpoint.csi.storage.gke.io
-            - name: sidecar-shared-memory
-              emptyDir:
-                medium: Memory
-            {{- end}}
+              - name: shared-tmp
+                hostPath:
+                  path: /tmp
+                  type: DirectoryOrCreate
+
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}
 {{- end }}

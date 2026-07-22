@@ -165,6 +165,10 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		Topology:                      schedOpts.Topology,
 		Verbose:                       job.Verbose,
 		Env:                           job.Env,
+		IsPathwaysJob:                 job.IsPathwaysJob,
+		Pathways:                      job.Pathways,
+		MTCEnabled:                    job.MTCEnabled,
+		RamdiskDirectory:              job.RamdiskDirectory,
 	}
 
 	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {

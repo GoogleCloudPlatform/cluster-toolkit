@@ -1000,20 +1000,20 @@ func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
 		"--project", "test-project",
 		"--pathways-gcs-location", "gs://my-bucket",
 		"--compute-type", "n2-standard-4",
-		"--pathways-mtc-enabled",
-		"--pathways-ramdisk-directory", "/tmp/custom_mtc_dir",
+		"--mtc-enabled",
+		"--mtc-ramdisk-directory", "/tmp/custom_mtc_dir",
 	)
 
 	if err != nil {
 		t.Fatalf("command failed with error: %v", err)
 	}
 
-	if !pathways.MTCEnabled {
-		t.Errorf("expected pathways.MTCEnabled to be true")
+	if !mtcEnabled {
+		t.Errorf("expected mtcEnabled to be true")
 	}
 
-	if pathways.RamdiskDirectory != "/tmp/custom_mtc_dir" {
-		t.Errorf("expected pathways.RamdiskDirectory to be /tmp/custom_mtc_dir, got %s", pathways.RamdiskDirectory)
+	if ramdiskDirectory != "/tmp/custom_mtc_dir" {
+		t.Errorf("expected ramdiskDirectory to be /tmp/custom_mtc_dir, got %s", ramdiskDirectory)
 	}
 
 }

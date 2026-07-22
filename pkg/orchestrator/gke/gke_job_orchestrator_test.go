@@ -535,8 +535,9 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			ColocatedPythonSidecarImage: "sidecar:latest",
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
-			MTCEnabled:                  true,
 		},
+		IsPathwaysJob: true,
+		MTCEnabled:    true,
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
