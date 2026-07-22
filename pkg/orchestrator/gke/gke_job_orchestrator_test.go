@@ -2272,7 +2272,7 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	_, _, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	_, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
 	if err != nil {
 		t.Fatalf("Initialize failed: %v", err)
 	}
@@ -2320,7 +2320,7 @@ func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	_, loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
 	if err != nil {
 		t.Fatalf("Initialize failed: %v", err)
 	}

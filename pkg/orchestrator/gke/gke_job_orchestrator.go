@@ -428,12 +428,8 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 	return nil
 }
 
-func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, string, error) {
-	proj, err := g.getProjectID(projectID)
-	if err != nil {
-		return "", "", err
-	}
-	g.projectID = proj
+func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	g.projectID = projectID
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
 	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
@@ -442,7 +438,7 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 		"--format=json")
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
-			return "", "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
+			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
 		}
 		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
 		if len(strings.Split(location, "-")) == 3 {
@@ -460,16 +456,16 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 				location = region
 				res = fallbackRes
 			} else {
-				return "", "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
+				return "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
 			}
 		} else {
-			return "", "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
+			return "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
 		}
 	}
 
 	var clusterDesc gkeCluster
 	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
-		return "", "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
+		return "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
 	}
 
 	g.clusterZones = clusterDesc.Locations
@@ -478,7 +474,7 @@ func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (s
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
 	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
 
-	return g.projectID, location, nil
+	return location, nil
 }
 
 func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
@@ -918,23 +914,6 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 	}
 
 	return hasCPU && hasMem
-}
-
-func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) {
-	if initialProjectID != "" {
-		return initialProjectID, nil
-	}
-
-	res := g.executor.ExecuteCommand("gcloud", "config", "get-value", "project")
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to get GCP project ID from gcloud config: %s", res.Stderr)
-	}
-	projectID := strings.TrimSpace(res.Stdout)
-	if projectID == "" {
-		return "", fmt.Errorf("GCP project ID is empty. Please provide it via --project flag or configure gcloud CLI.")
-	}
-	logging.Info("Using GCP Project ID inferred from gcloud config: %s", projectID)
-	return projectID, nil
 }
 
 func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, error) {

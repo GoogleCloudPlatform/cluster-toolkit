@@ -300,10 +300,14 @@ func setupSubmitTestEnv(t *testing.T) {
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
+	initializeFunc func(string, string, string) (string, error)
 }
 
-func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, string, error) {
-	return projectID, location, nil
+func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	if m.initializeFunc != nil {
+		return m.initializeFunc(clusterName, location, projectID)
+	}
+	return location, nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
