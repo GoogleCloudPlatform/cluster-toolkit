@@ -24,7 +24,7 @@ import (
 )
 
 func TestCancelCmd_Success(t *testing.T) {
-	resetSubmitCmdFlags() // Reset shared flags
+	setupSubmitTestEnv(t) // Reset shared flags
 
 	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory
@@ -91,7 +91,7 @@ func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
 }
 
 func TestCancelCmd_MissingArgs(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	_, err := executeCommand(JobCmd, "cancel")
 	if err == nil {
@@ -104,7 +104,7 @@ func TestCancelCmd_MissingArgs(t *testing.T) {
 }
 
 func TestCancelCmd_JobNotFound(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()

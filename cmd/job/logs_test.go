@@ -39,7 +39,7 @@ func (m *mockLogsExecutor) ExecuteCommandStream(name string, args ...string) err
 }
 
 func TestLogsCmd_Success(t *testing.T) {
-	resetSubmitCmdFlags() // Reset shared flags
+	setupSubmitTestEnv(t) // Reset shared flags
 
 	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory
