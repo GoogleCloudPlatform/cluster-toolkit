@@ -50,6 +50,16 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 func TestListWorkloadsCmd_InvalidStatus(t *testing.T) {
 	resetSubmitCmdFlags()
 
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		g := gke.NewGKEOrchestrator()
+		g.SetExecutor(&mockCancelExecutor{}) // Use the mock from cancel_test.go if available
+		g.SetKubeClient(&mockKubeClient{namespace: "default"})
+		return g
+	}
+
 	_, err := executeCommand(JobCmd, "list", "--status", "InvalidStatus", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 	if err == nil {
 		t.Fatalf("expected error for invalid status, got nil")

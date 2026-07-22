@@ -428,49 +428,48 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 	return nil
 }
 
-func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
-	projectID, err := g.getProjectID(job.ProjectID)
+func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, string, error) {
+	proj, err := g.getProjectID(projectID)
 	if err != nil {
-		return err
+		return "", "", err
 	}
-	job.ProjectID = projectID
-	g.projectID = projectID
+	g.projectID = proj
 
-	logging.Info("Fetching GKE cluster metadata for '%s'...", job.ClusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
-		"--location", job.ClusterLocation,
-		"--project", job.ProjectID,
+	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
+	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+		"--location", location,
+		"--project", g.projectID,
 		"--format=json")
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
-			return fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", job.ClusterName, job.ProjectID)
+			return "", "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
 		}
 		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
-		if len(strings.Split(job.ClusterLocation, "-")) == 3 {
-			region := shell.ExtractRegion(job.ClusterLocation)
-			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", job.ClusterLocation, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
+		if len(strings.Split(location, "-")) == 3 {
+			region := shell.ExtractRegion(location)
+			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
+			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
-				"--project", job.ProjectID,
+				"--project", g.projectID,
 				"--format=json")
 			if fallbackRes.ExitCode == 0 {
 				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
 					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
 					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
-					job.ClusterName, region, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation)
-				job.ClusterLocation = region
+					clusterName, region, location, location, location, location)
+				location = region
 				res = fallbackRes
 			} else {
-				return fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", job.ClusterName, job.ClusterLocation, region, res.Stderr)
+				return "", "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
 			}
 		} else {
-			return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+			return "", "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
 		}
 	}
 
 	var clusterDesc gkeCluster
 	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
-		return fmt.Errorf("failed to parse GKE cluster description: %w", err)
+		return "", "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
 	}
 
 	g.clusterZones = clusterDesc.Locations
@@ -478,6 +477,11 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
 	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
+
+	return g.projectID, location, nil
+}
+
+func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
 
 	if job.IsPathwaysJob {
 		if job.Pathways.HeadNodePool != "" {
@@ -491,7 +495,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		job.Pathways.HeadNodePool = g.resolvedHeadNodePool
 	}
 
-	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
+	capacity, nodePoolSAs, err := g.calculateClusterCapacity(g.clusterDesc, job.ClusterLocation)
 	if err != nil {
 		return err
 	}

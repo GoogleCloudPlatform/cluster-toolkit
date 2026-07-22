@@ -288,10 +288,17 @@ func resetSubmitCmdFlags() {
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
 }
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
+}
+
+func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, string, error) {
+	return projectID, location, nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {

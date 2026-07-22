@@ -52,6 +52,9 @@ func TestCancelCmd_Success(t *testing.T) {
 type mockCancelExecutor struct{}
 
 func (m *mockCancelExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	if name == "gcloud" && len(args) >= 3 && args[0] == "container" && args[1] == "clusters" && args[2] == "describe" {
+		return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
+	}
 	return shell.CommandResult{ExitCode: 0}
 }
 
