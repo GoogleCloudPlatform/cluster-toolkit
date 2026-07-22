@@ -477,7 +477,8 @@ func getProjectIfReservationMatches(resVal cty.Value, reservationName string) st
 		return ""
 	}
 	resAttrs := resVal.AsValueMap()
-	if getSafeString(resAttrs, "name") != reservationName {
+	nameVal := strings.Split(getSafeString(resAttrs, "name"), "/reservationBlocks/")[0]
+	if nameVal != reservationName {
 		return ""
 	}
 	return getSafeString(resAttrs, "project")
