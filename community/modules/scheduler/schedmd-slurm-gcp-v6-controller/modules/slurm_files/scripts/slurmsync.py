@@ -451,32 +451,40 @@ def sync_instances():
         action.apply(list(nodes))
 
 
-def reconfigure_slurm():
+def reconfigure_slurm() -> bool:
+    """Fetch new config and regenerate Slurm config files.
+
+    Returns True if config was updated and a scontrol reconfigure is needed.
+    On the controller, the reconfigure is deferred until after topology
+    regeneration to avoid issuing two sequential scontrol reconfigure calls
+    in the same sync cycle (which can cause a socket timeout).
+    """
     update_msg = "*** slurm configuration was updated ***"
 
     if lookup().cfg.hybrid:
         # terraform handles generating the config.yaml, don't do it here
-        return
+        return False
 
     upd, cfg_new = util.fetch_config()
     if not upd:
         log.debug("No changes in config detected.")
-        return
+        return False
     log.debug("Changes in config detected. Reconfiguring Slurm now.")
     util.update_config(cfg_new)
 
     if lookup().is_controller:
         conf.get_generator(lookup()).generate_configs()
 
-        log.info("Restarting slurmctld to make changes take effect.")
+        # Defer slurmctld restart and scontrol reconfigure:
+        # Running them now would cause slurmctld to temporarily load new node defs with old topology.
+        # This causes slurmctld to hang/timeout when update_topology tries to reconfigure it subsequently.
+        log.info("Config files regenerated. Deferring scontrol reconfigure until after topology update.")
         try:
-            # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
-            run("sudo systemctl restart slurmctld.service", check=False)
-            util.scontrol_reconfigure(lookup())
+            util.run(f"wall '{update_msg}'", timeout=30)
         except Exception:
-            log.exception("failed to reconfigure slurmctld")
-        util.run(f"wall '{update_msg}'", timeout=30)
+            log.warning("failed to broadcast wall message")
         log.debug("Done.")
+        return True
     elif lookup().instance_role_safe == "compute":
         log.info("Restarting slurmd to make changes take effect.")
         run("systemctl restart slurmd")
@@ -487,19 +495,23 @@ def reconfigure_slurm():
         run("systemctl restart sackd")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
+    return False
 
 
 def _generate_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
     return conf.get_generator(lkp).generate_topology_data()
 
-def update_topology(lkp: util.Lookup) -> None:
+def update_topology(lkp: util.Lookup) -> Tuple[bool, Any]:
+    """Regenerate topology files.
+
+    Returns (updated, summary) so the caller can decide when to
+    issue the scontrol reconfigure and persist the summary.
+    """
     updated, summary = _generate_topology(lkp) # type: ignore[attr-defined]
 
     if updated:
-        log.info("Topology configuration updated. Reconfiguring Slurm.")
-        util.scontrol_reconfigure(lkp)
-        # Safe summary only after Slurm got reconfigured, so summary reflects Slurm POV
-        summary.dump(lkp)
+        log.info("Topology configuration updated.")
+    return updated, summary
 
 
 def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
@@ -662,10 +674,19 @@ def main():
     lkp = lookup()
     if util.should_mount_slurm_bucket() and not lkp.is_controller:
         return
+
+    # Track if reconfigure_slurm changed cloud.conf so we can trigger
+    # a deferred scontrol reconfigure inside update_topology
+    config_changed = False
     try:
-        reconfigure_slurm()
+        config_changed = reconfigure_slurm()
+        if config_changed:
+            lkp = lookup()
     except Exception:
         log.exception("failed to reconfigure slurm")
+    if lkp.is_controller and not util.is_active_controller(lkp):
+        log.info("Local controller is in STANDBY mode. Skipping slurmsync pass.")
+        return
     if lkp.is_controller:
         try:
             process_messages(lkp)
@@ -692,10 +713,29 @@ def main():
         except Exception:
             log.exception("failed to sync placement groups")
 
+        topology_changed = False
+        topology_summary = None
         try:
-            update_topology(lkp)
+            topology_changed, topology_summary = update_topology(lkp)
         except Exception:
             log.exception("failed to update topology")
+
+        # Single deferred reconfigure for both config and topology changes.
+        # Placed here so it runs even if topology generation failed above.
+        if config_changed or topology_changed:
+            reasons = []
+            if config_changed:
+                reasons.append("config updated")
+            if topology_changed:
+                reasons.append("topology changed")
+            try:
+                log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
+                util.scontrol_reconfigure(lkp)
+                # Only dump summary after successful reconfigure so it reflects Slurm's view
+                if topology_changed and topology_summary is not None:
+                    topology_summary.dump(lkp)
+            except Exception:
+                log.exception("failed to reconfigure slurmctld")
 
         try:
             sync_maintenance_reservation(lkp)

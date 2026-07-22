@@ -462,6 +462,63 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
     with blob.open('w') as f:
         f.write(yaml.dump(data))
 
+def check_slurmdbd_ready(maxtries: int = 30, interval: float = 15.0) -> None:
+    """Poll sacctmgr until slurmdbd is ready, with timeout safety and backoff."""
+    sacctmgr = slurmdirs.prefix / "bin" / "sacctmgr"
+    wait = 10.0
+    for try_cnt in range(1, maxtries + 1):
+        try:
+            res = run(f"{sacctmgr} -n -i show cluster", check=False, timeout=10)
+            if res.returncode == 0:
+                log.info(f"slurmdbd is ready (try {try_cnt}).")
+                return
+        except Exception as e:
+            log.debug(f"slurmdbd check error: {e}")
+
+        log.info(f"Waiting for slurmdbd to be ready... (try {try_cnt}/{maxtries}, retrying in {int(wait)}s)")
+        time.sleep(wait)
+        wait = min(wait * 1.5, interval)
+
+    log.error(f"Slurmdbd is still not ready after {maxtries} tries. Expecting issues!")
+    raise RuntimeError("Slurmdbd is not ready")
+
+def check_sackd_ready(maxtries: int = 40, interval: float = 15.0) -> None:
+    """Poll sackd until it successfully connects to slurmctld and becomes active."""
+    run("systemctl enable sackd", timeout=30)
+    wait = 10.0
+    for try_cnt in range(1, maxtries + 1):
+        try:
+            proc = subprocess.run(
+                ["systemctl", "restart", "sackd"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=60,
+                universal_newlines=True,
+            )
+            if proc.returncode == 0:
+                active_proc = subprocess.run(
+                    ["systemctl", "is-active", "sackd"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=15,
+                    universal_newlines=True,
+                )
+                if active_proc.returncode == 0:
+                    log.info(f"sackd is ready and active (try {try_cnt}).")
+                    return
+        except subprocess.TimeoutExpired:
+            log.info("Timed out waiting for sackd to start; waiting for controller slurmctld to become ready...")
+        except Exception as e:
+            log.debug(f"sackd check error: {e}")
+
+        log.info(f"Waiting for sackd to be ready... (try {try_cnt}/{maxtries}, retrying in {int(wait)}s)")
+        time.sleep(wait)
+        wait = min(wait * 1.5, interval)
+
+    log.error(f"sackd is still not ready after {maxtries} tries. Expecting issues!")
+    run("systemctl status sackd", timeout=30, check=False)
+
+
 def setup_slurm_health_check_service(lkp: util.Lookup) -> None:
     if not lkp.cfg.get("slurm_backup_controller_name") or not lkp.cfg.get("enable_controller_load_balancer"):
         return
@@ -549,8 +606,9 @@ def setup_controller(is_primary: bool):
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
 
-    # Wait for slurmdbd to come up
-    time.sleep(5)
+    # Wait for slurmdbd to come up.
+    # This can take a while in case of database migration after upgrades (up to an hour).
+    check_slurmdbd_ready(maxtries=30, interval=240)
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
@@ -638,11 +696,7 @@ def setup_login():
     setup_sudoers()
     if not lkp.cfg.enable_slurm_auth:
       run("systemctl restart munge", timeout=30)
-    run("systemctl enable sackd", timeout=30)
-    try:
-        run("systemctl restart sackd", timeout=30)
-    except Exception:
-        log.exception("Failed to restart sackd, ignoring failure.")
+    check_sackd_ready()
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     run_custom_scripts()
