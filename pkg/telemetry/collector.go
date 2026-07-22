@@ -419,9 +419,9 @@ func getErrorType(err error) string {
 	return ErrTypeUnknown
 }
 
-// This method intentionally returns "true", as all telemetry is in testing phase currently.
+// This method intentionally returns "false" to address b/474513593 and https://b.corp.google.com/issues/474514068#comment9
 func getIsTestData() string {
-	return "true" // do not modify
+	return "false" // do not modify
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {

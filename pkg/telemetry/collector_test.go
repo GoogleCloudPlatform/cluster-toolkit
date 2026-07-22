@@ -117,7 +117,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "0",
 				COMMAND_FLAGS:      "force,project",
 				REGION:             "us-central1",
@@ -146,7 +146,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "1",
 				COMMAND_FLAGS:      "",
 				REGION:             "",
@@ -441,8 +441,8 @@ func TestGetReleaseVersion(t *testing.T) {
 }
 
 func TestGetIsTestData(t *testing.T) {
-	if got := getIsTestData(); got != "true" {
-		t.Errorf("getIsTestData() = %v, want true", got)
+	if got := getIsTestData(); got != "false" {
+		t.Errorf("getIsTestData() = %v, want false", got)
 	}
 }
 
