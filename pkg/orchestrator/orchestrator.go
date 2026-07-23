@@ -38,11 +38,9 @@ type PathwaysJobDefinition struct {
 	ServerEnv map[string]string
 	WorkerEnv map[string]string
 
-	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
 
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
-
 }
 
 type VolumeDefinition struct {
@@ -96,8 +94,8 @@ type JobDefinition struct {
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
 	// Multi-Tier Checkpointing (MTC)
-	MTCEnabled       bool
-	RamdiskDirectory string
+	MTCEnabled          bool
+	MTCRamdiskDirectory string
 
 	RawMounts []string
 	Env       map[string]string

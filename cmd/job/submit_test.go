@@ -279,7 +279,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeScheduler = ""
 	platform = "linux/amd64"
 	awaitJobCompletion = false
-	priorityClassName = "medium"
+	priority = "medium"
 	isPathwaysJob = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
 	gkeNapProvisioning = ""
@@ -296,6 +296,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
+	mtcEnabled = false
+	mtcRamdiskDirectory = ""
 }
 
 type mockOrchestrator struct {
@@ -1012,8 +1014,8 @@ func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
 		t.Errorf("expected mtcEnabled to be true")
 	}
 
-	if ramdiskDirectory != "/tmp/custom_mtc_dir" {
-		t.Errorf("expected ramdiskDirectory to be /tmp/custom_mtc_dir, got %s", ramdiskDirectory)
+	if mtcRamdiskDirectory != "/tmp/custom_mtc_dir" {
+		t.Errorf("expected mtcRamdiskDirectory to be /tmp/custom_mtc_dir, got %s", mtcRamdiskDirectory)
 	}
 
 }

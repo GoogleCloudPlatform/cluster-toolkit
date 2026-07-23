@@ -99,12 +99,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if job.Pathways.MTCEnabled {
-		if err := g.checkMTCAddonEnabled(job.ProjectID, job.ClusterLocation, job.ClusterName); err != nil {
-			return err
-		}
-	}
-
 	if err := g.fetchClusterState(&job); err != nil {
 		return err
 	}
@@ -396,8 +390,8 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
-	if job.MTCEnabled && job.RamdiskDirectory == "" {
-		job.RamdiskDirectory = "/tmp/mtc_checkpoints"
+	if job.MTCEnabled && job.MTCRamdiskDirectory == "" {
+		job.MTCRamdiskDirectory = "/tmp/mtc_checkpoints"
 	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
@@ -528,12 +522,6 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 	g.nodePoolSAs = nodePoolSAs
 	logging.Info("Calculated cluster capacity: %+v", g.capacity)
 
-	if job.MTCEnabled {
-		if clusterDesc.AddonsConfig == nil || clusterDesc.AddonsConfig.StatefulHaConfig == nil || !clusterDesc.AddonsConfig.StatefulHaConfig.Enabled {
-			return fmt.Errorf("MTC is not enabled on cluster '%s'. If you created your cluster using Cluster Toolkit, you can enable MTC by updating your cluster blueprint's gke-cluster module settings with:\n  enable_multi_tier_checkpointing: true\n  mtc_target_bucket: \"gs://YOUR_BUCKET\"\n  mtc_cache_size: \"50Gi\"\nThen run 'gcluster deploy'. For clusters provisioned otherwise or for underlying GKE concepts, see: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/training/multi-tier-checkpointing", job.ClusterName)
-		}
-	}
-
 	return nil
 }
 
@@ -574,6 +562,12 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 
 	if err := g.configureClusterEnvironment(job); err != nil {
 		return err
+	}
+
+	if job.MTCEnabled {
+		if err := g.checkMTCAddonEnabled(job.ProjectID, job.ClusterLocation, job.ClusterName); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1400,7 +1394,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
 		MTCEnabled:                    opts.MTCEnabled,
-		RamdiskDirectory:              opts.RamdiskDirectory,
+		MTCRamdiskDirectory:           opts.MTCRamdiskDirectory,
 	}
 }
 

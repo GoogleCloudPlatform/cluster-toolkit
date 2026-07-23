@@ -287,7 +287,7 @@ spec:
                 mountPath: /tmp
               {{- if .MTCEnabled}}
               - name: cache
-                mountPath: {{.MTCRamdiskDirectory}}
+                mountPath: {{.RamdiskDirectory}}
               - name: sidecar-shared-memory
                 mountPath: /tmp/sidecar
               {{- end}}
@@ -356,12 +356,6 @@ spec:
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
-                {{- if .MTCEnabled}}
-                - name: cache
-                  mountPath: {{.MTCRamdiskDirectory}}
-                - name: sidecar-shared-memory
-                  mountPath: /tmp/sidecar
-                {{- end}}
 {{- if .VolumeMountsYAML }}
 {{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
@@ -370,14 +364,6 @@ spec:
                 hostPath:
                   path: /tmp
                   type: DirectoryOrCreate
-              {{- if .MTCEnabled}}
-              - name: cache
-                csi:
-                  driver: multitier-checkpoint.csi.storage.gke.io
-              - name: sidecar-shared-memory
-                emptyDir:
-                  medium: Memory
-              {{- end}}
 
 {{- if .VolumesYAML }}
 {{(StructuralData .VolumesYAML)}}

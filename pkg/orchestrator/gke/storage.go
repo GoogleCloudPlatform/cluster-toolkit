@@ -106,6 +106,7 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (src, dest string, read
 	if err != nil {
 		return "", "", false, err
 	}
+
 	if err := validateSrcScheme(src, vStr); err != nil {
 		return "", "", false, err
 	}
@@ -302,8 +303,12 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 	}
 
 	if opts.MTCEnabled {
+		ramdiskDir := opts.MTCRamdiskDirectory
+		if ramdiskDir == "" {
+			ramdiskDir = "/tmp/mtc_checkpoints"
+		}
 		mountSpecs = append(mountSpecs,
-			map[string]interface{}{"name": "cache", "mountPath": opts.RamdiskDirectory},
+			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
 		)
 		volSpecs = append(volSpecs,
 			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},

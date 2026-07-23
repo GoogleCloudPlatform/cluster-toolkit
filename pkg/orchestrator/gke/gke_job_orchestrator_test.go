@@ -536,8 +536,7 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
 		},
-		IsPathwaysJob: true,
-		MTCEnabled:    true,
+		MTCEnabled: true,
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
