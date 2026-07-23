@@ -380,6 +380,11 @@ func validateGKENAPFlags() error {
 	if gkeNapProvisioning != "reservation" && gkeNapReservation != "" {
 		return fmt.Errorf("--gke-nap-reservation should only be provided when --gke-nap-provisioning=reservation")
 	}
+
+	if pathways.MTCEnabled {
+		// MTC Addon validation is now handled by the GKE Orchestrator preflight checks.
+	}
+
 	return nil
 }
 
