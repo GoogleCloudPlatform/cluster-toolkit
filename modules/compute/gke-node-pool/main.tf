@@ -173,6 +173,7 @@ resource "google_container_node_pool" "node_pool" {
   node_config {
     disk_size_gb                = var.disk_size_gb
     disk_type                   = var.disk_type
+    storage_pools               = var.disk_storage_pool != null ? [var.disk_storage_pool] : null
     resource_labels             = local.labels
     labels                      = local.kubernetes_labels
     service_account             = var.service_account_email
@@ -346,6 +347,10 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || can(regex("^hyperdisk-", var.disk_type))
+      error_message = "Storage pools are only supported with Hyperdisk types."
     }
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")

@@ -71,6 +71,12 @@ variable "disk_type" {
   default     = null
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the node's boot disk. Note that storage pools are only supported with Hyperdisk types."
+  type        = string
+  default     = null
+}
+
 variable "enable_gcfs" {
   description = "Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config)."
   type        = bool
