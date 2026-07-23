@@ -283,7 +283,6 @@ type gkeCluster struct {
 	NodePools                   []gkeJobNodePool             `json:"nodePools"`
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
-	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
 }
 
 type controlPlaneEndpointsConfig struct {
@@ -291,16 +290,7 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type dnsEndpointConfig struct {
-	AllowExternalTraffic bool             `json:"allowExternalTraffic,omitempty"`
-	AddonsConfig         *gkeAddonsConfig `json:"addonsConfig,omitempty"`
-}
-
-type gkeAddonsConfig struct {
-	StatefulHaConfig *gkeStatefulHaConfig `json:"statefulHaConfig,omitempty"`
-}
-
-type gkeStatefulHaConfig struct {
-	Enabled bool `json:"enabled"`
+	AllowExternalTraffic bool `json:"allowExternalTraffic,omitempty"`
 }
 
 // Types for JobSet status unmarshaling

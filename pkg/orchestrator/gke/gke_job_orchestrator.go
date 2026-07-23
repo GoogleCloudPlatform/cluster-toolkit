@@ -149,7 +149,7 @@ func (g *GKEOrchestrator) checkMTCAddonEnabled(projectID, location, clusterName 
 	}
 
 	if resp.AddonsConfig == nil || resp.AddonsConfig.HighScaleCheckpointingConfig == nil || !resp.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please update your cluster blueprint to set 'enable_multi_tier_checkpointing: true' and deploy the cluster before submitting jobs with --pathways-mtc-enabled")
+		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please update your cluster blueprint to set 'enable_multi_tier_checkpointing: true' and deploy the cluster before submitting jobs with --mtc-enabled")
 	}
 	return nil
 }

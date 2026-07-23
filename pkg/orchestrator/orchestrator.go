@@ -38,6 +38,7 @@ type PathwaysJobDefinition struct {
 	ServerEnv map[string]string
 	WorkerEnv map[string]string
 
+	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
 
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.

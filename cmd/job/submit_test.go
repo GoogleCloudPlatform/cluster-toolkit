@@ -278,6 +278,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	topology = ""
 	gkeScheduler = ""
 	platform = "linux/amd64"
+	mtcEnabled = false
+	mtcRamdiskDirectory = ""
 	awaitJobCompletion = false
 	priority = "medium"
 	isPathwaysJob = false
