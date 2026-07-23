@@ -65,3 +65,8 @@ output "instructions" {
       gcloud logging read labels.hostname=${local.slurm_cluster_name}-controller
   EOT
 }
+
+output "slurm_control_host_port" {
+  description = "The port number that the Slurm controller, slurmctld, listens to for work."
+  value       = var.slurm_control_host_port
+}

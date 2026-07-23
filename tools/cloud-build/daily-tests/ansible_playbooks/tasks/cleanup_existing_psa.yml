@@ -1,0 +1,71 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: PSA Cleanup Block
+  block:
+  - name: Debug PSA cleanup vars
+    ansible.builtin.debug:
+      msg: "Cleaning up PSA for network: {{ resolved_network }}, project: {{ project }}"
+    when: resolved_network is defined and project is defined
+
+  - name: Clean up existing PSA Peering (Blind Delete)
+    register: psa_deleted
+    changed_when: psa_deleted.rc == 0
+    failed_when: false
+    delegate_to: localhost
+    ansible.builtin.command: >-
+      gcloud services vpc-peerings delete
+      --service=servicenetworking.googleapis.com
+      --network={{ resolved_network }}
+      --project={{ project }}
+      --quiet
+    # Run blindly to attempt clearing ghost peerings even if network is deleted
+    when: resolved_network is defined and resolved_network != "" and project is defined
+
+  - name: Debug Peering deletion output
+    ansible.builtin.debug:
+      msg:
+      - "rc: {{ psa_deleted.rc }}"
+      - "stdout: {{ psa_deleted.stdout }}"
+      - "stderr: {{ psa_deleted.stderr }}"
+    when: psa_deleted is defined and psa_deleted.rc is defined and psa_deleted.rc != 0
+
+  - name: Check for existing PSA address
+    register: existing_psa_addr
+    changed_when: false
+    failed_when: false
+    ansible.builtin.command: >-
+      gcloud compute addresses list
+      --project={{ project }}
+      --global
+      --filter="network=projects/{{ project }}/global/networks/{{ resolved_network }}"
+      --format="value(name)"
+    when: resolved_network is defined and resolved_network != "" and project is defined
+
+  - name: Clean up existing PSA Address
+    register: addr_deleted
+    changed_when: addr_deleted.rc == 0
+    failed_when: false
+    ansible.builtin.command: >-
+      gcloud compute addresses delete {{ item }}
+      --project={{ project }}
+      --global
+      --quiet
+    loop: "{{ existing_psa_addr.stdout_lines | default([]) }}"
+    when: >-
+      project is defined and
+      existing_psa_addr.rc is defined and existing_psa_addr.rc == 0
+  vars:
+    resolved_network: "{{ psa_network | default(network) }}"

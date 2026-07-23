@@ -77,6 +77,7 @@ locals {
     experimental                   = var.experimental
     enable_expedited_requeue       = var.enable_expedited_requeue
     enable_health_check_start_only = var.enable_health_check_start_only
+    enable_openmetrics             = var.enable_openmetrics
 
     # hybrid
     hybrid                        = var.enable_hybrid

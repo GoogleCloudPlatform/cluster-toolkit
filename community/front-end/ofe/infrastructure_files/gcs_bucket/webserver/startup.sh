@@ -221,8 +221,8 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nEstablishing django environment..."
   python3.12 -m venv /opt/gcluster/django-env
   source /opt/gcluster/django-env/bin/activate
-  printf "\nUpgrading pip...\n"
-  pip install --upgrade pip
+  printf "\nInstalling pip...\n"
+  pip install --require-hashes -r /opt/gcluster/cluster-toolkit/community/front-end/ofe/infrastructure_files/gcs_bucket/webserver/django_requirements.txt
   printf "\nInstalling pip requirements...\n"
   pip install --require-hashes -r /opt/gcluster/cluster-toolkit/community/front-end/ofe/requirements.txt
 

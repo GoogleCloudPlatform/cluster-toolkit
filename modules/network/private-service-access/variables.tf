@@ -57,3 +57,14 @@ variable "deletion_policy" {
   type        = string
   default     = null
 }
+
+variable "name" {
+  description = "Name of the global address allocation for Private Service Access. If null, defaults to deterministic naming based on network name. Note: Changing this on an existing deployment will force resource recreation."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.name == null || (length(var.name) <= 63 && can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name)))
+    error_message = "The name must be 63 characters or less, begin with a lowercase letter, end with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens."
+  }
+}

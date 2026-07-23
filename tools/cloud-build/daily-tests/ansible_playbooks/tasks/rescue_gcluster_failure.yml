@@ -33,6 +33,12 @@
     - delete
     - "{{ deployment_name }}"
 
+- name: Clean up PSA resources on failure
+  ansible.builtin.include_tasks:
+    file: cleanup_existing_psa.yml
+  vars:
+    psa_network: "{{ actual_network | default(network) }}"
+
 - name: Destroy block
   block:
 

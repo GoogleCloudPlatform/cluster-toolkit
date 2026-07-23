@@ -486,6 +486,7 @@ limitations under the License.
 | <a name="input_enable_expedited_requeue"></a> [enable\_expedited\_requeue](#input\_enable\_expedited\_requeue) | Enables Expedited Requeue, which automatically requeues eligible jobs and grants them the highest priority upon node failure. (Usage: sbatch --requeue=expedite) | `bool` | `true` | no |
 | <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br/>shared by NFS from the controller to compute nodes. Find more details at:<br/>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md | `bool` | `null` | no |
 | <a name="input_enable_health_check_start_only"></a> [enable\_health\_check\_start\_only](#input\_enable\_health\_check\_start\_only) | Adjusts the Slurm HealthCheckNodeState behavior to run health checks solely upon node initialization. This prevents continuous health check polling. | `bool` | `false` | no |
+| <a name="input_enable_openmetrics"></a> [enable\_openmetrics](#input\_enable\_openmetrics) | Enable native Prometheus OpenMetrics telemetry via Slurm and Google Cloud Ops Agent | `bool` | `false` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_slurm_auth"></a> [enable\_slurm\_auth](#input\_enable\_slurm\_auth) | Enables slurm authentication instead of munge. | `bool` | `false` | no |
@@ -529,6 +530,7 @@ limitations under the License.
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting.<br/>If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters). | `string` | `null` | no |
 | <a name="input_slurm_conf_template"></a> [slurm\_conf\_template](#input\_slurm\_conf\_template) | Slurm slurm.conf template. Content of the file in 'slurm\_conf\_tpl' is used if this is not set. | `string` | `null` | no |
 | <a name="input_slurm_conf_tpl"></a> [slurm\_conf\_tpl](#input\_slurm\_conf\_tpl) | Slurm slurm.conf template file path. This path is used only if raw content is not provided in 'slurm\_conf\_template'. | `string` | `null` | no |
+| <a name="input_slurm_control_host_port"></a> [slurm\_control\_host\_port](#input\_slurm\_control\_host\_port) | The port number that the Slurm controller, slurmctld, listens to for work. | `string` | `"6818"` | no |
 | <a name="input_slurm_key_mount"></a> [slurm\_key\_mount](#input\_slurm\_key\_mount) | Remote mount for compute and login nodes to acquire the slurm.key. | <pre>object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  })</pre> | `null` | no |
 | <a name="input_slurmdbd_conf_tpl"></a> [slurmdbd\_conf\_tpl](#input\_slurmdbd\_conf\_tpl) | Slurm slurmdbd.conf template file path. | `string` | `null` | no |
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances. | `list(string)` | `[]` | no |
@@ -551,6 +553,7 @@ limitations under the License.
 | <a name="output_slurm_bucket_name"></a> [slurm\_bucket\_name](#output\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |
 | <a name="output_slurm_cluster_name"></a> [slurm\_cluster\_name](#output\_slurm\_cluster\_name) | Slurm cluster name. |
+| <a name="output_slurm_control_host_port"></a> [slurm\_control\_host\_port](#output\_slurm\_control\_host\_port) | The port number that the Slurm controller, slurmctld, listens to for work. |
 | <a name="output_slurm_controller_instance"></a> [slurm\_controller\_instance](#output\_slurm\_controller\_instance) | Compute instance of controller node |
 | <a name="output_slurm_login_instances"></a> [slurm\_login\_instances](#output\_slurm\_login\_instances) | Compute instances of login nodes |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

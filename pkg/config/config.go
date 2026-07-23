@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.97.0"
+	latestToolkitVersion     = "v1.98.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -295,7 +295,7 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 type Blueprint struct {
 	BlueprintName            string      `yaml:"blueprint_name"`
 	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
-	AiAssisted               bool        `yaml:"ai_assisted,omitempty"`
+	AIAssisted               bool        `yaml:"ai_assisted,omitempty"`
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict

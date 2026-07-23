@@ -77,14 +77,12 @@ limitations under the License.
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.40 |
-| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.40 |
-| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
 
@@ -97,7 +95,6 @@ No modules.
 | [google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_global_address) | resource |
 | [google_compute_network_peering_routes_config.private_vpc_peering_routes_gcnv](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network_peering_routes_config) | resource |
 | [google_service_networking_connection.private_vpc_connection](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_networking_connection) | resource |
-| [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
@@ -106,6 +103,7 @@ No modules.
 | <a name="input_address"></a> [address](#input\_address) | The IP address or beginning of the address range allocated for the Private Service Access. | `string` | `null` | no |
 | <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | The policy to apply when deleting the Private Service Access. Leave empty or use ABANDON. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to supporting resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | Name of the global address allocation for Private Service Access. If null, defaults to deterministic naming based on network name. Note: Changing this on an existing deployment will force resource recreation. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure Private Service Access:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_prefix_length"></a> [prefix\_length](#input\_prefix\_length) | The prefix length of the IP range allocated for the Private Service Access. | `number` | `16` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Private Service Access will be created. | `string` | n/a | yes |

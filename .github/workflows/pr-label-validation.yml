@@ -30,7 +30,8 @@ on:
     branches:
     - main
     - develop
-    - release-candidate
+    - release-candidate-*
+    - hotfix-*
 
 jobs:
   pr-label-validation:

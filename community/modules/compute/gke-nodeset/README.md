@@ -43,6 +43,7 @@
 | <a name="input_slurm_bucket"></a> [slurm\_bucket](#input\_slurm\_bucket) | GCS Bucket of Slurm cluster file storage. | `any` | n/a | yes |
 | <a name="input_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#input\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used in slurm controller | `string` | n/a | yes |
+| <a name="input_slurm_control_host_port"></a> [slurm\_control\_host\_port](#input\_slurm\_control\_host\_port) | The port number that the Slurm controller, slurmctld, listens to for work. | `string` | `"6818"` | no |
 | <a name="input_slurm_controller_instance"></a> [slurm\_controller\_instance](#input\_slurm\_controller\_instance) | Slurm cluster controller instance | `any` | n/a | yes |
 | <a name="input_slurm_namespace"></a> [slurm\_namespace](#input\_slurm\_namespace) | slurm namespace for charts | `string` | `"slurm"` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Primary subnetwork object | `any` | n/a | yes |

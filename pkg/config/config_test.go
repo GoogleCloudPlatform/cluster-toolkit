@@ -529,7 +529,7 @@ dragon: "Lews Therin Telamon"`))
 	c.Check(err, NotNil)
 }
 
-func (s *zeroSuite) TestParseBlueprint_AiAssisted(c *C) {
+func (s *zeroSuite) TestParseBlueprint_AIAssisted(c *C) {
 	// Case 1: ai_assisted is true
 	{
 		bp, _, err := parseYaml[Blueprint]([]byte(`
@@ -537,7 +537,7 @@ blueprint_name: test-bp
 ai_assisted: true
 `))
 		c.Assert(err, IsNil)
-		c.Check(bp.AiAssisted, Equals, true)
+		c.Check(bp.AIAssisted, Equals, true)
 	}
 
 	// Case 2: ai_assisted is false
@@ -547,7 +547,7 @@ blueprint_name: test-bp
 ai_assisted: false
 `))
 		c.Assert(err, IsNil)
-		c.Check(bp.AiAssisted, Equals, false)
+		c.Check(bp.AIAssisted, Equals, false)
 	}
 
 	// Case 3: ai_assisted is missing (should default to false, no error)
@@ -556,7 +556,7 @@ ai_assisted: false
 blueprint_name: test-bp
 `))
 		c.Assert(err, IsNil)
-		c.Check(bp.AiAssisted, Equals, false)
+		c.Check(bp.AIAssisted, Equals, false)
 	}
 }
 

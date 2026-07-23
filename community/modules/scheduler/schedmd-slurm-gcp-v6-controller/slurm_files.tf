@@ -164,6 +164,7 @@ module "slurm_files" {
   bucket_dir                      = var.bucket_dir
   bucket_name                     = local.bucket_name
   controller_network_attachment   = var.controller_network_attachment
+  slurm_control_host_port         = var.slurm_control_host_port
 
   slurmdbd_conf_tpl              = var.slurmdbd_conf_tpl
   slurm_conf_tpl                 = var.slurm_conf_tpl
@@ -185,6 +186,7 @@ module "slurm_files" {
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+  enable_openmetrics   = var.enable_openmetrics
 
   enable_slurm_auth = var.enable_slurm_auth
 

@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -117,7 +118,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "0",
 				COMMAND_FLAGS:      "force,project",
 				REGION:             "us-central1",
@@ -146,7 +147,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "1",
 				COMMAND_FLAGS:      "",
 				REGION:             "",
@@ -441,8 +442,34 @@ func TestGetReleaseVersion(t *testing.T) {
 }
 
 func TestGetIsTestData(t *testing.T) {
-	if got := getIsTestData(); got != "true" {
-		t.Errorf("getIsTestData() = %v, want true", got)
+	tests := []struct {
+		name      string
+		projectID string
+		want      string
+	}{
+		{
+			name:      "dev project",
+			projectID: "hpc-toolkit-dev",
+			want:      "true",
+		},
+		{
+			name:      "prod project",
+			projectID: "some-other-project",
+			want:      "false",
+		},
+		{
+			name:      "empty project",
+			projectID: "",
+			want:      "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsTestData(tt.projectID); got != tt.want {
+				t.Errorf("getIsTestData() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -609,6 +636,135 @@ func TestGetStorageType(t *testing.T) {
 			want: "pd-ssd",
 		},
 		{
+			name: "Extracts standalone Netapp Volume source",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-vol"),
+								Source: "modules/file-system/netapp-volume",
+							},
+						},
+					},
+				},
+			},
+			want: "netapp",
+		},
+		{
+			name: "Extracts multiple standalone file-system modules sorted",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("ps"),
+								Source: "modules/file-system/parallelstore",
+							},
+							{
+								ID:     config.ModuleID("lustre"),
+								Source: "modules/file-system/managed-lustre",
+							},
+						},
+					},
+				},
+			},
+			want: "managed-lustre,parallelstore",
+		},
+		{
+			name: "Extracts standalone Managed Lustre source",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("fast-lustre"),
+								Source: "modules/file-system/managed-lustre",
+							},
+						},
+					},
+				},
+			},
+			want: "managed-lustre",
+		},
+		{
+			name: "Extracts standalone Parallelstore source",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("fast-ps"),
+								Source: "modules/file-system/parallelstore",
+							},
+						},
+					},
+				},
+			},
+			want: "parallelstore",
+		},
+		{
+			name: "Extracts Netapp service_level explicitly",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-pool"),
+								Source: "modules/file-system/netapp-storage-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"service_level": cty.StringVal("EXTREME"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "netapp-extreme",
+		},
+		{
+			name: "Extracts Netapp service_level default",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-pool-def"),
+								Source: "../../modules/file-system/netapp-storage-pool",
+							},
+						},
+					},
+				},
+			},
+			want: "netapp-premium", // standard default from variables.tf
+		},
+		{
+			name: "Extracts storage_type from gke-storage explicitly",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("gke-stor"),
+								Source: "../../modules/file-system/gke-storage",
+								Settings: config.NewDict(map[string]cty.Value{
+									"storage_type": cty.StringVal("hyperdisk-extreme"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "hyperdisk-extreme",
+		},
+		{
 			name: "Extracts storage_class from GCS bucket",
 			bp: config.Blueprint{
 				Groups: []config.Group{
@@ -672,6 +828,47 @@ func TestGetStorageType(t *testing.T) {
 				},
 			},
 			want: "redis-basic,spanner-enterprise",
+		},
+		{
+			name: "Extracts database tier/edition defaults for Redis and Spanner",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("redis-def"),
+								Source: "../../modules/database/redis",
+							},
+							{
+								ID:     config.ModuleID("spanner-def"),
+								Source: "../../modules/database/spanner",
+							},
+						},
+					},
+				},
+			},
+			want: "redis-basic,spanner-standard",
+		},
+		{
+			name: "Extracts Netapp service_level explicitly with trimmed whitespace",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID:     config.ModuleID("netapp-pool"),
+								Source: "modules/file-system/netapp-storage-pool",
+								Settings: config.NewDict(map[string]cty.Value{
+									"service_level": cty.StringVal("  extreme  "),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "netapp-extreme",
 		},
 		{
 			name: "Extracts fs_type from network_storage",
@@ -2776,6 +2973,39 @@ func TestGetDynamicNodeCounts(t *testing.T) {
 			got := getDynamicNodeCounts(tc.bp, tc.kind)
 			if got != tc.want {
 				t.Errorf("getDynamicNodeCounts() = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetIsAIAssisted(t *testing.T) {
+	tests := []struct {
+		name     string
+		bp       config.Blueprint
+		expected string
+	}{
+		{
+			name:     "returns true when AIAssisted is true",
+			bp:       config.Blueprint{AIAssisted: true},
+			expected: "true",
+		},
+		{
+			name:     "returns false when AIAssisted is false",
+			bp:       config.Blueprint{AIAssisted: false},
+			expected: "false",
+		},
+		{
+			name:     "returns false when AIAssisted is not set",
+			bp:       config.Blueprint{},
+			expected: "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := strconv.FormatBool(tt.bp.AIAssisted)
+			if actual != tt.expected {
+				t.Errorf("getIsAIAssisted() = %v, want %v", actual, tt.expected)
 			}
 		})
 	}

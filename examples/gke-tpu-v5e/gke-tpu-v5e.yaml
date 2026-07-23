@@ -56,9 +56,6 @@ vars:
   # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
   enable_pathways_for_tpus: true
 
-  # Kueue configuration
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-
   # The namespace to be configured for running workloads
   user_namespace: default
 
@@ -167,10 +164,10 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-v5e-pool.node_count_static * gke-tpu-v5e-pool.tpu_chips_per_node)
           accelerator_type: $(vars.accelerator_type)
+          tpu_topology: $(vars.tpu_topology)
           namespace: $(vars.user_namespace)
       jobset:
         install: true

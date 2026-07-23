@@ -1,0 +1,68 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Draft CTK Release
+
+on:
+  pull_request:
+    types:
+    - ready_for_review
+    branches:
+    - main
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    if: |
+      startsWith(github.event.pull_request.head.ref, 'release-candidate-') ||
+      startsWith(github.event.pull_request.head.ref, 'hotfix-')
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get Release Information
+      id: release
+      shell: bash
+      run: |
+        BRANCH="${{ github.event.pull_request.head.ref }}"
+
+        if [[ "$BRANCH" == release-candidate-* ]]; then
+          VERSION="${BRANCH#release-candidate-}"
+        elif [[ "$BRANCH" == hotfix-* ]]; then
+          VERSION="${BRANCH#hotfix-}"
+        else
+          echo "Unsupported branch: $BRANCH"
+          exit 1
+        fi
+
+        echo "rc_branch=$BRANCH" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Create Draft Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.release.outputs.version }}
+        target_commitish: ${{ steps.release.outputs.rc_branch }}
+        name: ${{ steps.release.outputs.version }}
+        draft: true
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,14 +49,21 @@ type result struct {
 
 // Storage constants
 const (
-	StoragePrefixGCS       = "gcs"       // Prefix for Google Cloud Storage metrics
-	StoragePrefixFilestore = "filestore" // Prefix for Filestore tiers
-	StoragePrefixRedis     = "redis"     // Prefix for Redis database usage
-	StoragePrefixSpanner   = "spanner"   // Prefix for Spanner database usage
-	StorageTypeLocalSSD    = "local-ssd" // Standalone metric base for Local SSDs
+	StoragePrefixGCS         = "gcs"            // Prefix for Google Cloud Storage metrics
+	StoragePrefixFilestore   = "filestore"      // Prefix for Filestore tiers
+	StoragePrefixRedis       = "redis"          // Prefix for Redis database usage
+	StoragePrefixSpanner     = "spanner"        // Prefix for Spanner database usage
+	StoragePrefixNetapp      = "netapp"         // Prefix for Netapp tiers
+	StorageTypeLocalSSD      = "local-ssd"      // Standalone metric base for Local SSDs
+	StorageTypeLustre        = "managed-lustre" // Standalone metric base for Managed Lustre
+	StorageTypeParallelstore = "parallelstore"  // Standalone metric base for Parallelstore
 
-	ModuleSourceRedis   = "database/redis"   // Module origin to detect Redis
-	ModuleSourceSpanner = "database/spanner" // Module origin to detect Spanner
+	ModuleSourceRedis         = "database/redis"                  // Module origin to detect Redis
+	ModuleSourceSpanner       = "database/spanner"                // Module origin to detect Spanner
+	ModuleSourceLustre        = "file-system/managed-lustre"      // Module origin to detect Lustre
+	ModuleSourceParallelstore = "file-system/parallelstore"       // Module origin to detect Parallelstore
+	ModuleSourceNetappPool    = "file-system/netapp-storage-pool" // Module origin to detect Netapp Pool
+	ModuleSourceNetappVolume  = "file-system/netapp-volume"       // Module origin to detect Netapp Volume
 )
 
 var (
@@ -222,6 +229,7 @@ func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
 	extractAdditionalDisks(m, bp, addStorageType)
 	extractInlineNodesets(m, bp, addStorageType)
 	extractDatabaseStorageTypes(m, bp, addStorageType)
+	extractFileSystemStorageTypes(m, bp, addStorageType)
 
 	return storageTypes
 }
@@ -257,21 +265,38 @@ func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint,
 	}
 }
 
+// extractPrefixedSetting is a helper function that extracts explicit or default settings and prepends a prefix.
+func extractPrefixedSetting(prefix, key string, m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if val := extractExplicitStringSetting(key, m, bp); val != "" {
+		addStorageType(prefix + "-" + val)
+	} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found {
+		if trimmed := strings.TrimSpace(val); trimmed != "" {
+			addStorageType(prefix + "-" + trimmed)
+		}
+	}
+}
+
 func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
 	src := string(m.Source)
 
-	extractAndAdd := func(moduleType, key string) {
-		if val := extractExplicitStringSetting(key, m, bp); val != "" {
-			addStorageType(moduleType + "-" + val)
-		} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found && val != "" {
-			addStorageType(moduleType + "-" + strings.TrimSpace(val))
-		}
-	}
-
 	if strings.Contains(src, ModuleSourceRedis) {
-		extractAndAdd(StoragePrefixRedis, "tier")
+		extractPrefixedSetting(StoragePrefixRedis, "tier", m, bp, addStorageType)
 	} else if strings.Contains(src, ModuleSourceSpanner) {
-		extractAndAdd(StoragePrefixSpanner, "edition")
+		extractPrefixedSetting(StoragePrefixSpanner, "edition", m, bp, addStorageType)
+	}
+}
+
+func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	src := string(m.Source)
+
+	if strings.Contains(src, ModuleSourceLustre) {
+		addStorageType(StorageTypeLustre)
+	} else if strings.Contains(src, ModuleSourceParallelstore) {
+		addStorageType(StorageTypeParallelstore)
+	} else if strings.Contains(src, ModuleSourceNetappPool) {
+		extractPrefixedSetting(StoragePrefixNetapp, "service_level", m, bp, addStorageType)
+	} else if strings.Contains(src, ModuleSourceNetappVolume) {
+		addStorageType(StoragePrefixNetapp)
 	}
 }
 
