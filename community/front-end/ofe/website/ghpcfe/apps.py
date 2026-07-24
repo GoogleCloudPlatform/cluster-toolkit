@@ -14,8 +14,6 @@
 
 """Top level Django app definitions"""
 
-import sys
-
 from django.apps import AppConfig
 from .cluster_manager import c2
 
@@ -26,12 +24,6 @@ class GHPCFEConfig(AppConfig):
     def ready(self):
         # Has side effect of registering various receiver callbacks
         import ghpcfe.signals # pylint:disable=unused-import,import-outside-toplevel
-
-        # C2 startup reads the server configuration file and connects to
-        # Pub/Sub, neither of which exists when running unit tests from a
-        # source checkout.
-        if sys.argv[1:2] == ["test"]:
-            return
 
         c2.startup()
         c2.start_cloud_build_log_subscriber()
