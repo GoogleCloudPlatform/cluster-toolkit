@@ -18,7 +18,11 @@
     name: centos-release-scl
   when: ansible_distribution == 'CentOS'
 
-- name: Install Dev Tools Rocky
+# The dev-tool package names differ by Rocky major version: Rocky 8 ships the
+# gcc-toolset-9 SCL and python2/python36 devel packages, none of which exist on
+# Rocky 9 (which uses python3-devel and only newer toolsets). gcc-toolset-11 and
+# cmake exist on both, and the profile.d task below enables gcc-toolset-11 on either.
+- name: Install Dev Tools Rocky 8
   ansible.builtin.yum:
     name:
     - gcc-toolset-11
@@ -26,7 +30,15 @@
     - cmake
     - python2-devel
     - python36-devel
-  when: ansible_distribution in ['Rocky']
+  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '8'
+
+- name: Install Dev Tools Rocky 9
+  ansible.builtin.yum:
+    name:
+    - gcc-toolset-11
+    - cmake
+    - python3-devel
+  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '9'
 
 - name: Install Dev Tools CentOS
   ansible.builtin.yum:
