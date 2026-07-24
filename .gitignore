@@ -76,3 +76,10 @@ GEMINI.md
 
 # Ignore Antigravity agents customizations
 .agents/
+
+# Per-branch agent instructions and local implementation documentation
+# (agent plans, bug logs — kept local, not committed)
+community/front-end/ofe/AGENTS.md
+community/front-end/ofe/CLAUDE.md
+community/front-end/ofe/PLANS.md
+community/front-end/ofe/BUG_FINDINGS.md
