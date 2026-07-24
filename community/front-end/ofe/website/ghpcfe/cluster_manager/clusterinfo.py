@@ -761,6 +761,12 @@ class ClusterInfo:
 
             utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
 
+            # Dynamic compute nodes are created directly via the GCP API by
+            # slurm-gcp at job-schedule time, so they are not in Terraform state
+            # and can survive the destroy above (still running and billing).
+            # Sweep any that carry this cluster's Slurm label.
+            self._sweep_orphaned_compute_nodes()
+
             # Mark Container Registry objects as deleted
             registries = ContainerRegistry.objects.filter(cluster=self.cluster)
             registry_count = 0
@@ -791,6 +797,61 @@ class ClusterInfo:
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
             raise
+
+    def _sweep_orphaned_compute_nodes(self):
+        """Delete any leftover compute instances still labelled for this cluster.
+
+        Best-effort safety net: slurm-gcp creates burst compute nodes directly
+        through the GCP API, so they are not tracked by Terraform and a destroy
+        (or the controller dying mid-teardown) can leave them running. Failures
+        here must never break teardown, which has already completed.
+        """
+        try:
+            from google.cloud import compute_v1
+            from google.oauth2 import service_account
+
+            project_id = self.cluster.project_id
+            cluster_name = self.cluster.cloud_id
+            if not project_id or not cluster_name:
+                return
+
+            credentials = service_account.Credentials.from_service_account_info(
+                json.loads(self.cluster.cloud_credential.detail)
+            )
+            client = compute_v1.InstancesClient(credentials=credentials)
+            request = compute_v1.AggregatedListInstancesRequest(
+                project=project_id,
+                filter=f"labels.slurm_cluster_name={cluster_name}",
+                return_partial_success=True,
+            )
+
+            deleted = 0
+            for zone_scope, scoped in client.aggregated_list(request=request):
+                for instance in getattr(scoped, "instances", []) or []:
+                    # Skip nodes GCP is already tearing down.
+                    if instance.status in ("STOPPING", "TERMINATED"):
+                        continue
+                    zone = zone_scope.split("/")[-1]
+                    logger.warning(
+                        "Deleting orphaned compute node %s in %s "
+                        "(cluster %s left it running after destroy)",
+                        instance.name, zone, cluster_name,
+                    )
+                    client.delete(
+                        project=project_id, zone=zone, instance=instance.name
+                    )
+                    deleted += 1
+
+            if deleted:
+                logger.warning(
+                    "Swept %d orphaned compute node(s) for cluster %s",
+                    deleted, cluster_name,
+                )
+        except Exception as err:  # noqa: BLE001 - best-effort cleanup
+            logger.warning(
+                "Orphaned compute node sweep failed for cluster %s: %s",
+                self.cluster.cloud_id, err,
+            )
 
     def _configure_spack_install_loc(self):
         """Configures the spack_install field.
