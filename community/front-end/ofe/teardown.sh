@@ -60,6 +60,31 @@ delete_service_account() {
 }
 
 #
+# Safety-net removal of the terraform-managed server service account
+# (<dname>-fe-sa). terraform destroy normally deletes it; this catches the
+# case where a partial or aborted destroy leaves it behind, which would
+# otherwise block a later redeploy that reuses the same deployment name.
+#
+cleanup_server_service_account() {
+
+	local project=${1}
+	local server_name=${2}
+	local service_account="${server_name}-fe-sa"
+
+	if ! bash "${SCRIPT_DIR}/script/service_account.sh" check \
+		"${project}" "${service_account}"; then
+		return 0
+	fi
+
+	echo "  Removing leftover service account: ${service_account}"
+	if ! bash "${SCRIPT_DIR}/script/service_account.sh" delete \
+		"${project}" "${service_account}"; then
+		echo "  Warning: Failed to delete ${service_account}; please check with gcloud"
+	fi
+	return 0
+}
+
+#
 #
 tfdestroy() {
 
@@ -196,6 +221,11 @@ echo ""
 # TODO: Remove PubSub subscriptions?
 
 tfdestroy
+
+# -- Safety net: terraform destroy should have removed the server service
+#    account, but clean up any leftover so a same-name redeploy is not blocked.
+#
+cleanup_server_service_account "${project}" "${dname}"
 
 # -- Remove the lock file
 #

@@ -596,8 +596,40 @@ TFVARS
 		#
 		set +e
 		terraform init
+
+		# -- Adopt a pre-existing server service account so a redeploy with the
+		#    same deployment name does not fail trying to recreate it. terraform
+		#    destroy normally removes it, but an aborted/partial teardown can
+		#    leave it behind; importing lets apply reconcile the existing
+		#    identity instead of hitting an "already exists" error.
+		fe_sa_email="${deployment_name}-fe-sa@${project_id}.iam.gserviceaccount.com"
+		fe_sa_address='module.service_account.google_service_account.service_accounts["fe-sa"]'
+		if gcloud iam service-accounts describe "${fe_sa_email}" \
+			--project="${project_id}" >/dev/null 2>&1; then
+			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
+				echo "Found existing service account ${fe_sa_email}; importing into Terraform state."
+				terraform import "${fe_sa_address}" \
+					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
+			fi
+		fi
+
 		terraform apply -auto-approve | tee tfapply.log
-		if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+		tf_rc=${PIPESTATUS[0]}
+
+		# -- The Google provider can return "Provider produced inconsistent
+		#    result after apply" on the service account when its create races
+		#    IAM's eventual consistency (e.g. reusing a recently-freed name).
+		#    The account is created regardless, so a single re-apply reconciles
+		#    state. Retry only for that specific service-account error.
+		if [[ ${tf_rc} -ne 0 ]] &&
+			grep -q "Provider produced inconsistent result after apply" tfapply.log &&
+			grep -q "service_account" tfapply.log; then
+			echo "Retrying terraform apply to reconcile service account state..."
+			terraform apply -auto-approve | tee tfapply.log
+			tf_rc=${PIPESTATUS[0]}
+		fi
+
+		if [[ ${tf_rc} -ne 0 ]]; then
 			error ""
 			error "Error:  Terraform failed."
 			error "        Please check parameters and/or seek assistance."
