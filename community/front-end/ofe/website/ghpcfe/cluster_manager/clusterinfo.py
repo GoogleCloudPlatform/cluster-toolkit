@@ -264,6 +264,17 @@ class ClusterInfo:
         for part in self.cluster.partitions.all():
             disk_range = list(range(part.additional_disk_count))
             exclusive = 'True' if part.enable_placement or not part.enable_node_reuse else 'False'
+            # The nodeset module defaults on_host_maintenance to TERMINATE, which
+            # GCP rejects for non-preemptible instances of machine families that
+            # only support live migration (e.g. e2). Emit MIGRATE for those
+            # families. GPU nodes must keep TERMINATE (GPUs cannot live-migrate),
+            # and these families are not offered placement, so MIGRATE is safe
+            # here. Review the family list against GCP's per-family maintenance
+            # policy support if it is broadened.
+            machine_family = part.machine_type.split("-")[0]
+            use_migrate_maintenance = (
+                machine_family in ("e2", "n1") and part.GPU_per_node == 0
+            )
             context = {
                 'part': part,
                 'part_id': f"partition_{part.id}",
@@ -271,6 +282,7 @@ class ClusterInfo:
                 'cluster': self.cluster,
                 'disk_range': disk_range,
                 'exclusive': exclusive,
+                'use_migrate_maintenance': use_migrate_maintenance,
                 "startup_bucket": self.config["server"]["gcs_bucket"],
             }
             rendered_yaml = template.render(context)
