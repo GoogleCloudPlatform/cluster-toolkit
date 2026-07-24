@@ -28,6 +28,10 @@ echo "This is the startup script for the login nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
+	# The default Slurm image ships an rpmdb built against a mismatched Berkeley
+	# DB environment, so the first write transaction fails until it is rebuilt.
+	rm -f /var/lib/rpm/__db.*
+	rpm --rebuilddb
 	yum install -y ansible
 else
 	apt install -y ansible
