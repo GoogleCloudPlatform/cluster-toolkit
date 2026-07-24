@@ -22,7 +22,10 @@ limitations under the License.
   settings:
     partition_name: {{ part.name }}
     exclusive: {{ part.exclusive }}
-    resume_timeout: 500
+    # Must exceed node boot time plus the compute startup-script budget
+    # (compute_startup_scripts_timeout: 1200) so slurmctld does not mark a node
+    # DOWN while its OFE bootstrap is still legitimately running.
+    resume_timeout: 1800
 
 - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
   id: {{ part_id }}-nodeset

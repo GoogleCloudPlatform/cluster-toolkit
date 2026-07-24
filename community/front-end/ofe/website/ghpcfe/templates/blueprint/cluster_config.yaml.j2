@@ -85,7 +85,9 @@ deployment_groups:
         project: schedmd-slurm-public
       cloud_parameters:
         resume_rate: 0
-        resume_timeout: 500
+        # Kept consistent with the partition resume_timeout; must cover node
+        # boot plus the 1200s compute startup-script budget.
+        resume_timeout: 1800
         suspend_rate: 0
         suspend_timeout: 300
         no_comma_params: false
