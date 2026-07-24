@@ -105,11 +105,11 @@ deployment_groups:
       controller_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
-        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh - | bash
+        gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh | bash
       login_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING LOGIN STARTUP"
-        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_login.sh - | bash
+        gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_login.sh | bash
     use:
     - slurm_login
 {{ controller_uses | safe }}

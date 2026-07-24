@@ -88,7 +88,7 @@ resource "null_resource" "uploader" {
   depends_on = [module.control_bucket.bucket]
   # Upload files
   provisioner "local-exec" {
-    command = "gsutil -m cp -r ../infrastructure_files/gcs_bucket/* ${module.control_bucket.bucket.url}/"
+    command = "gcloud storage cp --recursive ../infrastructure_files/gcs_bucket/* ${module.control_bucket.bucket.url}/"
   }
 }
 

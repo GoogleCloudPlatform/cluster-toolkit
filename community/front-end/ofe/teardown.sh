@@ -92,7 +92,7 @@ cat <<'HEADER'
 
 HEADER
 
-# -- Check for terraform and gsutil
+# -- Check for terraform and the gcloud storage CLI
 #
 if ! command -v terraform &>/dev/null; then
 	echo "  Error:"
@@ -100,9 +100,9 @@ if ! command -v terraform &>/dev/null; then
 	echo "Exiting."
 	exit 1
 fi
-if ! command -v gsutil &>/dev/null; then
+if ! command -v gcloud &>/dev/null || ! gcloud storage --help &>/dev/null; then
 	echo "  Error:"
-	echo "      Please ensure gsutil (part of Google Cloud Tools)  is in your \$PATH"
+	echo "      Please ensure the gcloud CLI (with the 'gcloud storage' command) is in your \$PATH"
 	echo "Exiting."
 	exit 1
 fi

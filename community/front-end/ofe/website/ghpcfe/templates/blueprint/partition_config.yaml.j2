@@ -72,4 +72,4 @@ limitations under the License.
     startup_script: |
       echo "******************************************** CALLING COMPUTE STARTUP"
       #!/bin/bash
-      gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash
+      gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh | bash

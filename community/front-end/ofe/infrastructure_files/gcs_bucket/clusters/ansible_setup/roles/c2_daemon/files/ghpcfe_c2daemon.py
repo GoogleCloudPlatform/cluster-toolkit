@@ -718,7 +718,7 @@ def _verify_params(message, keys):
 
 def _get_upload_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{target_dir.as_posix()}' '{url}'"
+        return f"gcloud storage cp --recursive '{target_dir.as_posix()}' '{url}'"
     if url.startswith("s3://"):
         return f"aws s3 cp --recursive '{target_dir.as_posix()}' '{url}'"
 
@@ -727,7 +727,7 @@ def _get_upload_command(target_dir, url):
 
 def _get_download_command(target_dir, url):
     if url.startswith("gs://"):
-        return f"gsutil cp -r '{url}' '{target_dir.as_posix()}'"
+        return f"gcloud storage cp --recursive '{url}' '{target_dir.as_posix()}'"
     if url.startswith("s3://"):
         ret = f"""
 output=$(aws s3 cp --recursive --dryrun '{url}' '{target_dir.as_posix()}')
@@ -760,9 +760,12 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
         recursive_fetch = script_url.path.endswith("/")
         fname = script_url.path.split("/")[-1] if not recursive_fetch else ""
         if script_url.scheme == "gs":
+            # 'cp' must be unconditional; only recursion is optional. Keeping
+            # the subcommand inside the recursive-only branch produced an
+            # invalid command for single-object job scripts.
             fetch = (
-                "gsutil "
-                f"{'-m cp -r ' if recursive_fetch else ''}"
+                "gcloud storage cp "
+                f"{'--recursive ' if recursive_fetch else ''}"
                 f"'{text}' "
                 f"'{job_dir.as_posix()}'"
             )
@@ -1113,8 +1116,8 @@ def cb_register_user_gcs(message, **kwargs):
     logger.info("Starting REGISTER_USER_GCS: %s", message)
 
     try:
-        (username, unused_uid, unused_gid, homedir) = _verify_oslogin_user(
-            message["login_uid"]
+        (username, unused_uid, unused_gid, unused_homedir) = (
+            _verify_oslogin_user(message["login_uid"])
         )
     except KeyError:
         logger.error(
@@ -1130,41 +1133,29 @@ def cb_register_user_gcs(message, **kwargs):
     try:
         response["status"] = "Configuring gcloud"
         send_message("UPDATE", response)
-        subprocess.run(
-            [
-                "sudo",
-                "-u",
-                username,
-                "gcloud",
-                "config",
-                "set",
-                "pass_credentials_to_gsutil",
-                "false",
-            ],
-            check=True,
-        )
 
-        # gsutil will fail if the backup file already exists
-        boto_backup = Path(homedir) / ".boto.bak"
-        if boto_backup.exists():
-            boto_backup.unlink()
-
+        # Drive the interactive gcloud user-login OAuth flow. The credentials
+        # are stored in the user's gcloud configuration and are shared with
+        # 'gcloud storage', so the user's jobs can access their private
+        # buckets. gcloud's default login scopes include cloud-platform, which
+        # covers the read/write storage access this flow previously requested
+        # explicitly.
         with pexpect.spawn(
             "sudo",
             args=[
                 "-u",
                 username,
-                "gsutil",
-                "config",
-                "-s",
-                "https://www.googleapis.com/auth/devstorage.read_write",
+                "gcloud",
+                "auth",
+                "login",
+                "--no-launch-browser",
             ],
         ) as child:
-            child.expect(
-                "Please navigate your browser to the following script_url:"
-            )
-            child.readline()  # Eat newline
-            url = str(child.readline(), "utf-8").strip()
+            # The consent URL is emitted on its own line; match it directly
+            # rather than relying on the surrounding prose or blank-line
+            # layout, which varies between gcloud releases.
+            child.expect(r"https://\S+")
+            url = child.after.decode("utf-8").strip()
             response["status"] = "Waiting For User Auth"
             response["verify_url"] = url
 
@@ -1196,7 +1187,7 @@ def cb_register_user_gcs(message, **kwargs):
             # Remove our callback, now that we have our verify key
             _c2_ackMap.pop(ackid)
 
-            child.expect("Enter the authorization code:")
+            child.expect("enter the verification code provided in your browser")
             child.sendline(my_verify_key)
             child.expect(pexpect.EOF)
             child.wait()
