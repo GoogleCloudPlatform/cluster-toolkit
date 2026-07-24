@@ -760,9 +760,7 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
         recursive_fetch = script_url.path.endswith("/")
         fname = script_url.path.split("/")[-1] if not recursive_fetch else ""
         if script_url.scheme == "gs":
-            # 'cp' must be unconditional; only recursion is optional. Keeping
-            # the subcommand inside the recursive-only branch produced an
-            # invalid command for single-object job scripts.
+            # 'cp' must be unconditional; only recursion is optional.
             fetch = (
                 "gcloud storage cp "
                 f"{'--recursive ' if recursive_fetch else ''}"
@@ -1145,8 +1143,7 @@ def cb_register_user_gcs(message, **kwargs):
         # are stored in the user's gcloud configuration and are shared with
         # 'gcloud storage', so the user's jobs can access their private
         # buckets. gcloud's default login scopes include cloud-platform, which
-        # covers the read/write storage access this flow previously requested
-        # explicitly.
+        # covers the storage read/write access these jobs need.
         with pexpect.spawn(
             "sudo",
             args=[

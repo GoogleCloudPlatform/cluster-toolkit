@@ -97,9 +97,6 @@ community/front-end/ofe/Greendoc Examples.md
 # Claude session artifacts
 community/front-end/ofe/.claude/
 
-# Temporary migration/regression test scaffolding (kept local, not committed)
-community/front-end/ofe/_gsutil_migration_tests/
-
 # OFE generates its Django migrations at deploy time (webserver startup.sh runs
 # makemigrations + migrate), so numbered migrations are not committed
 community/front-end/ofe/website/ghpcfe/migrations/[0-9]*.py
