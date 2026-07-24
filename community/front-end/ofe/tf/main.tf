@@ -50,6 +50,13 @@ EOT
     ghpcfe_id = var.deployment_name,
   }
   labels = merge(var.extra_labels, local.default_labels)
+
+  # Content hash over everything staged into the control bucket. Clusters pull
+  # their bootstrap/ansible files from the bucket at boot, so the staged copy
+  # must be re-uploaded whenever any source file changes.
+  gcs_bucket_root  = "${path.module}/../infrastructure_files/gcs_bucket"
+  gcs_bucket_files = fileset(local.gcs_bucket_root, "**")
+  gcs_bucket_hash  = sha256(join(",", [for f in local.gcs_bucket_files : filesha256("${local.gcs_bucket_root}/${f}")]))
 }
 
 
@@ -86,6 +93,11 @@ module "control_bucket" {
 
 resource "null_resource" "uploader" {
   depends_on = [module.control_bucket.bucket]
+  # Re-run the upload whenever any staged source file changes, so clusters
+  # never boot from a stale copy of the bootstrap/ansible files.
+  triggers = {
+    gcs_bucket_hash = local.gcs_bucket_hash
+  }
   # Upload files
   provisioner "local-exec" {
     command = "gcloud storage cp --recursive ../infrastructure_files/gcs_bucket/* ${module.control_bucket.bucket.url}/"
