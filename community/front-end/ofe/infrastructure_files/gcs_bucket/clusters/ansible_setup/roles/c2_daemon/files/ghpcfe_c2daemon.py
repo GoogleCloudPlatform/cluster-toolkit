@@ -782,6 +782,24 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
                 return None
             fetch = f"curl --silent -O '{text}'"
 
+        # When there is no single fetched file to execute directly -- an
+        # archive that was unpacked, or a recursive directory fetch that has
+        # no filename at all -- run the shallowest 'run.sh' in the result.
+        run_toplevel_script = (
+            "# Find and execute most top-level 'run.sh' we can find\n"
+            "$("
+            "find . -maxdepth 3 -name run.sh | "
+            "awk '{print length, $0}' | "
+            "sort -n  | "
+            "cut -d' ' -f2- | "
+            "head -n1"
+            ")"
+        )
+
+        # Defaults cover the recursive/directory case (fname == ""), where no
+        # single file is fetched: nothing to chmod, run the discovered run.sh.
+        extract = ""
+        execute = run_toplevel_script
         if fname:
             extract = f"chmod 755 {fname}"
             execute = f"./{fname}"
@@ -798,18 +816,7 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
                 extract = f"unzip {file_path.name}"
                 archive = True
             if archive:
-                execute = (
-                    "# Find and execute most top-level 'run.sh' we can find\n"
-                )
-                execute += (
-                    "$("
-                    "find . -maxdepth 3 -name run.sh | "
-                    "awk '{print length, $0}' | "
-                    "sort -n  | "
-                    "cut -d' ' -f2- | "
-                    "head -n1"
-                    ")"
-                )
+                execute = run_toplevel_script
         return f"""
 {fetch}
 {extract}
