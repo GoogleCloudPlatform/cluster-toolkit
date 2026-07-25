@@ -537,7 +537,7 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			HeadNodePool:                "pathways-np",
 		},
 		IsPathwaysJob: true,
-		MTCEnabled:    true,
+		GKEMTCEnabled: true,
 	}
 
 	mockResponses := map[string][]shell.CommandResult{

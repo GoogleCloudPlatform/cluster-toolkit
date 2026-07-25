@@ -302,8 +302,8 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		}
 	}
 
-	if opts.MTCEnabled {
-		ramdiskDir := opts.MTCRamdiskDirectory
+	if opts.GKEMTCEnabled {
+		ramdiskDir := opts.GKEMTCRamdiskDirectory
 		if ramdiskDir == "" {
 			ramdiskDir = "/tmp/mtc_checkpoints"
 		}

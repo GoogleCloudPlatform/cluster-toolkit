@@ -285,9 +285,9 @@ spec:
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
-              {{- if .MTCEnabled}}
+              {{- if .GKEMTCEnabled}}
               - name: cache
-                mountPath: {{.MTCRamdiskDirectory}}
+                mountPath: {{.GKEMTCRamdiskDirectory}}
               - name: sidecar-shared-memory
                 mountPath: /tmp/sidecar
               {{- end}}
@@ -305,7 +305,7 @@ spec:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
                 - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
-                {{- if .MTCEnabled}}
+                {{- if .GKEMTCEnabled}}
                 - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
                 {{- end}}
                 {{- range .WorkerArgsList }}

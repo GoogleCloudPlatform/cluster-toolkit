@@ -95,8 +95,8 @@ type JobDefinition struct {
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
 	// Multi-Tier Checkpointing (MTC)
-	MTCEnabled          bool
-	MTCRamdiskDirectory string
+	GKEMTCEnabled          bool
+	GKEMTCRamdiskDirectory string
 
 	RawMounts []string
 	Env       map[string]string

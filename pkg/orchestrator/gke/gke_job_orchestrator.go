@@ -390,8 +390,8 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
-	if job.MTCEnabled && job.MTCRamdiskDirectory == "" {
-		job.MTCRamdiskDirectory = "/tmp/mtc_checkpoints"
+	if job.GKEMTCEnabled && job.GKEMTCRamdiskDirectory == "" {
+		job.GKEMTCRamdiskDirectory = "/tmp/mtc_checkpoints"
 	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
@@ -564,7 +564,7 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 		return err
 	}
 
-	if job.MTCEnabled {
+	if job.GKEMTCEnabled {
 		if err := g.checkMTCAddonEnabled(job.ProjectID, job.ClusterLocation, job.ClusterName); err != nil {
 			return err
 		}
@@ -1393,8 +1393,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
-		MTCEnabled:                    opts.MTCEnabled,
-		MTCRamdiskDirectory:           opts.MTCRamdiskDirectory,
+		GKEMTCEnabled:                 opts.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}
 }
 

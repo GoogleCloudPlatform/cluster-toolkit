@@ -67,8 +67,8 @@ var (
 	verbose            bool
 	volumeStr          []string
 
-	mtcEnabled          bool
-	mtcRamdiskDirectory string
+	gkeMtcEnabled          bool
+	gkeMtcRamdiskDirectory string
 
 	isPathwaysJob bool
 	pathways      orchestrator.PathwaysJobDefinition
@@ -184,8 +184,8 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional Python-based sidecar container to run alongside the Pathways head components.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
-	SubmitCmd.Flags().BoolVar(&mtcEnabled, "mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
-	SubmitCmd.Flags().StringVar(&mtcRamdiskDirectory, "mtc-ramdisk-directory", "", "The ramdisk directory path for local checkpoints in MTC.")
+	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
+	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "The ramdisk directory path for local checkpoints in MTC.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
 	_ = SubmitCmd.MarkFlagRequired("compute-type")
@@ -258,8 +258,8 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		Timeout:                       timeout,
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
-		MTCEnabled:                    mtcEnabled,
-		MTCRamdiskDirectory:           mtcRamdiskDirectory,
+		GKEMTCEnabled:                 gkeMtcEnabled,
+		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GKENAPProvisioning:            gkeNapProvisioning,
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,

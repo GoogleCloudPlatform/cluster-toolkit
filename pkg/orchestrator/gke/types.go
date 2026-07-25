@@ -180,8 +180,8 @@ type ManifestOptions struct {
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
 	IsPathwaysJob                 bool
-	MTCEnabled                    bool
-	MTCRamdiskDirectory           string
+	GKEMTCEnabled                 bool
+	GKEMTCRamdiskDirectory        string
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -365,8 +365,8 @@ type jobSetTemplateData struct {
 	PathwaysWorkerEnv             []EnvVar
 	IsTPU                         bool
 	IsGPU                         bool
-	MTCEnabled                    bool
-	MTCRamdiskDirectory           string
+	GKEMTCEnabled                 bool
+	GKEMTCRamdiskDirectory        string
 }
 
 // Types for parsing kubectl get nodes -o json
