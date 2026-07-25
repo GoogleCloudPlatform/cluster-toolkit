@@ -31,9 +31,9 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
-If you plan to use Multi-Tier Checkpointing (`--mtc-enabled` flag), ensure that your cluster was created with `enable_multi_tier_checkpointing = true` (or `stateful_ha_config { enabled = true }`).
+If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the StateHA / Multi-Tier Checkpointing feature is enabled on your GKE cluster.
 
-To use this feature, the cluster administrator must deploy the required `CheckpointConfiguration` Custom Resource globally at cluster creation. This is done by specifying the `mtc_target_bucket` variable in the Terraform blueprint. Job submitters then only need to pass `--mtc-enabled` to their jobs.
+To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters simply pass `--gke-mtc-enabled` to their jobs.
 
 ## 2. Prepare Sample Application Code
 
