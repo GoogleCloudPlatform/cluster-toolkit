@@ -31,7 +31,7 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
-If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the StateHA / Multi-Tier Checkpointing feature is enabled on your GKE cluster.
+If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster.
 
 To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters simply pass `--gke-mtc-enabled` to their jobs.
 
@@ -1156,6 +1156,8 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--service-account` | `string` | Kubernetes service account name used to provide fine-grained IAM roles to the job pods. |
 | `--cpu-affinity` | `string` | CPU affinity rules (e.g., `'numa'`). |
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
+| `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
+| `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
