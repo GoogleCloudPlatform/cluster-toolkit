@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 	"net"
@@ -66,6 +67,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
+	c.metadata[MACHINE_CATEGORY] = getMachineCategory(c.blueprint)
 	c.metadata[STORAGE_TYPE] = getStorageType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
@@ -229,6 +231,85 @@ func getMachineType(bp config.Blueprint) string {
 	}
 
 	return strings.Join(machineTypes, ",")
+}
+
+func detectMachineCategory(mType string) string {
+	mType = strings.ToLower(strings.TrimSpace(mType))
+	mType = config.ResolveMachineType(mType)
+
+	if config.IsTPU(mType) {
+		return "TPU"
+	}
+
+	gpuPrefixes := []string{"a2-", "a3-", "a4-", "a4x-", "g2-", "g4-"}
+	for _, p := range gpuPrefixes {
+		if strings.HasPrefix(mType, p) {
+			return "GPU"
+		}
+	}
+	if strings.Contains(mType, "gpu") {
+		return "GPU"
+	}
+
+	cpuPrefixes := []string{"c2-", "c2d-", "c3-", "c3d-", "c4-", "n1-", "n2-", "n2d-", "n4-", "e2-", "t2a-", "t2d-", "m1-", "m2-", "m3-", "h3-", "z3-", "f1-", "g1-"}
+	for _, p := range cpuPrefixes {
+		if strings.HasPrefix(mType, p) {
+			return "CPU"
+		}
+	}
+
+	if strings.Contains(mType, "-standard-") || strings.Contains(mType, "-highmem-") || strings.Contains(mType, "-highcpu-") || strings.Contains(mType, "custom-") {
+		return "CPU"
+	}
+
+	return "Other"
+}
+
+func getMachineCategory(bp config.Blueprint) string {
+	categories := make(map[string]string)
+
+	for _, m := range config.GetAllBpModules(&bp) {
+		if mt := getMachineTypeFromModule(m, bp); mt != "" {
+			categories[mt] = detectMachineCategory(mt)
+		}
+
+		moduleCounts := getModuleNodeCounts(m, bp)
+		for mt := range moduleCounts {
+			if mt != "" {
+				categories[mt] = detectMachineCategory(mt)
+			}
+		}
+
+		moduleDynReq := getModuleDynamicNodeCounts(m, bp, dynamicMinNodeCountSettings)
+		for mt := range moduleDynReq {
+			if mt != "" {
+				categories[mt] = detectMachineCategory(mt)
+			}
+		}
+
+		moduleDynMax := getModuleDynamicNodeCounts(m, bp, dynamicMaxNodeCountSettings)
+		for mt := range moduleDynMax {
+			if mt != "" {
+				categories[mt] = detectMachineCategory(mt)
+			}
+		}
+	}
+
+	if len(categories) == 0 {
+		return ""
+	}
+
+	var keys []string
+	for k := range categories {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	var builder []string
+	for _, k := range keys {
+		builder = append(builder, fmt.Sprintf("%s:%s", k, categories[k]))
+	}
+	return strings.Join(builder, ",")
 }
 
 func getStorageType(bp config.Blueprint) string {
