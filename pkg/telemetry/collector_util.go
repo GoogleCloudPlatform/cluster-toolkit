@@ -1104,9 +1104,23 @@ func detectMachineCategory(mType string) string {
 		}
 	}
 
-	if strings.Contains(mType, "-standard-") || strings.Contains(mType, "-highmem-") || strings.Contains(mType, "-highcpu-") || strings.Contains(mType, "-megamem-") || strings.Contains(mType, "-ultramem-") || strings.Contains(mType, "custom-") {
+	if isCPUFallback(mType) {
 		return "CPU"
 	}
 
 	return "Other"
+}
+
+// isCPUFallback checks if the machine type contains any of the standard CPU identifiers.
+func isCPUFallback(mType string) bool {
+	cpuKeywords := []string{
+		"-standard-", "-highmem-", "-highcpu-",
+		"-megamem-", "-ultramem-", "custom-",
+	}
+	for _, kw := range cpuKeywords {
+		if strings.Contains(mType, kw) {
+			return true
+		}
+	}
+	return false
 }
