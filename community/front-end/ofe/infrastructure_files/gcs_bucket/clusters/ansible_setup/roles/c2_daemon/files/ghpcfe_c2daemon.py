@@ -201,7 +201,10 @@ def _upload_log_blobs(log_dict):
     client = gcs.Client()
     gcs_bucket = client.bucket(cluster_bucket)
     for path, data in log_dict.items():
-        if data:
+        # Skip entries with no content; upload the ones that actually have log
+        # text. (Uploading a None/empty blob raises "None could not be
+        # converted to bytes" and would crash the callback thread.)
+        if not data:
             continue
 
         # cluster_bucket is bucket and path...
