@@ -233,8 +233,7 @@ func getMachineType(bp config.Blueprint) string {
 	return strings.Join(machineTypes, ",")
 }
 
-// getMachineCategory extracts unique machine designations defined across modules in the blueprint
-// and maps each to its inferred hardware category (e.g. CPU, GPU, TPU, Other) generating a formatted summary.
+// getMachineCategory maps each machine type to its inferred hardware category (CPU/GPU/TPU/Other)
 func getMachineCategory(bp config.Blueprint) string {
 	var categories []string
 	seen := make(map[string]bool)

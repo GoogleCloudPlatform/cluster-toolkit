@@ -1076,8 +1076,7 @@ func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys
 	return counts
 }
 
-// detectMachineCategory attempts to identify the hardware nature of an instantiated machine type
-// by interpreting available cluster toolkit mappings (e.g. associating mapped nvidia labels with GPUs).
+// detectMachineCategory attempts to identify the hardware nature of an instantiated machine type by interpreting available cluster toolkit mappings (e.g. associating mapped nvidia labels with GPUs).
 // Returns "CPU", "GPU", "TPU", or "Other".
 func detectMachineCategory(mType string) string {
 	mType = strings.ToLower(strings.TrimSpace(mType))
