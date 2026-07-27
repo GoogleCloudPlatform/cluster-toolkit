@@ -106,7 +106,7 @@ resource "google_compute_instance_template" "tpl" {
       disk_name             = lookup(disk.value, "disk_name", null)
       disk_size_gb          = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
       disk_type             = lookup(disk.value, "disk_type", null)
-      storage_pool          = lookup(disk.value, "disk_storage_pool", null) != "" ? lookup(disk.value, "disk_storage_pool", null) : null
+      storage_pool          = try(disk.value.disk_storage_pool, null) == "" ? null : try(disk.value.disk_storage_pool, null)
       interface             = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
       mode                  = lookup(disk.value, "mode", null)
       source                = lookup(disk.value, "source", null)
