@@ -1104,7 +1104,7 @@ func detectMachineCategory(mType string) string {
 		}
 	}
 
-	if strings.Contains(mType, "-standard-") || strings.Contains(mType, "-highmem-") || strings.Contains(mType, "-highcpu-") || strings.Contains(mType, "custom-") {
+	if strings.Contains(mType, "-standard-") || strings.Contains(mType, "-highmem-") || strings.Contains(mType, "-highcpu-") || strings.Contains(mType, "-megamem-") || strings.Contains(mType, "-ultramem-") || strings.Contains(mType, "custom-") {
 		return "CPU"
 	}
 
