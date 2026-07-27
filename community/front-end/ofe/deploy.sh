@@ -613,7 +613,10 @@ TFVARS
 			fi
 		fi
 
-		terraform apply -auto-approve | tee tfapply.log
+		# -- Merge stderr into the piped/logged stream: terraform writes its
+		#    "Error: ..." diagnostics to stderr, not stdout, so the retry
+		#    detection below would never see them if only stdout were teed.
+		terraform apply -auto-approve 2>&1 | tee tfapply.log
 		tf_rc=${PIPESTATUS[0]}
 
 		# -- The Google provider can return "Provider produced inconsistent
@@ -625,7 +628,7 @@ TFVARS
 			grep -q "Provider produced inconsistent result after apply" tfapply.log &&
 			grep -q "service_account" tfapply.log; then
 			echo "Retrying terraform apply to reconcile service account state..."
-			terraform apply -auto-approve | tee tfapply.log
+			terraform apply -auto-approve 2>&1 | tee tfapply.log
 			tf_rc=${PIPESTATUS[0]}
 		fi
 
