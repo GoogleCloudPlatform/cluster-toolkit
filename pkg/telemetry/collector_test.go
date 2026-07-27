@@ -3049,7 +3049,7 @@ func TestGetMachineCategory(t *testing.T) {
 					},
 				},
 			},
-			want: "c2-standard-4:CPU,g4-standard-48:GPU,tpu7x-standard-4t:TPU",
+			want: "g4-standard-48:GPU,tpu7x-standard-4t:TPU,c2-standard-4:CPU",
 		},
 		{
 			name: "Handles shorthand mapping for TPU and GPU",
@@ -3075,6 +3075,93 @@ func TestGetMachineCategory(t *testing.T) {
 				},
 			},
 			want: "a100-40gb-1:GPU,v6e-4:TPU",
+		},
+		{
+			name: "Handles unknown machine types mapped to Other",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_unknown"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("bizarre-type-1"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "bizarre-type-1:Other",
+		},
+		{
+			name: "Handles trailing spaces and upper casing in machine types to normalize appropriately",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_noisy"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal(" N2-Standard-4 "),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "N2-Standard-4:CPU",
+		},
+		{
+			name: "Handles deduping duplicate machine types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-micro"),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-micro"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-micro:CPU",
+		},
+		{
+			name: "Returns empty string for blueprint with no compute instances",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("storage"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-standard"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Returns empty string for empty blueprint",
+			bp:   config.Blueprint{},
+			want: "",
 		},
 	}
 
