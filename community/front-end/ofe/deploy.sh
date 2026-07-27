@@ -627,7 +627,15 @@ TFVARS
 		if [[ ${tf_rc} -ne 0 ]] &&
 			grep -q "Provider produced inconsistent result after apply" tfapply.log &&
 			grep -q "service_account" tfapply.log; then
-			echo "Retrying terraform apply to reconcile service account state..."
+			echo "Reconciling service account state and retrying terraform apply..."
+			# The failed apply actually created the account but, because of the
+			# inconsistent-result error, dropped it from state. A bare re-apply
+			# would then hit "409 already exists", so adopt the existing account
+			# back into state before retrying.
+			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
+				terraform import "${fe_sa_address}" \
+					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
+			fi
 			terraform apply -auto-approve 2>&1 | tee tfapply.log
 			tf_rc=${PIPESTATUS[0]}
 		fi
