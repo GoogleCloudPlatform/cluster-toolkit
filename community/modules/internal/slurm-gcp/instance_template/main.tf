@@ -33,6 +33,7 @@ locals {
       boot         = disk.boot
       disk_size_gb = disk.disk_size_gb
       disk_type    = disk.disk_type
+      disk_storage_pool = disk.disk_storage_pool
       disk_labels = merge(
         disk.disk_labels,
         {
@@ -157,6 +158,7 @@ module "instance_template" {
   # Disk
   disk_type    = var.disk_type
   disk_size_gb = var.disk_size_gb
+  disk_storage_pool = var.disk_storage_pool
   auto_delete  = var.disk_auto_delete
   disk_labels = merge(
     {

@@ -33,6 +33,7 @@ locals {
       source_image                        = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
       disk_size_gb                        = var.disk_size_gb
       disk_type                           = var.disk_type
+      disk_storage_pool                   = var.disk_storage_pool
       disk_labels                         = var.disk_labels
       auto_delete                         = var.auto_delete
       disk_resource_manager_tags          = var.disk_resource_manager_tags
@@ -105,6 +106,7 @@ resource "google_compute_instance_template" "tpl" {
       disk_name             = lookup(disk.value, "disk_name", null)
       disk_size_gb          = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
       disk_type             = lookup(disk.value, "disk_type", null)
+      storage_pool          = lookup(disk.value, "disk_storage_pool", null) != "" ? lookup(disk.value, "disk_storage_pool", null) : null
       interface             = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
       mode                  = lookup(disk.value, "mode", null)
       source                = lookup(disk.value, "source", null)
