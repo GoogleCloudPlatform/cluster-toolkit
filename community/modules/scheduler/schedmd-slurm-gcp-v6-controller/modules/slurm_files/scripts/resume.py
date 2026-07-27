@@ -530,6 +530,12 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
             jobs_to_requeue.append(job)
 
     if jobs_to_requeue:
+        # Safely extract ID from Slurm JSON dicts or legacy primitives
+        def extract_json_id(val) -> str:
+            if isinstance(val, dict):
+                return str(val.get("number", "0"))
+            return str(val) if val else "0"
+
         pending_jobs = set()
         parent_job_ids = {}
         
@@ -550,17 +556,17 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
                         state = job_dict.get("job_state", "")
                         # Unlike sbatch, interactive srun jobs fail immediately and won't be in PENDING state
                         if "PENDING" in state:
-                            job_id = str(job_dict.get("job_id"))
+                            job_id = extract_json_id(job_dict.get("job_id"))
                             pending_jobs.add(job_id)
                             parent_id = job_id
-                            arr_id = job_dict.get("array_job_id")
-                            pack_id = job_dict.get("pack_job_id")
+                            arr_id = extract_json_id(job_dict.get("array_job_id"))
+                            pack_id = extract_json_id(job_dict.get("pack_job_id"))
                             # Ignore "0" and "0_0" for unset array/pack IDs
-                            if arr_id and str(arr_id) not in ("0", "0_0"):
+                            if arr_id not in ("0", "0_0"):
                                 parent_id = arr_id
-                            elif pack_id and str(pack_id) not in ("0", "0_0"):
+                            elif pack_id not in ("0", "0_0"):
                                 parent_id = pack_id
-                            parent_job_ids[job_id] = str(parent_id)
+                            parent_job_ids[job_id] = parent_id
                 except Exception as e:
                     log.debug(f"Failed to query job states: {e}")
 
