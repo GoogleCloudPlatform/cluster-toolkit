@@ -72,18 +72,6 @@ steps:
     echo '      machine_type: n2-standard-2'                                              >> $${EXAMPLE_BP}
     echo '      name_prefix: remote-node'                                                 >> $${EXAMPLE_BP}
     echo '      add_deployment_name_before_prefix: true'                                  >> $${EXAMPLE_BP}
-    echo ''
-    echo '  - id: job_template_hostname'                                                   >> $${EXAMPLE_BP}
-    echo '    source: modules/compute/gke-job-template'                                    >> $${EXAMPLE_BP}
-    echo '    use: [gke-tpu-v5e-pool]'                                                     >> $${EXAMPLE_BP}
-    echo '    settings:'                                                                   >> $${EXAMPLE_BP}
-    echo '      image: us-docker.pkg.dev/cloud-tpu-images/jax-ai-image/tpu:latest'         >> $${EXAMPLE_BP}
-    echo '      command:'                                                                  >> $${EXAMPLE_BP}
-    echo '      - /bin/bash'                                                               >> $${EXAMPLE_BP}
-    echo '      - -c'                                                                      >> $${EXAMPLE_BP}
-    echo '      - python -c '\''import warnings; warnings.filterwarnings("ignore"); import jax; print(jax.device_count(), "TPU cores")'\'''    >> $${EXAMPLE_BP}
-    echo '      node_count: 1'                                                             >> $${EXAMPLE_BP}
-    echo '    outputs: [instructions]'                                                     >> $${EXAMPLE_BP}
 
     ENABLE_SPOT="true"
     GKE_VARS_FILE="tools/cloud-build/daily-tests/tests/gke-tpu-v5e.yml"

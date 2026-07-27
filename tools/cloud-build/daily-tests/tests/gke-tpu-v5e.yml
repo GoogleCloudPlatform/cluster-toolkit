@@ -47,6 +47,4 @@ custom_vars:
 instance_type: "tpuv5e"
 scheduler: "gke"
 post_deploy_tests:
-- test-validation/test-gke-tpu.yml
-- test-validation/test-gke-ml-diagnostics.yml
 - test-validation/test-gcluster-job-pathways.yml

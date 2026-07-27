@@ -174,7 +174,27 @@
   - name: Wait for Pathways Proxy and RM sidecars to initialize
     delegate_to: localhost
     ansible.builtin.command: kubectl wait --for=condition=Initialized pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }} --timeout=600s
+    register: wait_result
+    until: wait_result.rc == 0
+    retries: 20
+    delay: 5
     changed_when: false
+
+  - name: List GCluster jobs
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job list
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: list_output
+    changed_when: false
+
+  - name: Verify job is in list
+    ansible.builtin.assert:
+      that:
+      - job_name in list_output.stdout
+      fail_msg: "Job {{ job_name }} was not found in the gcluster job list."
 
   - name: Wait for Pathways Workload container to start running or terminate
     delegate_to: localhost
@@ -190,25 +210,24 @@
 
   - name: Stream Pathways Workload logs for JAX TPU execution result
     delegate_to: localhost
-    ansible.builtin.shell: |
-      timeout 600 bash -c '
-      for i in {1..10}; do
-        state_json=$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath="{.items[*].status.containerStatuses[?(@.name==\"workload-container\")].state}")
-        opts=""
+    ansible.builtin.shell:
+      cmd: |
+        state_json=$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath='{.items[*].status.containerStatuses[?(@.name=="workload-container")].state}')
         if echo "$state_json" | grep -q "running"; then
           opts="-f"
-        elif ! echo "$state_json" | grep -q "terminated"; then
-          sleep 2
-          continue
+        elif echo "$state_json" | grep -q "terminated"; then
+          opts=""
+        else
+          # Neither running nor terminated; fail to trigger Ansible's retry
+          exit 1
         fi
-        if {{ workspace }}/gcluster job logs "{{ job_name }}" $opts --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "JAX TPU Result"; then
-          exit 0
-        fi
-        sleep 2
-      done
-      exit 1
-      '
+        timeout 600 {{ workspace }}/gcluster job logs "{{ job_name }}" $opts --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "JAX TPU Result"
     register: streaming_logs
+    until: streaming_logs.rc == 0
+    retries: 10
+    delay: 2
+    changed_when: false
+
 
   - name: Print streaming logs result
     ansible.builtin.debug:
