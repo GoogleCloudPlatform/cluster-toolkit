@@ -28,6 +28,7 @@ import os
 import re
 
 from django.template import engines as template_engines
+from django.utils import timezone
 from google.api_core.exceptions import PermissionDenied as GCPPermissionDenied
 from website.settings import SITE_NAME
 
@@ -679,8 +680,11 @@ class ClusterInfo:
                 self.cluster.internal_name = self.cluster.name
                 self.cluster.cloud_state = "m"
 
-                # Cluster initialization is now running.
+                # Cluster initialization is now running. Stamp the start time
+                # so a bootstrap that stalls (controller never reports ready)
+                # can be surfaced instead of spinning on "initialising".
                 self.cluster.status = "i"
+                self.cluster.initialization_started = timezone.now()
                 self.cluster.save()
 
                 # Filters for Management Nodes (Controller)

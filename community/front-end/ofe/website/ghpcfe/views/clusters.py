@@ -28,6 +28,8 @@ from rest_framework.response import Response
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
+from datetime import timedelta
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
@@ -511,6 +513,39 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 f"The spack directory ({spackdir}) is not on any shared mount "
                 "point. Add a mount point whose path is a parent of the spack "
                 "directory, or change the spack directory.",
+            )
+            return self.form_invalid(form)
+
+        # Cluster nodes have no external IP, so during bootstrap they reach the
+        # control bucket (Google APIs) and package mirrors only through Private
+        # Google Access or a Cloud NAT. A subnet with neither leaves every node
+        # stuck with no route out and the cluster stuck initialising with no
+        # error. Managed VPCs get a NAT, but an imported subnet may have
+        # neither, so validate before deploying. The probe fails open: a
+        # subnet we cannot read (or an API error) does not block the deploy.
+        subnet = self.object.subnet
+        try:
+            egress = cloud_info.get_subnet_egress_info(
+                "GCP",
+                self.object.cloud_credential.detail,
+                subnet.cloud_region,
+                subnet.cloud_id,
+            )
+        except Exception as e:  # noqa: BLE001 - never block deploy on a probe error
+            logger.warning("Subnet egress check failed, allowing deploy: %s", e)
+            egress = None
+        if (
+            egress
+            and egress["found"]
+            and not (egress["private_google_access"] or egress["cloud_nat"])
+        ):
+            form.add_error(
+                None,
+                f"The selected subnet ({subnet.cloud_id}) has neither Private "
+                "Google Access nor a Cloud NAT, so cluster nodes cannot reach "
+                "Google APIs or package mirrors and setup would hang. Enable "
+                "Private Google Access on the subnet or add a Cloud NAT in "
+                f"region {subnet.cloud_region}, then try again.",
             )
             return self.form_invalid(form)
 
@@ -1175,15 +1210,31 @@ class BackendSyncCluster(LoginRequiredMixin, generic.View):
 class BackendClusterStatus(LoginRequiredMixin, generic.View):
     """Backend handler for cluster syncing"""
 
+    # A controller that never reports "ready" leaves the cluster on
+    # "initialising" forever. If it has been initialising longer than this,
+    # surface a likely-failed-setup warning instead of spinning silently.
+    INIT_STALL_MINUTES = 45
+
     def get(self, request, pk, *args, **kwargs):
         """
         This handles GET request with parameter pk.
-        for example: /backend/cluster-status/50 
+        for example: /backend/cluster-status/50
         """
         cluster = get_object_or_404(Cluster, pk=pk)
         logger.info(f"Current cluster {pk} status: {cluster.status}")
 
-        return JsonResponse({'status': cluster.status})
+        payload = {"status": cluster.status}
+        if cluster.status == "i" and cluster.initialization_started:
+            elapsed = timezone.now() - cluster.initialization_started
+            if elapsed > timedelta(minutes=self.INIT_STALL_MINUTES):
+                payload["stalled"] = True
+                payload["message"] = (
+                    "This cluster has been initialising for over "
+                    f"{self.INIT_STALL_MINUTES} minutes. Setup may have failed "
+                    "on the controller. Check View Logs; you may need to "
+                    "delete and retry the cluster."
+                )
+        return JsonResponse(payload)
 
 
 class BackendAuthUserGCP(BackendAsyncView):
