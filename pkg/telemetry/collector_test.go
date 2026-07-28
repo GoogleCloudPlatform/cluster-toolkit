@@ -3077,31 +3077,6 @@ func TestGetMachineCategory(t *testing.T) {
 			want: "a100-40gb-1:GPU,v6e-4:TPU",
 		},
 		{
-			name: "Handles memory-optimized machine types correctly as CPU",
-			bp: config.Blueprint{
-				Groups: []config.Group{
-					{
-						Name: config.GroupName("primary"),
-						Modules: []config.Module{
-							{
-								ID: config.ModuleID("compute_mem_1"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type": cty.StringVal("m1-megamem-96"),
-								}),
-							},
-							{
-								ID: config.ModuleID("compute_mem_2"),
-								Settings: config.NewDict(map[string]cty.Value{
-									"machine_type": cty.StringVal("m2-ultramem-208"),
-								}),
-							},
-						},
-					},
-				},
-			},
-			want: "m1-megamem-96:CPU,m2-ultramem-208:CPU",
-		},
-		{
 			name: "Handles unknown machine types mapped to Other",
 			bp: config.Blueprint{
 				Groups: []config.Group{

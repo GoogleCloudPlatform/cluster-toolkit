@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
@@ -233,16 +232,16 @@ func getMachineType(bp config.Blueprint) string {
 	return strings.Join(machineTypes, ",")
 }
 
-// getMachineCategory maps each machine type to its inferred hardware category (CPU/GPU/TPU/Other)
 func getMachineCategory(bp config.Blueprint) string {
-	var categories []string
-	seen := make(map[string]bool)
+	machineTypes := getMachineType(bp)
+	if machineTypes == "" {
+		return ""
+	}
 
-	for _, m := range config.GetAllBpModules(&bp) {
-		if mt := getMachineTypeFromModule(m, bp); mt != "" && !seen[mt] {
-			categories = append(categories, fmt.Sprintf("%s:%s", mt, detectMachineCategory(mt)))
-			seen[mt] = true
-		}
+	machineTypesList := strings.Split(machineTypes, ",")
+	categories := make([]string, 0, len(machineTypesList))
+	for _, mt := range machineTypesList {
+		categories = append(categories, fmt.Sprintf("%s:%s", mt, detectMachineCategory(mt)))
 	}
 
 	return strings.Join(categories, ",")
@@ -313,15 +312,21 @@ func getStaticNodeCounts(bp config.Blueprint) string {
 		}
 	}
 
-	counts, err := json.Marshal(countsByMachineType)
-	if err != nil || len(countsByMachineType) == 0 {
+	if len(countsByMachineType) == 0 {
 		return ""
 	}
 
-	// Trim the curly braces and remove the double quotes for a cleaner metric.
-	// Expected return format: "g4-standard-48:3,a3-ultragpu-8g:2"
-	return strings.ReplaceAll(strings.Trim(string(counts), "{}"), `"`, "")
+	keys := make([]string, 0, len(countsByMachineType))
+	for k := range countsByMachineType {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
 
+	builder := make([]string, 0, len(keys))
+	for _, k := range keys {
+		builder = append(builder, fmt.Sprintf("%s:%d", k, countsByMachineType[k]))
+	}
+	return strings.Join(builder, ",")
 }
 
 func getDynamicNodeCounts(bp config.Blueprint, kind string) string {
@@ -339,11 +344,22 @@ func getDynamicNodeCounts(bp config.Blueprint, kind string) string {
 			}
 		}
 	}
-	countsJSON, err := json.Marshal(counts)
-	if err != nil || len(counts) == 0 {
+
+	if len(counts) == 0 {
 		return ""
 	}
-	return strings.ReplaceAll(strings.Trim(string(countsJSON), "{}"), "\"", "")
+
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	builder := make([]string, 0, len(keys))
+	for _, k := range keys {
+		builder = append(builder, fmt.Sprintf("%s:%d", k, counts[k]))
+	}
+	return strings.Join(builder, ",")
 }
 
 func getOSName() string {

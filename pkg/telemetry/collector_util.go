@@ -1111,12 +1111,13 @@ func detectMachineCategory(mType string) string {
 	return "Other"
 }
 
+var cpuKeywords = []string{
+	"-standard-", "-highmem-", "-highcpu-", "-megamem-",
+	"-ultramem-", "custom-", "-micro", "-small", "-medium", "-metal",
+}
+
 // isCPUFallback checks if the machine type contains any of the standard CPU identifiers.
 func isCPUFallback(mType string) bool {
-	cpuKeywords := []string{
-		"-standard-", "-highmem-", "-highcpu-",
-		"-megamem-", "-ultramem-", "custom-",
-	}
 	for _, kw := range cpuKeywords {
 		if strings.Contains(mType, kw) {
 			return true
