@@ -88,7 +88,8 @@ variable "additional_persistent_disks" {
     size         = optional(number, 200)
     storage_pool = optional(string)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 variable "name_prefix" {

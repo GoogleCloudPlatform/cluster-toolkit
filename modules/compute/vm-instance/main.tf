@@ -341,7 +341,7 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
     precondition {
-      condition     = try(var.additional_persistent_disks.count, 0) == 0 || try(var.additional_persistent_disks.storage_pool, null) == null || can(regex("^hyperdisk-(balanced|throughput)$", try(var.additional_persistent_disks.type, "pd-balanced")))
+      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-(balanced|throughput)$", var.additional_persistent_disks.type))
       error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
   }
