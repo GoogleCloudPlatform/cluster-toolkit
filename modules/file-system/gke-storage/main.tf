@@ -36,10 +36,10 @@ check "private_vpc_connection_peering" {
   }
 }
 
-check "hyperdisk_extreme_storage_pool" {
+check "storage_pool_supported_types" {
   assert {
-    condition     = lower(var.storage_type) != "hyperdisk-extreme" || (var.disk_storage_pool == null || var.disk_storage_pool == "")
-    error_message = "Storage Pools are not supported with Hyperdisk Extreme. Use hyperdisk-balanced or hyperdisk-throughput."
+    condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-(balanced|throughput)$", lower(var.storage_type)))
+    error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
   }
 }
 

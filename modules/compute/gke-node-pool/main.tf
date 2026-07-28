@@ -349,8 +349,8 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
     }
     precondition {
-      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", var.disk_type))
-      error_message = "Storage pools are only supported with Hyperdisk types."
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-(balanced|throughput)$", var.disk_type))
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
