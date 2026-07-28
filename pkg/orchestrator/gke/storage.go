@@ -310,11 +310,11 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		volSpecs = append(volSpecs,
 			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},
 		)
+	}
 
-		if opts.IsPathwaysJob {
-			mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
-			volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
-		}
+	if opts.IsPathwaysJob && opts.Pathways.ColocatedPythonSidecarImage != "" {
+		mountSpecs = append(mountSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "mountPath": "/tmp/sidecar"})
+		volSpecs = append(volSpecs, map[string]interface{}{"name": "sidecar-shared-memory", "emptyDir": map[string]interface{}{"medium": "Memory"}})
 	}
 
 	if len(volSpecs) == 0 {

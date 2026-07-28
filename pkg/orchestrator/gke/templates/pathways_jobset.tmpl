@@ -285,11 +285,11 @@ spec:
               volumeMounts:
               - name: shared-tmp
                 mountPath: /tmp
+              - name: sidecar-shared-memory
+                mountPath: /tmp/sidecar
               {{- if .GKEMTCEnabled}}
               - name: cache
                 mountPath: {{.GKEMTCRamdiskDirectory}}
-              - name: sidecar-shared-memory
-                mountPath: /tmp/sidecar
               {{- end}}
             {{- end}}
             containers:
