@@ -14,6 +14,7 @@
 
 ---
 tags:
+- m.custom-image
 - m.cloud-storage-bucket
 - m.pre-existing-network-storage
 - m.managed-lustre
