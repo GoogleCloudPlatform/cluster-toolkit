@@ -304,9 +304,6 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 
 	if opts.GKEMTCEnabled {
 		ramdiskDir := opts.GKEMTCRamdiskDirectory
-		if ramdiskDir == "" {
-			ramdiskDir = "/tmp/mtc_checkpoints"
-		}
 		mountSpecs = append(mountSpecs,
 			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
 		)

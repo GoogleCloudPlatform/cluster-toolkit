@@ -283,6 +283,15 @@ type gkeCluster struct {
 	NodePools                   []gkeJobNodePool             `json:"nodePools"`
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
+	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
+}
+
+type gkeAddonsConfig struct {
+	HighScaleCheckpointingConfig *gkeHighScaleCheckpointingConfig `json:"highScaleCheckpointingConfig,omitempty"`
+}
+
+type gkeHighScaleCheckpointingConfig struct {
+	Enabled bool `json:"enabled"`
 }
 
 type controlPlaneEndpointsConfig struct {

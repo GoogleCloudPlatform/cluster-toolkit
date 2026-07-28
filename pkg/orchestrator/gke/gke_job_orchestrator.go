@@ -32,8 +32,6 @@ import (
 	"strings"
 	"time"
 
-	container "google.golang.org/api/container/v1"
-
 	"github.com/google/safetext/yamltemplate"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -132,25 +130,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	}
 	logging.Info("gcluster job submit workflow completed.")
 
-	return nil
-}
-
-func (g *GKEOrchestrator) checkMTCAddonEnabled(projectID, location, clusterName string) error {
-	ctx := context.Background()
-	svc, err := container.NewService(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create cluster manager client: %v", err)
-	}
-
-	name := fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, location, clusterName)
-	resp, err := svc.Projects.Locations.Clusters.Get(name).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("failed to get cluster details for MTC validation: %v", err)
-	}
-
-	if resp.AddonsConfig == nil || resp.AddonsConfig.HighScaleCheckpointingConfig == nil || !resp.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
-		return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please update your cluster blueprint to set 'enable_multi_tier_checkpointing: true' and deploy the cluster before submitting jobs with --mtc-enabled")
-	}
 	return nil
 }
 
@@ -390,9 +369,6 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
-	if job.GKEMTCEnabled && job.GKEMTCRamdiskDirectory == "" {
-		job.GKEMTCRamdiskDirectory = "/tmp/mtc_checkpoints"
-	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
 	if err != nil {
@@ -565,8 +541,11 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	}
 
 	if job.GKEMTCEnabled {
-		if err := g.checkMTCAddonEnabled(job.ProjectID, job.ClusterLocation, job.ClusterName); err != nil {
-			return err
+		if job.GKEMTCRamdiskDirectory == "" {
+			job.GKEMTCRamdiskDirectory = "/tmp/mtc_checkpoints"
+		}
+		if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
+			return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please follow the official GKE documentation to enable this feature on your cluster before submitting jobs with --gke-mtc-enabled: https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing")
 		}
 	}
 
