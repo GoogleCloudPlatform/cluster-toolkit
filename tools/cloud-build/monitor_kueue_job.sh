@@ -30,8 +30,7 @@ gcloud container clusters get-credentials "$CLUSTER_NAME" --region="$REGION"
 
 echo "Waiting for Job $JOB_NAME to be admitted by Kueue..."
 while true; do
-	SUSPENDED=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.suspend}' 2>/dev/null)
-	if [ "$?" -ne 0 ]; then
+	if ! SUSPENDED=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.suspend}' 2>/dev/null); then
 		echo "Error: Job $JOB_NAME not found yet or kubectl failed. Retrying..."
 		sleep 5
 		continue

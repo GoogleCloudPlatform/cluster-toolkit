@@ -30,7 +30,7 @@ while true; do
 	EXIT_CODE=${PIPESTATUS[0]}
 	set -e
 
-	if [ $EXIT_CODE -eq 0 ]; then
+	if [ "$EXIT_CODE" -eq 0 ]; then
 		source /tmp/zone_export.sh
 		break
 	else
