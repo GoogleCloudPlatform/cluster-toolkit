@@ -193,9 +193,7 @@ deployment_groups:
               - cuda-toolkit-12-8
               - nvidia-dkms-580-server-open
               - nvidia-driver-580-server-open
-              - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
-              - datacenter-gpu-manager-4-dev=1:4.6.0-1
-              - datacenter-gpu-manager-4-core=1:4.6.0-1
+              - datacenter-gpu-manager-4-cuda13
               - libnvidia-nscq-580
               - nvidia-container-toolkit
             tasks:
@@ -211,11 +209,10 @@ deployment_groups:
               ansible.builtin.apt:
                 name: "{{ item }}"
                 update_cache: true
-                allow_downgrade: yes
               loop: "{{ nvidia_packages }}"
             - name: Freeze NVIDIA drivers and CUDA
               ansible.builtin.dpkg_selections:
-                name: "{{ item.split('=')[0] }}"
+                name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
