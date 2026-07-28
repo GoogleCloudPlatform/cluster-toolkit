@@ -337,12 +337,12 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
     }
     precondition {
-      condition     = var.disk_storage_pool == null || can(regex("^hyperdisk-", var.disk_type))
-      error_message = "Storage pools are only supported with Hyperdisk types."
+      condition     = var.disk_storage_pool == null || can(regex("^hyperdisk-(balanced|throughput)$", var.disk_type))
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
     precondition {
-      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.storage_pool == null || can(regex("^hyperdisk-", var.additional_persistent_disks.type))
-      error_message = "Storage pools are only supported with Hyperdisk types."
+      condition     = try(var.additional_persistent_disks.count, 0) == 0 || try(var.additional_persistent_disks.storage_pool, null) == null || can(regex("^hyperdisk-(balanced|throughput)$", try(var.additional_persistent_disks.type, "pd-balanced")))
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
   }
 }
