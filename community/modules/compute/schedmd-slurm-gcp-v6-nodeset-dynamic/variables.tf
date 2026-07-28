@@ -150,14 +150,14 @@ variable "disk_labels" {
 variable "additional_disks" {
   description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
-    disk_name    = string
-    device_name  = string
-    disk_size_gb = number
-    disk_type    = string
+    disk_name         = string
+    device_name       = string
+    disk_size_gb      = number
+    disk_type         = string
     disk_storage_pool = optional(string)
-    disk_labels  = map(string)
-    auto_delete  = bool
-    boot         = bool
+    disk_labels       = map(string)
+    auto_delete       = bool
+    boot              = bool
   }))
   default = []
 }
