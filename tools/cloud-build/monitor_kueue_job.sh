@@ -44,7 +44,13 @@ while true; do
 done
 
 echo "Waiting for Pod to be initialized..."
+POD_INIT_TIMEOUT=1200
+START_TIME=$SECONDS
 while true; do
+	if [ $((SECONDS - START_TIME)) -gt $POD_INIT_TIMEOUT ]; then
+		echo "Error: Pod initialization timed out after 20 minutes." >&2
+		exit 1
+	fi
 	POD_NAME=$(kubectl get pods -n "$NAMESPACE" --selector=job-name="$JOB_NAME" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 	if [ -n "$POD_NAME" ]; then
 		POD_PHASE=$(kubectl get pod "$POD_NAME" -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null)
@@ -67,9 +73,11 @@ while true; do
 	sleep 5
 
 	# Check if job is completed
-	SUCCEEDED=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.status.succeeded}' 2>/dev/null)
-	FAILED=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.status.failed}' 2>/dev/null)
-
+	if ! JOB_STATUS=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.status.succeeded}{"|"}{.status.failed}' 2>/dev/null); then
+		echo "Error: Job $JOB_NAME no longer exists or kubectl failed. Exiting." >&2
+		exit 1
+	fi
+	IFS='|' read -r SUCCEEDED FAILED <<<"$JOB_STATUS"
 	if [ "$SUCCEEDED" = "1" ] || [ "$FAILED" = "1" ]; then
 		break
 	fi

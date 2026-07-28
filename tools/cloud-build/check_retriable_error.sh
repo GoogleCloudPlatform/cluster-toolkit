@@ -21,6 +21,11 @@ if [ -z "$LOG_FILE" ]; then
 	exit 2
 fi
 
+if [ ! -f "$LOG_FILE" ]; then
+	echo "Error: Log file '$LOG_FILE' does not exist or is not a regular file." >&2
+	exit 2
+fi
+
 # Define all retriable errors here.
 # Note: "Couldn't find a zone to deploy" and "ERROR: ZONE not found" are not included here
 # because find_available_zone.sh now internally loops and waits for zone capacity to maintain Kueue locks.

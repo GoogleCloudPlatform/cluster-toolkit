@@ -16,26 +16,32 @@
 # Wrapper around find_available_zone.sh that loops instead of exiting when out of capacity.
 # Since find_available_zone.sh uses 'exit 1', we must run it in a subshell
 # to prevent it from killing the pod.
+ZONE_EXPORT=$(mktemp)
+ZONE_OUTPUT=$(mktemp)
+trap 'rm -f "$ZONE_EXPORT" "$ZONE_OUTPUT"' EXIT
+
 while true; do
 	# Run the script in a subshell, streaming stdout and stderr to the console and a log file.
 	# To extract the exported variables, we have the subshell write them to a file.
 	set +e
 	(
+		set -e
 		source /workspace/tools/cloud-build/find_available_zone.sh
 		# If it succeeds, these lines will execute and save the exports.
-		echo "export ZONE=${ZONE}" >/tmp/zone_export.sh
-		echo "export PROVISIONING_MODEL=${PROVISIONING_MODEL}" >>/tmp/zone_export.sh
-	) 2>&1 | tee /tmp/zone_output.log
+		echo "export ZONE=\"${ZONE}\"" >"$ZONE_EXPORT"
+		echo "export PROVISIONING_MODEL=\"${PROVISIONING_MODEL}\"" >>"$ZONE_EXPORT"
+	) 2>&1 | tee "$ZONE_OUTPUT"
 
 	EXIT_CODE=${PIPESTATUS[0]}
 	set -e
 
 	if [ "$EXIT_CODE" -eq 0 ]; then
-		source /tmp/zone_export.sh
+		# shellcheck source=/dev/null
+		source "$ZONE_EXPORT"
 		break
 	else
 		# Check if the failure was specifically due to zone capacity
-		if grep -q "Couldn't find a zone to deploy" /tmp/zone_output.log; then
+		if grep -q "Couldn't find a zone to deploy" "$ZONE_OUTPUT"; then
 			echo "--- RETRYING in 5 minutes... ---" >&2
 			sleep 300
 		else
@@ -44,3 +50,6 @@ while true; do
 		fi
 	fi
 done
+
+rm -f "$ZONE_EXPORT" "$ZONE_OUTPUT"
+trap - EXIT
