@@ -1075,3 +1075,53 @@ func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys
 	}
 	return counts
 }
+
+// detectMachineCategory attempts to identify the hardware nature of an instantiated machine type by interpreting available cluster toolkit mappings (e.g. associating mapped nvidia labels with GPUs).
+// Returns "CPU", "GPU", "TPU", or "Other".
+func detectMachineCategory(mType string) string {
+	mType = strings.ToLower(strings.TrimSpace(mType))
+	mType = config.ResolveMachineType(mType)
+
+	if config.IsTPU(mType) {
+		return "TPU"
+	}
+
+	mappings := config.GetMachineMappings()
+
+	for family, label := range mappings.MachineFamilyToLabelMap {
+		if strings.HasPrefix(mType, family) && strings.Contains(label, "nvidia") {
+			return "GPU"
+		}
+	}
+
+	if strings.Contains(mType, "gpu") {
+		return "GPU"
+	}
+
+	for _, p := range mappings.CpuMachineFamilies {
+		if strings.HasPrefix(mType, p) {
+			return "CPU"
+		}
+	}
+
+	if isCPUFallback(mType) {
+		return "CPU"
+	}
+
+	return "Other"
+}
+
+var cpuKeywords = []string{
+	"-standard-", "-highmem-", "-highcpu-", "-megamem-",
+	"-ultramem-", "custom-", "-micro", "-small", "-medium", "-metal",
+}
+
+// isCPUFallback checks if the machine type contains any of the standard CPU identifiers.
+func isCPUFallback(mType string) bool {
+	for _, kw := range cpuKeywords {
+		if strings.Contains(mType, kw) {
+			return true
+		}
+	}
+	return false
+}
