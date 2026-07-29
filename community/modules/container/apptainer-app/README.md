@@ -5,20 +5,7 @@ Artifact Registry image as an Apptainer SIF, then write a wrapper command, Tcl
 modulefile, and YAML manifest into a caller-chosen shared path.
 
 This is a helper module only. It does not create storage, compute, or
-application-specific Open OnDemand assets by itself.
-
-### v1 scope
-
-- Google Artifact Registry only
-- OCI image reference in `image_ref`, without the `docker://` prefix
-- SIF staging via `apptainer pull`
-- wrapper, modulefile, and manifest generation
-
-Out of scope in v1:
-
-- arbitrary third-party registries
-- Open OnDemand batch-connect app generation
-- storage lifecycle or mount creation
+application-specific assets by itself.
 
 ## Usage
 
@@ -64,12 +51,12 @@ precedence.
 
 ### Typical foundation wiring
 
-For an OOD + Slurm foundation, a common pattern is:
+For a shared storage and compute foundation, a common pattern is:
 
 - run `community/modules/container/apptainer-runtime` once in the composed
   startup flow to own the shared layout and module-path setup
-- run the generated app startup script on the OOD VM, a login node, or a shared
-  tools host
+- run the generated app startup script on any host with the shared mount, such
+  as a login node or shared tools VM
 - resolve the shared mount from `appsfs.network_storage[0].local_mount` or an
   equivalent storage-module output
 - rely on your existing modulefile initialization to expose the wrapper command
