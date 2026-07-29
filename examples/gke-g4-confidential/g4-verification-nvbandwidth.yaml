@@ -1,0 +1,55 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: g4-verification-nvbandwidth
+  namespace: default
+spec:
+  template:
+    metadata:
+      labels:
+        name: g4-verification-nvbandwidth
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/machine-family: g4
+        cloud.google.com/gke-confidential-nodes: "true"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: nvbandwidth
+        image: nvidia/cuda:13.0.0-devel-ubuntu24.04
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -ex
+          echo "=== INSTALLING SYSTEM DEPENDENCIES ==="
+          apt-get update && apt-get install -y \
+            git build-essential cmake libboost-program-options-dev libopenmpi-dev openmpi-bin
+          echo "=== COMPILING AND RUNNING NVBANDWIDTH ==="
+          git clone -b v0.10.0 --depth 1 https://github.com/NVIDIA/nvbandwidth.git
+          cd nvbandwidth
+          cmake -DCMAKE_CUDA_ARCHITECTURES="89;90;100" .
+          make
+          echo "=== EXECUTING PCIE BANDWIDTH TESTS ==="
+          ./nvbandwidth -t 0 1 2 3 -s
