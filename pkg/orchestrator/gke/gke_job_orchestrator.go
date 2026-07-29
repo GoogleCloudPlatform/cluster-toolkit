@@ -338,12 +338,18 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 	if job.IsPathwaysJob {
 		jobName = job.WorkloadName + "-pathways-head-0"
 	}
-	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/default/%s/details?project=%s",
-		job.ClusterLocation, job.ClusterName, jobName, job.ProjectID)
+
+	ns, err := g.getCurrentNamespace()
+	if err != nil {
+		ns = "default"
+	}
+
+	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/%s/%s/details?project=%s",
+		job.ClusterLocation, job.ClusterName, ns, jobName, job.ProjectID)
 
 	logging.Info("Follow your workload details here: %s", gkeLink)
 
-	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, "default", jobName)
+	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 }
 
@@ -752,7 +758,12 @@ func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nod
 }
 
 func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefinition) error {
-	localQueue, err := g.resolveKueueQueue(job.KueueQueueName)
+	ns, err := g.getCurrentNamespace()
+	if err != nil {
+		return fmt.Errorf("failed to get current namespace: %w", err)
+	}
+
+	localQueue, err := g.resolveKueueQueue(job.KueueQueueName, ns)
 	if err != nil {
 		logging.Info("Warning: Failed to auto-discover Kueue Queue Name: %v. Falling back to default-queue.", err)
 		localQueue = "default-queue"
@@ -764,23 +775,23 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 			logging.Info("Warning: Failed to ensure ResourceFlavors: %v", err)
 		}
 
-		exists, err := g.checkLocalQueueExists(localQueue)
+		exists, err := g.checkLocalQueueExists(localQueue, ns)
 		if err != nil {
 			logging.Info("Warning: Failed to check if LocalQueue exists: %v", err)
 		}
 		if !exists {
-			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue)
+			promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'. Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns)
 			if shell.PromptYesNo(promptMsg) {
-				if err := g.createDefaultQueues(localQueue); err != nil {
+				if err := g.createDefaultQueues(localQueue, ns); err != nil {
 					logging.Info("Warning: Failed to create default queues: %v. Workload might remain suspended.", err)
 				}
 			} else {
-				return fmt.Errorf("LocalQueue '%s' does not exist and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue)
+				return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s' and user declined to create default queues. Please create one manually or specify an existing queue using --queue flag", localQueue, ns)
 			}
 		}
 
 		if job.IsPathwaysJob {
-			if err := g.ensureClusterQueueCoverage(localQueue); err != nil {
+			if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
 				logging.Info("Warning: Could not automatically update ClusterQueue: %v. Workload might remain suspended.", err)
 			}
 		}
@@ -789,8 +800,8 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	return nil
 }
 
-func (g *GKEOrchestrator) checkLocalQueueExists(name string) (bool, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", name, "-n", "default")
+func (g *GKEOrchestrator) checkLocalQueueExists(name, ns string) (bool, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", name, "-n", ns)
 	if res.ExitCode == 0 {
 		return true, nil
 	}
@@ -800,7 +811,7 @@ func (g *GKEOrchestrator) checkLocalQueueExists(name string) (bool, error) {
 	return false, fmt.Errorf("failed to check localqueue status: %s", res.Stderr)
 }
 
-func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
+func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	logging.Info("Creating default ClusterQueue and LocalQueue...")
 
 	// Render and apply ClusterQueue
@@ -822,7 +833,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
 		Namespace        string
 		LocalQueueName   string
 		ClusterQueueName string
-	}{"default", localQueueName, defaultClusterQueue}); err != nil {
+	}{ns, localQueueName, defaultClusterQueue}); err != nil {
 		return fmt.Errorf("failed to execute local_queue.tmpl template: %w", err)
 	}
 
@@ -834,8 +845,8 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName string) error {
 	return nil
 }
 
-func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) error {
-	cqName, err := g.getClusterQueueName(localQueueName)
+func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) error {
+	cqName, err := g.getClusterQueueName(localQueueName, ns)
 	if err != nil {
 		return err
 	}
@@ -865,10 +876,10 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName string) erro
 	return fmt.Errorf("clusterQueue '%s' does not cover required resources (CPU and Memory). Please configure it manually to include quotas for 'cpu' and 'memory' resources.", cqName)
 }
 
-func (g *GKEOrchestrator) getClusterQueueName(localQueueName string) (string, error) {
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", localQueueName, "-n", "default", "-o", "jsonpath={.spec.clusterQueue}")
+func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string, error) {
+	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}")
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to find clusterqueue for %s: %s", localQueueName, res.Stderr)
+		return "", fmt.Errorf("failed to find clusterqueue for %s in namespace %s: %s", localQueueName, ns, res.Stderr)
 	}
 	cqName := strings.TrimSpace(res.Stdout)
 	if cqName == "" {
@@ -925,15 +936,15 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 	return hasCPU && hasMem
 }
 
-func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, error) {
+func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName, ns string) (string, error) {
 	if requestedQueueName != "" {
 		logging.Info("Using provided Kueue LocalQueue: %s", requestedQueueName)
 		return requestedQueueName, nil
 	}
 
-	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", "default", "-o", "jsonpath={.items[*].metadata.name}")
+	res := g.executor.ExecuteCommand("kubectl", "get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}")
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to query LocalQueues: %s", res.Stderr)
+		return "", fmt.Errorf("failed to query LocalQueues in namespace %s: %s", ns, res.Stderr)
 	}
 
 	output := strings.TrimSpace(res.Stdout)

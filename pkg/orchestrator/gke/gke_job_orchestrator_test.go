@@ -1888,7 +1888,7 @@ func TestResolveKueueQueue(t *testing.T) {
 			mockExec := NewMockExecutor(responses)
 			orc := newTestGKEOrchestrator(mockExec)
 
-			got, err := orc.resolveKueueQueue(tt.requestedName)
+			got, err := orc.resolveKueueQueue(tt.requestedName, "default")
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("resolveKueueQueue() error = %v, wantErr %v", err, tt.wantErr)
 			}
