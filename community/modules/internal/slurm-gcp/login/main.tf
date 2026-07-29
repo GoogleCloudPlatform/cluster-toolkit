@@ -69,6 +69,7 @@ module "instance" {
   project_id = var.project_id
 
   instance_template = module.template.self_link
+  metadata          = merge(module.template.metadata, var.login_nodes.instance_metadata)
   num_instances     = var.login_nodes.num_instances
 
   additional_networks = var.login_nodes.additional_networks

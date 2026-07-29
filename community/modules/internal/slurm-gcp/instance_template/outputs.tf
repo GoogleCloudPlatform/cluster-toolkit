@@ -41,3 +41,17 @@ output "labels" {
   description = "Labels attached to the instance template"
   value       = local.labels
 }
+
+output "metadata" {
+  description = "Complete metadata inherited by instances created from this template."
+  value = merge(
+    var.metadata,
+    {
+      enable-oslogin      = var.enable_oslogin ? "TRUE" : "FALSE"
+      slurm_bucket_path   = var.slurm_bucket_path
+      slurm_cluster_name  = var.slurm_cluster_name
+      slurm_instance_role = var.slurm_instance_role
+      startup-script      = coalesce(var.internal_startup_script, data.local_file.startup.content)
+    },
+  )
+}

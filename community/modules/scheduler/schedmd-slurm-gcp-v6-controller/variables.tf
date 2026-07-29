@@ -198,6 +198,7 @@ variable "login_nodes" {
       enable_uefi_networking       = optional(bool)
     })
     metadata              = optional(map(string), {})
+    instance_metadata     = optional(map(string), {})
     min_cpu_platform      = optional(string)
     num_instances         = optional(number, 1)
     on_host_maintenance   = optional(string)
