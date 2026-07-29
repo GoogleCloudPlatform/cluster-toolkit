@@ -25,7 +25,6 @@ while true; do
 	# To extract the exported variables, we have the subshell write them to a file.
 	set +e
 	(
-		set -e
 		source /workspace/tools/cloud-build/find_available_zone.sh
 		# If it succeeds, these lines will execute and save the exports.
 		echo "export ZONE=\"${ZONE}\"" >"$ZONE_EXPORT"
