@@ -28,6 +28,8 @@ import (
 	"github.com/hashicorp/go-version"
 )
 
+const docLink = "https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies"
+
 type DownloadDecision int
 
 const (
@@ -85,8 +87,6 @@ func ensureBinary(binaryName, version string, decision DownloadDecision) error {
 	if binaryName != "terraform" {
 		return nil // for packer, just check existence for now
 	}
-
-	docLink := "https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies"
 
 	installedVersion, err := getInstalledTfVersion(path)
 	if err != nil {
@@ -163,8 +163,6 @@ func compareVersions(v1, v2 string) (int, error) {
 }
 
 func confirmDownload(binaryName, version string, decision DownloadDecision) error {
-	docLink := "https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies"
-
 	if decision == DownloadDecisionNo {
 		return fmt.Errorf("%s is missing or incompatible. Download is explicitly disabled. Enable download by specifying --download-dependencies flag. See %s", binaryName, docLink)
 	}

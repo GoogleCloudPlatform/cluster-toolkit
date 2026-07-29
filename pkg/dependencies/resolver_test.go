@@ -61,7 +61,6 @@ func TestEnsureBinary_MissingAndDecisionNo(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected error when binary is missing and decision is No")
 	}
-	docLink := "https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies"
 	expectedErrMsg := fmt.Sprintf("%s is missing or incompatible. Download is explicitly disabled. Enable download by specifying --download-dependencies flag. See %s", binaryName, docLink)
 	if err.Error() != expectedErrMsg {
 		t.Errorf("Expected error %q, got %q", expectedErrMsg, err.Error())
