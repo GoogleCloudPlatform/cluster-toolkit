@@ -145,9 +145,14 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 		return nil, err
 	}
 
-	list, err := g.kubeClient.ListJobSets("gcluster.google.com/workload")
+	ns, err := g.getCurrentNamespace()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list jobsets across all namespaces: %w", err)
+		return nil, fmt.Errorf("failed to get current namespace: %w", err)
+	}
+
+	list, err := g.kubeClient.ListJobSets(ns, "gcluster.google.com/workload")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list jobsets in namespace %s: %w", ns, err)
 	}
 
 	var filteredJobs []orchestrator.JobStatus
@@ -177,11 +182,11 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 		return fmt.Errorf("failed to initialize k8s client: %w", err)
 	}
 
-	// Find the job to get its namespace
-	foundNamespace, err := g.kubeClient.GetJobNamespace(name)
+	ns, err := g.getCurrentNamespace()
 	if err != nil {
 		return err
 	}
+	foundNamespace := ns
 
 	status, err := g.getJobSetStatus(name, foundNamespace)
 	actionVerb := "Cancel"
@@ -1251,6 +1256,26 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 }
 
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
+	// 1. Capture current namespace context before gcloud resets it
+	originalNamespace, err := g.getCurrentNamespace()
+	if err != nil {
+		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v", err)
+		if originalNamespace == "" {
+			originalNamespace = "default"
+		}
+	}
+
+	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
+	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID); err != nil {
+		return err
+	}
+
+	// 3. Restore the original namespace context
+	return g.restoreNamespaceContext(originalNamespace)
+}
+
+// refreshGKEAuth handles the gcloud container clusters get-credentials call.
+func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string) error {
 	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
 
 	if g.clusterDesc.ControlPlaneEndpointsConfig != nil &&
@@ -1265,6 +1290,21 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate.", clusterName)
 		}
 		return fmt.Errorf("failed to get GKE cluster credentials: %s\n%s", credsRes.Stderr, credsRes.Stdout)
+	}
+	return nil
+}
+
+// restoreNamespaceContext sets the current namespace back to its original value if needed.
+func (g *GKEOrchestrator) restoreNamespaceContext(namespace string) error {
+	// If it was default, gcloud already set it to default, so we can skip.
+	if namespace == "" || namespace == "default" {
+		return nil
+	}
+
+	logging.Info("Restoring namespace context to '%s'...", namespace)
+	restoreRes := g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace="+namespace)
+	if restoreRes.ExitCode != 0 {
+		return fmt.Errorf("failed to restore namespace context to %s: %s", namespace, restoreRes.Stderr)
 	}
 	return nil
 }
@@ -1490,7 +1530,8 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 
 func (g *GKEOrchestrator) getCurrentNamespace() (string, error) {
 	if g.kubeClient == nil {
-		return "default", nil
+		client := &DefaultKubeClient{}
+		return client.GetCurrentNamespace()
 	}
 	return g.kubeClient.GetCurrentNamespace()
 }
@@ -2013,11 +2054,12 @@ func (d *DefaultKubeClient) ListWorkloads(namespace string, workloadName string)
 	return matchedWorkloads, nil
 }
 
-func (d *DefaultKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.Background(), metav1.ListOptions{
+	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
+
 	if err != nil {
 		return nil, err
 	}

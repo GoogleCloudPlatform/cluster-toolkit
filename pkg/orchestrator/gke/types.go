@@ -45,7 +45,7 @@ type KubeClient interface {
 	GetJobNamespace(workloadName string) (string, error)
 	ListWorkloads(namespace string, workloadName string) ([]string, error)
 	DeleteJobSet(namespace string, name string) error
-	ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error)
+	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace() (string, error)
 }
 

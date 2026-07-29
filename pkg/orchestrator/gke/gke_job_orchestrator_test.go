@@ -128,7 +128,7 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.Err
 }
 
-func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
 }
 
