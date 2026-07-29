@@ -560,12 +560,12 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
                             pending_jobs.add(job_id)
                             parent_id = job_id
                             arr_id = extract_json_id(job_dict.get("array_job_id"))
-                            pack_id = extract_json_id(job_dict.get("pack_job_id"))
-                            # Ignore "0" and "0_0" for unset array/pack IDs
+                            het_id = extract_json_id(job_dict.get("het_job_id") or job_dict.get("pack_job_id"))
+                            # Ignore "0" and "0_0" for unset array/het IDs
                             if arr_id not in ("0", "0_0"):
                                 parent_id = arr_id
-                            elif pack_id not in ("0", "0_0"):
-                                parent_id = pack_id
+                            elif het_id not in ("0", "0_0"):
+                                parent_id = het_id
                             parent_job_ids[job_id] = parent_id
                 except Exception as e:
                     log.debug(f"Failed to query job states: {e}")
@@ -583,7 +583,7 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
             if job_id not in pending_jobs:
                 continue
 
-            # Use parent job ID (array/pack) as seed value so grouped jobs generate identical random backoffs
+            # Use parent job ID (array/het) as seed value so grouped jobs generate identical random backoffs
             seed_val = parent_job_ids.get(job_id, job_id)
             random_generator = random.Random(seed_val)
 
