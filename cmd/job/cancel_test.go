@@ -67,10 +67,6 @@ type mockKubeClient struct {
 	err       error
 }
 
-func (m *mockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.namespace, m.err
-}
-
 func (m *mockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return nil, nil
 }

@@ -116,10 +116,6 @@ type MockKubeClient struct {
 	Err       error
 }
 
-func (m *MockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.Namespace, m.Err
-}
-
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return m.Workloads, m.Err
 }

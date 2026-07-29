@@ -150,11 +150,11 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName st
 		return workloadNamespace
 	}
 
-	ns, err := g.getJobNamespace(workloadName)
+	ns, err := g.getCurrentNamespace()
 	if err == nil {
 		workloadNamespace = ns
 	} else {
-		logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", workloadName, err)
+		logging.Warn("Failed to get current namespace, defaulting to 'default' for inspection: %v", err)
 	}
 
 	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)

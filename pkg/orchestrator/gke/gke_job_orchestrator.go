@@ -212,10 +212,11 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 		return "", err
 	}
 
-	foundNamespace, err := g.getJobNamespace(name)
+	ns, err := g.getCurrentNamespace()
 	if err != nil {
 		return "", err
 	}
+	foundNamespace := ns
 
 	selector, mainOnly, podCountForNotice := g.resolveLogsSelector(name, foundNamespace, opts.MainOnly)
 
@@ -1736,16 +1737,6 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 	return string(b)
 }
 
-func (g *GKEOrchestrator) getJobNamespace(name string) (string, error) {
-	if g.kubeClient == nil {
-		_, err := g.getDynamicClient()
-		if err != nil {
-			return "", fmt.Errorf("failed to get dynamic client: %w", err)
-		}
-	}
-	return g.kubeClient.GetJobNamespace(name)
-}
-
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
 	if g.dynClient != nil {
 		return g.dynClient, nil
@@ -1777,9 +1768,9 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 		}
 	}
 
-	ns, err := g.kubeClient.GetJobNamespace(workloadName)
+	ns, err := g.getCurrentNamespace()
 	if err != nil {
-		return fmt.Errorf("failed to get job namespace: %w", err)
+		return fmt.Errorf("failed to get current namespace: %w", err)
 	}
 
 	jobConsoleLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/workload/gke/%s/%s/details/%s?project=%s",
@@ -1999,24 +1990,6 @@ func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType s
 		}
 	}
 	return ""
-}
-
-func (d *DefaultKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	optsSelector := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
-	}
-	list, err := d.dynClient.Resource(gvr).Namespace("").List(context.TODO(), optsSelector)
-	if err != nil {
-		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", workloadName, err)
-	}
-
-	if len(list.Items) == 1 {
-		return list.Items[0].GetNamespace(), nil
-	} else if len(list.Items) > 1 {
-		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported. Please ensure job names are unique across the cluster", workloadName)
-	}
-	return "", fmt.Errorf("jobset %s not found in any namespace", workloadName)
 }
 
 func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
