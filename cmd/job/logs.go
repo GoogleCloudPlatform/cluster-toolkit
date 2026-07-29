@@ -15,6 +15,7 @@
 package job
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
 
 	"github.com/spf13/cobra"
@@ -57,7 +58,7 @@ func runLogsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cmd.Println(output)
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), output)
+	return err
 
-	return nil
 }
