@@ -256,9 +256,9 @@ deployment_groups:
 
           apt-get update -y
           apt-get install -y \
-              datacenter-gpu-manager-4-cuda13 \
-              datacenter-gpu-manager-4-dev \
-              datacenter-gpu-manager-4-core
+              datacenter-gpu-manager-4-cuda13=1:4.6.0-1 \
+              datacenter-gpu-manager-4-dev=1:4.6.0-1 \
+              datacenter-gpu-manager-4-core=1:4.6.0-1
 
           apt-mark hold \
               datacenter-gpu-manager-4-cuda13 \
