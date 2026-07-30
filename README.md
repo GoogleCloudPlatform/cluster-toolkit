@@ -41,25 +41,25 @@ If you want to work from a Linux or macOS client or workstation, you must follow
 
 You can use two different methods to install Cluster Toolkit:
 
-- [Using the Pre-built Bundle (Recommended)](#using-the-pre-built-bundle-recommended)
-- [Building from Source](#building-from-source)
+- [Using the pre-built bundle (recommended)](#using-the-pre-built-bundle-recommended)
+- [Building from source](#building-from-source)
 
-### Using the Pre-built Bundle (Recommended)
+### Using the pre-built bundle (recommended)
 
 For the easiest setup, download the appropriate bundle for your operating system and architecture (e.g., `gcluster_bundle_linux_amd64.zip`, `gcluster_bundle_linux_arm64.zip`, `gcluster_bundle_mac_amd64.zip`, or `gcluster_bundle_mac_arm64.zip`) from the [Releases](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) page. These bundles include the pre-compiled `gcluster` binary, the `examples` folder, and the `community/examples` folder.
 
-#### Bundle Compatibility Matrix
+#### Bundle compatibility matrix
 
 The pre-built bundles are compiled for Linux and macOS execution environments and support the deployment of the following cluster operating systems.
 
-##### Execution Platform (Where the binary runs)
+##### Execution platform (where the binary runs)
 
 | Platform | Support Status | Notes |
 | :--- | :---: | :--- |
 | **Linux (amd64 / arm64)** | ✅ | Pre-compiled on Debian Bullseye. Includes amd64 (x86_64) and arm64 builds starting v1.85.0. |
 | **Google Cloud Shell** | ✅ | Native support via the Linux amd64 binary. |
 | **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
-| **Windows** | ❎ | Please [Build from Source](#building-from-source). |
+| **Windows** | ❎ | Please [Build from source](#building-from-source). |
 
 1. Download and extract the bundle:
 
@@ -101,7 +101,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     ./gcluster --help
     ```
 
-### Building from Source
+### Building from source
 
 If you prefer to build the `gcluster` binary from source,
 you can use the following commands:
@@ -135,7 +135,7 @@ For more information, see [Set up Cluster Toolkit](https://docs.cloud.google.com
 
 HPC and AI workloads often require significant resources. You might need to request additional quota to deploy your cluster. For more information, see [Request additional quotas](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota).
 
-### GCP Credentials
+### GCP credentials
 
 Terraform can provide credentials for authenticating to Google Cloud in several ways. We recommend using `gcloud` on your workstation or using service accounts attached to cloud environments.
 
@@ -156,7 +156,7 @@ If you receive a quota project error, then set the quota project to your current
 gcloud auth application-default set-quota-project ${PROJECT_ID}
 ```
 
-### Telemetry and Privacy Notice
+### Telemetry and privacy notice
 
 To help improve Cluster Toolkit, feature usage statistics are collected and sent to Google. You can opt-out at any time by executing the following command:
 
@@ -166,7 +166,7 @@ To help improve Cluster Toolkit, feature usage statistics are collected and sent
 
 Cluster Toolkit telemetry overall is handled in accordance with the [Google Privacy Policy](https://policies.google.com/privacy). When you use Cluster Toolkit to interact with or utilize GCP Services, your information is handled in accordance with the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
 
-## Cluster Creation and Management
+## Cluster creation and management
 
 After installing `gcluster`, you can deploy, manage, and destroy infrastructure using cluster blueprints:
 
@@ -190,11 +190,11 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
 
 For detailed guides, blueprint syntax, and configuration options, see the [Google Cloud documentation site](https://cloud.google.com/cluster-toolkit/docs/overview).
 
-## Job Submission (gcluster job submit)
+## Job submission (gcluster job submit)
 
 The `gcluster job submit` command provides a unified interface to submit batch and distributed containerized workloads (JobSets) to your GKE clusters.
 
-### Prerequisites for Job Submission
+### Prerequisites for job submission
 
 Ensure your environment is set up before submitting jobs:
 - A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
@@ -273,7 +273,7 @@ Clean up a running workload:
 
 For complete step-by-step tutorials, advanced multi-slice topologies, storage mounts, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
 
-## VM Image support
+## VM image support
 
 Cluster Toolkit provides specialized modules for Slurm images, and support for standard OS images.
 
@@ -291,7 +291,7 @@ The toolkit also supports standard OS images for general-purpose modules:
 - Debian 11
 - Ubuntu 22.04 LTS
 
-For more details, see [VM Image Support](docs/vm-images.md).
+For more details, see [VM image support](docs/vm-images.md).
 
 ## Blueprint validation
 
