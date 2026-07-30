@@ -67,7 +67,7 @@ get_latest_activity_timestamp() {
 	# Check if there are any bot reminders
 	local latest_bot_reminder_timestamp
 	latest_bot_reminder_timestamp=$(echo "$comments_json" | jq -r '
-		map(select((.author.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
+		map(select((.author?.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
 		map(select(.createdAt | type == "string")) |
 		map(.createdAt) |
 		max // null
@@ -99,7 +99,7 @@ get_latest_activity_timestamp() {
 		# Check latest non-bot comment activity
 		local latest_comment_updated_at
 		latest_comment_updated_at=$(echo "$comments_json" | jq -r '
-			map(select((.author.login // "" | test("github-actions|bot"; "i") | not) or (.body | contains("<!-- PR_INACTIVITY_REMINDER -->") | not))) |
+			map(select(.author?.login // "" | test("github-actions|bot"; "i") | not)) |
 			map(select(.createdAt | type == "string")) |
 			map(.createdAt) |
 			max // null
@@ -164,7 +164,7 @@ send_reminder() {
 	fi
 
 	if [[ "$approval_status_code" -eq 0 ]]; then
-		gh pr comment "$pr_number" --body "${prefix}this PR is approved and should be merged/closed. It has been inactive for ${inactive_days} days. @${pr_author}, please merge it. ${REMINDER_MARKER}"
+		gh pr comment "$pr_number" --body "${prefix}this PR is approved and should be merged/closed. It has been inactive for ${inactive_days} days. ${target_tag}, please merge it. ${REMINDER_MARKER}"
 	else
 		if [[ "$changes_requested" == "CHANGES_REQUESTED" ]]; then
 			gh pr comment "$pr_number" --body "${prefix}this PR has been inactive for ${inactive_days} days and has changes requested. @${pr_author}, please address the requested changes or close the PR if it's no longer needed. ${REMINDER_MARKER}"
@@ -200,8 +200,8 @@ process_pr() {
 
 	local target_tag
 	target_tag=$(echo "$pr_json" | jq -r '
-		([.reviewRequests[]? | select(.__typename == "User") | "@" + .login] +
-		 [.assignees[]? | "@" + .login]) | unique | join(", ")
+		([.reviewRequests[]? | select(.__typename? == "User" and .login? != null) | "@" + .login] +
+		 [.assignees[]? | select(.login? != null) | "@" + .login]) | unique | join(", ")
 	')
 	if [[ -z "$target_tag" ]]; then
 		target_tag="$TEAM_TO_TAG"
@@ -214,12 +214,12 @@ process_pr() {
 	updated_at_seconds=$(date -d "$latest_activity_timestamp" +%s)
 	now_seconds=$(date +%s)
 	inactive_seconds=$((now_seconds - updated_at_seconds))
-	inactive_days=$((inactive_seconds / 86400))
+	inactive_days=$(((inactive_seconds + 3600) / 86400))
 	echo "PR #${pr_number} has been inactive for ${inactive_days} days."
 
 	local reminder_count
 	reminder_count=$(echo "$comments_json" | jq -r --arg since "$latest_activity_timestamp" '
-		map(select((.author.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
+		map(select((.author?.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
 		map(select(.createdAt > $since)) |
 		length
 	')
