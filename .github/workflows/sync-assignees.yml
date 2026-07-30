@@ -2,7 +2,7 @@ name: 'Sync Reviewers to Assignees'
 
 on:
   pull_request_target:
-    types: [opened, ready_for_review, review_requested]
+    types: [opened, ready_for_review, review_requested, review_request_removed]
   pull_request_review:
     types: [submitted]
 
@@ -32,7 +32,17 @@ jobs:
             fi
           fi
 
-          # 2. Add currently requested individual reviewers to Assignees
+          # 2. When a review request is removed, remove that user from Assignees
+          if [ "${{ github.event_name }}" = "pull_request_target" ] && [ "${{ github.event.action }}" = "review_request_removed" ]; then
+            REMOVED_USER="${{ github.event.requested_reviewer.login }}"
+            if [ -n "$REMOVED_USER" ]; then
+              echo "Review request removed for $REMOVED_USER. Removing from assignees."
+              gh pr edit "$PR_URL" --remove-assignee "$REMOVED_USER" || true
+              exit 0
+            fi
+          fi
+
+          # 3. Add currently requested individual reviewers to Assignees
           REVIEWERS=$(gh pr view "$PR_URL" --json requestedReviewers -q '.requestedReviewers[].login' | paste -sd, - || true)
           if [ -n "$REVIEWERS" ]; then
             echo "Adding assignees: $REVIEWERS"
