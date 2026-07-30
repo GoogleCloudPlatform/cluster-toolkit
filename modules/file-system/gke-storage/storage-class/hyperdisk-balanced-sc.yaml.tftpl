@@ -19,7 +19,7 @@ parameters:
   disk-encryption-kms-key: "${disk_encryption_kms_key}"
   %{~ endif ~}
   %{~ if disk_storage_pool != null && disk_storage_pool != "" ~}
-  storage-pool: "${disk_storage_pool}"
+  storage-pools: "${disk_storage_pool}"
   %{~ endif ~}
 volumeBindingMode: ${volume_binding_mode}
 reclaimPolicy: ${reclaim_policy}

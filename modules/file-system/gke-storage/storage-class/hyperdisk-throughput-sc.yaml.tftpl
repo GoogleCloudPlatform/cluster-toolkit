@@ -12,7 +12,7 @@ parameters:
   type: hyperdisk-throughput
   provisioned-throughput-on-create: "250Mi"
   %{~ if disk_storage_pool != null && disk_storage_pool != "" ~}
-  storage-pool: "${disk_storage_pool}"
+  storage-pools: "${disk_storage_pool}"
   %{~ endif ~}
 volumeBindingMode: ${volume_binding_mode}
 reclaimPolicy: ${reclaim_policy}
