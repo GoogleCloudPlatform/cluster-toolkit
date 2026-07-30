@@ -164,7 +164,7 @@ func compareVersions(v1, v2 string) (int, error) {
 
 func confirmDownload(binaryName, version string, decision DownloadDecision) error {
 	if decision == DownloadDecisionNo {
-		return fmt.Errorf("%s is missing or incompatible. Download is explicitly disabled. Enable download by specifying --download-dependencies flag. See %s", binaryName, docLink)
+		return fmt.Errorf("%s is missing or incompatible; download is explicitly disabled, enable download by specifying --download-dependencies flag (see %s)", binaryName, docLink)
 	}
 
 	if decision == DownloadDecisionAsk {
