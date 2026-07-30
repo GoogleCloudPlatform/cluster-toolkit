@@ -142,7 +142,7 @@ Terraform can provide credentials for authenticating to Google Cloud in several 
 > [!WARNING]
 > We do not recommend downloading or using service account JSON keys. These keys are long-lived credentials that pose a significant security risk if leaked. Instead, use short-lived credentials via Application Default Credentials (ADC).
 
-On your local terminal or Cloud Workstations terminal, generate credentials associated with your Google Cloud account:
+On your local terminal, Cloud Workstations, or Cloud Shell, generate Application Default Credentials (ADC) associated with your Google Cloud account:
 
 ```bash
 gcloud auth application-default login
