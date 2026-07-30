@@ -42,10 +42,6 @@ type PathwaysJobDefinition struct {
 	ColocatedPythonSidecarImage string // Default: ""
 
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
-
-	// Multi-Tier Checkpointing (MTC)
-	MTCEnabled       bool
-	RamdiskDirectory string
 }
 
 type VolumeDefinition struct {
@@ -97,6 +93,10 @@ type JobDefinition struct {
 	// Pathways-specific fields
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
+
+	// Multi-Tier Checkpointing (MTC)
+	GKEMTCEnabled          bool
+	GKEMTCRamdiskDirectory string
 
 	RawMounts []string
 	Env       map[string]string
