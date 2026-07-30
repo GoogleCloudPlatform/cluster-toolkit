@@ -37,3 +37,17 @@ variable "repo_uri" {
   type        = string
   default     = "https://github.com/GoogleCloudPlatform/cluster-toolkit"
 }
+
+variable "daily_tests_project_id" {
+  description = "The GCP project for daily tests"
+  type        = string
+  default     = "hpc-toolkit-dev-2"
+}
+
+variable "kueue_migrated_tests" {
+  description = "List of tests migrated to Kueue"
+  type        = list(string)
+  default = [
+    "slurm-gcp-v6-rocky8"
+  ]
+}
