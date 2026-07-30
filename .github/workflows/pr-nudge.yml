@@ -1,0 +1,63 @@
+name: 'PR 48-Hour Reviewer Nudge'
+
+on:
+  schedule:
+    - cron: '0 14 * * 1-5' # 14:00 UTC Mon-Fri
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check stale PRs and nudge reviewers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          
+          # On Mondays (day 1), use 96 hours to skip weekends; otherwise 48 hours
+          if [ "$(date -u +%u)" -eq 1 ]; then
+            HOURS=96
+          else
+            HOURS=48
+          fi
+          
+          # Use (HOURS - 1) buffer to absorb API runtime latency (47h on Tue-Fri, 95h on Mon)
+          BUFFER_HOURS=$((HOURS - 1))
+          THRESHOLD=$(date -u -d "$BUFFER_HOURS hours ago" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${BUFFER_HOURS}h "+%Y-%m-%dT%H:%M:%SZ")
+          
+          # Query open, non-draft PRs with high limit
+          gh pr list --repo "$REPO" --state open --draft=false --limit 1000 \
+            --json number,title,updatedAt,requestedReviewers,requestedTeams | jq -c '.[]' | while read -r pr; do
+            
+            PR_NUM=$(echo "$pr" | jq -r '.number')
+            UPDATED_AT=$(echo "$pr" | jq -r '.updatedAt')
+            
+            # Extract both individual reviewers and requested teams dynamically by organization
+            ORG_PREFIX="${REPO%%/*}"
+            REVIEWERS=$(echo "$pr" | jq -r --arg org "$ORG_PREFIX" '
+              ([.requestedReviewers[].login | "@" + .] + [.requestedTeams[].slug | "@" + $org + "/" + .]) | join(", ")
+            ')
+            
+            if [ -n "$REVIEWERS" ] && [ "$REVIEWERS" != "" ] && [[ "$UPDATED_AT" < "$THRESHOLD" ]]; do
+              # Check bot comment history (ignoring human replies that quote the marker)
+              LAST_REMINDER=$(gh pr view "$PR_NUM" --repo "$REPO" --json comments -q '
+                [.comments[] | select((.author.login | test("github-actions"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->"))) | .createdAt] | max // empty
+              ' || true)
+              
+              # Skip ONLY if a reminder was already posted within the last 48 hours ($THRESHOLD)
+              if [ -n "$LAST_REMINDER" ] && [[ "$LAST_REMINDER" > "$THRESHOLD" ]]; do
+                echo "PR #$PR_NUM already nudged within the last ${HOURS} hours ($LAST_REMINDER). Skipping."
+                continue
+              fi
+              
+              echo "PR #$PR_NUM inactive since $UPDATED_AT. Nudging: $REVIEWERS"
+              COMMENT_BODY="⏰ **Friendly Reminder:** $REVIEWERS — this PR has been waiting for review for over ${HOURS} hours. Please take a look when you have a chance! <!-- PR_INACTIVITY_REMINDER -->"
+              gh pr comment "$PR_NUM" --repo "$REPO" --body "$COMMENT_BODY"
+            fi
+          done

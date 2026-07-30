@@ -1,0 +1,50 @@
+name: 'Sync Reviewers to Assignees'
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, review_requested, review_request_removed]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  sync-assignees:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync Assignees with Ball-in-Court Status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url || github.event.review.pull_request_url }}
+        run: |
+          set -euo pipefail
+          
+          # 1. When a reviewer approves, remove them from Assignees and assign the PR author back
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            REVIEW_STATE="${{ github.event.review.state }}"
+            if [ "$(echo "$REVIEW_STATE" | tr '[:upper:]' '[:lower:]')" = "approved" ]; then
+              APPROVER="${{ github.event.review.user.login }}"
+              AUTHOR="${{ github.event.pull_request.user.login }}"
+              echo "Reviewer $APPROVER approved. Removing from assignees and assigning PR author ($AUTHOR)."
+              gh pr edit "$PR_URL" --remove-assignee "$APPROVER" --add-assignee "$AUTHOR" || true
+              exit 0
+            fi
+          fi
+
+          # 2. When a review request is removed, remove that user from Assignees
+          if [ "${{ github.event_name }}" = "pull_request_target" ] && [ "${{ github.event.action }}" = "review_request_removed" ]; then
+            REMOVED_USER="${{ github.event.requested_reviewer.login }}"
+            if [ -n "$REMOVED_USER" ]; then
+              echo "Review request removed for $REMOVED_USER. Removing from assignees."
+              gh pr edit "$PR_URL" --remove-assignee "$REMOVED_USER" || true
+              exit 0
+            fi
+          fi
+
+          # 3. Add currently requested individual reviewers to Assignees
+          REVIEWERS=$(gh pr view "$PR_URL" --json requestedReviewers -q '.requestedReviewers[].login' | paste -sd, - || true)
+          if [ -n "$REVIEWERS" ]; then
+            echo "Adding assignees: $REVIEWERS"
+            gh pr edit "$PR_URL" --add-assignee "$REVIEWERS" || true
+          fi
