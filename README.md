@@ -4,32 +4,36 @@
 
 [Cluster Toolkit](https://cloud.google.com/cluster-toolkit) is an open-source software provided by Google Cloud that makes it easy to deploy AI/ML and high performance computing (HPC) environments following Google Cloud best practices.
 
-Cluster Toolkit is highly customizable and extensible, addressing the deployment needs of a broad range of workloads, such as compute, networking and storage, in a repeatable manner.
+Cluster Toolkit is highly customizable and extensible, addressing the deployment needs of a broad range of workloads, such as compute, networking, and storage, in a repeatable manner.
 
 ## Detailed documentation and main components
 
 Cluster Toolkit comes with a suite of [tutorials](docs/tutorials/README.md), [examples](examples/README.md), and full documentation for [modules](modules/README.md) designed for AI/ML and HPC use cases.
 
-The main components of the Cluster Toolkit include:
+The main components of Cluster Toolkit include:
 
-- **Cluster Blueprint**: A YAML file that defines the cluster's infrastructure and configuration.
+- **Cluster blueprint**: A YAML file that defines the cluster's infrastructure and configuration.
 - **Modules**: Reusable building blocks (Terraform or Packer) used to compose a blueprint.
 - **gcluster engine**: The command-line tool that processes blueprints to create a deployment folder.
-- **Deployment Folder**: A self-contained folder containing the Terraform or Packer code needed to provision the environment.
+- **Deployment folder**: A self-contained folder containing the Terraform or Packer code needed to provision the environment.
 
-More information can be found on the [Google Cloud documentation site](https://cloud.google.com/cluster-toolkit/docs/overview).
+For more information, see [Google Cluster Toolkit overview](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 ## AI Hypercomputer
 
-The Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer](https://cloud.google.com/ai-hypercomputer/docs). Documentation for AI Hypercomputer solutions is available for [GKE](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute) and for [Slurm](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster).
+Cluster Toolkit is an integral part of [Google Cloud AI Hypercomputer](https://cloud.google.com/ai-hypercomputer/docs). For more information about GKE and Slurm deployments in AI Hypercomputer, see [Create an AI-optimized GKE cluster with default configuration](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute) and [Create a self-managed Slurm cluster for AI workloads](https://docs.cloud.google.com/ai-hypercomputer/docs/create/create-self-managed-slurm-cluster).
 
 ## Quickstart
 
-To get started with Cluster Toolkit quickly, we recommend that you follow the quickstart tutorial [Deploy an HPC cluster with Slurm](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster).
+To get started with Cluster Toolkit deployments, you can follow one of the following quickstart guides:
+
+- [Deploy an HPC cluster with Slurm](https://docs.cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster).
+- [Create a self-managed Slurm cluster with an A4 VM](https://docs.cloud.google.com/cluster-toolkit/docs/quickstarts/create-a-slurm-cluster-with-a4).
+- [Create a Cloud RDMA-enabled HPC Slurm cluster with H4D instances](https://docs.cloud.google.com/cluster-toolkit/docs/quickstarts/create-a-slurm-cluster-h4d).
 
 ## Install Cluster Toolkit
 
-To create a cluster using the Cluster Toolkit, you can use either Cloud Shell, or a workstation that is running Linux or macOS.
+To create a cluster using Cluster Toolkit, you can use either Cloud Shell, or a workstation that is running Linux or macOS.
 
 Cloud Shell is an interactive development and operations environment that is accessible from your web browser. If you use Cloud Shell, the following dependencies are already pre-installed and you don't need to manually install dependencies.
 
@@ -59,7 +63,8 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 1. Download and extract the bundle:
 
-    > **_NOTE:_** Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
+    > [!NOTE]
+    > Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
 
     For versions v1.89.0 and newer (Multi-architecture Tarball):
 
@@ -67,7 +72,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
     # Set the desired version TAG (e.g., v1.89.0)
     TAG=vX.Y.Z
-    # Set your OS (linux or mac) and Architecture (amd64 or arm64)
+    # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
     ARCH="amd64"
     # Download and extract the platform-specific bundle in a single step
@@ -80,7 +85,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     # Find all available releases at: https://github.com/GoogleCloudPlatform/cluster-toolkit/releases
     # Set the desired version TAG (e.g., v1.85.0)
     TAG=vX.Y.Z
-    # Set your OS (linux or mac) and Architecture (amd64 or arm64)
+    # Set your OS (linux or mac) and architecture (amd64 or arm64)
     OS="linux"
     ARCH="amd64"
     # Download and extract the platform-specific bundle
@@ -109,7 +114,8 @@ make
 ./gcluster --help
 ```
 
-Note: You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command will fail.
+> [!NOTE]
+> You must [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) (such as Go and Terraform) before building, otherwise the `make` command fails.
 
 ## Prerequisites
 
@@ -117,13 +123,13 @@ Before deploying your first cluster, ensure the following are configured in your
 
 ### Enable APIs
 
-Several APIs must be enabled to deploy your cluster. While Terraform will identify missing APIs during `terraform apply`, enabling them upfront saves time. Required APIs typically include:
+Several APIs must be enabled to deploy your cluster. While Terraform identifies missing APIs during `terraform apply`, enabling them upfront saves time. Required APIs typically include:
 - Compute Engine API
 - Filestore API
 - Cloud Storage API
 - Service Usage API
 
-See the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis) for detailed instructions.
+For more information, see [Set up Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
 
 ### Quotas
 
@@ -133,7 +139,8 @@ HPC and AI workloads often require significant resources. You might need to requ
 
 Terraform can provide credentials for authenticating to Google Cloud in several ways. We recommend using `gcloud` on your workstation or using service accounts attached to cloud environments.
 
-**Warning**: We do not recommend downloading or using service account JSON keys. These keys are long-lived credentials that pose a significant security risk if leaked. Instead, use short-lived credentials via Application Default Credentials (ADC).
+> [!WARNING]
+> We do not recommend downloading or using service account JSON keys. These keys are long-lived credentials that pose a significant security risk if leaked. Instead, use short-lived credentials via Application Default Credentials (ADC).
 
 On your local terminal or Cloud Workstations terminal, generate credentials associated with your Google Cloud account:
 
@@ -141,9 +148,9 @@ On your local terminal or Cloud Workstations terminal, generate credentials asso
 gcloud auth application-default login
 ```
 
-Follow the prompts in your browser to authenticate. You will be provided a token to copy and paste back into your terminal to complete the process. Once finished, Terraform will automatically use these "Application Default Credentials."
+Follow the prompts in your browser to authenticate. You are provided a token to copy and paste back into your terminal to complete the process. Once finished, Terraform automatically uses these "Application Default Credentials."
 
-If you receive "quota project" errors, set the quota project to your current project ID:
+If you receive a quota project error, then set the quota project to your current project ID:
 
 ```bash
 gcloud auth application-default set-quota-project ${PROJECT_ID}
@@ -161,21 +168,21 @@ Cluster Toolkit telemetry overall is handled in accordance with the [Google Priv
 
 ## Cluster Creation and Management
 
-After installing `gcluster`, you can deploy, manage, and destroy infrastructure using Cluster Blueprints:
+After installing `gcluster`, you can deploy, manage, and destroy infrastructure using cluster blueprints:
 
-1. **Create Deployment Folder**: Process a blueprint YAML file to generate deployment files:
+1. **Create deployment folder**: Use a blueprint YAML file to generate deployment files:
 
    ```bash
    ./gcluster create examples/hpc-slurm.yaml
    ```
 
-2. **Deploy Cluster**: Provision infrastructure with Terraform:
+2. **Deploy cluster**: Provision infrastructure with Terraform:
 
    ```bash
    ./gcluster deploy hpc-slurm
    ```
 
-3. **Destroy Cluster**: Clean up provisioned resources:
+3. **Destroy cluster**: Clean up provisioned resources:
 
    ```bash
    ./gcluster destroy hpc-slurm
@@ -194,9 +201,16 @@ Ensure your environment is set up before submitting jobs:
 - `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
 - For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`).
 
-### Submitting a Job
+### Submit a JobSet
 
-**Submitting with a Pre-built Image**:
+There are two ways to submit a JobSet with the `gcluster job submit` command:
+
+- [Submit with a pre-built image](#submit-with-a-pre-built-image): Submit a job using an existing container image from an image registry.
+- [Submit with on-the-fly image building](#submit-with-on-the-fly-image-building): Package local application code into a container image and push it automatically.
+
+#### Submit with a pre-built image
+
+To submit with a pre-built image, run `./gcluster job submit` with the following properties in your shell:
 
 ```bash
 ./gcluster job submit \
@@ -209,7 +223,9 @@ Ensure your environment is set up before submitting jobs:
   --compute-type n2-standard-32
 ```
 
-**Submitting with On-the-Fly Image Building**:
+#### Submit with on-the-fly image building
+
+To submit with on-the-fly image building, run `./gcluster job submit` with the following properties in your shell:
 
 ```bash
 ./gcluster job submit \
@@ -223,33 +239,50 @@ Ensure your environment is set up before submitting jobs:
   --compute-type n2-standard-32
 ```
 
-### Managing Jobs
+### Manage jobs
 
-- **List Jobs**: Check workload status across the cluster:
+You can manage submitted jobs directly using the `gcluster job` commands:
 
-  ```bash
-  ./gcluster job list
-  ```
+- [List jobs](#list-jobs): Check workload status across the cluster.
+- [View job logs](#view-job-logs): View container stdout and stderr logs.
+- [Cancel a job](#cancel-a-job): Clean up a running workload.
 
-- **View Job Logs**: View container stdout/stderr logs:
+#### List jobs
 
-  ```bash
-  ./gcluster job logs my-job
-  ```
+Check workload status across the cluster:
 
-- **Cancel a Job**: Clean up a running workload:
+```bash
+./gcluster job list
+```
 
-  ```bash
-  ./gcluster job cancel my-job
-  ```
+#### View job logs
+
+View container stdout and stderr logs:
+
+```bash
+./gcluster job logs my-job
+```
+
+#### Cancel a job
+
+Clean up a running workload:
+
+```bash
+./gcluster job cancel my-job
+```
 
 For complete step-by-step tutorials, advanced multi-slice topologies, storage mounts, and Kueue queue management, refer to the full [Gcluster Job Submission Guide](docs/gcluster_job_guide.md).
 
 ## VM Image support
 
+Cluster Toolkit provides specialized modules for Slurm images, and support for standard OS images.
+
 ### Slurm images
 
-The Cluster Toolkit provides specialized modules for Slurm. **Note**: Slurm Terraform modules must be used with images specifically built for the versioned release of the module. To learn more about pre-built and custom Slurm images, see [Slurm VM Images](docs/vm-images.md#slurm-on-gcp).
+Cluster Toolkit provides specialized modules for Slurm.
+
+> [!NOTE]
+> Slurm Terraform modules must be used with images specifically built for the versioned release of the module. To learn more about pre-built and custom Slurm images, see [Slurm VM Images](docs/vm-images.md#slurm-on-gcp).
 
 ### Standard images
 
@@ -262,7 +295,7 @@ For more details, see [VM Image Support](docs/vm-images.md).
 
 ## Blueprint validation
 
-A **Cluster Blueprint** is the core configuration file (YAML) for your deployment. Cluster Toolkit includes **validator** functions that perform basic tests on the blueprint to ensure variables are valid and resources can be provisioned. See [Blueprint Validation](docs/blueprint-validation.md) for more details.
+A cluster blueprint is the core configuration file (YAML) for your deployment. Cluster Toolkit includes validator functions that perform basic tests on the blueprint to ensure variables are valid and resources can be provisioned. See [Blueprint validation](docs/blueprint-validation.md) for more details.
 
 ## Billing reports
 
@@ -277,17 +310,18 @@ To track the costs of your deployment, use the [Cloud Billing Reports](https://c
 ### Authentication
 Ensure you have properly [set up Google Cloud credentials](#gcp-credentials).
 
-### Slurm Clusters
+### Slurm clusters
 See [Slurm Troubleshooting](docs/slurm-troubleshooting.md).
 
-### Terraform Deployment
+### Terraform deployment
 Common deployment failures:
 - **Project Access**: Ensure your account has the necessary roles in the IAM section of the console.
 - **Filestore resource limit**: If you see "System limit for internal resources has been reached," see the [Filestore troubleshooting guide](https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance) for the solution.
 
 ## Development
 
-**Note for macOS users**: While macOS is supported for building and running the toolkit, it is not recommended for core development due to GNU-specific shell scripts. If developing on macOS, install GNU tools (e.g., `coreutils`, `findutils`) via Homebrew or Conda to avoid script failures.
+> [!NOTE]
+> While macOS is supported for building and running the toolkit, it is not recommended for core development due to GNU-specific shell scripts. If developing on macOS, install GNU tools (e.g., `coreutils`, `findutils`) via Homebrew or Conda to avoid script failures.
 
 ### Setup
 
