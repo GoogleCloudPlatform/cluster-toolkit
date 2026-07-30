@@ -13,7 +13,7 @@
 # limitations under the License.
 
 locals {
-  install_root_resolved    = var.install_root != null ? var.install_root : var.network_storage[var.network_storage_index].local_mount
+  install_root_resolved    = var.install_root != null ? var.install_root : try(var.network_storage[var.network_storage_index].local_mount, "")
   install_root_clean       = local.install_root_resolved == "/" ? "" : trimsuffix(local.install_root_resolved, "/")
   module_name_resolved     = var.module_name != null ? var.module_name : var.app_id
   module_version_resolved  = var.module_version != null ? trimspace(var.module_version) : ""
@@ -183,7 +183,7 @@ locals {
         exit 0
       fi
 
-      tmp_path="$${output_path}.tmp.$$"
+      tmp_path="$${output_path}.tmp.$$$$"
       trap 'rm -f "$tmp_path"' EXIT
 
       apptainer pull "$tmp_path" "docker://$image_ref"

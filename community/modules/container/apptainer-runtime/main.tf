@@ -13,7 +13,7 @@
 # limitations under the License.
 
 locals {
-  install_root_resolved = var.install_root != null ? var.install_root : var.network_storage[var.network_storage_index].local_mount
+  install_root_resolved = var.install_root != null ? var.install_root : try(var.network_storage[var.network_storage_index].local_mount, "")
   install_root_clean    = local.install_root_resolved == "/" ? "" : trimsuffix(local.install_root_resolved, "/")
 
   sif_dir        = "${local.install_root_clean}/${var.sif_subdir}"
