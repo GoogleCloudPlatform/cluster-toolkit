@@ -34,14 +34,18 @@ jobs:
       run: |
         set -euo pipefail
 
-        # 1. When a reviewer approves, remove them from Assignees and assign the PR author back
+        # 1. When a reviewer approves, check if other reviewers are still waiting
         if [ "${{ github.event_name }}" = "pull_request_review" ]; then
           REVIEW_STATE="${{ github.event.review.state }}"
           if [ "$(echo "$REVIEW_STATE" | tr '[:upper:]' '[:lower:]')" = "approved" ]; then
             APPROVER="${{ github.event.review.user.login }}"
-            AUTHOR="${{ github.event.pull_request.user.login }}"
-            echo "Reviewer $APPROVER approved. Removing from assignees and assigning PR author ($AUTHOR)."
-            gh pr edit "$PR_URL" --remove-assignee "$APPROVER" --add-assignee "$AUTHOR" || true
+            REMAINING=$(gh pr view "$PR_URL" --json reviewRequests -q '[.reviewRequests[] | .login // empty] | length' || echo "0")
+            if [ "$REMAINING" -gt 0 ]; then
+              echo "Other reviewers still requested ($REMAINING remaining). Removing $APPROVER from assignees."
+              gh pr edit "$PR_URL" --remove-assignee "$APPROVER" || true
+            else
+              echo "All reviews complete! Leaving final approver ($APPROVER) assigned to merge."
+            fi
             exit 0
           fi
         fi
