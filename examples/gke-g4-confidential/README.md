@@ -75,6 +75,11 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `reservation` | (Optional) The name of a zonal GCE reservation matching `g4-standard-48` to consume capacity from. |
 | `enable_confidential_storage` | (Optional) Set to `true` to enable Confidential Storage, encrypting both the Kubernetes dynamic PVs (using CMEK) and the VM boot disks of all GKE nodes (system and workload). Defaults to `false`. |
 | `disk_encryption_kms_key` | (Optional) The resource path to your Cloud KMS key used for CMEK storage encryption. Defaults to empty (`""`). |
+| `local_ssd_count_nvme_block` | (Optional) Number of Local SSDs to attach as raw block NVMe devices (supports `0` or `4` for `g4-standard-48`). Defaults to `0` (no SSDs attached). |
+| `local_ssd_count_ephemeral_storage` | (Optional) Number of Local SSDs to format as ephemeral emptyDir scratch storage (supports `0` or `4` for `g4-standard-48`). Defaults to `0` (no SSDs attached). |
+
+> [!IMPORTANT]
+> The `local_ssd_count_nvme_block` and `local_ssd_count_ephemeral_storage` settings are mutually exclusive in the underlying GKE node pool module. Specifying non-zero values for both at the same time will cause a Terraform planning error.
 
 ### (Optional) KMS CMEK Setup for Storage
 
