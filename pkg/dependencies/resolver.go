@@ -173,7 +173,7 @@ func confirmDownload(binaryName, version string, decision DownloadDecision) erro
 		response, _ := reader.ReadString('\n')
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			return fmt.Errorf("user declined to download %s. See %s", binaryName, docLink)
+			return fmt.Errorf("user declined to download %s; see %s", binaryName, docLink)
 		}
 	}
 
