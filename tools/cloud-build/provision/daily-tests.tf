@@ -51,6 +51,9 @@ resource "google_cloudbuild_trigger" "daily_test_migrated" {
   name     = "DAILY-test-${each.key}"
   project  = var.daily_tests_project_id
   tags     = [local.notify_chat_tag]
+  # For projects with BYOSA enforced (e.g. hpc-toolkit-dev-2), export the service account environment variable before applying:
+  # export TF_VAR_daily_tests_service_account="projects/MY_PROJECT/serviceAccounts/my-service-account@MY_PROJECT.iam.gserviceaccount.com"
+  service_account = var.daily_tests_service_account
 
   git_file_source {
     path      = "tools/cloud-build/daily-tests/builds/${each.key}.yaml"
