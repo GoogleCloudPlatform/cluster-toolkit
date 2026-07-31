@@ -69,6 +69,7 @@ When prompted for project, use integration test project.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_daily_tests_project_id"></a> [daily\_tests\_project\_id](#input\_daily\_tests\_project\_id) | The GCP project for daily tests | `string` | `"hpc-toolkit-dev-2"` | no |
+| <a name="input_daily_tests_service_account"></a> [daily\_tests\_service\_account](#input\_daily\_tests\_service\_account) | The service account to run daily tests under. If null, the default Cloud Build service account is used. For projects enforcing BYOSA (like hpc-toolkit-dev-2), you must set this via environment variable, e.g. export TF\_VAR\_daily\_tests\_service\_account="projects/..." | `string` | `null` | no |
 | <a name="input_kueue_migrated_tests"></a> [kueue\_migrated\_tests](#input\_kueue\_migrated\_tests) | List of tests migrated to Kueue | `list(string)` | <pre>[<br/>  "slurm-gcp-v6-rocky8"<br/>]</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
