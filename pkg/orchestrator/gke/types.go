@@ -202,6 +202,7 @@ type MountInfo struct {
 	MountPath string
 	Type      string
 	ReadOnly  bool
+	Options   string
 }
 
 type FlavorCapacity struct {
