@@ -48,6 +48,10 @@ variable "kueue_migrated_tests" {
   description = "List of tests migrated to Kueue"
   type        = list(string)
   default = [
-    "slurm-gcp-v6-rocky8"
+    "slurm-gcp-v6-rocky8",
+    "batch-mpi.yaml",
+    "htcondor.yaml",
+    "packer.yaml",
+    "monitoring.yaml"
   ]
 }
