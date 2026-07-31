@@ -77,11 +77,9 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}()
 
 	// Resolve namespace context
-	// Fallback to 'default' to capture as much info as possible instead of failing diagnostics.
 	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		logging.Warn("Failed to resolve current namespace: %v. Defaulting to 'default'", err)
-		targetNamespace = "default"
+		return fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
 	var outputTarget io.Writer = file
