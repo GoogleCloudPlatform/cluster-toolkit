@@ -53,9 +53,7 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
-	if opts.GKENamespace != "" {
-		g.namespace = opts.GKENamespace
-	}
+	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return fmt.Errorf("failed to configure kubectl: %w", err)

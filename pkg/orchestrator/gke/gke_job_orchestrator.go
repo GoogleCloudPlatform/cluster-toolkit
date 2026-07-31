@@ -84,9 +84,7 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 // SubmitJob submits a job to the GKE cluster. It processes the job definition,
 // creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
-	if job.GKENamespace != "" {
-		g.namespace = job.GKENamespace
-	}
+	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
 
 	sm := &StorageManager{orchestrator: g}
@@ -139,9 +137,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 // ListJobs retrieves a list of jobs in the GKE cluster.
 // It filters jobs based on the provided ListOptions.
 func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
-	if opts.GKENamespace != "" {
-		g.namespace = opts.GKENamespace
-	}
+	g.namespace = opts.GKENamespace
 	logging.Info("Listing jobs in cluster '%s'...", opts.ClusterName)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return nil, err
@@ -180,9 +176,7 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 // CancelJob deletes a job from the GKE cluster by name.
 // Jobs are filtered via cluster name and location provided through CancelOptions.
 func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
-	if opts.GKENamespace != "" {
-		g.namespace = opts.GKENamespace
-	}
+	g.namespace = opts.GKENamespace
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return err
 	}
@@ -216,9 +210,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 
 // GetJobLogs fetches the logs for a specific job in the GKE cluster.
 func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
-	if opts.GKENamespace != "" {
-		g.namespace = opts.GKENamespace
-	}
+	g.namespace = opts.GKENamespace
 	logging.Info("Fetching logs for job '%s' in cluster '%s'...", name, opts.ClusterName)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return "", err
