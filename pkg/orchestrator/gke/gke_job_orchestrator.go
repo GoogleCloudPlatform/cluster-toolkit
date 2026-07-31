@@ -2095,19 +2095,19 @@ func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID
 	// Standard GKE context naming convention
 	expectedContext := fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
 
-	if context, ok := config.Contexts[expectedContext]; ok {
-		if context.Namespace != "" {
-			return context.Namespace, nil
+	if kubeCtx, ok := config.Contexts[expectedContext]; ok {
+		if kubeCtx.Namespace != "" {
+			return kubeCtx.Namespace, nil
 		}
 		return "default", nil
 	}
 
 	// Fallback/Legacy: Also check if there's a context with just the cluster name
 	// (sometimes users manually rename them)
-	for contextName, context := range config.Contexts {
-		if contextName == clusterName || context.Cluster == clusterName {
-			if context.Namespace != "" {
-				return context.Namespace, nil
+	for contextName, kubeCtx := range config.Contexts {
+		if contextName == clusterName || kubeCtx.Cluster == clusterName {
+			if kubeCtx.Namespace != "" {
+				return kubeCtx.Namespace, nil
 			}
 			return "default", nil
 		}
