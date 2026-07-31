@@ -1,0 +1,68 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: 'Sync Reviewers to Assignees'
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, review_requested, review_request_removed]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  sync-assignees:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Sync Assignees with Ball-in-Court Status
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_URL: ${{ github.event.pull_request.html_url || github.event.review.pull_request_url }}
+      run: |
+        set -euo pipefail
+
+        # 1. When a reviewer approves, check if other reviewers are still waiting
+        if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+          REVIEW_STATE="${{ github.event.review.state }}"
+          if [ "$(echo "$REVIEW_STATE" | tr '[:upper:]' '[:lower:]')" = "approved" ]; then
+            APPROVER="${{ github.event.review.user.login }}"
+            REMAINING=$(gh pr view "$PR_URL" --json reviewRequests -q '[.reviewRequests[] | .login // empty] | length' || echo "0")
+            if [ "$REMAINING" -gt 0 ]; then
+              echo "Other reviewers still requested ($REMAINING remaining). Removing $APPROVER from assignees."
+              gh pr edit "$PR_URL" --remove-assignee "$APPROVER" || true
+            else
+              echo "All reviews complete! Leaving final approver ($APPROVER) assigned to merge."
+            fi
+            exit 0
+          fi
+        fi
+
+        # 2. When a review request is removed, remove that user from Assignees
+        if [ "${{ github.event_name }}" = "pull_request_target" ] && [ "${{ github.event.action }}" = "review_request_removed" ]; then
+          REMOVED_USER="${{ github.event.requested_reviewer.login }}"
+          if [ -n "$REMOVED_USER" ]; then
+            echo "Review request removed for $REMOVED_USER. Removing from assignees."
+            gh pr edit "$PR_URL" --remove-assignee "$REMOVED_USER" || true
+            exit 0
+          fi
+        fi
+
+        # 3. Add currently requested individual reviewers to Assignees
+        REVIEWERS=$(gh pr view "$PR_URL" --json reviewRequests -q '[.reviewRequests[] | .login // empty] | join(",")' || true)
+        if [ -n "$REVIEWERS" ]; then
+          echo "Adding assignees: $REVIEWERS"
+          gh pr edit "$PR_URL" --add-assignee "$REVIEWERS" || true
+        fi

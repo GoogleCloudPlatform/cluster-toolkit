@@ -78,7 +78,7 @@ spec:
             - name: nccl-test
               stdin: true
               tty: true
-              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64:v1.1.1
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.1.2
               securityContext:
                 capabilities:
                   add: ["IPC_LOCK"]

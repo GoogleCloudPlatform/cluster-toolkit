@@ -10,4 +10,4 @@ The [gke-a3-ultragpu](../gke-a3-ultragpu/README.md) example can be used to creat
 
 Refer to [Create an AI-optimized GKE cluster with default configuration](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for instructions on creating the GKE-A3U cluster.
 
-Refer to [Deploy and run NCCL test](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#deploy-run-nccl-tas-test) for instructions on running a NCCL test on the GKE A3 Ultragpu cluster.
+Refer to [Deploy and run NCCL test](https://cloud.google.com/ai-hypercomputer/docs/nccl/test-gke#a3-ultra) for instructions on running a NCCL test on the GKE A3 Ultragpu cluster.

@@ -12,7 +12,7 @@ google-resumable-media==2.5.0
 googleapis-common-protos==1.59.1
 grpcio==1.60.0
 grpcio-status==1.60.0
-httplib2==0.22.0
+httplib2==0.32.0
 more-executors==2.11.4
 pyyaml==6.0.2
 requests==2.33.0

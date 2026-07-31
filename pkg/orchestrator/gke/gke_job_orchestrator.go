@@ -226,7 +226,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
+		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
 		return "", err
 	}
 
@@ -245,8 +245,9 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector string) (shell.CommandResult, error) {
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
+	cmdArgs := []string{"logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1"}
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
+		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
@@ -368,9 +369,6 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if job.Pathways.WorkerImage == "" {
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
-	}
-	if job.Pathways.MTCEnabled && job.Pathways.RamdiskDirectory == "" {
-		job.Pathways.RamdiskDirectory = "/tmp/mtc_checkpoints"
 	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
@@ -541,6 +539,15 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 
 	if err := g.configureClusterEnvironment(job); err != nil {
 		return err
+	}
+
+	if job.GKEMTCEnabled {
+		if job.GKEMTCRamdiskDirectory == "" {
+			job.GKEMTCRamdiskDirectory = "/tmp/mtc_checkpoints"
+		}
+		if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
+			return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please follow the official GKE documentation to enable this feature on your cluster before submitting jobs with --gke-mtc-enabled: https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing")
+		}
 	}
 
 	return nil
@@ -1366,6 +1373,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
+		GKEMTCEnabled:                 opts.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}
 }
 

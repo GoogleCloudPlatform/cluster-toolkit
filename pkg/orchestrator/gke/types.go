@@ -179,6 +179,9 @@ type ManifestOptions struct {
 	IsStaticSlicing               bool
 	IsCPUMachine                  bool
 	Pathways                      orchestrator.PathwaysJobDefinition
+	IsPathwaysJob                 bool
+	GKEMTCEnabled                 bool
+	GKEMTCRamdiskDirectory        string
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -281,6 +284,15 @@ type gkeCluster struct {
 	NodePools                   []gkeJobNodePool             `json:"nodePools"`
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
+	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
+}
+
+type gkeAddonsConfig struct {
+	HighScaleCheckpointingConfig *gkeHighScaleCheckpointingConfig `json:"highScaleCheckpointingConfig,omitempty"`
+}
+
+type gkeHighScaleCheckpointingConfig struct {
+	Enabled bool `json:"enabled"`
 }
 
 type controlPlaneEndpointsConfig struct {
@@ -363,6 +375,8 @@ type jobSetTemplateData struct {
 	PathwaysWorkerEnv             []EnvVar
 	IsTPU                         bool
 	IsGPU                         bool
+	GKEMTCEnabled                 bool
+	GKEMTCRamdiskDirectory        string
 }
 
 // Types for parsing kubectl get nodes -o json
