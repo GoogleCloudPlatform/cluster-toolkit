@@ -45,7 +45,7 @@ type KubeClient interface {
 	ListWorkloads(namespace string, workloadName string) ([]string, error)
 	DeleteJobSet(namespace string, name string) error
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
-	GetCurrentNamespace() (string, error)
+	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
 }
 
 type MachineTypeClient interface {
@@ -74,6 +74,7 @@ type GKEOrchestrator struct {
 	clusterDesc                 gkeCluster
 	dynClient                   dynamic.Interface
 	kubeClient                  KubeClient
+	namespace                   string
 	machineTypeClient           MachineTypeClient
 	acceleratorToMachineType    map[string]string
 	machineCapCache             map[string]MachineTypeCap

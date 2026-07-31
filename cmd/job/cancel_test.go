@@ -79,7 +79,7 @@ func (m *mockKubeClient) ListJobSets(namespace string, labelSelector string) ([]
 	return []orchestrator.JobStatus{}, m.err
 }
 
-func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
+func (m *mockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if m.namespace != "" {
 		return m.namespace, nil
 	}

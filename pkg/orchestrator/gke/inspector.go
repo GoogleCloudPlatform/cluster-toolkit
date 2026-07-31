@@ -74,7 +74,8 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}()
 
 	// Resolve namespace context
-	targetNamespace, err := g.getCurrentNamespace()
+	// Fallback to 'default' to capture as much info as possible instead of failing diagnostics.
+	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
 		logging.Warn("Failed to resolve current namespace: %v. Defaulting to 'default'", err)
 		targetNamespace = "default"
@@ -135,7 +136,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
 	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
 
-	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName)
+	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName, opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 
 	// --- 7. Console Links ---
 	logConsoleLinks(outputTarget, opts, workloadNamespace)
@@ -144,16 +145,17 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	return nil
 }
 
-func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName string) string {
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, clusterName, clusterLocation, projectID string) string {
 	workloadNamespace := "default"
 	if workloadName == "" {
 		return workloadNamespace
 	}
 
-	ns, err := g.getCurrentNamespace()
+	ns, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
 	if err == nil {
 		workloadNamespace = ns
 	} else {
+		// Non-critical diagnostic path.
 		logging.Warn("Failed to get current namespace, defaulting to 'default' for inspection: %v", err)
 	}
 
