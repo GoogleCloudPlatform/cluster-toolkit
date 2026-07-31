@@ -61,6 +61,7 @@ func runListWorkloads(cmd *cobra.Command, args []string) error {
 		ProjectID:       projectID,
 		ClusterName:     clusterName,
 		ClusterLocation: location,
+		GKENamespace:    gkeNamespace,
 		Status:          filterStatus,
 		NameContains:    filterName,
 	}

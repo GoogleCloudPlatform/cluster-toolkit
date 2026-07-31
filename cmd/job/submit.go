@@ -238,6 +238,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		ProjectID:                     projectID,
 		ClusterName:                   clusterName,
 		ClusterLocation:               location,
+		GKENamespace:                  gkeNamespace,
 		WorkloadName:                  workloadName,
 		KueueQueueName:                kueueQueueName,
 		NumSlices:                     numSlices,
