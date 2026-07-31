@@ -79,7 +79,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	// Resolve namespace context
 	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
+		return err
 	}
 
 	var outputTarget io.Writer = file

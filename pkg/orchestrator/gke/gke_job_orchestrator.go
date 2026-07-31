@@ -153,7 +153,7 @@ func (g *GKEOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrato
 
 	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
+		return nil, err
 	}
 
 	list, err := g.kubeClient.ListJobSets(ns, "gcluster.google.com/workload")
@@ -193,7 +193,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 
 	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
+		return err
 	}
 	foundNamespace := ns
 
@@ -226,7 +226,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	ns, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
+		return "", err
 	}
 	foundNamespace := ns
 
@@ -780,7 +780,7 @@ func (g *GKEOrchestrator) processAccelerators(accelerators []gkeAccelerator, nod
 func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefinition) error {
 	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
 	if err != nil {
-		return fmt.Errorf("failed to get current namespace: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
+		return err
 	}
 
 	localQueue, err := g.resolveKueueQueue(job.KueueQueueName, ns)
@@ -1275,7 +1275,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	// If we can't read it, using 'default' allows gcloud setup to proceed,
 	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
 	if err != nil {
-		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v", err)
+		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
 		if originalNamespace == "" {
 			originalNamespace = "default"
 		}
@@ -2097,7 +2097,7 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	config, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
 	if err != nil {
-		return "", fmt.Errorf("failed to load kubeconfig: %w", err)
+		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
 	// Standard GKE context naming convention
@@ -2121,6 +2121,5 @@ func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID
 		}
 	}
 
-	// Fallback to default if no matching context found
-	return "default", nil
+	return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 }
