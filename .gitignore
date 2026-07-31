@@ -74,31 +74,12 @@ venv*/
 # Ignore Gemini memories
 GEMINI.md
 
-# Ignore Antigravity agents customizations
-.agents/
-
-# Per-branch agent instructions and local implementation documentation
 # (agent plans, bug logs — kept local, not committed)
-community/front-end/ofe/AGENTS.md
-community/front-end/ofe/CLAUDE.md
-community/front-end/ofe/PLANS.md
-community/front-end/ofe/BUG_FINDINGS.md
 
 # Local-only design/implementation docs carried in the working tree
 # (backed up separately; never committed to this repo)
-community/front-end/ofe/CMEK_EXECPLAN.md
-community/front-end/ofe/CMEK_GREENDOC.md
-community/front-end/ofe/CMEK_IMPLEMENTATION_PLAN.md
-community/front-end/ofe/CMEK_KEYGEN_CLUSTER_TOOLKIT_EXECPLAN.md
-community/front-end/ofe/CMEK_KEYGEN_CLUSTER_TOOLKIT_GREENDOC.md
-community/front-end/ofe/CMEK_KEYGEN_GREENDOC.md
-community/front-end/ofe/CMEK_KEYGEN_OFE_INTEGRATION_EXECPLAN.md
-community/front-end/ofe/CMEK_KEYGEN_OFE_INTEGRATION_GREENDOC.md
-community/front-end/ofe/CMEK_TEST_PLAN.md
-community/front-end/ofe/Greendoc Examples.md
 
 # Claude session artifacts
-community/front-end/ofe/.claude/
 
 # OFE generates its Django migrations at deploy time (webserver startup.sh runs
 # makemigrations + migrate), so numbered migrations are not committed
