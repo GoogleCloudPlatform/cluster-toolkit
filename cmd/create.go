@@ -20,6 +20,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -31,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -70,6 +72,46 @@ var (
 	})
 )
 
+func promptAndCreateGcsBuckets(bp config.Blueprint) error {
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = client.Close()
+	}()
+
+	for _, g := range bp.Groups {
+		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
+			continue
+		}
+		bucketName := g.TerraformBackend.Configuration.Get("bucket").AsString()
+
+		bucketHandle := client.Bucket(bucketName)
+		if _, err := bucketHandle.Attrs(ctx); errors.Is(err, storage.ErrBucketNotExist) {
+			fmt.Printf("Bucket '%s' missing. Create it? (y/N): ", bucketName)
+			var response string
+			_, _ = fmt.Scanln(&response)
+
+			if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
+				return fmt.Errorf("user aborted")
+			}
+
+			if !bp.Vars.Has("project_id") {
+				return fmt.Errorf("cannot create bucket: project_id is missing from blueprint vars")
+			}
+			projectID := bp.Vars.Get("project_id").AsString()
+			if err := bucketHandle.Create(ctx, projectID, nil); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplDir := doCreate(cmd, args[0])
 	logging.Info("To deploy your infrastructure please run:")
@@ -81,6 +123,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 func doCreate(cmd *cobra.Command, path string) string {
 	bp, ctx := expandOrDie(cmd, path)
+	checkErr(promptAndCreateGcsBuckets(bp), ctx)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
