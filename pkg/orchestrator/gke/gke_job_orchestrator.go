@@ -1268,9 +1268,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	originalNamespace, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
 	if err != nil {
 		logging.Warn("Could not read current namespace before gcloud (defaulting to 'default'): %v. If you want to target a specific namespace please use the --gke-namespace flag", err)
-		if originalNamespace == "" {
-			originalNamespace = "default"
-		}
+		originalNamespace = "default"
 	}
 
 	// 2. Refresh credentials via gcloud (this resets namespace to 'default')
