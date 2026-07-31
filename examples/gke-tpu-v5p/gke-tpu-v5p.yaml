@@ -57,9 +57,6 @@ vars:
   # Enable Pathways for TPUs (provisions CPU node pool and configures Kueue quotas)
   enable_pathways_for_tpus: true
 
-  # # Kueue configuration
-  # kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-
   # The namespace to be configured for running workloads
   user_namespace: default
 
