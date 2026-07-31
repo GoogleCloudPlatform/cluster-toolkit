@@ -63,6 +63,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
+  * [gke-tpu-v4](#gke-tpu-v4-) ![core-badge]
   * [gke-tpu-v5e](#gke-tpu-v5e-) ![core-badge]
   * [gke-tpu-v5p](#gke-tpu-v5p-) ![core-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
@@ -1637,6 +1638,10 @@ deployment_groups:
 
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
+
+### [gke-tpu-v4] ![core-badge]
+This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v4/README.md).
+[gke-tpu-v4]: ../examples/gke-tpu-v4
 
 ### [gke-tpu-v5e] ![core-badge]
 This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5e/README.md).
