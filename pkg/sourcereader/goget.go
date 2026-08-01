@@ -18,11 +18,22 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-getter"
 )
+
+// GitMissingError indicates that git is required but missing from PATH.
+type GitMissingError struct {
+	Source string
+}
+
+func (e GitMissingError) Error() string {
+	return fmt.Sprintf("'git' is required to download remote module %q but not found in PATH", e.Source)
+}
 
 // GoGetterSourceReader reads modules from a git repository
 type GoGetterSourceReader struct{}
@@ -54,6 +65,21 @@ func getterClient(source string, dst string) getter.Client {
 
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
+	isGit := strings.HasPrefix(source, "git::") ||
+		strings.Contains(source, "github.com") ||
+		strings.Contains(source, "gitlab.com") ||
+		strings.Contains(source, ".git//") ||
+		strings.Contains(source, ".git?") ||
+		strings.HasSuffix(source, ".git")
+
+	if isGit {
+		if _, err := os.Stat(source); err != nil {
+			if _, err := exec.LookPath("git"); err != nil {
+				return GitMissingError{Source: source}
+			}
+		}
+	}
+
 	tmp, err := os.MkdirTemp("", "get-module-*")
 	defer os.RemoveAll(tmp)
 	if err != nil {

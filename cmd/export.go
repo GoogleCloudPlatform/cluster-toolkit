@@ -56,6 +56,8 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 
 	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
+	checkDependencies(cmd, "terraform")
+
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	group, err := bp.Group(groupName)

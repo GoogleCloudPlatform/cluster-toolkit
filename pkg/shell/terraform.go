@@ -107,6 +107,12 @@ func initModule(tf *tfexec.Terraform) error {
 	}
 
 	if err != nil {
+		if strings.Contains(err.Error(), "git must be available") {
+			return config.HintError{
+				Hint: "Git is required to fetch remote modules. Please install git via your OS package manager (e.g., `apt install git` or `brew install git`).",
+				Err:  err,
+			}
+		}
 		return config.HintError{
 			Hint: fmt.Sprintf("initialization of deployment group %s failed; manually resolve errors", tf.WorkingDir()),
 			Err:  err}
