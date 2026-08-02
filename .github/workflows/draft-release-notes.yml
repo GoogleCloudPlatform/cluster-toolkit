@@ -57,12 +57,13 @@ jobs:
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
     - name: Create Draft Release
-      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-      with:
-        tag_name: ${{ steps.release.outputs.version }}
-        target_commitish: ${{ steps.release.outputs.rc_branch }}
-        name: ${{ steps.release.outputs.version }}
-        draft: true
-        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ steps.release.outputs.version }}
+        RC_BRANCH: ${{ steps.release.outputs.rc_branch }}
+      run: |
+        gh release create "$VERSION" \
+          --title "$VERSION" \
+          --target "$RC_BRANCH" \
+          --draft \
+          --generate-notes
