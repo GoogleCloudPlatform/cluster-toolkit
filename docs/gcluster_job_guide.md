@@ -964,40 +964,25 @@ completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 345
 
 ## 8. Advanced GKE Infrastructure Features
 
-This section details how GCluster natively orchestrates advanced GKE hardware features—such as dynamic slice reconfiguration, the Pathways distributed AI framework, and GKE Node Auto-Provisioning (NAP). It covers both **Cluster Blueprint Provisioning** (how to configure your Terraform blueprint when creating the cluster) and **Job Submission & Scheduling** (how to submit workloads onto the cluster).
+This section details how `gcluster job submit` orchestrates advanced GKE hardware and scheduling capabilities—such as dynamic slice reconfiguration, the Pathways distributed AI framework, and GKE Node Auto-Provisioning (NAP).
+
+> [!NOTE]
+> For complete infrastructure formation guidelines, cluster blueprint Terraform variable configurations, and module requirements for deploying clusters that support these features, see the [GKE Advanced Infrastructure Features Guide](gke-advanced-features.md).
 
 ---
 
 ### 8.1 Dynamic Slicing (TPU7x)
 
-GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In GCluster, dynamic slicing is supported exclusively on TPU v7x (Ironwood) nodes.
+GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In Cluster Toolkit, dynamic slicing is supported exclusively on TPU v7x (Ironwood) nodes.
 
-#### Part 1: Cluster Blueprint Provisioning & Configuration
-
-To deploy a GKE cluster that supports TPU Dynamic Slicing, configure your blueprint (such as `examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml`) with the following settings:
-
-* **Hardware & Accelerator Type:** Specify a TPU v7x machine type (e.g. `machine_type: tpu7x-standard-4t`) and set `accelerator_type: tpu7x`.
-* **Enable Dynamic Slicing:** Set `enable_dynamic_slicing_for_tpus: true` in your blueprint `vars`. This instructs Cluster Toolkit to deploy the GKE slice controller and configure partition-level topology definitions.
-* **Kueue Dynamic Slicing Manifest:** Set `kueue_configuration_path` to point to a Kueue template configured for dynamic slicing (`kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS).
-
-**Blueprint Snippet Example:**
-
-```yaml
-vars:
-  machine_type: tpu7x-standard-4t
-  accelerator_type: tpu7x
-  enable_dynamic_slicing_for_tpus: true
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-```
-
-#### Part 2: Capabilities, Scheduling Benefits & Orchestration
+#### Capabilities & Scheduling Benefits
 
 * **Elastic Topology Provisioning:** Stitch multiple physical TPU v7x blocks together into a larger logical slice (e.g., wiring multiple `4x4x4` blocks together).
 * **Latency Optimization:** Kueue's Topology-Aware Scheduling (TAS) guarantees that TPU pods are placed with minimal network hop latency across the physical TPU architecture, ensuring maximum distributed training and inference throughput.
 * **Multi-Slice Synchronization:** For multi-slice jobs (`--num-slices > 1`), GCluster dynamically coordinates slice-level reservations to ensure all slices are acquired concurrently, preventing mismatched scaling or execution hangs.
 * **Under-The-Hood Mappings:** GCluster automatically translates high-level TPU requests into partition-level requirements (`cloud.google.com/gke-tpu-partition-<topology>-id`) and switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys.
 
-#### Part 3: Example CLI Command
+#### Example CLI Command
 
 Submit a dynamic slicing workload targeting TPU v7x nodes:
 
@@ -1024,24 +1009,7 @@ For a deeper conceptual understanding or custom configurations, refer to Google 
 
 Pathways is a specialized distributed AI execution framework designed to coordinate large-scale multi-slice TPU workloads. GCluster provides first-class integration for compiling and deploying Pathways-enabled workloads without complex manual manifest configuration.
 
-#### Part 1: Cluster Blueprint Provisioning & Configuration
-
-To prepare a GKE cluster for Pathways execution, configure your cluster blueprint with the following requirements:
-
-* **Dedicated CPU Coordinator Node Pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure your blueprint includes a system or CPU compute node pool (e.g. `n2-standard-32`) so coordinator pods are co-located on CPU nodes rather than consuming TPU chips.
-* **Enable Pathways Flag:** Set `enable_pathways_for_tpus: true` in your blueprint `vars`. This configures Kueue ClusterQueues and LocalQueues with multi-slice resource quotas tailored for Pathways.
-* **Kueue Pathways Manifest:** Set `kueue_configuration_path` to point to `kueue-configuration-pathways.yaml.tftpl` (or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`).
-* **IAM & Workload Identity:** If using state persistence (`ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure the workload service account (`gke-wl-sa`) has `storage.admin` or `storage.objectAdmin` permissions on your Google Cloud Storage bucket.
-
-**Blueprint Snippet Example:**
-
-```yaml
-vars:
-  enable_pathways_for_tpus: true
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-```
-
-#### Part 2: Capabilities & Workload Orchestration Roles
+#### Capabilities & Workload Orchestration Roles
 
 When the `--pathways` flag is specified during job submission, GCluster automatically refactors the JobSet manifest to deploy and coordinate three distinct functional roles across your GKE cluster:
 
@@ -1062,7 +1030,7 @@ When `--pathways-headless` is enabled, GCluster deploys the Pathways infrastruct
 
   And then initializing JAX/Pathways client pointing to `grpc://127.0.0.1:29000`.
 
-#### Part 3: Example CLI Commands
+#### Example CLI Commands
 
 Submit a standard multi-slice Pathways distributed training job:
 
@@ -1092,38 +1060,13 @@ Submit a headless Pathways cluster infrastructure for external client connection
 
 Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dynamically creates and deletes node pools based on unschedulable pod resource requirements. GCluster integrates with NAP to allow users to target specific compute consumption models without pre-provisioning static node pools.
 
-#### Part 1: Cluster Blueprint Provisioning & Configuration
-
-To enable Node Auto-Provisioning on your GKE cluster, configure the `gke-cluster` module in your blueprint with `cluster_autoscaling` settings:
-
-* **Cluster Autoscaling Configuration:** Define minimum and maximum limits for CPU, memory, and accelerator resources in the `gke-cluster` module settings:
-
-```yaml
-  - id: my-gke-cluster
-    source: modules/scheduler/gke-cluster
-    settings:
-      cluster_autoscaling:
-        enabled: true
-        autoscaling_profile: OPTIMIZE_UTILIZATION # or BALANCED
-        resource_limits:
-          - resource_type: cpu
-            minimum: 1
-            maximum: 1000
-          - resource_type: memory
-            minimum: 1
-            maximum: 4000
-```
-
-* **Automated Machine Type & Resource Mapping:** When GKE NAP is enabled, GCluster automatically maps shorthand compute names (e.g. `v6e-4`, `a3-megagpu-8g`, `n2-standard-32`) to accelerator and machine type resource requirements during job submission.
-* **Kueue Resource Quota Alignment:** Ensure your Kueue ClusterQueue nominal capacities match your GKE NAP autoprovisioning limits so Kueue can admit workloads smoothly ahead of NAP node pool scaling.
-
-#### Part 2: Capabilities, Scheduling & Pre-flight Verification
+#### Capabilities, Scheduling & Pre-flight Verification
 
 * **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs via `--gke-nap-provisioning`. If you explicitly target Spot, pre-flight checks and node selectors ensure the workload does not silently fall back to standard pools.
 * **Reservation Targeting:** Target GCE reservations by name via `--gke-nap-reservation`. GCluster automatically extracts short reservation identifiers to populate pod node selectors and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn nodes directly into your target GCE reservation.
 * **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type is explicitly covered by GKE NAP limits. If not covered, GCluster **fails fast** during submission to prevent scheduling deadlocks.
 
-#### Part 3: Example CLI Commands
+#### Example CLI Commands
 
 Target Spot VMs via GKE Node Auto-Provisioning:
 
