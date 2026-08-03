@@ -183,6 +183,16 @@ Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
 in particular an inactivity timeout that will close running shells after 20
 minutes. Please consider it only for blueprints that are quickly deployed.
 
+## Advanced GKE Infrastructure Orchestration
+
+`gcluster job submit` integrates natively with advanced GKE hardware and scheduling capabilities:
+
+* **GKE Node Auto-Provisioning (NAP)**: Automatically scale and provision compute nodes on demand using `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation`.
+* **Pathways Distributed AI Orchestration**: Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) using `--pathways` and `--pathways-gcs-location`.
+* **Dynamic TPU Slicing**: Reconfigure and pack TPU v7x nodes into logical slices dynamically using `--topology` and Kueue's Topology-Aware Scheduling (`--gke-scheduler`).
+
+For comprehensive architecture diagrams, flag tables, and detailed CLI examples, see [Advanced GKE Infrastructure Features](docs/gcluster_job_guide.md#8-advanced-gke-infrastructure-features).
+
 ## VM Image Support
 
 ### Standard Images

@@ -987,6 +987,19 @@ Additionally, GCluster automatically includes standard TPU topology labels (`clo
 
 This automated TAS annotation injection and nodeSelector decoupling is enabled by default for supported TPU v7x configurations.
 
+#### Example CLI Command
+
+Submit a dynamic slicing workload targeting TPU v7x nodes:
+
+```bash
+./gcluster job submit \
+  --name my-dynamic-slice-job \
+  --command "python train.py" \
+  --compute-type tpu-v7x-slice \
+  --topology 4x4x4 \
+  --gke-scheduler gke.io/topology-aware-auto
+```
+
 #### GKE Documentation Reference
 
 For a deeper conceptual understanding or custom configurations, refer to Google Cloud's official public guides:
@@ -1030,6 +1043,30 @@ When `--pathways-headless` is enabled, GCluster deploys the Pathways infrastruct
 
   And then initializing JAX/Pathways client pointing to `grpc://127.0.0.1:29000`.
 
+#### Example CLI Commands
+
+Submit a standard multi-slice Pathways distributed training job:
+
+```bash
+./gcluster job submit \
+  --name my-pathways-job \
+  --command "python train_pathways.py" \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://<YOUR_BUCKET_NAME>/pathways-artifacts
+```
+
+Submit a headless Pathways cluster infrastructure for external client connections:
+
+```bash
+./gcluster job submit \
+  --name my-pathways-headless \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://<YOUR_BUCKET_NAME>/pathways-artifacts \
+  --pathways-headless
+```
+
 ---
 
 ### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
@@ -1050,6 +1087,29 @@ When GKE NAP options are used, GCluster performs several operations to structure
   * Spot: Injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector.
   * Reservation: Injects reservation tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`) to allow scheduling on nodes spawned by GKE to consume the target reservation. If a block/sub-block path format is provided, the short reservation identifier is automatically extracted and used as the `<reservation-name>`.
 * **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type (e.g., `ct6e-standard-4t`, `a3-megagpu-8g`) is explicitly configured in GKE NAP limits. If the machine type is not covered by GKE NAP limits, GCluster **fails fast** during submission, preventing scheduling locks.
+
+#### Example CLI Commands
+
+Target Spot VMs via GKE Node Auto-Provisioning:
+
+```bash
+./gcluster job submit \
+  --name my-nap-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
+
+Target a GCE reservation via GKE Node Auto-Provisioning:
+
+```bash
+./gcluster job submit \
+  --name my-nap-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
+```
 
 ## 9. `gcluster job` Command Reference
 
