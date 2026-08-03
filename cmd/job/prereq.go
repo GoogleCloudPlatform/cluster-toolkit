@@ -234,17 +234,13 @@ func ensureProjectExists(projectID string) error {
 }
 
 // checkProjectPrereqs validates the project exists and checks if Artifact Registry API is enabled.
-func checkProjectPrereqs(projectID string, gcloudAuthOK bool, state *PrereqState, missing *[]missingPrereq) {
+func checkProjectPrereqs(projectID string, gcloudAuthOK bool, state *PrereqState, missing *[]missingPrereq) error {
 	if !gcloudAuthOK || projectID == "" {
-		return
+		return nil
 	}
 
 	if err := ensureProjectExists(projectID); err != nil {
-		*missing = append(*missing, missingPrereq{
-			name:     fmt.Sprintf("Project ID validation for %q", projectID),
-			commands: []string{fmt.Sprintf("# Error: %v", err)},
-		})
-		return
+		return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, err)
 	}
 	state.GCloudProjectConfigured = true
 
@@ -258,6 +254,7 @@ func checkProjectPrereqs(projectID string, gcloudAuthOK bool, state *PrereqState
 	} else {
 		state.ArtifactRegistryAPIEnabled = true
 	}
+	return nil
 }
 
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
@@ -313,8 +310,9 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	} else {
 		state.DockerCredsConfigured = true
 	}
-
-	checkProjectPrereqs(*projectID, state.GCloudAuthenticated, &state, &missing)
+	if err := checkProjectPrereqs(*projectID, state.GCloudAuthenticated, &state, &missing); err != nil {
+		return err
+	}
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)

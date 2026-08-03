@@ -486,18 +486,14 @@ func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
 	projectID := "invalid-project"
 	location := "us-central1-a"
 
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
 	err := ensurePrerequisites(cmd, &projectID, location)
 	if err == nil {
-		t.Error("expected error because project is invalid, got nil")
+		t.Fatal("expected error because project is invalid, got nil")
 	}
 
-	output := buf.String()
-	expectedErrorMsg := "Project ID validation for \"invalid-project\""
-	if !strings.Contains(output, expectedErrorMsg) {
-		t.Errorf("expected output to contain %q, but got:\n%s", expectedErrorMsg, output)
+	expectedErrorMsg := "project \"invalid-project\" is invalid or inaccessible"
+	if !strings.Contains(err.Error(), expectedErrorMsg) {
+		t.Errorf("expected error to contain %q, but got: %v", expectedErrorMsg, err)
 	}
 
 	if servicesListCalled {
