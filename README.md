@@ -189,7 +189,7 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 
 * **GKE Node Auto-Provisioning (NAP)**: Automatically scale and provision compute nodes on demand using `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation`.
 * **Pathways Distributed AI Orchestration**: Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) using `--pathways` and `--pathways-gcs-location`.
-* **Dynamic TPU Slicing**: Reconfigure and pack TPU v7x nodes into logical slices dynamically using `--topology` and Kueue's Topology-Aware Scheduling (`--gke-scheduler`).
+* **Dynamic TPU Slicing**: Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically using `--topology` and Kueue's Topology-Aware Scheduling (`--gke-scheduler`).
 
 For cluster blueprint Terraform deployment instructions and comprehensive workload orchestration guidelines, see [GKE Advanced Infrastructure Features Guide](docs/gke-advanced-features.md) and [Gcluster Job Submission Guide](docs/gcluster_job_guide.md#8-advanced-gke-infrastructure-features).
 

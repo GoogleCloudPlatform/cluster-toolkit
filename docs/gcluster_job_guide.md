@@ -971,9 +971,9 @@ This section details how `gcluster job submit` orchestrates advanced GKE hardwar
 
 ---
 
-### 8.1 Dynamic Slicing (TPU7x)
+### 8.1 Dynamic Slicing (TPU v7x and Future Generations)
 
-GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In Cluster Toolkit, dynamic slicing is supported exclusively on TPU v7x (Ironwood) nodes.
+GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In Cluster Toolkit and GKE, dynamic slicing is supported starting with **TPU v7x (Ironwood) and future TPU generations onwards** (earlier generations like TPU v4, v5e, v5p, and v6e require static slice topologies).
 
 #### Capabilities & Scheduling Benefits
 
