@@ -57,12 +57,8 @@ func TestInspectCluster_Success(t *testing.T) {
 	location := "us-central1-a"
 	project := "test-project"
 
-	t.Cleanup(func() {
-		files, _ := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
-		for _, f := range files {
-			_ = os.Remove(f)
-		}
-	})
+	tempDir := t.TempDir()
+	logFilePath := filepath.Join(tempDir, "gcluster-inspect-"+clusterName+".log")
 
 	responses := defaultMockResponses(clusterName, location, project)
 	mockExec := NewMockExecutor(responses)
@@ -79,6 +75,7 @@ func TestInspectCluster_Success(t *testing.T) {
 		ClusterLocation: location,
 		WorkloadName:    "test-workload",
 		Show:            false,
+		OutputPath:      logFilePath,
 	}
 
 	err := orc.InspectCluster(opts)
@@ -87,14 +84,10 @@ func TestInspectCluster_Success(t *testing.T) {
 	}
 
 	// Verify log file was created
-	files, err := filepath.Glob("gcluster-inspect-" + clusterName + "-*.log")
-	if err != nil {
-		t.Fatalf("failed to glob log files: %v", err)
+	if _, err := os.Stat(logFilePath); os.IsNotExist(err) {
+		t.Fatalf("expected log file to exist at %s", logFilePath)
 	}
-	if len(files) != 1 {
-		t.Fatalf("expected 1 log file, found %d", len(files))
-	}
-	logFile := files[0]
+	logFile := logFilePath
 
 	contentBytes, err := os.ReadFile(logFile)
 	if err != nil {

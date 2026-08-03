@@ -88,6 +88,35 @@
       - "'SUCCESS: G4 GPU computation completed successfully!' in storage_logs.stdout"
       fail_msg: "The Storage Verification Test did not verify both successful confidential volume read/write and GPU computation."
 
+  - name: Run the G4 NVBandwidth test
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl create -f {{ workspace }}/examples/gke-g4-confidential/g4-verification-nvbandwidth.yaml -v=9
+    args:
+      executable: /bin/bash
+
+  - name: Wait for NVBandwidth test to hit completion
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl wait --for=condition=complete job/g4-verification-nvbandwidth --timeout=1200s
+    register: wait_result
+    until: wait_result.rc == 0
+    retries: 3
+    delay: 10
+
+  - name: Fetch logs from the nvbandwidth pod
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl logs job/g4-verification-nvbandwidth
+    register: nvbandwidth_logs
+
+  - name: Ensure nvbandwidth output confirms confidential encrypted bounce buffers
+    ansible.builtin.assert:
+      that:
+      - "'Detected platform using encrypted bounce buffers for CPU<->GPU traffic.' in nvbandwidth_logs.stdout"
+      - "'Waived host_to_device_bidirectional_memcpy_ce: bounce-buffer confidential computing enabled' in nvbandwidth_logs.stdout"
+      fail_msg: "NVBandwidth test failed or did not run under bounce-buffer CC mode."
+
   rescue:
   - name: Capture K8s events for jobs, pods, and PVCs on failure
     delegate_to: localhost
@@ -130,7 +159,21 @@
       msg: "G4 Confidential Verification tests failed."
 
   always:
+  - name: Fetch logs and describe nvbandwidth pod on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      echo "=== NVBANDWIDTH JOB & POD DESCRIPTION ==="
+      kubectl describe job g4-verification-nvbandwidth || true
+      kubectl describe pods -l name=g4-verification-nvbandwidth || true
+      echo "=== NVBANDWIDTH LOGS ==="
+      kubectl logs job/g4-verification-nvbandwidth || true
+    register: failed_nvbandwidth_logs
+
+  - name: Print nvbandwidth logs on failure
+    ansible.builtin.debug:
+      var: failed_nvbandwidth_logs.stdout_lines
+
   - name: Clean up
     delegate_to: localhost
     ansible.builtin.shell: |
-      kubectl delete job g4-verification-test g4-verification-storage-test --ignore-not-found -v=9
+      kubectl delete job g4-verification-test g4-verification-storage-test g4-verification-nvbandwidth --ignore-not-found -v=9

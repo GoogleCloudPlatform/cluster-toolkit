@@ -735,6 +735,78 @@ def setup_cloud_ops() -> None:
     file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
     file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
 
+    lkp = lookup()
+    enable_openmetrics = lkp.cfg.get("enable_openmetrics", False)
+
+    if lkp.is_controller and enable_openmetrics:
+        if util.slurm_version_gte(lkp.slurm_version, "25.11"):
+            # Safely initialize nested dictionaries to prevent KeyErrors from missing/null YAML blocks.
+            if not isinstance(file.get("metrics"), dict): file["metrics"] = {}
+            metrics = file["metrics"]
+
+            if not isinstance(metrics.get("receivers"), dict): metrics["receivers"] = {}
+
+            if not isinstance(metrics.get("service"), dict): metrics["service"] = {}
+            service = metrics["service"]
+
+            if not isinstance(service.get("pipelines"), dict): service["pipelines"] = {}
+            pipelines = service["pipelines"]
+
+            if not isinstance(pipelines.get("prometheus_pipeline"), dict): pipelines["prometheus_pipeline"] = {}
+            prom_pipeline = pipelines["prometheus_pipeline"]
+
+            if not isinstance(prom_pipeline.get("receivers"), list): prom_pipeline["receivers"] = []
+            if not isinstance(prom_pipeline.get("exporters"), list): prom_pipeline["exporters"] = ["google"]
+                
+            # The Slurm controller natively exposes OpenMetrics on the control host port.
+            raw_port = lkp.cfg.get("slurm_control_host_port") or "6818"
+            port = str(raw_port).split('-')[0]
+            
+            # The root /metrics endpoint returns an index page that the Ops Agent cannot parse.
+            # We must explicitly define scrape configs for each sub-path.
+            # Note: /metrics/jobs-users-accts is intentionally omitted to avoid excessive metric volume.
+            metrics["receivers"]["slurm_prometheus"] = {
+                "type": "prometheus",
+                "config": {
+                    "scrape_configs": [
+                        {
+                            "job_name": "slurm-controller-jobs",
+                            "metrics_path": "/metrics/jobs",
+                            "scrape_interval": "60s",
+                            "static_configs": [{"targets": [f"localhost:{port}"]}]
+                        },
+                        {
+                            "job_name": "slurm-controller-nodes",
+                            "metrics_path": "/metrics/nodes",
+                            "scrape_interval": "60s",
+                            "static_configs": [{"targets": [f"localhost:{port}"]}]
+                        },
+                        {
+                            "job_name": "slurm-controller-partitions",
+                            "metrics_path": "/metrics/partitions",
+                            "scrape_interval": "120s",
+                            "static_configs": [{"targets": [f"localhost:{port}"]}]
+                        },
+                        {
+                            "job_name": "slurm-controller-scheduler",
+                            "metrics_path": "/metrics/scheduler",
+                            "scrape_interval": "60s",
+                            "static_configs": [{"targets": [f"localhost:{port}"]}]
+                        }
+                    ]
+                }
+            }
+            
+            # Append the receiver to the pipeline to activate it, preserving any pre-existing receivers.
+            if "slurm_prometheus" not in prom_pipeline["receivers"]:
+                prom_pipeline["receivers"].append("slurm_prometheus")
+
+        else:
+            log.warning(
+                f"enable_openmetrics is enabled, but native OpenMetrics telemetry "
+                f"is not supported on Slurm {lkp.slurm_version} (requires >= 25.11)."
+            )
+
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 

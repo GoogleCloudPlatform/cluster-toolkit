@@ -166,7 +166,7 @@ To avoid incurring charges for the resources created, destroy the deployment:
 
 Refer to [Deploy an A3 Mega GKE cluster for ML training](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-gke-cluster) for more instructions on creating the GKE-A3M cluster.
 
-Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#deploy-run-nccl-tas-test) for more instructions on running a NCCL test on the GKE-A3M cluster.
+Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/test-gke#a3-mega) for more instructions on running a NCCL test on the GKE-A3M cluster.
 
 ### Additional Consumption Options
 The Cluster Toolkit supports alternative consumption options such as Spot VMs or Dynamic Workload Scheduler (DWS) Flex-start.

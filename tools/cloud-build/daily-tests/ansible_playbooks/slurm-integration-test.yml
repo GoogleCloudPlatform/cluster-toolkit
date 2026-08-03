@@ -54,7 +54,7 @@
 
   - name: Set actual network name
     ansible.builtin.set_fact:
-      actual_network: "{% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}"
+      actual_network: "{% if use_fixed_vpc | default(false) | bool %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}"
 
   - name: Run Pre Deploy Tasks
     ansible.builtin.include_tasks: "{{ pre_deploy_task }}"

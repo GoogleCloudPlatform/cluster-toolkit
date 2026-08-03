@@ -77,6 +77,7 @@ locals {
     experimental                   = var.experimental
     enable_expedited_requeue       = var.enable_expedited_requeue
     enable_health_check_start_only = var.enable_health_check_start_only
+    enable_openmetrics             = var.enable_openmetrics
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -202,6 +203,7 @@ locals {
     "resume_wrapper.sh",
     "resume.py",
     "repair.py",
+    "error_handler.py",
     "setup_network_storage.py",
     "setup.py",
     "slurm_health_check.py",
@@ -230,6 +232,7 @@ locals {
     "setup.py",
     "slurmsync.py",
     "sort_nodes.py",
+    "error_handler.py",
     "repair.py",
     "suspend.py",
     "tpu.py",

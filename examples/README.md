@@ -64,6 +64,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v5e](#gke-tpu-v5e-) ![core-badge]
+  * [gke-tpu-v5p](#gke-tpu-v5p-) ![core-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
@@ -1640,6 +1641,10 @@ deployment_groups:
 ### [gke-tpu-v5e] ![core-badge]
 This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5e/README.md).
 [gke-tpu-v5e]: ../examples/gke-tpu-v5e
+
+### [gke-tpu-v5p] ![core-badge]
+This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5p/README.md).
+[gke-tpu-v5p]: ../examples/gke-tpu-v5p
 
 ### [gke-tpu-v6e] ![core-badge]
 
