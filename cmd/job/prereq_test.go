@@ -454,3 +454,53 @@ func (m *mockPrereqStore) Load() PrereqState {
 }
 
 func (m *mockPrereqStore) Save(state PrereqState) {}
+
+func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	origExecuteCommand := shell.ExecuteCommand
+	defer func() { shell.ExecuteCommand = origExecuteCommand }()
+
+	servicesListCalled := false
+	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
+		cmdStr := name + " " + strings.Join(args, " ")
+		switch {
+		case strings.HasPrefix(cmdStr, "gcloud auth list"):
+			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
+		case cmdStr == "gcloud projects describe invalid-project":
+			return shell.CommandResult{ExitCode: 1, Stderr: "Project not found"}
+		case strings.HasPrefix(cmdStr, "gcloud services list"):
+			servicesListCalled = true
+			return shell.CommandResult{ExitCode: 0}
+		default:
+			return shell.CommandResult{ExitCode: 0}
+		}
+	}
+
+	origStore := store
+	defer func() { store = origStore }()
+	store = &mockPrereqStore{}
+
+	cmd := &cobra.Command{}
+	projectID := "invalid-project"
+	location := "us-central1-a"
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := ensurePrerequisites(cmd, &projectID, location)
+	if err == nil {
+		t.Error("expected error because project is invalid, got nil")
+	}
+
+	output := buf.String()
+	expectedErrorMsg := "Project ID validation for \"invalid-project\""
+	if !strings.Contains(output, expectedErrorMsg) {
+		t.Errorf("expected output to contain %q, but got:\n%s", expectedErrorMsg, output)
+	}
+
+	if servicesListCalled {
+		t.Error("expected gcloud services list to NOT be called, but it was")
+	}
+}

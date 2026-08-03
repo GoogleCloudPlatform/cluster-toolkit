@@ -110,10 +110,6 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 			return err
 		}
 
-		if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
-			return err
-		}
-
 		if err := validateGKENAPFlags(); err != nil {
 			return err
 		}

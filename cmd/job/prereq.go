@@ -224,6 +224,42 @@ func isDockerCredsConfigured(region string) bool {
 	return config.CredHelpers[pkgDevReg] == "gcloud"
 }
 
+// ensureProjectExists checks if the project exists and is accessible.
+func ensureProjectExists(projectID string) error {
+	result := shell.ExecuteCommand("gcloud", "projects", "describe", projectID)
+	if result.ExitCode != 0 {
+		return fmt.Errorf("failed to validate project: %s", strings.TrimSpace(result.Stderr))
+	}
+	return nil
+}
+
+// checkProjectPrereqs validates the project exists and checks if Artifact Registry API is enabled.
+func checkProjectPrereqs(projectID string, gcloudAuthOK bool, state *PrereqState, missing *[]missingPrereq) {
+	if !gcloudAuthOK || projectID == "" {
+		return
+	}
+
+	if err := ensureProjectExists(projectID); err != nil {
+		*missing = append(*missing, missingPrereq{
+			name:     fmt.Sprintf("Project ID validation for %q", projectID),
+			commands: []string{fmt.Sprintf("# Error: %v", err)},
+		})
+		return
+	}
+	state.GCloudProjectConfigured = true
+
+	// Check Artifact Registry API
+	apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
+	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
+		*missing = append(*missing, missingPrereq{
+			name:     "Artifact Registry API",
+			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
+		})
+	} else {
+		state.ArtifactRegistryAPIEnabled = true
+	}
+}
+
 // EnsurePrerequisites checks all necessary gcloud and kubectl prerequisites.
 func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string) error {
 	if dryRunManifest != "" {
@@ -278,18 +314,7 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 		state.DockerCredsConfigured = true
 	}
 
-	// Check Artifact Registry API
-	if *projectID != "" {
-		apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", *projectID)
-		if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
-			missing = append(missing, missingPrereq{
-				name:     "Artifact Registry API",
-				commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", *projectID)},
-			})
-		} else {
-			state.ArtifactRegistryAPIEnabled = true
-		}
-	}
+	checkProjectPrereqs(*projectID, state.GCloudAuthenticated, &state, &missing)
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)

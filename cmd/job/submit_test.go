@@ -332,7 +332,11 @@ type MockPrereqStore struct {
 }
 
 func (m *MockPrereqStore) Load() PrereqState {
-	return m.State
+	state := m.State
+	if state.LastCheckedProjectID == "" {
+		state.LastCheckedProjectID = "test-project"
+	}
+	return state
 }
 
 func (m *MockPrereqStore) Save(state PrereqState) {
