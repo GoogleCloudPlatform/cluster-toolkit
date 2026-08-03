@@ -310,9 +310,9 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
 		RawMounts: []string{
-			"gs://my-bucket:/data",
-			"/host/path:/host",
-			"my-pvc:/pvc",
+			"gs://my-bucket;/data",
+			"/host/path;/host",
+			"my-pvc;/pvc",
 		},
 	}
 

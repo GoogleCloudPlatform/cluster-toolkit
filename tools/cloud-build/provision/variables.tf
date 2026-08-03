@@ -55,3 +55,9 @@ variable "kueue_migrated_tests" {
     "monitoring.yaml"
   ]
 }
+
+variable "daily_tests_service_account" {
+  description = "The service account to run daily tests under. If null, the default Cloud Build service account is used. For projects enforcing BYOSA (like hpc-toolkit-dev-2), you must set this via environment variable, e.g. export TF_VAR_daily_tests_service_account=\"projects/...\""
+  type        = string
+  default     = null
+}
