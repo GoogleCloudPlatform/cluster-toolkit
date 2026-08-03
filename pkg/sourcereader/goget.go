@@ -73,7 +73,7 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 		strings.HasSuffix(source, ".git")
 
 	if isGit {
-		if _, err := os.Stat(source); err != nil {
+		if _, err := os.Stat(source); os.IsNotExist(err) {
 			if _, err := exec.LookPath("git"); err != nil {
 				return GitMissingError{Source: source}
 			}

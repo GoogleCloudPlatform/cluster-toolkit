@@ -80,6 +80,12 @@ func EnsureDependencies(decision DownloadDecision, tools ...string) error {
 		return fmt.Errorf("no tools specified for dependency check")
 	}
 
+	for _, tool := range tools {
+		if tool != "terraform" && tool != "packer" {
+			return fmt.Errorf("unknown tool requested: %s", tool)
+		}
+	}
+
 	seen := make(map[string]bool)
 	for _, tool := range tools {
 		if seen[tool] {
