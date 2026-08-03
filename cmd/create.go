@@ -73,20 +73,25 @@ var (
 )
 
 func promptAndCreateGcsBuckets(bp config.Blueprint) error {
+	var client *storage.Client
+	var err error
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = client.Close()
-	}()
 
 	for _, g := range bp.Groups {
 		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
 			continue
 		}
 		bucketName := g.TerraformBackend.Configuration.Get("bucket").AsString()
+
+		if client == nil {
+			client, err = storage.NewClient(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to initialize GCS client: %w", err)
+			}
+			defer func() {
+				_ = client.Close()
+			}()
+		}
 
 		bucketHandle := client.Bucket(bucketName)
 		if _, err := bucketHandle.Attrs(ctx); errors.Is(err, storage.ErrBucketNotExist) {
@@ -98,15 +103,15 @@ func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 				return fmt.Errorf("user aborted")
 			}
 
-			if !bp.Vars.Has("project_id") {
-				return fmt.Errorf("cannot create bucket: project_id is missing from blueprint vars")
+			projectID := config.GetKeyFromBlueprint("project_id", bp)
+			if projectID == "" {
+				return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
 			}
-			projectID := bp.Vars.Get("project_id").AsString()
 			if err := bucketHandle.Create(ctx, projectID, nil); err != nil {
 				return err
 			}
 		} else if err != nil {
-			return err
+			return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
 		}
 	}
 	return nil
