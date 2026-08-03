@@ -119,7 +119,6 @@ resource "google_compute_disk" "additional_disks" {
   count = var.instance_count * var.additional_persistent_disks.count
 
   # NB: this resource array must be sliced accounting for var.instance_count
-  provider     = google-beta
   name         = "${local.resource_prefix}-disk-${count.index}"
   type         = var.additional_persistent_disks.type
   size         = var.additional_persistent_disks.size
