@@ -30,15 +30,15 @@ vars:
   zone:
 
   # The number of TPU slices to create
-  num_slices: 1
+  num_slices:
 
   # Machine type
   # TPU v4 options: ct4p-hightpu-4t
   machine_type: ct4p-hightpu-4t
 
   # The TPU placement topology for pod slice node pool.
-  # TPU v4 options: 2x2x2 (8 chips), 2x2x4 (16 chips), 2x4x4 (32 chips), etc.
-  tpu_topology: 2x2x2
+  # TPU v4 toplogy options: https://docs.cloud.google.com/tpu/docs/v4#v4-variants.
+  tpu_topology:
 
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
@@ -59,9 +59,6 @@ vars:
 
   # The namespace to be configured for running workloads
   user_namespace: default
-
-  labels:
-    time-to-live: "2026-08-05"
 
 
 deployment_groups:

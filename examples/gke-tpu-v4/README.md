@@ -13,7 +13,7 @@ Before you start, make sure you have performed the following tasks:
 
 * Enable the Google Kubernetes Engine API.
 * If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI.
-* Ensure that you have enough quota for TPUs (`tpu-v4-podslice` quota in your region/zone). TPU v4 is primarily available in `us-central2-b`.
+* Ensure that you have enough quota for TPUs (`tpu-v4-podslice` quota in your region/zone).
 * Ensure that you have the following roles enabled on your deployment identity:
   * `roles/editor`
   * `roles/container.clusterAdmin`
