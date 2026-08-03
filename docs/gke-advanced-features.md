@@ -1,80 +1,14 @@
 # GKE Advanced Infrastructure Features Guide
 
-This guide provides comprehensive documentation on deploying, configuring, and utilizing advanced Google Kubernetes Engine (GKE) hardware and orchestration capabilities in Cluster Toolkit: **Node Auto-Provisioning (NAP)**, **Dynamic TPU Slicing**, and **Pathways Distributed AI Orchestration**.
+This guide provides comprehensive documentation on deploying, configuring, and utilizing advanced Google Kubernetes Engine (GKE) hardware and orchestration capabilities in Cluster Toolkit: **Dynamic TPU Slicing**, **Pathways Distributed AI Orchestration**, and **Node Auto-Provisioning (NAP)**.
 
 ---
 
-## 1. Node Auto-Provisioning (NAP) and Compute Consumption
-
-Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaling capability that dynamically creates, manages, and deletes node pools based on unschedulable pod resource requirements. Rather than pre-provisioning static node pools, NAP allows your cluster to scale compute resources on demand.
-
-### 1.1 Cluster Blueprint Provisioning & Configuration
-
-To enable Node Auto-Provisioning on your GKE cluster, configure the `gke-cluster` module in your Cluster Toolkit blueprint with `cluster_autoscaling` settings:
-
-```yaml
-deployment_groups:
-- group: primary
-  modules:
-  - id: my-gke-cluster
-    source: modules/scheduler/gke-cluster
-    settings:
-      cluster_autoscaling:
-        enabled: true
-        autoscaling_profile: OPTIMIZE_UTILIZATION # or BALANCED
-        resource_limits:
-          - resource_type: cpu
-            minimum: 1
-            maximum: 1000
-          - resource_type: memory
-            minimum: 1
-            maximum: 4000
-          - resource_type: nvidia-l4
-            minimum: 0
-            maximum: 64
-```
-
-#### Key Cluster Configuration Requirements
-
-* **Resource Limits:** Specify `minimum` and `maximum` bounds for CPU, memory, and accelerator types. NAP will only spin up node pools whose total aggregate consumption stays within these defined bounds.
-* **Kueue Resource Quota Alignment:** When integrating with Kueue for job queuing, ensure that Kueue ClusterQueue nominal capacities correspond to your GKE NAP maximum resource bounds so Kueue can admit workloads smoothly ahead of NAP node pool creation.
-
-### 1.2 Job Submission & Workload Scheduling (`gcluster job submit`)
-
-When submitting jobs to a NAP-enabled GKE cluster via `gcluster job submit`, you can target specific compute consumption models without modifying Kubernetes manifests manually:
-
-* **Spot vs. On-Demand Provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When `spot` is specified, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
-* **GCE Reservation Targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation <reservation-name>`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn node pools directly inside your targeted GCE reservation.
-* **Pre-Flight Limit Verification:** Before submitting a job, Cluster Toolkit queries GKE cluster metadata to verify that the requested machine type (e.g. `v6e-4`, `a3-megagpu-8g`) is explicitly permitted by your cluster's NAP resource limits. If not permitted, submission fails fast with a clear diagnostic error.
-
-#### Example CLI Commands
-
-Target Spot VMs via GKE Node Auto-Provisioning:
-
-```bash
-./gcluster job submit \
-  --name my-nap-spot-job \
-  --command "python app.py" \
-  --compute-type v6e-4 \
-  --gke-nap-provisioning spot
-```
-
-Target a GCE reservation via GKE Node Auto-Provisioning:
-
-```bash
-./gcluster job submit \
-  --name my-nap-reservation-job \
-  --command "python app.py" \
-  --compute-type v6e-4 \
-  --gke-nap-provisioning reservation \
-  --gke-nap-reservation my-tpu-reservation
-```
-
-## 2. Dynamic TPU Slicing (TPU v7x and Future Generations)
+## 1. Dynamic TPU Slicing (TPU v7x and Future Generations)
 
 GKE Dynamic Slicing provides unprecedented flexibility in Tensor Processing Unit (TPU) capacity scheduling by allowing physical hardware blocks to be logically grouped or sliced dynamically on demand. In Cluster Toolkit and GKE, dynamic slicing is supported starting with **TPU v7x (Ironwood) and future TPU generations onwards**. Earlier TPU generations (such as TPU v4, TPU v5e, TPU v5p, and TPU v6e) do not support dynamic slicing and require static slice topologies configured at node pool creation time.
 
-### 2.1 Cluster Blueprint Provisioning & Configuration
+### 1.1 Cluster Blueprint Provisioning & Configuration
 
 To deploy a GKE cluster configured for TPU Dynamic Slicing, configure your TPU v7x blueprint (such as `examples/gke-tpu-7x/gke-tpu-7x-advanced.yaml`) with the following settings:
 
@@ -92,7 +26,7 @@ vars:
 * **Enable Dynamic Slicing Flag:** Set `enable_dynamic_slicing_for_tpus: true` in blueprint `vars`. This deploys the GKE TPU Slice Controller and configures dynamic partition-level topology definitions.
 * **Kueue Dynamic Slicing Template:** Set `kueue_configuration_path` to point to a Kueue template configured for dynamic slicing (`kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS).
 
-### 2.2 Capabilities & Workload Scheduling (`gcluster job submit`)
+### 1.2 Capabilities & Workload Scheduling (`gcluster job submit`)
 
 * **Elastic Topology Provisioning:** Stitch multiple physical TPU v7x blocks together into a larger logical slice (e.g. connecting multiple `4x4x4` blocks together).
 * **Latency Optimization:** Kueue's Topology-Aware Scheduling (TAS) guarantees that TPU pods are placed with minimal network hop latency across the physical TPU interconnect mesh.
@@ -118,11 +52,11 @@ Submit a dynamic slicing workload targeting TPU v7x nodes:
 
 ---
 
-## 3. Pathways Distributed AI Orchestration
+## 2. Pathways Distributed AI Orchestration
 
 Pathways is Google's specialized distributed AI execution framework designed to coordinate large-scale multi-slice TPU machine learning workloads. Cluster Toolkit provides native integration for compiling and deploying Pathways-enabled workloads without manual multi-job Kubernetes manifest configuration.
 
-### 3.1 Cluster Blueprint Provisioning & Configuration
+### 2.1 Cluster Blueprint Provisioning & Configuration
 
 To prepare a GKE cluster for Pathways execution, configure your cluster blueprint with the following structural components:
 
@@ -139,7 +73,7 @@ vars:
 * **Kueue Pathways Manifest:** Link a Kueue template configured for Pathways (`kueue-configuration-pathways.yaml.tftpl` or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`).
 * **IAM & Workload Identity Permissions:** If using state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure the workload service account (`gke-wl-sa`) is granted `storage.admin` or `storage.objectAdmin` roles on your Google Cloud Storage bucket.
 
-### 3.2 Workload Orchestration Roles & Scheduling (`gcluster job submit`)
+### 2.2 Workload Orchestration Roles & Scheduling (`gcluster job submit`)
 
 When `--pathways` is specified during job submission, Cluster Toolkit automatically refactors the Kubernetes JobSet manifest to deploy and coordinate three distinct functional roles:
 
@@ -182,4 +116,72 @@ Submit a headless Pathways cluster infrastructure for external client connection
   --pathways \
   --pathways-gcs-location gs://<YOUR_BUCKET_NAME>/pathways-artifacts \
   --pathways-headless
+```
+
+---
+
+## 3. Node Auto-Provisioning (NAP) and Compute Consumption
+
+Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaling capability that dynamically creates, manages, and deletes node pools based on unschedulable pod resource requirements. Rather than pre-provisioning static node pools, NAP allows your cluster to scale compute resources on demand.
+
+### 3.1 Cluster Blueprint Provisioning & Configuration
+
+To enable Node Auto-Provisioning on your GKE cluster, configure the `gke-cluster` module in your Cluster Toolkit blueprint with `cluster_autoscaling` settings:
+
+```yaml
+deployment_groups:
+- group: primary
+  modules:
+  - id: my-gke-cluster
+    source: modules/scheduler/gke-cluster
+    settings:
+      cluster_autoscaling:
+        enabled: true
+        autoscaling_profile: OPTIMIZE_UTILIZATION # or BALANCED
+        resource_limits:
+          - resource_type: cpu
+            minimum: 1
+            maximum: 1000
+          - resource_type: memory
+            minimum: 1
+            maximum: 4000
+          - resource_type: nvidia-l4
+            minimum: 0
+            maximum: 64
+```
+
+#### Key Cluster Configuration Requirements
+
+* **Resource Limits:** Specify `minimum` and `maximum` bounds for CPU, memory, and accelerator types. NAP will only spin up node pools whose total aggregate consumption stays within these defined bounds.
+* **Kueue Resource Quota Alignment:** When integrating with Kueue for job queuing, ensure that Kueue ClusterQueue nominal capacities correspond to your GKE NAP maximum resource bounds so Kueue can admit workloads smoothly ahead of NAP node pool creation.
+
+### 3.2 Job Submission & Workload Scheduling (`gcluster job submit`)
+
+When submitting jobs to a NAP-enabled GKE cluster via `gcluster job submit`, you can target specific compute consumption models without modifying Kubernetes manifests manually:
+
+* **Spot vs. On-Demand Provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When `spot` is specified, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
+* **GCE Reservation Targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation <reservation-name>`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn node pools directly inside your targeted GCE reservation.
+* **Pre-Flight Limit Verification:** Before submitting a job, Cluster Toolkit queries GKE cluster metadata to verify that the requested machine type (e.g. `v6e-4`, `a3-megagpu-8g`) is explicitly permitted by your cluster's NAP resource limits. If not permitted, submission fails fast with a clear diagnostic error.
+
+#### Example CLI Commands
+
+Target Spot VMs via GKE Node Auto-Provisioning:
+
+```bash
+./gcluster job submit \
+  --name my-nap-spot-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning spot
+```
+
+Target a GCE reservation via GKE Node Auto-Provisioning:
+
+```bash
+./gcluster job submit \
+  --name my-nap-reservation-job \
+  --command "python app.py" \
+  --compute-type v6e-4 \
+  --gke-nap-provisioning reservation \
+  --gke-nap-reservation my-tpu-reservation
 ```
