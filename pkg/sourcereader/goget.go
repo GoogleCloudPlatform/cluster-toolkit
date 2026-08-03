@@ -65,12 +65,22 @@ func getterClient(source string, dst string) getter.Client {
 
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
-	isGit := strings.HasPrefix(source, "git::") ||
-		strings.Contains(source, "github.com") ||
-		strings.Contains(source, "gitlab.com") ||
-		strings.Contains(source, ".git//") ||
-		strings.Contains(source, ".git?") ||
-		strings.HasSuffix(source, ".git")
+	detectors := []getter.Detector{
+		new(getter.GitHubDetector),
+		new(getter.GitDetector),
+		new(getter.GCSDetector),
+	}
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	detected, err := getter.Detect(source, pwd, detectors)
+	isGit := false
+	if err == nil {
+		isGit = strings.HasPrefix(detected, "git::") || strings.Contains(detected, ".git")
+	}
 
 	if isGit {
 		if _, err := os.Stat(source); os.IsNotExist(err) {
