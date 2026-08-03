@@ -68,10 +68,10 @@ vars:
 
 #### Key Cluster Configuration Requirements
 
-* **Dedicated CPU Coordinator Node Pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure your blueprint includes a system or CPU compute node pool (e.g. `n2-standard-32`) so coordinator pods are co-located on CPU nodes rather than consuming expensive TPU chips.
+* **Dedicated CPU Coordinator Node Pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure your blueprint includes a system or CPU compute node pool (e.g., `n2-standard-32`) so coordinator pods are scheduled on CPU nodes rather than consuming expensive TPU chips.
 * **Enable Pathways Flag:** Set `enable_pathways_for_tpus: true` in blueprint `vars`. This configures Kueue ClusterQueues and LocalQueues with multi-slice resource quotas tailored for Pathways.
 * **Kueue Pathways Manifest:** Link a Kueue template configured for Pathways (`kueue-configuration-pathways.yaml.tftpl` or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`).
-* **IAM & Workload Identity Permissions:** If using state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure the workload service account (`gke-wl-sa`) is granted `storage.admin` or `storage.objectAdmin` roles on your Google Cloud Storage bucket.
+* **IAM & Workload Identity Permissions:** If using state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure the Google Cloud Service Account (GSA) associated with your workload (typically suffixed with `gke-wl-sa`) is granted `storage.admin` or `storage.objectAdmin` roles on your Google Cloud Storage bucket.
 
 ### 2.2 Workload Orchestration Roles & Scheduling (`gcluster job submit`)
 
@@ -160,7 +160,7 @@ deployment_groups:
 When submitting jobs to a NAP-enabled GKE cluster via `gcluster job submit`, you can target specific compute consumption models without modifying Kubernetes manifests manually:
 
 * **Spot vs. On-Demand Provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When `spot` is specified, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
-* **GCE Reservation Targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation <reservation-name>`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn node pools directly inside your targeted GCE reservation.
+* **GCE Reservation Targeting:** Use `--gke-nap-provisioning reservation` in combination with `--gke-nap-reservation <reservation-name>`. Cluster Toolkit automatically populates the reservation node selector and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn node pools directly inside your targeted GCE reservation. You can also pass a full GCP resource URI (e.g., `projects/<project-id>/reservations/<reservation-name>`) to target shared reservations in other projects, which automatically configures the `cloud.google.com/reservation-project` label.
 * **Pre-Flight Limit Verification:** Before submitting a job, Cluster Toolkit queries GKE cluster metadata to verify that the requested machine type (e.g. `v6e-4`, `a3-megagpu-8g`) is explicitly permitted by your cluster's NAP resource limits. If not permitted, submission fails fast with a clear diagnostic error.
 
 #### Example CLI Commands

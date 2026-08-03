@@ -1063,7 +1063,7 @@ Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dyna
 #### Capabilities, Scheduling & Pre-flight Verification
 
 * **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs via `--gke-nap-provisioning`. If you explicitly target Spot, pre-flight checks and node selectors ensure the workload does not silently fall back to standard pools.
-* **Reservation Targeting:** Target GCE reservations by name via `--gke-nap-reservation`. GCluster automatically extracts short reservation identifiers to populate pod node selectors and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn nodes directly into your target GCE reservation.
+* **Reservation Targeting:** Target GCE reservations by name via `--gke-nap-reservation`. GCluster automatically extracts short reservation identifiers to populate pod node selectors and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn nodes directly into your target GCE reservation. You can also pass a full GCP resource URI (e.g., `projects/<project-id>/reservations/<reservation-name>`) to target shared reservations in other projects, which automatically configures the `cloud.google.com/reservation-project` label.
 * **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type is explicitly covered by GKE NAP limits. If not covered, GCluster **fails fast** during submission to prevent scheduling deadlocks.
 
 #### Example CLI Commands
