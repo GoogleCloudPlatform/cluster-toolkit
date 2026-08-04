@@ -205,6 +205,26 @@ resource "google_compute_instance_template" "tpl" {
       condition     = var.enable_confidential_vm ? contains(["SEV", "SEV_SNP", "TDX"], local.confidential_instance_type) : true
       error_message = "If enable_confidential_vm is true, confidential_instance_type must be one of 'SEV', 'SEV_SNP', or 'TDX'."
     }
+
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || tonumber(var.disk_size_gb) >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
+    }
+
+    precondition {
+      condition     = length(var.additional_disks) == 0 || alltrue([for disk in var.additional_disks : disk.disk_storage_pool == null || disk.disk_storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(try(disk.disk_type, "")))])
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+    }
   }
 
   scheduling {
