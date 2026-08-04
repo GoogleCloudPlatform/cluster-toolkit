@@ -324,6 +324,65 @@ SUCCESS: G4 GPU computation completed successfully!
 
 ---
 
+### Step 4: Verify PCIe Secure Bandwidth (nvbandwidth)
+This test measures the secure PCIe link speed between the CPU and GPU using the NVIDIA `nvbandwidth` tool, operating via driver-managed secure bounce buffers, to verify functional data path execution and collect baseline transfer speeds.
+
+**Significance of the Test:**
+On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV-SNP encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
+
+> [!NOTE]
+> The test job is pre-configured with the `-s` / `--skipVerification` flag. Because CPU host memory is encrypted, the tool's data verification step (which attempts to copy results directly to standard CPU stack memory) will trigger a security boundary violation and halt the GPU. Leaving this flag active is required for the test to execute cleanly.
+
+1. Submit the bandwidth test job:
+
+   ```bash
+   kubectl create -f examples/gke-g4-confidential/g4-verification-nvbandwidth.yaml
+   ```
+
+2. Monitor the execution (Note: compilation and CUDA JIT translation take up to 2 minutes on first startup):
+
+   ```bash
+   kubectl logs jobs/g4-verification-nvbandwidth -f
+   ```
+
+3. Print the logs to verify PCIe bandwidth results (the following shows sample log output from a test run):
+
+**Expected Log Output:**
+
+```text
+Detected platform using encrypted bounce buffers for CPU<->GPU traffic.
+
+g4-verification-nvbandwidth-l55w6
+Device 0: NVIDIA RTX PRO 6000 Blackwell Server Edition (00000000:05:00)
+
+Running host_to_device_memcpy_ce.
+memcpy CE CPU(row) -> GPU(column) bandwidth (GB/s)
+           0
+ 0     15.69
+
+SUM host_to_device_memcpy_ce 15.69
+COEFFICIENT_OF_VARIATION host_to_device_memcpy_ce 0.00
+
+Running device_to_host_memcpy_ce.
+memcpy CE CPU(row) <- GPU(column) bandwidth (GB/s)
+           0
+ 0     18.58
+
+SUM device_to_host_memcpy_ce 18.58
+COEFFICIENT_OF_VARIATION device_to_host_memcpy_ce 0.02
+
+Waived host_to_device_bidirectional_memcpy_ce: bounce-buffer confidential computing enabled
+Waived device_to_host_bidirectional_memcpy_ce: bounce-buffer confidential computing enabled
+```
+
+To clean up the job resource once complete, run:
+
+```bash
+kubectl delete job g4-verification-nvbandwidth
+```
+
+---
+
 ## Clean Up
 
 To avoid incurring ongoing charges for the resources created, destroy the deployment:
