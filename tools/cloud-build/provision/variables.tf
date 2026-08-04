@@ -49,10 +49,15 @@ variable "kueue_migrated_tests" {
   type        = list(string)
   default = [
     "slurm-gcp-v6-rocky8",
-    "batch-mpi.yaml",
-    "htcondor.yaml",
-    "packer.yaml",
-    "monitoring.yaml"
+    "batch-mpi",
+    "htcondor",
+    "packer",
+    "monitoring",
+    "chrome-remote-desktop",
+    "chrome-remote-desktop-ubuntu",
+    "ansible-vm",
+    "e2e",
+    "hcls"
   ]
 }
 
