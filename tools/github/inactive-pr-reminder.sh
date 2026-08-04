@@ -20,8 +20,8 @@ set -euo pipefail
 
 # --- Constants ---
 REMINDER_MARKER="<!-- PR_INACTIVITY_REMINDER -->"
-DAYS_INTERVAL=2
-DAYS_TO_CLOSE=14
+DAYS_INTERVAL=7
+DAYS_TO_CLOSE=21
 TEAM_TO_TAG="@GoogleCloudPlatform/hpc-toolkit"
 
 # --- Functions ---
@@ -67,7 +67,7 @@ get_latest_activity_timestamp() {
 	# Check if there are any bot reminders
 	local latest_bot_reminder_timestamp
 	latest_bot_reminder_timestamp=$(echo "$comments_json" | jq -r '
-		map(select((.author?.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
+		map(select(.body | contains("<!-- PR_INACTIVITY_REMINDER -->"))) |
 		map(select(.createdAt | type == "string")) |
 		map(.createdAt) |
 		max // null
@@ -99,7 +99,7 @@ get_latest_activity_timestamp() {
 		# Check latest non-bot comment activity
 		local latest_comment_updated_at
 		latest_comment_updated_at=$(echo "$comments_json" | jq -r '
-			map(select(.author?.login // "" | test("github-actions|bot"; "i") | not)) |
+			map(select(.body | contains("<!-- PR_INACTIVITY_REMINDER -->") | not)) |
 			map(select(.createdAt | type == "string")) |
 			map(.createdAt) |
 			max // null
@@ -156,7 +156,6 @@ send_reminder() {
 	local approval_status_code=$4
 	local changes_requested=$5
 	local reminder_type=$6
-	local target_tag=$7
 
 	local prefix=""
 	if [[ "$reminder_type" == "second" ]]; then
@@ -164,12 +163,12 @@ send_reminder() {
 	fi
 
 	if [[ "$approval_status_code" -eq 0 ]]; then
-		gh pr comment "$pr_number" --body "${prefix}this PR is approved and should be merged/closed. It has been inactive for ${inactive_days} days. ${target_tag}, please merge it. ${REMINDER_MARKER}"
+		gh pr comment "$pr_number" --body "${prefix}this PR is approved and should be merged/closed. It has been inactive for ${inactive_days} days. @${pr_author}, please merge it. ${REMINDER_MARKER}"
 	else
 		if [[ "$changes_requested" == "CHANGES_REQUESTED" ]]; then
 			gh pr comment "$pr_number" --body "${prefix}this PR has been inactive for ${inactive_days} days and has changes requested. @${pr_author}, please address the requested changes or close the PR if it's no longer needed. ${REMINDER_MARKER}"
 		else
-			gh pr comment "$pr_number" --body "${prefix}this PR has been inactive for ${inactive_days} days and has no unresolved comments. ${target_tag}, please review. ${REMINDER_MARKER}"
+			gh pr comment "$pr_number" --body "${prefix}this PR has been inactive for ${inactive_days} days and has no unresolved comments. ${TEAM_TO_TAG}, please review. ${REMINDER_MARKER}"
 		fi
 	fi
 }
@@ -198,15 +197,6 @@ process_pr() {
 	local approval_status_code
 	approval_status_code=$(get_approval_status "$pr_number" "$pr_json")
 
-	local target_tag
-	target_tag=$(echo "$pr_json" | jq -r '
-		([.reviewRequests[]? | select(.__typename? == "User" and .login? != null) | "@" + .login] +
-		 [.assignees[]? | select(.login? != null) | "@" + .login]) | unique | join(", ")
-	')
-	if [[ -z "$target_tag" ]]; then
-		target_tag="$TEAM_TO_TAG"
-	fi
-
 	local latest_activity_timestamp
 	latest_activity_timestamp=$(get_latest_activity_timestamp "$pr_number" "$comments_json" "$created_at" "$latest_reviews_json" "$updated_at")
 
@@ -214,22 +204,22 @@ process_pr() {
 	updated_at_seconds=$(date -d "$latest_activity_timestamp" +%s)
 	now_seconds=$(date +%s)
 	inactive_seconds=$((now_seconds - updated_at_seconds))
-	inactive_days=$(((inactive_seconds + 3600) / 86400))
+	inactive_days=$((inactive_seconds / 86400))
 	echo "PR #${pr_number} has been inactive for ${inactive_days} days."
 
 	local reminder_count
 	reminder_count=$(echo "$comments_json" | jq -r --arg since "$latest_activity_timestamp" '
-		map(select((.author?.login // "" | test("github-actions|bot"; "i")) and (.body | contains("<!-- PR_INACTIVITY_REMINDER -->")))) |
+		map(select(.body | contains("<!-- PR_INACTIVITY_REMINDER -->"))) |
 		map(select(.createdAt > $since)) |
 		length
 	')
 	echo "Found ${reminder_count} reminder(s) since last human activity for PR #${pr_number}."
 
 	# Logic:
-	# Day 2 -> Reminder 1
-	# Day 4 -> Reminder 2
-	# Day 14 -> Close PR (only if unapproved)
-	if ((inactive_days >= DAYS_TO_CLOSE)) && [[ "$reminder_count" -ge 2 ]]; then
+	# Day 7 -> Reminder 1
+	# Day 14 -> Reminder 2
+	# Day 21 -> Close PR (only if unapproved)
+	if ((inactive_days >= DAYS_TO_CLOSE)) && [[ "$reminder_count" -eq 2 ]]; then
 		if [[ "$approval_status_code" -eq 1 ]]; then
 			echo "PR #${pr_number} is unapproved and has been inactive for ${inactive_days} days. Closing."
 			gh pr comment "$pr_number" --body "@${pr_author} This PR was automatically closed after being inactive for more than ${DAYS_TO_CLOSE} days. ${REMINDER_MARKER}"
@@ -237,12 +227,12 @@ process_pr() {
 		else
 			echo "PR #${pr_number} is approved but has been inactive for ${inactive_days} days. It should be merged or closed."
 		fi
-	elif ((inactive_days >= (DAYS_INTERVAL * 2))) && [[ "$reminder_count" -eq 1 ]]; then
+	elif ((inactive_days >= 14)) && [[ "$reminder_count" -eq 1 ]]; then
 		echo "Expected 2 reminders, found 1. Sending a second reminder."
-		send_reminder "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" "$review_decision" "second" "$target_tag"
+		send_reminder "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" "$review_decision" "second"
 	elif ((inactive_days >= DAYS_INTERVAL)) && [[ "$reminder_count" -eq 0 ]]; then
 		echo "Expected 1 reminder, found 0. Sending a first reminder."
-		send_reminder "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" "$review_decision" "first" "$target_tag"
+		send_reminder "$pr_number" "$pr_author" "$inactive_days" "$approval_status_code" "$review_decision" "first"
 	else
 		echo "No new action needed for PR #${pr_number}."
 	fi
@@ -257,7 +247,7 @@ main() {
 
 	while [ "$attempt_num" -le "$MAX_ATTEMPTS" ]; do
 		echo "Attempt $attempt_num of $MAX_ATTEMPTS to fetch PRs..."
-		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt,reviewRequests,assignees); then
+		if pr_list_output=$(gh pr list --limit 100 --label "external" --draft=false --json number,createdAt,comments,author,reviewDecision,statusCheckRollup,latestReviews,updatedAt); then
 			break
 		fi
 
