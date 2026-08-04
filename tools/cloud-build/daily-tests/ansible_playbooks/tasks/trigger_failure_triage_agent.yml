@@ -46,9 +46,9 @@
       exit 0
     fi
 
-    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$TRIAGE_PROJECT_NUMBER" 2>/dev/null || echo "false")
+    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$TRIAGE_PROJECT_NUMBER" || echo "false")
     if [ "$ENABLE_AGENT" != "true" ]; then
-      echo "SKIPPED: Failure Triage Agent is currently disabled in Secret Manager." >&2
+      echo "SKIPPED: Failure Triage Agent is currently disabled in Secret Manager, or the secret could not be accessed." >&2
       exit 0
     fi
 
