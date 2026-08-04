@@ -63,7 +63,7 @@ variable "auto_delete_boot_disk" {
 }
 
 variable "disk_storage_pool" {
-  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
+  description = "Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
   type        = string
   default     = null
 }
