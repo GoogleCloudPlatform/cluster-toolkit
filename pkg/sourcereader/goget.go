@@ -79,7 +79,7 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	detected, err := getter.Detect(source, pwd, detectors)
 	isGit := false
 	if err == nil {
-		isGit = strings.HasPrefix(detected, "git::") || strings.HasPrefix(detected, "git://")
+		isGit = strings.HasPrefix(detected, "git::") || strings.HasPrefix(detected, "git://") || strings.HasPrefix(detected, "git+")
 	}
 
 	if isGit {
