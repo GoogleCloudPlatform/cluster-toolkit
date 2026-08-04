@@ -182,3 +182,5 @@ To validate the functionality of the provisioned cluster, you can run a NCCL tes
     # Out of bounds values : 0 OK
     # Avg bus bandwidth    : 120.248
     ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

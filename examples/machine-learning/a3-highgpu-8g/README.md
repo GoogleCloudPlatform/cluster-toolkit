@@ -291,3 +291,5 @@ sbatch run-nccl-tests.sh
 [tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/cluster-toolkit/#quickstart
 [deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

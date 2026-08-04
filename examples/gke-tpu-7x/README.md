@@ -461,3 +461,5 @@ The blueprint includes a sample job (`shared-fs-job`) that demonstrates how two 
     ```
 
 The logs will display content from `shared_output.txt`, showing timestamps and hostnames from both pods, confirming that the filesystem is truly shared.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

@@ -2105,3 +2105,5 @@ This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) 
 Slurm-GCP v5 users should read [Slurm-GCP v5 EOL](../docs/slurm-gcp-support.md)
 for information on v5 retirement and feature highlights for v6. Slurm-GCP v6 is
 only supported option within the Toolkit.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

@@ -62,20 +62,25 @@ var (
 		forceOverwrite      bool
 	}{}
 
-	createCmd = addCreateFlags(&cobra.Command{
+	createCmd = addAutoApproveFlag(addCreateFlags(&cobra.Command{
 		Use:               "create <BLUEPRINT_FILE>",
 		Short:             "Create a new deployment.",
 		Long:              "Create a new deployment based on a provided blueprint.",
 		Run:               runCreateCmd,
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
 		ValidArgsFunction: filterYaml,
-	})
+	}))
 )
 
 func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 	var client *storage.Client
 	var err error
 	ctx := context.Background()
+	defer func() {
+		if client != nil {
+			_ = client.Close()
+		}
+	}()
 
 	for _, g := range bp.Groups {
 		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
@@ -88,32 +93,52 @@ func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 			if err != nil {
 				return fmt.Errorf("failed to initialize GCS client: %w", err)
 			}
-			defer func() {
-				_ = client.Close()
-			}()
 		}
 
-		bucketHandle := client.Bucket(bucketName)
-		if _, err := bucketHandle.Attrs(ctx); errors.Is(err, storage.ErrBucketNotExist) {
-			fmt.Printf("Bucket '%s' missing. Create it? (y/N): ", bucketName)
-			var response string
-			_, _ = fmt.Scanln(&response)
-
-			if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
-				return fmt.Errorf("user aborted")
-			}
-
-			projectID := config.GetKeyFromBlueprint("project_id", bp)
-			if projectID == "" {
-				return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
-			}
-			if err := bucketHandle.Create(ctx, projectID, nil); err != nil {
-				return err
-			}
-		} else if err != nil {
-			return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
+		if err := createGcsBucket(ctx, client, bucketName, bp); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func createGcsBucket(ctx context.Context, client *storage.Client, bucketName string, bp config.Blueprint) error {
+	bucketHandle := client.Bucket(bucketName)
+
+	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	_, err := bucketHandle.Attrs(ctxTimeout)
+	cancel()
+
+	if errors.Is(err, storage.ErrBucketNotExist) {
+		if !flagAutoApprove {
+			prompt := fmt.Sprintf("Bucket '%s' missing. Note that this bucket will not be deleted by gcluster destroy command and needs manual deletion.\nCreate it? [y/n]: ", bucketName)
+			if !confirmActionFunc(prompt) {
+				return fmt.Errorf("user aborted")
+			}
+		}
+
+		projectID := config.GetKeyFromBlueprint("project_id", bp)
+		if projectID == "" {
+			return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
+		}
+
+		region := config.GetKeyFromBlueprint("region", bp)
+		var bucketAttrs *storage.BucketAttrs
+		if region != "" {
+			bucketAttrs = &storage.BucketAttrs{Location: region}
+		}
+
+		ctxCreate, cancelCreate := context.WithTimeout(ctx, 30*time.Second)
+		err = bucketHandle.Create(ctxCreate, projectID, bucketAttrs)
+		cancelCreate()
+
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
+	}
+	logging.Info("Note: The GCS bucket %s will not be deleted by gcluster destroy command and needs manual deletion.", bucketName)
 	return nil
 }
 

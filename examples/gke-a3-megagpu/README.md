@@ -171,3 +171,5 @@ Refer to [Deploy and run NCCL test with Topology Aware Scheduling (TAS)](https:/
 ### Additional Consumption Options
 The Cluster Toolkit supports alternative consumption options such as Spot VMs or Dynamic Workload Scheduler (DWS) Flex-start.
 Refer to step 5 of [Create a cluster using Cluster Toolkit](https://docs.cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#use-cluster-toolkit) for general instructions on other consumption options. Similar configuration settings can be used for GKE-A3M cluster as well.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

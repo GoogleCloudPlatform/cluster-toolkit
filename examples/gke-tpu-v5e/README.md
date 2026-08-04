@@ -232,3 +232,5 @@ To avoid recurring charges for the resources used on this page, clean up the res
    ```sh
    ./gcluster destroy DEPLOYMENT_NAME
    ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

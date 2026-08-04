@@ -432,6 +432,7 @@ func writeExpandedBlueprint(depDir string, bp config.Blueprint) error {
 
 func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir string) {
 	packerManifests := []string{}
+	gcsBuckets := []string{}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
 	fmt.Fprintln(w, "===============================================")
@@ -454,9 +455,13 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 		}
+		if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration.Has("bucket") {
+			gcsBuckets = append(gcsBuckets, grp.TerraformBackend.Configuration.Get("bucket").AsString())
+		}
 	}
 
 	WritePackerDestroyInstructions(w, packerManifests)
+	WriteGcsDestroyInstructions(w, gcsBuckets)
 }
 
 // WritePackerDestroyInstructions prints our best effort guidance to the user on
@@ -474,4 +479,31 @@ func WritePackerDestroyInstructions(w io.Writer, manifests []string) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "https://console.cloud.google.com/compute/images")
+}
+
+// WriteGcsDestroyInstructions prints our best effort guidance to the user on
+// deleting GCS buckets used for Terraform state.
+func WriteGcsDestroyInstructions(w io.Writer, buckets []string) {
+	if len(buckets) == 0 {
+		return
+	}
+
+	uniqueBuckets := []string{}
+	seen := map[string]bool{}
+	for _, b := range buckets {
+		if !seen[b] {
+			seen[b] = true
+			uniqueBuckets = append(uniqueBuckets, b)
+		}
+	}
+
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Please browse to the Cloud Console to remove GCS buckets used for Terraform state.\n")
+	_, _ = fmt.Fprintln(w, "The following buckets were used and will not be automatically deleted by gcluster destroy:")
+	_, _ = fmt.Fprintln(w)
+	for _, bucket := range uniqueBuckets {
+		_, _ = fmt.Fprintln(w, bucket)
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "https://console.cloud.google.com/storage/browser")
 }

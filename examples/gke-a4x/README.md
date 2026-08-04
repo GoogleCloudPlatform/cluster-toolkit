@@ -83,3 +83,5 @@ The Kubeflow MPI Operator manages distributed MPI workloads on GKE.
    kubectl logs -l training.kubeflow.org/job-role=launcher
    kubectl delete -f sample-mpijob.yaml
    ```
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

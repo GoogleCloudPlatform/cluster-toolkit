@@ -137,3 +137,5 @@ to manage data.
    storage.
 1. `/gcs-model-serving` is an optimized mount for serving models, which
    downloads model weights in parallel to local ssd.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

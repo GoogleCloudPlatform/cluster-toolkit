@@ -137,3 +137,5 @@ When using the TPU Flex Start model, the cluster begins with **0 nodes** in the 
     ```
 
    * **Final State:** The node pool will return to **0 nodes**.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.

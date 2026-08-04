@@ -190,3 +190,5 @@ To verify the workload policy configuration using the Google Cloud Console UI:
 5. On the Managed Instance Group page, select the **Details** tab.
 6. Scroll down to locate the **Workload policy** section.
 7. Verify that the attached policy configuration shows the correct type and topology distance.
+
+**Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
