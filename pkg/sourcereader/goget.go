@@ -79,14 +79,12 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	detected, err := getter.Detect(source, pwd, detectors)
 	isGit := false
 	if err == nil {
-		isGit = strings.HasPrefix(detected, "git::") || strings.Contains(detected, ".git")
+		isGit = strings.HasPrefix(detected, "git::") || strings.HasPrefix(detected, "git://")
 	}
 
 	if isGit {
-		if _, err := os.Stat(source); os.IsNotExist(err) {
-			if _, err := exec.LookPath("git"); err != nil {
-				return GitMissingError{Source: source}
-			}
+		if _, err := exec.LookPath("git"); err != nil {
+			return GitMissingError{Source: source}
 		}
 	}
 
