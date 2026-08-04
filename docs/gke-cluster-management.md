@@ -38,14 +38,14 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     settings:
       # Specify the GKE version here
-      # version_prefix: "1.30.1-gke.1156000"
+      # version_prefix: "1.35.6-gke.1641000"
       # ...
 ```
 
-**Note** on `version_prefix`: By default, the `gke-cluster` module restricts upgrades to a specific minor version (like `1.31.`).
+**Note** on `version_prefix`: By default, the `gke-cluster` module restricts upgrades to a specific minor version (like `1.35.`).
 
 * To stay on the same minor version: Leave `version_prefix` as is.  
-* To upgrade to a new minor version (or specific patch): You must update `version_prefix` to that new prefix or full version (e.g., `"1.32."` or `"1.32.2-gke.100"`).
+* To upgrade to a new minor version (or specific patch): You must update `version_prefix` to that new prefix or full version (e.g., `"1.35."` or `"1.35.2-gke.100"`).
 
 ##### Specifying Release Channels in Blueprint
 
@@ -100,7 +100,7 @@ Example: Update `version_prefix` to a new minor version or specific patch.
 
 ```yaml
     settings:
-      version_prefix: "1.31." # Upgrading to 1.31
+      version_prefix: "1.35." # Upgrading to 1.35
 ```
 
 #### Step 2: Redeploy
