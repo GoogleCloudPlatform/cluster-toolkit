@@ -105,7 +105,7 @@ func ensureBinary(binaryName, version string, decision DownloadDecision) error {
 		return nil // exact match, use installed version
 	case cmp > 0:
 		// installed version is newer
-		fmt.Fprintf(os.Stderr, "WARNING: Terraform version %s is currently installed. We recommend using version %s for compatibility with all features. See: %s\n", installedVersion, version, docLink)
+		fmt.Fprintf(os.Stderr, "Warning: Terraform version %s is currently installed. We recommend using version %s for compatibility with all features. See: %s\n", installedVersion, version, docLink)
 		return nil // proceed with newer version
 	default:
 		// installed version is older (cmp < 0)
