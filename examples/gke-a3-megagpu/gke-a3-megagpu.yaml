@@ -51,7 +51,7 @@ vars:
   reservation:
 
   accelerator_type: nvidia-h100-mega-80gb
-  version_prefix: "1.32."
+  version_prefix: "1.35."
   nccl_tcpxo_version: v1.0.15
 
 deployment_groups:
