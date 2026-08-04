@@ -49,7 +49,7 @@ output "slurm_bucket_dir" {
 
 output "munge_deprecation_warning" {
   description = "Deprecation warning for legacy MUNGE authentication."
-  value       = var.enable_slurm_auth ? null : "WARNING: Support for MUNGE-based authentication is DEPRECATING and scheduled for complete removal on July 31, 2026. Please plan to migrate to Slurm Native Authentication by setting enable_slurm_auth: true. See docs/slurm-native-auth-migration-guide.md for the destroy-and-recreate migration steps."
+  value       = var.enable_slurm_auth ? null : "WARNING: Legacy MUNGE-based authentication is end-of-support and no longer maintained in Cluster Toolkit; the option to use MUNGE will be completely removed soon. Please migrate your blueprint to Slurm Native Authentication. See docs/slurm-native-auth-migration-guide.md for migration steps."
 }
 
 output "instructions" {
