@@ -122,6 +122,8 @@ func ensureGCloudAuthenticated() error {
 	return nil
 }
 
+var getADCSetupCommandFunc = getADCSetupCommand
+
 // getADCSetupCommand checks if Application Default Credentials are valid and returns the setup command if not.
 func getADCSetupCommand() string {
 	creds, err := google.FindDefaultCredentials(context.Background(), "https://www.googleapis.com/auth/cloud-platform")
@@ -233,27 +235,53 @@ func ensureProjectExists(projectID string) error {
 	return nil
 }
 
-// checkProjectPrereqs validates the project exists and checks if Artifact Registry API is enabled.
-func checkProjectPrereqs(projectID string, gcloudAuthOK bool, state *PrereqState, missing *[]missingPrereq) error {
-	if !gcloudAuthOK || projectID == "" {
+// ensureBasicPrerequisites checks for gcloud, auth, project existence, and kubectl.
+func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
+	if dryRunManifest != "" {
 		return nil
 	}
 
-	if err := ensureProjectExists(projectID); err != nil {
-		return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, err)
-	}
-	state.GCloudProjectConfigured = true
+	state := store.Load()
 
-	// Check Artifact Registry API
-	apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", projectID)
-	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
-		*missing = append(*missing, missingPrereq{
-			name:     "Artifact Registry API",
-			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
-		})
-	} else {
-		state.ArtifactRegistryAPIEnabled = true
+	if !isStateStale(state, projectID) {
+		logging.Info("Skipping basic checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
+		return nil
 	}
+
+	var missing []missingPrereq
+
+	// Hard dependency: gcloud must be installed
+	if err := ensureGCloudSDKInstalled(); err != nil {
+		return err
+	}
+
+	// Check GCloud Auth
+	gcloudAuthOK := false
+	if err := ensureGCloudAuthenticated(); err != nil {
+		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
+	} else {
+		gcloudAuthOK = true
+	}
+
+	// Check ADC
+	if adcCmd := getADCSetupCommandFunc(); adcCmd != "" {
+		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
+	}
+
+	checkK8sDependencies(&state, &missing)
+
+	if len(missing) > 0 {
+		printMissingPrereqs(cmd, missing)
+		return fmt.Errorf("some basic prerequisites are missing")
+	}
+
+	// Project validation - fail immediately with direct error
+	if gcloudAuthOK && projectID != "" {
+		if err := ensureProjectExists(projectID); err != nil {
+			return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, err)
+		}
+	}
+
 	return nil
 }
 
@@ -274,27 +302,18 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 
 	var missing []missingPrereq
 
-	// Hard dependency: gcloud must be installed
-	if err := ensureGCloudSDKInstalled(); err != nil {
-		return err
+	// Check Artifact Registry API
+	if *projectID != "" {
+		apiResult := shell.ExecuteCommand("gcloud", "services", "list", "--filter=NAME:artifactregistry.googleapis.com", "--format=value(STATE)", "--project", *projectID)
+		if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
+			missing = append(missing, missingPrereq{
+				name:     "Artifact Registry API",
+				commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", *projectID)},
+			})
+		} else {
+			state.ArtifactRegistryAPIEnabled = true
+		}
 	}
-	state.GCloudSDKInstalled = true
-
-	// Check GCloud Auth
-	if err := ensureGCloudAuthenticated(); err != nil {
-		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
-	} else {
-		state.GCloudAuthenticated = true
-	}
-
-	// Check ADC
-	if adcCmd := getADCSetupCommand(); adcCmd != "" {
-		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
-	} else {
-		state.ADCConfigured = true
-	}
-
-	checkK8sDependencies(&state, &missing)
 
 	// Check Docker creds
 	region := shell.ExtractRegion(location)
@@ -310,14 +329,18 @@ func ensurePrerequisites(cmd *cobra.Command, projectID *string, location string)
 	} else {
 		state.DockerCredsConfigured = true
 	}
-	if err := checkProjectPrereqs(*projectID, state.GCloudAuthenticated, &state, &missing); err != nil {
-		return err
-	}
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
-		return fmt.Errorf("job could not be submitted because some prerequisites are missing.")
+		return fmt.Errorf("job could not be submitted because some prerequisites are missing")
 	}
+
+	// Mark basic checks as true since they must have passed to reach here
+	state.GCloudSDKInstalled = true
+	state.GCloudAuthenticated = true
+	state.ADCConfigured = true
+	state.KubectlInstalled = true
+	state.GKEGCloudAuthPluginInstalled = true
 
 	state.LastCheckedTimestamp = time.Now()
 	state.LastCheckedProjectID = *projectID

@@ -27,6 +27,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestMain(m *testing.M) {
+	// Mock store globally for tests to skip prerequisite checks by default.
+	// Tests that need to verify prerequisite checks can override it.
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+		},
+	}
+
+	code := m.Run()
+	os.Exit(code)
+}
+
 func executeCommand(root *cobra.Command, args ...string) (string, error) {
 	buf := new(bytes.Buffer)
 	root.SetOut(buf)

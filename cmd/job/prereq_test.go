@@ -99,7 +99,16 @@ func TestStateFilePath(t *testing.T) {
 	}
 }
 
+func useFileStore(t *testing.T) {
+	oldStore := store
+	store = &FilePrereqStore{}
+	t.Cleanup(func() {
+		store = oldStore
+	})
+}
+
 func TestLoadPrereqState_Success(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-load-test")
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +145,7 @@ func TestLoadPrereqState_Success(t *testing.T) {
 }
 
 func TestSavePrereqState_Success(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-save-test")
 	if err != nil {
 		t.Fatal(err)
@@ -177,6 +187,7 @@ func TestSavePrereqState_Success(t *testing.T) {
 }
 
 func TestLoadPrereqState_CorruptedFile(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-corrupt-test")
 	if err != nil {
 		t.Fatal(err)
@@ -204,6 +215,7 @@ func TestLoadPrereqState_CorruptedFile(t *testing.T) {
 }
 
 func TestSavePrereqState_WriteError(t *testing.T) {
+	useFileStore(t)
 	tempDir, err := os.MkdirTemp("", "prereq-write-error-test")
 	if err != nil {
 		t.Fatal(err)
@@ -455,14 +467,13 @@ func (m *mockPrereqStore) Load() PrereqState {
 
 func (m *mockPrereqStore) Save(state PrereqState) {}
 
-func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
+func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
 	origExecuteCommand := shell.ExecuteCommand
 	defer func() { shell.ExecuteCommand = origExecuteCommand }()
 
-	servicesListCalled := false
 	shell.ExecuteCommand = func(name string, args ...string) shell.CommandResult {
 		cmdStr := name + " " + strings.Join(args, " ")
 		switch {
@@ -470,9 +481,6 @@ func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		case cmdStr == "gcloud projects describe invalid-project":
 			return shell.CommandResult{ExitCode: 1, Stderr: "Project not found"}
-		case strings.HasPrefix(cmdStr, "gcloud services list"):
-			servicesListCalled = true
-			return shell.CommandResult{ExitCode: 0}
 		default:
 			return shell.CommandResult{ExitCode: 0}
 		}
@@ -482,11 +490,14 @@ func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
 	defer func() { store = origStore }()
 	store = &mockPrereqStore{}
 
+	origGetADCSetupCommand := getADCSetupCommandFunc
+	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	getADCSetupCommandFunc = func() string { return "" }
+
 	cmd := &cobra.Command{}
 	projectID := "invalid-project"
-	location := "us-central1-a"
 
-	err := ensurePrerequisites(cmd, &projectID, location)
+	err := ensureBasicPrerequisites(cmd, projectID)
 	if err == nil {
 		t.Fatal("expected error because project is invalid, got nil")
 	}
@@ -494,9 +505,5 @@ func TestEnsurePrerequisites_InvalidProject(t *testing.T) {
 	expectedErrorMsg := "project \"invalid-project\" is invalid or inaccessible"
 	if !strings.Contains(err.Error(), expectedErrorMsg) {
 		t.Errorf("expected error to contain %q, but got: %v", expectedErrorMsg, err)
-	}
-
-	if servicesListCalled {
-		t.Error("expected gcloud services list to NOT be called, but it was")
 	}
 }

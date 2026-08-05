@@ -59,15 +59,11 @@ var JobCmd = &cobra.Command{
 		if location == "" {
 			return fmt.Errorf("location is required; please specify it using the --location flag or set a default value using 'gcluster job config set location <value>'")
 		}
-
 		if projectID == "" {
 			return fmt.Errorf("project ID is required; please specify it using the --project flag or set a default value using 'gcluster job config set project <value>'")
 		}
-
-		if cmd.Name() == "submit" {
-			if err := ensurePrerequisites(cmd, &projectID, location); err != nil {
-				return err
-			}
+		if err := ensureBasicPrerequisites(cmd, projectID); err != nil {
+			return err
 		}
 
 		resolvedLoc, err := orc.Initialize(clusterName, location, projectID)
