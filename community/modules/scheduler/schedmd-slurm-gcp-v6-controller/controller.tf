@@ -293,6 +293,14 @@ resource "google_compute_instance_group_manager" "controller_zonal_mig" {
     port = var.health_check.port
   }
 
+  dynamic "named_port" {
+    for_each = var.named_ports
+    content {
+      name = named_port.value.name
+      port = named_port.value.port
+    }
+  }
+
   version {
     instance_template = module.slurm_controller_template.self_link
   }
@@ -330,6 +338,14 @@ resource "google_compute_region_instance_group_manager" "controller_regional_mig
   named_port {
     name = var.health_check.port_name
     port = var.health_check.port
+  }
+
+  dynamic "named_port" {
+    for_each = var.named_ports
+    content {
+      name = named_port.value.name
+      port = named_port.value.port
+    }
   }
 
   version {

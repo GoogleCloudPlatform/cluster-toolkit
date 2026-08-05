@@ -294,6 +294,31 @@ def test_conflines_health_check_start_only(mock_slurm_version, version, expect_f
 
 
 @pytest.mark.parametrize(
+    "version,expect_feature",
+    [
+        ("24.11", False),
+        ("25.05", False),
+        ("25.11", True),
+    ]
+)
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_enable_openmetrics(mock_slurm_version, version, expect_feature):
+    cfg = TstCfg(
+        install_dir="ukulele",
+        enable_openmetrics=True,
+    )
+    mock_slurm_version.return_value = version
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    
+    res = conf.conflines(lkp)
+    if expect_feature:
+        assert "MetricsType=metrics/openmetrics" in res
+    else:
+        assert "MetricsType=metrics/openmetrics" not in res
+
+
+@pytest.mark.parametrize(
     "version",
     ["25.05", "25.11"]
 )

@@ -25,6 +25,9 @@ import (
 type mockLogsExecutor struct{}
 
 func (m *mockLogsExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	if name == "gcloud" && len(args) >= 3 && args[0] == "container" && args[1] == "clusters" && args[2] == "describe" {
+		return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
+	}
 	if name == "kubectl" && len(args) > 0 && args[0] == "logs" {
 		return shell.CommandResult{ExitCode: 0, Stdout: "mock logs output"}
 	}
@@ -36,7 +39,7 @@ func (m *mockLogsExecutor) ExecuteCommandStream(name string, args ...string) err
 }
 
 func TestLogsCmd_Success(t *testing.T) {
-	resetSubmitCmdFlags() // Reset shared flags
+	setupSubmitTestEnv(t) // Reset shared flags
 
 	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory

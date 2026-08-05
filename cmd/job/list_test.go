@@ -22,7 +22,7 @@ import (
 )
 
 func TestListWorkloadsCmd_Success(t *testing.T) {
-	resetSubmitCmdFlags() // Reset shared flags
+	setupSubmitTestEnv(t) // Reset shared flags
 
 	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory
@@ -48,7 +48,17 @@ func TestListWorkloadsCmd_Success(t *testing.T) {
 }
 
 func TestListWorkloadsCmd_InvalidStatus(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		g := gke.NewGKEOrchestrator()
+		g.SetExecutor(&mockCancelExecutor{}) // Use the mock from cancel_test.go if available
+		g.SetKubeClient(&mockKubeClient{namespace: "default"})
+		return g
+	}
 
 	_, err := executeCommand(JobCmd, "list", "--status", "InvalidStatus", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
 	if err == nil {

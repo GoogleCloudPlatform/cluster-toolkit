@@ -39,6 +39,7 @@ When prompted for project, use integration test project.
 | <a name="module_daily_project_cleanup_schedule"></a> [daily\_project\_cleanup\_schedule](#module\_daily\_project\_cleanup\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_project_cleanup_slurm_schedule"></a> [daily\_project\_cleanup\_slurm\_schedule](#module\_daily\_project\_cleanup\_slurm\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_test_schedule"></a> [daily\_test\_schedule](#module\_daily\_test\_schedule) | ./trigger-schedule | n/a |
+| <a name="module_daily_test_schedule_migrated"></a> [daily\_test\_schedule\_migrated](#module\_daily\_test\_schedule\_migrated) | ./trigger-schedule | n/a |
 | <a name="module_weekly_build_dependency_check_schedule"></a> [weekly\_build\_dependency\_check\_schedule](#module\_weekly\_build\_dependency\_check\_schedule) | ./trigger-schedule | n/a |
 
 ## Resources
@@ -49,6 +50,7 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.daily_project_cleanup_filestore](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_project_cleanup_slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.daily_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
+| [google_cloudbuild_trigger.daily_test_migrated](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.image_build_test_runner](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_go_build_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_ofe_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
@@ -66,6 +68,9 @@ When prompted for project, use integration test project.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_daily_tests_project_id"></a> [daily\_tests\_project\_id](#input\_daily\_tests\_project\_id) | The GCP project for daily tests | `string` | `"hpc-toolkit-dev-2"` | no |
+| <a name="input_daily_tests_service_account"></a> [daily\_tests\_service\_account](#input\_daily\_tests\_service\_account) | The service account to run daily tests under. If null, the default Cloud Build service account is used. For projects enforcing BYOSA (like hpc-toolkit-dev-2), you must set this via environment variable, e.g. export TF\_VAR\_daily\_tests\_service\_account="projects/..." | `string` | `null` | no |
+| <a name="input_kueue_migrated_tests"></a> [kueue\_migrated\_tests](#input\_kueue\_migrated\_tests) | List of tests migrated to Kueue | `list(string)` | <pre>[<br/>  "slurm-gcp-v6-rocky8",<br/>  "batch-mpi.yaml",<br/>  "htcondor.yaml",<br/>  "packer.yaml",<br/>  "monitoring.yaml"<br/>]</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
 | <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/cluster-toolkit"` | no |

@@ -226,7 +226,7 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	if opts.Follow {
 		logging.Info("Streaming logs for job '%s'...", name)
-		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
+		err := g.executor.ExecuteCommandStream("kubectl", "logs", "-n", foundNamespace, "-l", selector, "--all-containers", "-f", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1")
 		return "", err
 	}
 
@@ -245,8 +245,9 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 func (g *GKEOrchestrator) fetchLogsWithRetry(ns, selector string) (shell.CommandResult, error) {
 	maxRetries := 12 // 12 * 5s = 1 minute timeout
 	var res shell.CommandResult
+	cmdArgs := []string{"logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests), "--tail=-1"}
 	for i := 0; i < maxRetries; i++ {
-		res = g.executor.ExecuteCommand("kubectl", "logs", "-n", ns, "-l", selector, "--all-containers", fmt.Sprintf("--max-log-requests=%d", maxLogRequests))
+		res = g.executor.ExecuteCommand("kubectl", cmdArgs...)
 		if res.ExitCode == 0 {
 			return res, nil
 		}
@@ -369,9 +370,6 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		// WorkerImage defaults to ServerImage if not explicitly set
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
-	if job.Pathways.MTCEnabled && job.Pathways.RamdiskDirectory == "" {
-		job.Pathways.RamdiskDirectory = "/tmp/mtc_checkpoints"
-	}
 
 	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
 	if err != nil {
@@ -428,49 +426,46 @@ func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, wor
 	return nil
 }
 
-func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
-	projectID, err := g.getProjectID(job.ProjectID)
-	if err != nil {
-		return err
-	}
-	job.ProjectID = projectID
+// Initialize fetches GKE cluster metadata and resolves the cluster location,
+// handling regional fallback if necessary.
+func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
 
-	logging.Info("Fetching GKE cluster metadata for '%s'...", job.ClusterName)
-	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
-		"--location", job.ClusterLocation,
-		"--project", job.ProjectID,
+	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
+	res := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
+		"--location", location,
+		"--project", g.projectID,
 		"--format=json")
 	if res.ExitCode != 0 {
 		if strings.Contains(res.Stderr, "403") || strings.Contains(strings.ToLower(res.Stderr), "permission denied") {
-			return fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", job.ClusterName, job.ProjectID)
+			return "", fmt.Errorf("your account lacks the required permission to access cluster '%s' in project '%s'. Please ask your project administrator to grant you the Kubernetes Engine Viewer role (roles/container.viewer)", clusterName, g.projectID)
 		}
 		// If the user specified a zone (location with 3 components, e.g. us-central1-a), try to fallback to the region
-		if len(strings.Split(job.ClusterLocation, "-")) == 3 {
-			region := shell.ExtractRegion(job.ClusterLocation)
-			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", job.ClusterLocation, region)
-			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", job.ClusterName,
+		if len(strings.Split(location, "-")) == 3 {
+			region := shell.ExtractRegion(location)
+			logging.Info("Failed to find cluster in zone %s. Trying fallback to region %s...", location, region)
+			fallbackRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "describe", clusterName,
 				"--location", region,
-				"--project", job.ProjectID,
+				"--project", g.projectID,
 				"--format=json")
 			if fallbackRes.ExitCode == 0 {
 				logging.Warn("Cluster '%s' is a regional cluster in '%s'. Found it by falling back from zone '%s'. "+
 					"Note: This does NOT restrict your job to '%s'. To run specifically in '%s', "+
 					"please use the '--node-constraint topology.kubernetes.io/zone=%s' flag.",
-					job.ClusterName, region, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation, job.ClusterLocation)
-				job.ClusterLocation = region
+					clusterName, region, location, location, location, location)
+				location = region
 				res = fallbackRes
 			} else {
-				return fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", job.ClusterName, job.ClusterLocation, region, res.Stderr)
+				return "", fmt.Errorf("failed to describe GKE cluster %s in zone %s and fallback region %s: %s", clusterName, location, region, res.Stderr)
 			}
 		} else {
-			return fmt.Errorf("failed to describe GKE cluster %s: %s", job.ClusterName, res.Stderr)
+			return "", fmt.Errorf("failed to describe GKE cluster %s: %s", clusterName, res.Stderr)
 		}
 	}
 
 	var clusterDesc gkeCluster
 	if err := json.Unmarshal([]byte(res.Stdout), &clusterDesc); err != nil {
-		return fmt.Errorf("failed to parse GKE cluster description: %w", err)
+		return "", fmt.Errorf("failed to parse GKE cluster description: %w", err)
 	}
 
 	g.clusterZones = clusterDesc.Locations
@@ -478,6 +473,11 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 
 	g.napEnabled = clusterDesc.Autoscaling.EnableNodeAutoprovisioning
 	g.napLimits = parseNAPLimits(clusterDesc.Autoscaling)
+
+	return location, nil
+}
+
+func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
 
 	if job.IsPathwaysJob {
 		if job.Pathways.HeadNodePool != "" {
@@ -491,7 +491,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		job.Pathways.HeadNodePool = g.resolvedHeadNodePool
 	}
 
-	capacity, nodePoolSAs, err := g.calculateClusterCapacity(clusterDesc, job.ClusterLocation)
+	capacity, nodePoolSAs, err := g.calculateClusterCapacity(g.clusterDesc, job.ClusterLocation)
 	if err != nil {
 		return err
 	}
@@ -539,6 +539,15 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 
 	if err := g.configureClusterEnvironment(job); err != nil {
 		return err
+	}
+
+	if job.GKEMTCEnabled {
+		if job.GKEMTCRamdiskDirectory == "" {
+			job.GKEMTCRamdiskDirectory = "/tmp/mtc_checkpoints"
+		}
+		if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
+			return fmt.Errorf("Multi-Tier Checkpointing (MTC) requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. Please follow the official GKE documentation to enable this feature on your cluster before submitting jobs with --gke-mtc-enabled: https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing")
+		}
 	}
 
 	return nil
@@ -916,23 +925,6 @@ func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
 	return hasCPU && hasMem
 }
 
-func (g *GKEOrchestrator) getProjectID(initialProjectID string) (string, error) {
-	if initialProjectID != "" {
-		return initialProjectID, nil
-	}
-
-	res := g.executor.ExecuteCommand("gcloud", "config", "get-value", "project")
-	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to get GCP project ID from gcloud config: %s", res.Stderr)
-	}
-	projectID := strings.TrimSpace(res.Stdout)
-	if projectID == "" {
-		return "", fmt.Errorf("GCP project ID is empty. Please provide it via --project flag or configure gcloud CLI.")
-	}
-	logging.Info("Using GCP Project ID inferred from gcloud config: %s", projectID)
-	return projectID, nil
-}
-
 func (g *GKEOrchestrator) resolveKueueQueue(requestedQueueName string) (string, error) {
 	if requestedQueueName != "" {
 		logging.Info("Using provided Kueue LocalQueue: %s", requestedQueueName)
@@ -1248,7 +1240,15 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 }
 
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	credsRes := g.executor.ExecuteCommand("gcloud", "container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID)
+	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
+
+	if g.clusterDesc.ControlPlaneEndpointsConfig != nil &&
+		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig != nil &&
+		g.clusterDesc.ControlPlaneEndpointsConfig.DnsEndpointConfig.AllowExternalTraffic {
+		args = append(args, "--dns-endpoint")
+	}
+
+	credsRes := g.executor.ExecuteCommand("gcloud", args...)
 	if credsRes.ExitCode != 0 {
 		if strings.Contains(strings.ToLower(credsRes.Stderr), "multiple") || strings.Contains(strings.ToLower(credsRes.Stderr), "ambiguous") {
 			return fmt.Errorf("found multiple GKE clusters named %s. Please specify the exact Zone using --location to disambiguate.", clusterName)
@@ -1373,6 +1373,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
 		IsGPU:                         isGPU,
+		GKEMTCEnabled:                 opts.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        opts.GKEMTCRamdiskDirectory,
 	}
 }
 

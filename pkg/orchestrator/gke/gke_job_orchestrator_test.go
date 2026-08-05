@@ -310,9 +310,9 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
 		RawMounts: []string{
-			"gs://my-bucket:/data",
-			"/host/path:/host",
-			"my-pvc:/pvc",
+			"gs://my-bucket;/data",
+			"/host/path;/host",
+			"my-pvc;/pvc",
 		},
 	}
 
@@ -535,8 +535,10 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			ColocatedPythonSidecarImage: "sidecar:latest",
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
-			MTCEnabled:                  true,
 		},
+		IsPathwaysJob:          true,
+		GKEMTCEnabled:          true,
+		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
@@ -2272,7 +2274,12 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	err := orc.populateClusterMetadata(job)
+	_, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	err = orc.populateClusterMetadata(job)
 	if err != nil {
 		t.Fatalf("populateClusterMetadata failed: %v", err)
 	}
@@ -2315,7 +2322,13 @@ func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	err := orc.populateClusterMetadata(job)
+	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	job.ClusterLocation = loc
+
+	err = orc.populateClusterMetadata(job)
 	if err != nil {
 		t.Fatalf("populateClusterMetadata failed: %v", err)
 	}

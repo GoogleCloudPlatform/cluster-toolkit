@@ -19,7 +19,7 @@
 #SBATCH --exclusive
 
 : "${NEMOFW_VERSION:=24.12}"
-: "${NCCL_GIB_VERSION:=v1.1.0}"
+: "${NCCL_GIB_VERSION:=v1.1.2}"
 
 # This ensures that the docker process on the compute node can access us-docker.pkg.dev
 srun gcloud auth configure-docker us-docker.pkg.dev --quiet

@@ -19,7 +19,7 @@ google-resumable-media==2.5.0
 googleapis-common-protos==1.67.0
 grpcio==1.70.0
 grpcio-status==1.70.0
-httplib2==0.22.0
+httplib2==0.32.0
 idna==3.15
 ipython>=8.10
 jedi==0.17.2
@@ -34,7 +34,7 @@ prompt-toolkit==3.0.39
 proto-plus==1.26.0
 protobuf==5.29.6
 ptyprocess==0.7.0
-pyasn1==0.6.3
+pyasn1==0.6.4
 pyasn1-modules==0.4.2
 Pygments==2.20.0
 pyparsing==3.1.0

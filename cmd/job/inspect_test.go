@@ -25,6 +25,10 @@ type mockJobOrchestrator struct {
 	inspectCalled bool
 }
 
+func (m *mockJobOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	return location, nil
+}
+
 func (m *mockJobOrchestrator) SubmitJob(job orchestrator.JobDefinition) error { return nil }
 func (m *mockJobOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
 	return nil, nil

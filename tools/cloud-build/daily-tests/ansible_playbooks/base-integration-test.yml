@@ -57,8 +57,18 @@
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
 
+  - name: Set actual_network variable
+    ansible.builtin.set_fact:
+      actual_network: "{% if use_fixed_vpc | default(false) | bool %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}"
+
   - name: Create Infrastructure and test
     block:
+    - name: Clean up any existing PSA resources from previous runs
+      ansible.builtin.include_tasks:
+        file: tasks/cleanup_existing_psa.yml
+      vars:
+        psa_network: "{{ actual_network }}"
+
     - name: Create Cluster with gcluster
       register: deployment
       changed_when: deployment.changed
@@ -120,7 +130,7 @@
         - "{{ deployment_name }}"
         - --direction=INGRESS
         - --priority=1000
-        - --network={% if use_fixed_vpc | default(false) %}{{ test_prefix | default('') }}{{ test_name }}-0{% else %}{{ network }}{% endif %}
+        - --network={{ actual_network }}
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
@@ -143,6 +153,7 @@
       ansible.builtin.add_host:
         hostname: "{{ remote_ip }}"
         groups: [remote_host]
+        actual_network: "{{ actual_network }}"
       when: (remote_ip | default('')) | ansible.utils.ipaddr != false
 
     - name: Wait for host tasks

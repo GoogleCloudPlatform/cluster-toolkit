@@ -30,7 +30,7 @@ tags:
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 14400s  # 4hr
+timeout: 18000s  # 5hr
 steps:
 # While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
@@ -56,12 +56,13 @@ steps:
     bash tools/add_ttl_label.sh $${BLUEPRINT}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/spack-gromacs.yml" \
-        --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
-        --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
-        --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
-        --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
+      --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
+      --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
+      --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
+      --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL"
   secretEnv: ['GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
 availableSecrets:
   secretManager:

@@ -253,8 +253,9 @@ deployment_groups:
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               nvidia_packages:
               - cuda-toolkit-13-0
-              - datacenter-gpu-manager-4-cuda13
-              - datacenter-gpu-manager-4-dev
+              - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
+              - datacenter-gpu-manager-4-dev=1:4.6.0-1
+              - datacenter-gpu-manager-4-core=1:4.6.0-1
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -276,7 +277,7 @@ deployment_groups:
                 argv:
                 - apt-mark
                 - hold
-                - "{{ item }}"
+                - "{{ item.split('=')[0] }}"
               loop: "{{ nvidia_packages }}"
               ignore_errors: yes # Ignore errors during packer build
             - name: Create nvidia-persistenced override directory
