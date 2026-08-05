@@ -471,30 +471,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
-        # Spack must live on a shared filesystem so compute nodes can see it.
-        # If no mount point covers the configured spack directory, the cluster
-        # would deploy "ready" but every Spack operation would fail on the
-        # compute nodes. Require some mount point to be a prefix of spackdir.
-        spackdir = self.object.spackdir
-        mount_paths = [
-            mp_form.cleaned_data.get("mount_path")
-            for mp_form in mountpoints.forms
-            if mp_form.cleaned_data
-            and not mp_form.cleaned_data.get("DELETE", False)
-            and mp_form.cleaned_data.get("mount_path")
-        ]
-        if not any(
-            spackdir == mp or spackdir.startswith(mp.rstrip("/") + "/")
-            for mp in mount_paths
-        ):
-            form.add_error(
-                None,
-                f"The spack directory ({spackdir}) is not on any shared mount "
-                "point. Add a mount point whose path is a parent of the spack "
-                "directory, or change the spack directory.",
-            )
-            return self.form_invalid(form)
-
         # Cluster nodes have no external IP, so during bootstrap they reach the
         # control bucket (Google APIs) and package mirrors only through Private
         # Google Access or a Cloud NAT. A subnet with neither leaves every node
