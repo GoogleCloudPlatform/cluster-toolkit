@@ -491,22 +491,12 @@ class BackendCustomAppInstall(LoginRequiredMixin, generic.View):
             if "log_message" in message:
                 logger.info("Install log message:  %s", message["log_message"])
 
-            new_status = message.get("status")
-            if not new_status:
-                return
-            # Pub/Sub delivers at-least-once and unordered, and the subscriber
-            # dispatches messages concurrently, so a delayed or redelivered
-            # non-terminal update (p/q/i) can be applied after the terminal one
-            # and must not revert a finished install back to "installing".
-            # Apply terminal states unconditionally; apply non-terminal states
-            # only while not already terminal, atomically at the database level
-            # so concurrent callbacks cannot lose the terminal write.
-            if new_status in ("r", "e"):
-                Application.objects.filter(pk=pk).update(status=new_status)
-            else:
-                Application.objects.filter(pk=pk).exclude(
-                    status__in=("r", "e")
-                ).update(status=new_status)
+            app = Application.objects.get(pk=pk)
+            app.status = message["status"]
+            if message["status"] == "r":
+                # TODO App was installed.  Should have more attributes to set
+                pass
+            app.save()
 
         c2.send_command(
             cluster_id,
@@ -555,31 +545,16 @@ class BackendSpackInstall(LoginRequiredMixin, generic.View):
             if "log_message" in message:
                 logger.info("Install log message: %s", message["log_message"])
 
-            new_status = message.get("status")
-            if not new_status:
-                return
-            # See the custom-install callback: guard against a concurrent or
-            # out-of-order non-terminal update clobbering a completed install,
-            # using atomic database-level updates rather than a read-modify-write
-            # save (which races the Pub/Sub subscriber's concurrent dispatch).
-            if new_status == "r":
-                Application.objects.filter(pk=pk).update(
-                    status="r",
-                    load_command=message.get("load_command", ""),
-                    installed_architecture=message.get("spack_arch", ""),
-                    compiler=message.get("compiler", ""),
-                    mpi=message.get("mpi", ""),
-                )
-                # spack_hash lives on the SpackApplication subclass table.
-                SpackApplication.objects.filter(pk=pk).update(
-                    spack_hash=message.get("spack_hash", "")
-                )
-            elif new_status == "e":
-                Application.objects.filter(pk=pk).update(status="e")
-            else:
-                Application.objects.filter(pk=pk).exclude(
-                    status__in=("r", "e")
-                ).update(status=new_status)
+            app = Application.objects.get(pk=pk)
+            app.status = message["status"]
+            if message["status"] == "r":
+                # App was installed.  Should have more attributes to set
+                app.spack_hash = message.get("spack_hash", "")
+                app.load_command = message.get("load_command", "")
+                app.installed_architecture = message.get("spack_arch", "")
+                app.compiler = message.get("compiler", "")
+                app.mpi = message.get("mpi", "")
+            app.save()
 
         c2.send_command(
             cluster_id,
