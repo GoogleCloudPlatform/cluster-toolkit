@@ -40,9 +40,6 @@ limitations under the License.
     {% endif %}
     enable_placement: {{ part.enable_placement }}
     machine_type: {{ part.machine_type }}
-    {% if use_migrate_maintenance %}
-    on_host_maintenance: MIGRATE
-    {% endif %}
     {% if part.reservation_name %}
     reservation_name: "projects/{{ cluster.project_id }}/reservations/{{ part.reservation_name }}"
     {% endif %}
