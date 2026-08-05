@@ -459,27 +459,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             form.add_error("login_node_disk_type", "Invalid Disk Type")
             return self.form_invalid(form)
 
-        # Reject controller/login machine types too small to run node setup.
-        # The OFE bootstrap (yum + ansible + spack) OOMs on ~2 GB nodes and dies
-        # silently, leaving the cluster stuck initializing. Require at least 4 GB.
-        min_ram_mb = 4096
-        for field_name, instance_type in [
-            ("controller_instance_type", self.object.controller_instance_type),
-            ("login_node_instance_type", self.object.login_node_instance_type),
-        ]:
-            try:
-                node_memory = machine_info[instance_type]["memory"]
-            except KeyError:
-                form.add_error(field_name, f"Invalid machine type {instance_type}")
-                return self.form_invalid(form)
-            if node_memory < min_ram_mb:
-                form.add_error(
-                    field_name,
-                    f"{instance_type} has {node_memory} MB RAM; at least "
-                    f"{min_ram_mb} MB is required for cluster node setup.",
-                )
-                return self.form_invalid(form)
-
         # Verify formset validity (surprised there's no method to do this)
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
@@ -609,16 +588,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         cpu_count = machine_info[part.machine_type]["vCPU"]
                         # logger.info(f"{part.machine_type} CPU Count: {cpu_count}")
-
-                        # Compute nodes run the same heavy bootstrap as the
-                        # controller; too little RAM OOMs setup so the node never
-                        # registers. Require at least 4 GB.
-                        if machine_info[part.machine_type]["memory"] < min_ram_mb:
-                            raise ValidationError(
-                                f"Machine type {part.machine_type} has "
-                                f"{machine_info[part.machine_type]['memory']} MB RAM; "
-                                f"at least {min_ram_mb} MB is required for compute node setup."
-                            )
 
                         # Tier1 networking validation
                         if part.enable_tier1_networking == True:
