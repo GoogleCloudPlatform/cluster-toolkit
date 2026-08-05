@@ -289,6 +289,19 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
 
+> [!TIP]
+> **Targeting a Specific Namespace**
+> By default, `gcluster job` commands operate on the namespace detected from your active `kubeconfig` context (falling back to `default` if the context is found but its namespace is empty). If the context cannot be resolved, the command will abort with an error. To submit or manage jobs in a custom namespace, use the `--gke-namespace` flag:
+>
+> ```bash
+> ./gcluster job submit ... --gke-namespace custom-namespace
+> ./gcluster job list --gke-namespace custom-namespace
+> ./gcluster job logs my-python-app-job --gke-namespace custom-namespace
+> ./gcluster job cancel my-python-app-job --gke-namespace custom-namespace
+> ./gcluster job inspect --gke-namespace custom-namespace
+> ./gcluster job inspect --name my-python-app-job --gke-namespace custom-namespace
+> ```
+
 ## 6. Advanced Workloads
 
 *Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
@@ -1054,13 +1067,14 @@ When GKE NAP options are used, GCluster performs several operations to structure
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
-*These flags are common to almost all `gcluster job` subcommands (except `config`). They can be set as defaults via `config set`.*
+*These flags are common to almost all `gcluster job` subcommands (except `config`). `project`, `cluster`, and `location` can be set as defaults via `config set`.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-c, --cluster` | `string` | Name of the target GKE cluster. |
 | `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
 | `-p, --project` | `string` | Google Cloud Project ID. |
+| `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
 
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
