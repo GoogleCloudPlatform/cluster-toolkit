@@ -23,10 +23,7 @@
 
 - name: Set default Python interpreter for Ansible
   ansible.builtin.set_fact:
-    # On images where python3 is not managed by update-alternatives (e.g. Rocky
-    # Linux 9) the probe above returns an empty string; fall back to the system
-    # interpreter so later tasks do not run with an empty interpreter path.
-    ansible_python_interpreter: "{{ default_python.stdout | default('/usr/bin/python3', true) }}"
+    ansible_python_interpreter: "{{ default_python.stdout }}"
 
 - name: Verify Python interpreter
   ansible.builtin.command: "{{ ansible_python_interpreter }} --version"
