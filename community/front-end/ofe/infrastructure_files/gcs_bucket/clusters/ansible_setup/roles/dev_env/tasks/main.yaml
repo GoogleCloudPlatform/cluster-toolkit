@@ -18,11 +18,7 @@
     name: centos-release-scl
   when: ansible_distribution == 'CentOS'
 
-# The dev-tool package names differ by Rocky major version: Rocky 8 ships the
-# gcc-toolset-9/11 SCLs and python2/python36 devel packages, none of which exist
-# on Rocky 9. Rocky 9 provides newer toolsets (12/13/14/15) and python3-devel, so
-# it uses gcc-toolset-13. The profile.d enable line is likewise version-specific.
-- name: Install Dev Tools Rocky 8
+- name: Install Dev Tools Rocky
   ansible.builtin.yum:
     name:
     - gcc-toolset-11
@@ -30,15 +26,7 @@
     - cmake
     - python2-devel
     - python36-devel
-  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '8'
-
-- name: Install Dev Tools Rocky 9
-  ansible.builtin.yum:
-    name:
-    - gcc-toolset-13
-    - cmake
-    - python3-devel
-  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '9'
+  when: ansible_distribution in ['Rocky']
 
 - name: Install Dev Tools CentOS
   ansible.builtin.yum:
@@ -61,7 +49,7 @@
     force: False
   when: ansible_distribution in ['CentOS']
 
-- name: Add DevTools to default shells on Rocky 8
+- name: Add DevTools to default shells on Rocky
   ansible.builtin.copy:
     dest: /etc/profile.d/98-devtools.sh
     content: |
@@ -69,17 +57,7 @@
     owner: root
     mode: 0755
     force: False
-  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '8'
-
-- name: Add DevTools to default shells on Rocky 9
-  ansible.builtin.copy:
-    dest: /etc/profile.d/98-devtools.sh
-    content: |
-      . /opt/rh/gcc-toolset-13/enable
-    owner: root
-    mode: 0755
-    force: False
-  when: ansible_distribution == 'Rocky' and ansible_distribution_major_version == '9'
+  when: ansible_distribution in ['Rocky']
 
 - name: Install Debian Dev tools
   ansible.builtin.apt:
