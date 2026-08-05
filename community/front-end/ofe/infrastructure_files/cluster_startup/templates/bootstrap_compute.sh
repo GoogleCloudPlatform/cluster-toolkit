@@ -29,10 +29,6 @@ echo "This is the startup script for the compute nodes on cluster ${CLUSTER_ID}"
 set -x
 set -e
 if [[ $(type -P yum) ]]; then
-	# A single unreachable repo preconfigured in the image (e.g. a CUDA repo) would
-	# otherwise fail every dnf transaction, even for unrelated packages. Let dnf skip
-	# any repo whose metadata cannot be fetched instead of aborting the whole node.
-	sed -i '/^\[.*\]$/a skip_if_unavailable=1' /etc/yum.repos.d/*.repo 2>/dev/null || true
 	yum install -y ansible
 else
 	apt install -y ansible
