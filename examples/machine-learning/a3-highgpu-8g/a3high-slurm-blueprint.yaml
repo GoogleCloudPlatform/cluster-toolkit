@@ -193,9 +193,9 @@ deployment_groups:
               - cuda-toolkit-12-8
               - nvidia-dkms-580-server-open
               - nvidia-driver-580-server-open
-              - datacenter-gpu-manager-4-core=1:4.6.0-1
-              - datacenter-gpu-manager-4-dev=1:4.6.0-1
-              - datacenter-gpu-manager-4-cuda13=1:4.6.0-1
+              - datacenter-gpu-manager-4-core=1:4.6.1-1
+              - datacenter-gpu-manager-4-dev=1:4.6.1-1
+              - datacenter-gpu-manager-4-cuda13=1:4.6.1-1
               - libnvidia-nscq-580
               - nvidia-container-toolkit
             tasks:
@@ -209,8 +209,8 @@ deployment_groups:
                 state: present
             - name: Install NVIDIA Packages
               ansible.builtin.apt:
-                name: "{{ item }}"
-                update_cache: true
+                name: "{{ nvidia_packages }}"
+                update_cache: yes
                 allow_downgrade: yes
               loop: "{{ nvidia_packages }}"
             - name: Freeze NVIDIA drivers and CUDA
