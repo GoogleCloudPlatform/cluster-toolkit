@@ -488,3 +488,27 @@ variable "health_check" {
     error_message = "The health_check.timeout_sec must be less than or equal to health_check.check_interval_sec."
   }
 }
+
+variable "named_ports" {
+  description = "Named ports for the controller instance group."
+  type = list(object({
+    name = string
+    port = number
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : p.port > 0 && p.port <= 65535])
+    error_message = "All named port numbers must be between 1 and 65535."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", p.name)) && length(p.name) <= 63])
+    error_message = "All named port names must be valid RFC 1035 labels (1-63 characters, lowercase letters, numbers, or hyphens, starting with a letter and ending with a letter or number)."
+  }
+
+  validation {
+    condition     = length(var.named_ports) == length(distinct([for p in var.named_ports : p.name]))
+    error_message = "All named port names must be unique."
+  }
+}

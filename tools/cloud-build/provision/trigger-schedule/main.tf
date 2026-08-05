@@ -14,6 +14,7 @@
 
 resource "google_cloud_scheduler_job" "schedule" {
   name      = "${var.trigger.name}-schedule"
+  project   = var.trigger.project
   schedule  = var.schedule
   time_zone = var.time_zone
 

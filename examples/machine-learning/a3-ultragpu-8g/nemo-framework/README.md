@@ -53,7 +53,7 @@ README
        stages=[training] \
        training=gpt3/5b \
        env_vars.TRANSFORMERS_OFFLINE=0 \
-       container=../nemo-24.12-v1.1.0.sqsh \
+       container=../nemo-24.12-v1.1.2.sqsh \
        container_mounts=[${HOME}/.cache] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \

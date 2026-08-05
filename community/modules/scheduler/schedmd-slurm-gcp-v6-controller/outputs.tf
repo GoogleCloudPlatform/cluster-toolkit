@@ -70,3 +70,31 @@ output "slurm_control_host_port" {
   description = "The port number that the Slurm controller, slurmctld, listens to for work."
   value       = var.slurm_control_host_port
 }
+output "controller_instance_group" {
+  description = "Self-link of the controller instance group (zonal or regional) if HA is enabled."
+  value = one(concat(
+    google_compute_instance_group_manager.controller_zonal_mig[*].instance_group,
+    google_compute_region_instance_group_manager.controller_regional_mig[*].instance_group
+  ))
+}
+
+output "controller_mig_name" {
+  description = "Name of the controller Managed Instance Group."
+  value = one(concat(
+    google_compute_instance_group_manager.controller_zonal_mig[*].name,
+    google_compute_region_instance_group_manager.controller_regional_mig[*].name
+  ))
+}
+
+output "controller_mig_id" {
+  description = "Fully qualified group manager id (zonal or regional)."
+  value = one(concat(
+    google_compute_instance_group_manager.controller_zonal_mig[*].id,
+    google_compute_region_instance_group_manager.controller_regional_mig[*].id
+  ))
+}
+
+output "controller_instance_names" {
+  description = "Names of the controller instances when HA is enabled."
+  value       = var.enable_backup_controller ? keys(local.mig_instances) : null
+}

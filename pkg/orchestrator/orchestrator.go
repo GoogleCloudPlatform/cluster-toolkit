@@ -42,10 +42,6 @@ type PathwaysJobDefinition struct {
 	ColocatedPythonSidecarImage string // Default: ""
 
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
-
-	// Multi-Tier Checkpointing (MTC)
-	MTCEnabled       bool
-	RamdiskDirectory string
 }
 
 type VolumeDefinition struct {
@@ -68,6 +64,7 @@ type JobDefinition struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 
 	WorkloadName                  string
 	KueueQueueName                string
@@ -98,6 +95,10 @@ type JobDefinition struct {
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
+	// Multi-Tier Checkpointing (MTC)
+	GKEMTCEnabled          bool
+	GKEMTCRamdiskDirectory string
+
 	RawMounts []string
 	Env       map[string]string
 
@@ -115,6 +116,7 @@ type ListOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	// Filters
 	Status       string
 	NameContains string
@@ -124,12 +126,14 @@ type CancelOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 }
 
 type LogsOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	Follow          bool
 	MainOnly        *bool
 }
@@ -139,6 +143,7 @@ type InspectOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	WorkloadName    string
 	OutputPath      string
 	Show            bool
@@ -146,6 +151,8 @@ type InspectOptions struct {
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.
 type JobOrchestrator interface {
+	// Initialize fetches cluster metadata and resolves the cluster location.
+	Initialize(clusterName, location, projectID string) (resolvedLocation string, err error)
 	SubmitJob(job JobDefinition) error
 	ListJobs(opts ListOptions) ([]JobStatus, error)
 	CancelJob(name string, opts CancelOptions) error

@@ -24,7 +24,7 @@ import (
 )
 
 func TestCancelCmd_Success(t *testing.T) {
-	resetSubmitCmdFlags() // Reset shared flags
+	setupSubmitTestEnv(t) // Reset shared flags
 
 	// Mock the orchestrator factory
 	oldFactory := gkeOrchestratorFactory
@@ -52,6 +52,9 @@ func TestCancelCmd_Success(t *testing.T) {
 type mockCancelExecutor struct{}
 
 func (m *mockCancelExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	if name == "gcloud" && len(args) >= 3 && args[0] == "container" && args[1] == "clusters" && args[2] == "describe" {
+		return shell.CommandResult{ExitCode: 0, Stdout: "{}"}
+	}
 	return shell.CommandResult{ExitCode: 0}
 }
 
@@ -64,10 +67,6 @@ type mockKubeClient struct {
 	err       error
 }
 
-func (m *mockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.namespace, m.err
-}
-
 func (m *mockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return nil, nil
 }
@@ -76,11 +75,11 @@ func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.err
 }
 
-func (m *mockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (m *mockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.err
 }
 
-func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
+func (m *mockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if m.namespace != "" {
 		return m.namespace, nil
 	}
@@ -88,7 +87,7 @@ func (m *mockKubeClient) GetCurrentNamespace() (string, error) {
 }
 
 func TestCancelCmd_MissingArgs(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	_, err := executeCommand(JobCmd, "cancel")
 	if err == nil {
@@ -101,7 +100,7 @@ func TestCancelCmd_MissingArgs(t *testing.T) {
 }
 
 func TestCancelCmd_JobNotFound(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()

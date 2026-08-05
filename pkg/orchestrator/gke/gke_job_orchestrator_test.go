@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,10 +117,6 @@ type MockKubeClient struct {
 	Err       error
 }
 
-func (m *MockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.Namespace, m.Err
-}
-
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return m.Workloads, m.Err
 }
@@ -128,11 +125,11 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.Err
 }
 
-func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
 }
 
-func (m *MockKubeClient) GetCurrentNamespace() (string, error) {
+func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
 	if m.Namespace != "" {
 		return m.Namespace, nil
 	}
@@ -310,9 +307,9 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
 		RawMounts: []string{
-			"gs://my-bucket:/data",
-			"/host/path:/host",
-			"my-pvc:/pvc",
+			"gs://my-bucket;/data",
+			"/host/path;/host",
+			"my-pvc;/pvc",
 		},
 	}
 
@@ -535,8 +532,10 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			ColocatedPythonSidecarImage: "sidecar:latest",
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
-			MTCEnabled:                  true,
 		},
+		IsPathwaysJob:          true,
+		GKEMTCEnabled:          true,
+		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
@@ -1886,7 +1885,7 @@ func TestResolveKueueQueue(t *testing.T) {
 			mockExec := NewMockExecutor(responses)
 			orc := newTestGKEOrchestrator(mockExec)
 
-			got, err := orc.resolveKueueQueue(tt.requestedName)
+			got, err := orc.resolveKueueQueue(tt.requestedName, "default")
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("resolveKueueQueue() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -2272,7 +2271,12 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	err := orc.populateClusterMetadata(job)
+	_, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	err = orc.populateClusterMetadata(job)
 	if err != nil {
 		t.Fatalf("populateClusterMetadata failed: %v", err)
 	}
@@ -2315,7 +2319,13 @@ func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	err := orc.populateClusterMetadata(job)
+	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	job.ClusterLocation = loc
+
+	err = orc.populateClusterMetadata(job)
 	if err != nil {
 		t.Fatalf("populateClusterMetadata failed: %v", err)
 	}
@@ -3128,5 +3138,122 @@ func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
 	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
 	if !strings.Contains(manifest, expectedCommand) {
 		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
+	}
+}
+
+func TestDefaultKubeClient_GetCurrentNamespace(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tempDir, "kubeconfig")
+
+	kubeconfigContent := `
+apiVersion: v1
+kind: Config
+preferences: {}
+current-context: ""
+clusters:
+- cluster:
+    server: https://1.2.3.4
+  name: gke_test-project_us-central1-a_test-cluster
+- cluster:
+    server: https://1.2.3.5
+  name: gke_test-project_us-central1-a_test-cluster-no-ns
+- cluster:
+    server: https://1.2.3.6
+  name: test-cluster
+contexts:
+- context:
+    cluster: gke_test-project_us-central1-a_test-cluster
+    namespace: custom-ns
+  name: gke_test-project_us-central1-a_test-cluster
+- context:
+    cluster: gke_test-project_us-central1-a_test-cluster-no-ns
+  name: gke_test-project_us-central1-a_test-cluster-no-ns
+- context:
+    cluster: test-cluster
+    namespace: fallback-ns
+  name: test-cluster
+- context:
+    cluster: test-cluster-fallback-cluster
+    namespace: fallback-ns-by-cluster
+  name: random-context-name
+- context:
+    cluster: other-cluster
+    namespace: other-ns
+  name: other-context
+users: []
+`
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp kubeconfig: %v", err)
+	}
+
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	client := &DefaultKubeClient{}
+
+	tests := []struct {
+		desc       string
+		cluster    string
+		location   string
+		project    string
+		wantNS     string
+		wantErr    bool
+		wantErrStr string
+	}{
+		{
+			desc:     "standard context exists with custom namespace",
+			cluster:  "test-cluster",
+			location: "us-central1-a",
+			project:  "test-project",
+			wantNS:   "custom-ns",
+		},
+		{
+			desc:     "standard context exists without namespace (returns default)",
+			cluster:  "test-cluster-no-ns",
+			location: "us-central1-a",
+			project:  "test-project",
+			wantNS:   "default",
+		},
+		{
+			desc:     "fallback by context name matching cluster name",
+			cluster:  "test-cluster",
+			location: "us-central1-b", // different location so standard doesn't match
+			project:  "test-project",
+			wantNS:   "fallback-ns",
+		},
+		{
+			desc:     "fallback by cluster name matching",
+			cluster:  "test-cluster-fallback-cluster",
+			location: "us-central1-b",
+			project:  "test-project",
+			wantNS:   "fallback-ns-by-cluster",
+		},
+		{
+			desc:       "no matching context",
+			cluster:    "non-existent",
+			location:   "us-central1-a",
+			project:    "test-project",
+			wantErr:    true,
+			wantErrStr: "no matching context found",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			ns, err := client.GetCurrentNamespace(tc.cluster, tc.location, tc.project)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				} else if !strings.Contains(err.Error(), tc.wantErrStr) {
+					t.Errorf("expected error containing %q, got %q", tc.wantErrStr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if ns != tc.wantNS {
+					t.Errorf("expected namespace %q, got %q", tc.wantNS, ns)
+				}
+			}
+		})
 	}
 }

@@ -119,8 +119,8 @@ ramble:
     hostlist: \${SLURM_JOB_NODELIST}
 
     container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic-v1.1.0
-    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.0
+    container_name: nccl-plugin-gib-diagnostic-v1.1.2
+    container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.1.2
     processes_per_node: 8
     processes_per_node: '{gpus_per_node}'
     gpus_per_node: '8'

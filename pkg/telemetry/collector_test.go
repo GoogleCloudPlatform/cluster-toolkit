@@ -59,6 +59,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	expectedKeys := []string{
 		COMMAND_FLAGS,
 		MACHINE_TYPE,
+		MACHINE_CATEGORY,
 		REGION,
 		ZONE,
 		STATIC_NODE_COUNTS,
@@ -118,12 +119,13 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "0",
 				COMMAND_FLAGS:      "force,project",
 				REGION:             "us-central1",
 				ZONE:               "us-central1-a",
 				MACHINE_TYPE:       "c2-standard-8",
+				MACHINE_CATEGORY:   "c2-standard-8:CPU",
 				STATIC_NODE_COUNTS: "c2-standard-8:1",
 				OS_NAME:            getOSName(),           // Dynamically expect the current OS name
 				OS_VERSION:         getOSVersion(),        // Dynamically expect the current OS version
@@ -147,7 +149,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				}
 			},
 			expectedValues: map[string]string{
-				IS_TEST_DATA:       "true",
+				IS_TEST_DATA:       "false",
 				EXIT_CODE:          "1",
 				COMMAND_FLAGS:      "",
 				REGION:             "",
@@ -156,6 +158,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				OS_VERSION:         getOSVersion(),        // Verify OS info is still collected on failure
 				TERRAFORM_VERSION:  getTerraformVersion(), // Verify Terraform version is still collected on failure
 				MACHINE_TYPE:       "",                    // Verify empty machine type when no matching modules exist
+				MACHINE_CATEGORY:   "",
 				STATIC_NODE_COUNTS: "",
 				INSTALLATION_MODE:  BINARY,
 			},
@@ -442,8 +445,34 @@ func TestGetReleaseVersion(t *testing.T) {
 }
 
 func TestGetIsTestData(t *testing.T) {
-	if got := getIsTestData(); got != "true" {
-		t.Errorf("getIsTestData() = %v, want true", got)
+	tests := []struct {
+		name      string
+		projectID string
+		want      string
+	}{
+		{
+			name:      "dev project",
+			projectID: "hpc-toolkit-dev",
+			want:      "true",
+		},
+		{
+			name:      "prod project",
+			projectID: "some-other-project",
+			want:      "false",
+		},
+		{
+			name:      "empty project",
+			projectID: "",
+			want:      "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getIsTestData(tt.projectID); got != tt.want {
+				t.Errorf("getIsTestData() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -2980,6 +3009,166 @@ func TestGetIsAIAssisted(t *testing.T) {
 			actual := strconv.FormatBool(tt.bp.AIAssisted)
 			if actual != tt.expected {
 				t.Errorf("getIsAIAssisted() = %v, want %v", actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetMachineCategory(t *testing.T) {
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		want string
+	}{
+		{
+			name: "GPU, CPU and TPU mapping",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node_1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("g4-standard-48"),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("tpu7x-standard-4t"),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_3"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("c2-standard-4"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "g4-standard-48:GPU,tpu7x-standard-4t:TPU,c2-standard-4:CPU",
+		},
+		{
+			name: "Handles shorthand mapping for TPU and GPU",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_node_4"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("a100-40gb-1"), // g2 short hand actually a2
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_node_5"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("v6e-4"), // v6e TPU shorthand
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "a100-40gb-1:GPU,v6e-4:TPU",
+		},
+		{
+			name: "Handles unknown machine types mapped to Other",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_unknown"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("bizarre-type-1"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "bizarre-type-1:Other",
+		},
+		{
+			name: "Handles trailing spaces and upper casing in machine types to normalize appropriately",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_noisy"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal(" N2-Standard-4 "),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "N2-Standard-4:CPU",
+		},
+		{
+			name: "Handles deduping duplicate machine types",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("compute_1"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-micro"),
+								}),
+							},
+							{
+								ID: config.ModuleID("compute_2"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("e2-micro"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "e2-micro:CPU",
+		},
+		{
+			name: "Returns empty string for blueprint with no compute instances",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("storage"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"disk_type": cty.StringVal("pd-standard"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "Returns empty string for empty blueprint",
+			bp:   config.Blueprint{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getMachineCategory(tt.bp); got != tt.want {
+				t.Errorf("getMachineCategory() = %v, want %v", got, tt.want)
 			}
 		})
 	}
