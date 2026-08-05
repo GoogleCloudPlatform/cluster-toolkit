@@ -220,7 +220,7 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 	var ns string
 	if sm.orchestrator != nil {
 		var err error
-		ns, err = sm.orchestrator.getCurrentNamespace()
+		ns, err = sm.orchestrator.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		if err != nil {
 			logging.Warn("failed to get current namespace: %v. Defaulting to 'default' for PV name.", err)
 		}
