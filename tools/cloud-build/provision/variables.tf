@@ -57,7 +57,11 @@ variable "kueue_migrated_tests" {
     "chrome-remote-desktop-ubuntu",
     "ansible-vm",
     "e2e",
-    "hcls"
+    "hcls",
+    "slurm-gke",
+    "slurm-flex",
+    "ml-slurm",
+    "htc-slurm"
   ]
 }
 
