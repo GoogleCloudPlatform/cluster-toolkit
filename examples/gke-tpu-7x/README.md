@@ -136,8 +136,8 @@ This blueprint supports [Kueue](https://kueue.sigs.k8s.io/), a kubernetes-native
 By default, the toolkit dynamically applies an embedded kueue configuration based on your **Pathways** and **Dynamic Slicing** settings.
 
 1. **Custom Configurations:**
-* If you want to override the toolkit's default embedded configurations, or if you explicitly disable both Pathways and Dynamic Slicing, no default queues are created by the toolkit.
-* In such scenarios, you can uncomment and set the `kueue_configuration_path` variable in your blueprint to apply your custom Queue/ResourceFlavor configurations.
+* If you explicitly disable both Pathways and Dynamic Slicing, the toolkit will still install the Kueue engine/controllers, but it leaves them unconfigured(no default queues or resource flavors are created).
+* If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set the `kueue_configuration_path` variable in your blueprint to point to your custom configuration file.
 * For more details on toolkit's default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
 
 2. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue` matching the total static TPU capacity of your cluster (slices x nodes x chips).
