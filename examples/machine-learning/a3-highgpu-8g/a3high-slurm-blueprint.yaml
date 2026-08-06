@@ -212,7 +212,7 @@ deployment_groups:
                 name: "{{ nvidia_packages }}"
                 update_cache: yes
                 allow_downgrade: yes
-              loop: "{{ nvidia_packages }}"
+              
             - name: Freeze NVIDIA drivers and CUDA
               ansible.builtin.dpkg_selections:
                 name: "{{ item.split('=')[0] }}"
