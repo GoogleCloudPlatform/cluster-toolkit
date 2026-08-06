@@ -74,6 +74,7 @@ venv*/
 # Ignore Gemini memories
 GEMINI.md
 
-# OFE generates its Django migrations at deploy time (webserver startup.sh runs
-# makemigrations + migrate), so numbered migrations are not committed
-community/front-end/ofe/website/ghpcfe/migrations/[0-9]*.py
+# Ignore Antigravity agents customizations
+.agents/
+
+
