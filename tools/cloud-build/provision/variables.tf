@@ -61,7 +61,11 @@ variable "kueue_migrated_tests" {
     "slurm-gke",
     "slurm-flex",
     "ml-slurm",
-    "htc-slurm"
+    "htc-slurm",
+    "gke",
+    "gke-inactive-reservation",
+    "ml-gke",
+    "ml-gke-e2e"
   ]
 }
 
