@@ -17,14 +17,13 @@ vars:
   machine_type: tpu7x-standard-4t
   accelerator_type: tpu7x
   enable_dynamic_slicing_for_tpus: true
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 ```
 
 #### Key Cluster Configuration Requirements
 
 * **Hardware & Accelerator Type:** Specify a TPU v7x machine type (`tpu7x-standard-4t`) and set `accelerator_type: tpu7x`.
 * **Enable Dynamic Slicing Flag:** Set `enable_dynamic_slicing_for_tpus: true` in blueprint `vars`. This deploys the GKE TPU Slice Controller and configures dynamic partition-level topology definitions.
-* **Kueue Dynamic Slicing Template:** Set `kueue_configuration_path` to point to a Kueue template configured for dynamic slicing (`kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS).
+* **Kueue Dynamic Slicing Configuration:** When `enable_dynamic_slicing_for_tpus: true` is set, Cluster Toolkit automatically uses the default dynamic slicing Kueue configuration template (`modules/management/kubectl-apply/kueue/kueue-configuration-dynamic-slicing.yaml.tftpl`), which registers the `tpu-v7x-slice` ResourceFlavor and enables Topology-Aware Scheduling (TAS). Users can optionally override this by passing a custom Kueue template path using `kueue_configuration_path`.
 
 ### 1.2 Capabilities & Workload Scheduling (`gcluster job submit`)
 
