@@ -56,8 +56,6 @@ vars:
   accelerator_type: tpu-v6e-slice
 
   # # Path to a custom Kueue configuration template.
-  # # By default, the toolkit automatically applies an embedded configuration based on Pathways and Dynamic Slicing settings.
-  # # Set this path to apply custom or basic configurations.You can also use this to override the toolkit's default embedded configuration.
   # kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 
   # The namespace to be configured for running workloads
@@ -189,7 +187,7 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        ## Custom kueue config path (Uncomment to override defaults)
+        ## Custom kueue config path
         # config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-v6e-pool.node_count_static * gke-tpu-v6e-pool.tpu_chips_per_node)
