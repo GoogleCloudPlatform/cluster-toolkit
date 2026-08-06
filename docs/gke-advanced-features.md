@@ -62,14 +62,13 @@ To prepare a GKE cluster for Pathways execution, configure your cluster blueprin
 ```yaml
 vars:
   enable_pathways_for_tpus: true
-  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
 ```
 
 #### Key Cluster Configuration Requirements
 
 * **Dedicated CPU Coordinator Node Pool:** Pathways relies on CPU-based Resource Manager (`pathways-rm`) and Proxy (`pathways-proxy`) services to coordinate multi-slice TPU execution. Ensure your blueprint includes a system or CPU compute node pool (e.g., `n2-standard-32`) so coordinator pods are scheduled on CPU nodes rather than consuming expensive TPU chips.
 * **Enable Pathways Flag:** Set `enable_pathways_for_tpus: true` in blueprint `vars`. This configures Kueue ClusterQueues and LocalQueues with multi-slice resource quotas tailored for Pathways.
-* **Kueue Pathways Manifest:** Link a Kueue template configured for Pathways (`kueue-configuration-pathways.yaml.tftpl` or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl`).
+* **Kueue Pathways Configuration:** When `enable_pathways_for_tpus: true` is set, Cluster Toolkit automatically uses the default Pathways Kueue configuration template (`modules/management/kubectl-apply/kueue/kueue-configuration-pathways.yaml.tftpl`, or `kueue-configuration-dynamic-slicing-pathways.yaml.tftpl` if dynamic slicing is also enabled). Users can optionally override this by passing a custom Kueue template path using `kueue_configuration_path`.
 * **IAM & Workload Identity Permissions:** If using state persistence (`export ENABLE_PATHWAYS_PERSISTENCE='1'`), ensure the Google Cloud Service Account (GSA) associated with your workload (typically suffixed with `gke-wl-sa`) is granted `storage.admin` or `storage.objectAdmin` roles on your Google Cloud Storage bucket.
 
 ### 2.2 Workload Orchestration Roles & Scheduling (`gcluster job submit`)
