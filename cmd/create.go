@@ -89,7 +89,9 @@ func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 		bucketName := g.TerraformBackend.Configuration.Get("bucket").AsString()
 
 		if client == nil {
-			client, err = storage.NewClient(ctx)
+			ctxInit, cancelInit := context.WithTimeout(ctx, 30*time.Second)
+			client, err = storage.NewClient(ctxInit)
+			cancelInit()
 			if err != nil {
 				return fmt.Errorf("failed to initialize GCS client: %w", err)
 			}
@@ -132,13 +134,14 @@ func createGcsBucket(ctx context.Context, client *storage.Client, bucketName str
 		err = bucketHandle.Create(ctxCreate, projectID, bucketAttrs)
 		cancelCreate()
 
+		logging.Info("Note: The GCS bucket %s will not be deleted by gcluster destroy command and needs manual deletion.", bucketName)
+
 		if err != nil {
 			return err
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to verify GCS bucket %q: %w", bucketName, err)
 	}
-	logging.Info("Note: The GCS bucket %s will not be deleted by gcluster destroy command and needs manual deletion.", bucketName)
 	return nil
 }
 
