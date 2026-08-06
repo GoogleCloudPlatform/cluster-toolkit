@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	clusterName string
-	location    string
-	projectID   string
+	clusterName  string
+	location     string
+	projectID    string
+	gkeNamespace string
 )
 
 var gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
@@ -78,6 +79,7 @@ func init() {
 	JobCmd.PersistentFlags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
+	JobCmd.PersistentFlags().StringVar(&gkeNamespace, "gke-namespace", "", "Target GKE namespace for the operation. If omitted, automatic detection is used.")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)

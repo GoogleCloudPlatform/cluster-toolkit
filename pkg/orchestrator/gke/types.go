@@ -42,11 +42,10 @@ type Executor interface {
 
 // KubeClient defines the interface for specific Kubernetes API operations needed by the orchestrator.
 type KubeClient interface {
-	GetJobNamespace(workloadName string) (string, error)
 	ListWorkloads(namespace string, workloadName string) ([]string, error)
 	DeleteJobSet(namespace string, name string) error
-	ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error)
-	GetCurrentNamespace() (string, error)
+	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
+	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
 }
 
 type MachineTypeClient interface {
@@ -75,6 +74,7 @@ type GKEOrchestrator struct {
 	clusterDesc                 gkeCluster
 	dynClient                   dynamic.Interface
 	kubeClient                  KubeClient
+	namespace                   string
 	machineTypeClient           MachineTypeClient
 	acceleratorToMachineType    map[string]string
 	machineCapCache             map[string]MachineTypeCap

@@ -49,6 +49,7 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 		"kubectl get workloads":                                           {workloadsResult, workloadsResult, workloadsResult, workloadsResult},
 		"kubectl describe jobsets":                                        {{ExitCode: 0, Stdout: "jobset-config"}},
 		"kubectl describe workloads":                                      {{ExitCode: 0, Stdout: "workload-config"}},
+		"kubectl config set-context":                                      {{ExitCode: 0}},
 	}
 }
 
