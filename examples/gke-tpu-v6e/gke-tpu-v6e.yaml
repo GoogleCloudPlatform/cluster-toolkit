@@ -55,9 +55,6 @@ vars:
   # Accelerator type for Kueue configuration
   accelerator_type: tpu-v6e-slice
 
-  # # Path to a custom Kueue configuration template.
-  # kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
-
   # The namespace to be configured for running workloads
   user_namespace: default
 
@@ -188,7 +185,7 @@ deployment_groups:
       kueue:
         install: true
         ## Custom kueue config path
-        # config_path: $(vars.kueue_configuration_path)
+        # config_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
         config_template_vars:
           tpu_quota: $(vars.num_slices * gke-tpu-v6e-pool.node_count_static * gke-tpu-v6e-pool.tpu_chips_per_node)
           accelerator_type: $(vars.accelerator_type)

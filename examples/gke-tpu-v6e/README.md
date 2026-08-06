@@ -129,7 +129,7 @@ By default, the toolkit dynamically applies an embedded kueue configuration base
 
 1. **Custom Configurations:**
 * If you explicitly disable both Pathways and Dynamic Slicing, the toolkit will still install the Kueue engine/controllers, but it leaves them unconfigured(no default queues or resource flavors are created).
-* * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set the `kueue_configuration_path` variable in your blueprint to point to your custom configuration file.
+* * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set `config_path` in the `kueue` section of the `workload-manager-install` module in the blueprint.
 * For more details on default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
 
 2. **Quota:** The blueprint automatically calculates and sets a `google.com/tpu` quota in the `ClusterQueue`. The node count is automatically derived from your `machine_type` and `tpu_topology`, and the quota is calculated as: `num_slices` × `(total_chips_in_topology / chips_per_machine)` × `chips_per_machine`.
