@@ -58,13 +58,13 @@ If `install_root` is omitted, the module follows the standard Cluster Toolkit
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -74,29 +74,26 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [terraform_data.module_ready](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_bin_subdir"></a> [bin\_subdir](#input\_bin\_subdir) | Relative subdirectory under install\_root where wrapper commands are written. | `string` | `"bin"` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Deployment name associated with the generated artifacts. | `string` | n/a | yes |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Absolute mounted path where shared Apptainer assets will be written. If unset, resolve the path from network\_storage. | `string` | `null` | no |
 | <a name="input_manifest_subdir"></a> [manifest\_subdir](#input\_manifest\_subdir) | Relative subdirectory under install\_root where generated app manifests are written. | `string` | `"app-manifests"` | no |
 | <a name="input_module_init_path"></a> [module\_init\_path](#input\_module\_init\_path) | Absolute path of the shell profile snippet that should add the shared modulefile tree to MODULEPATH. | `string` | `"/etc/profile.d/shared-modules.sh"` | no |
 | <a name="input_modulefile_subdir"></a> [modulefile\_subdir](#input\_modulefile\_subdir) | Relative subdirectory under install\_root where Tcl modulefiles are written. | `string` | `"modulefiles"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Optional list of network storage mounts, following the standard Cluster<br/>Toolkit network\_storage contract (e.g. from a storage module used via<br/>`use:`). When install\_root is unset, the module resolves install\_root from<br/>the selected entry's local\_mount. | <pre>list(object({<br/>    server_ip               = string<br/>    remote_mount            = string<br/>    local_mount             = string<br/>    local_mount_owner       = optional(string)<br/>    local_mount_permissions = optional(string)<br/>    fs_type                 = string<br/>    mount_options           = string<br/>    client_install_runner   = optional(map(string))<br/>    mount_runner            = optional(map(string))<br/>  }))</pre> | `[]` | no |
 | <a name="input_network_storage_index"></a> [network\_storage\_index](#input\_network\_storage\_index) | Index to select when network\_storage is provided as a list and install\_root is unset. | `number` | `0` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID associated with the deployment. | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | Region associated with the deployment. | `string` | n/a | yes |
 | <a name="input_sif_subdir"></a> [sif\_subdir](#input\_sif\_subdir) | Relative subdirectory under install\_root where SIF images are staged. | `string` | `"containers"` | no |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_bin_dir"></a> [bin\_dir](#output\_bin\_dir) | Resolved directory where wrapper commands should be written. |
 | <a name="output_install_root_resolved"></a> [install\_root\_resolved](#output\_install\_root\_resolved) | Resolved install root, either from install\_root or the selected network\_storage local\_mount. |
 | <a name="output_layout_runner"></a> [layout\_runner](#output\_layout\_runner) | Shell runner that creates the shared Apptainer layout directories. |
