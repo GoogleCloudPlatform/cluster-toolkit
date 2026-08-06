@@ -80,6 +80,14 @@ This section guides you through the cluster creation process, ensuring that your
 
 This blueprint installs and configures [Kueue](https://kueue.sigs.k8s.io/) by default to manage TPU quotas and queue job submissions. The provided `tpu-kueue-jax-sample.yaml` file creates a Kubernetes JobSet that integrates both Kueue queue routing and JAX TPU device count validation.
 
+**NOTE**:
+By default, the toolkit dynamically applies an embedded kueue configuration based on your **Pathways** and **Dynamic Slicing** settings.
+
+* **Custom Configurations:**
+  * If you explicitly disable both Pathways and Dynamic Slicing, the toolkit will still install the Kueue engine/controllers, but it leaves them unconfigured(no default queues or resource flavors are created).
+  * If you want to override the default embedded configurations, or apply configuration in the scenario above, you can uncomment and set `config_path` in the `kueue` section of the `workload-manager-install` module in the blueprint.
+  * For more details on default configurations and variables, see the [`kubectl-apply` documentation](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/management/kubectl-apply#inputs).
+
 1. **Connect to your cluster:**
 
     ```sh
