@@ -12,21 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  description = "Project ID associated with the deployment."
-  type        = string
-}
-
-variable "deployment_name" {
-  description = "Deployment name associated with the generated artifacts."
-  type        = string
-}
-
-variable "region" {
-  description = "Region associated with the deployment."
-  type        = string
-}
-
 variable "install_root" {
   description = "Absolute mounted path where shared Apptainer assets will be written. If unset, resolve the path from network_storage."
   type        = string
