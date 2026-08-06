@@ -43,6 +43,10 @@ var JobCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
 
+		if cmd.Name() == "gke-template-extract" {
+			return nil
+		}
+
 		ctx := loadContext()
 		if clusterName == "" {
 			clusterName = ctx.ClusterName

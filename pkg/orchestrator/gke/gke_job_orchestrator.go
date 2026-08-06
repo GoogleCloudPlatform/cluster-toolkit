@@ -86,6 +86,7 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
+	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
 	if err := sm.ValidateMounts(job.RawMounts); err != nil {
@@ -389,7 +390,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 
-	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
+	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}

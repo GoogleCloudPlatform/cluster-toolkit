@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"text/template"
 	"time"
 
 	"hpc-toolkit/pkg/logging"
@@ -32,9 +31,6 @@ import (
 
 	"gopkg.in/yaml.v2"
 )
-
-// filestoreTmpl is the pre-parsed template for Filestore configuration.
-var filestoreTmpl = template.Must(template.ParseFS(templatesFS, "templates/filestore.tmpl"))
 
 // ProcessMounts parses mount strings and generates necessary K8s resources.
 func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDefinition) ([]MountInfo, []string, error) {
@@ -229,6 +225,11 @@ func (sm *StorageManager) handleFilestoreMount(src, dest string, readOnly bool, 
 		ns = "default"
 	}
 	pvName := sanitizePVCName(fmt.Sprintf("%s-%s", pvcName, ns))
+
+	filestoreTmpl, err := sm.orchestrator.parseGKETextTemplate("filestore.tmpl")
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to parse filestore template: %w", err)
+	}
 
 	var buf bytes.Buffer
 	err = filestoreTmpl.Execute(&buf, map[string]string{

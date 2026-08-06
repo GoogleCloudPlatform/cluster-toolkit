@@ -31,8 +31,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/safetext/yamltemplate"
-
 	"hpc-toolkit/pkg/orchestrator"
 
 	"gopkg.in/yaml.v2"
@@ -279,15 +277,22 @@ func (g *GKEOrchestrator) installKueue(version string) error {
 
 func (g *GKEOrchestrator) installPriorityClasses() error {
 	logging.Info("Installing Kueue PriorityClasses...")
-	priorityClassesTmpl, err := yamltemplate.New("priority_classes.tmpl").ParseFS(templatesFS, "templates/priority_classes.tmpl")
+	tmpl, err := g.parseGKETemplate("priority_classes.tmpl")
 	if err != nil {
-		return fmt.Errorf("failed to parse priority_classes.tmpl: %w", err)
+		return err
 	}
-	var priorityClassesBuf bytes.Buffer
-	if err := priorityClassesTmpl.Execute(&priorityClassesBuf, nil); err != nil {
-		return fmt.Errorf("failed to execute priority_classes.tmpl template: %w", err)
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, nil); err != nil {
+		return fmt.Errorf("failed to execute priority_classes template: %w", err)
 	}
-	return g.applyManifests(priorityClassesBuf.Bytes(), "priority-classes.yaml")
+
+	logging.Info("Applying Kueue priority classes...")
+	if err := g.applyManifests(buf.Bytes(), "kueue_priority_classes.yaml"); err != nil {
+		return fmt.Errorf("failed to apply Kueue priority classes: %w", err)
+	}
+
+	return nil
 }
 
 func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) error {
@@ -313,7 +318,7 @@ func (g *GKEOrchestrator) installKueueResources(cqName string, lqName string) er
 	}
 
 	// Install LocalQueue
-	localQueueTmpl, err := yamltemplate.New("local_queue.tmpl").ParseFS(templatesFS, "templates/local_queue.tmpl")
+	localQueueTmpl, err := g.parseGKETemplate("local_queue.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse local_queue.tmpl: %w", err)
 	}

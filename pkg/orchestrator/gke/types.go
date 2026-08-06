@@ -87,6 +87,7 @@ type GKEOrchestrator struct {
 	topologyCache               map[string]string
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
+	gkeCustomTemplatesPath      string
 }
 
 // Types for GetClusterInfo unmarshaling
