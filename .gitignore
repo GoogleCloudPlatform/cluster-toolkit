@@ -74,13 +74,6 @@ venv*/
 # Ignore Gemini memories
 GEMINI.md
 
-# (agent plans, bug logs — kept local, not committed)
-
-# Local-only design/implementation docs carried in the working tree
-# (backed up separately; never committed to this repo)
-
-# Claude session artifacts
-
 # OFE generates its Django migrations at deploy time (webserver startup.sh runs
 # makemigrations + migrate), so numbered migrations are not committed
 community/front-end/ofe/website/ghpcfe/migrations/[0-9]*.py
