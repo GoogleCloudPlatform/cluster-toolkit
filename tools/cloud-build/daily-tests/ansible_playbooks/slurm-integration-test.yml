@@ -329,7 +329,7 @@
       when: custom_vars is defined and custom_vars.enable_spot | default(false) | bool
 
     - name: Hot-patch TCPXO network interface names on compute nodes
-      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      delegate_to: controller_node_host
       ansible.builtin.shell: |
         #!/bin/bash
         NODES=$(sinfo --noheader --format "%n")
