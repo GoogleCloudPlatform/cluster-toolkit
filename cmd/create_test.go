@@ -19,6 +19,7 @@ import (
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -186,5 +187,41 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists.*`)
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)
 		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
+	}
+}
+
+func TestPromptAndCreateGcsBucketsEmptyBucket(t *testing.T) {
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id": cty.StringVal("my-project"),
+		}),
+		Groups: []config.Group{
+			{
+				Name: "group1",
+				TerraformBackend: config.TerraformBackend{
+					Type: "gcs",
+					Configuration: config.NewDict(map[string]cty.Value{
+						"bucket": cty.NullVal(cty.String),
+					}),
+				},
+			},
+		},
+	}
+
+	err := promptAndCreateGcsBuckets(bp)
+	if err == nil {
+		t.Errorf("expected error when bucket is null, got nil")
+	} else if err.Error() != "GCS backend bucket name cannot be empty" {
+		t.Errorf("expected error 'GCS backend bucket name cannot be empty', got: %v", err)
+	}
+
+	bp.Groups[0].TerraformBackend.Configuration = config.NewDict(map[string]cty.Value{
+		"bucket": cty.StringVal(""),
+	})
+	err = promptAndCreateGcsBuckets(bp)
+	if err == nil {
+		t.Errorf("expected error when bucket is empty string, got nil")
+	} else if err.Error() != "GCS backend bucket name cannot be empty" {
+		t.Errorf("expected error 'GCS backend bucket name cannot be empty', got: %v", err)
 	}
 }

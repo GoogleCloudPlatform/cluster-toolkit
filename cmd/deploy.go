@@ -61,7 +61,8 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		deplRoot = args[0]
 		// check that no "create" flags were specified
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil {
+			_, isShared := f.Annotations["shared"]
+			if f.Changed && createCmd.LocalFlags().Lookup(f.Name) != nil && !isShared {
 				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
 			}
 		})

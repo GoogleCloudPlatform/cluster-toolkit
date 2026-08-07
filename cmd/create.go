@@ -171,10 +171,10 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 func doCreate(cmd *cobra.Command, path string) string {
 	bp, ctx := expandOrDie(cmd, path)
-	checkErr(promptAndCreateGcsBuckets(bp), ctx)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
+	checkErr(promptAndCreateGcsBuckets(bp), ctx)
 	checkErr(modulewriter.WriteDeployment(bp, deplDir), ctx)
 	return deplDir
 }
