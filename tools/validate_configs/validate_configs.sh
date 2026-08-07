@@ -16,6 +16,7 @@
 set -e -o pipefail
 
 export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+export GHPC_SKIP_BUCKET_CREATION="true"
 
 run_test() {
 	example=$1

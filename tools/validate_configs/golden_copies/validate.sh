@@ -16,6 +16,7 @@
 set -e
 
 export GHPC_MOCK_MACHINE_CONFIG='{"gpus": {}, "tpus": {}, "cpus": {}}'
+export GHPC_SKIP_BUCKET_CREATION="true"
 
 run_test() {
 	bp=$1
@@ -51,6 +52,7 @@ run_test() {
 		cd "${tmpdir}"
 	fi
 	${GHPC_PATH} create -l ERROR \
+		--auto-approve \
 		--skip-validators="${VALIDATORS_TO_SKIP}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
 		--add-creator-label=false \

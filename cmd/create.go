@@ -174,7 +174,9 @@ func doCreate(cmd *cobra.Command, path string) string {
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
-	checkErr(promptAndCreateGcsBuckets(bp), ctx)
+	if os.Getenv("GHPC_SKIP_BUCKET_CREATION") != "true" {
+		checkErr(promptAndCreateGcsBuckets(bp), ctx)
+	}
 	checkErr(modulewriter.WriteDeployment(bp, deplDir), ctx)
 	return deplDir
 }
