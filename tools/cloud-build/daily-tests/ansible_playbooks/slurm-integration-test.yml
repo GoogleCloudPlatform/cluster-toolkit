@@ -78,6 +78,9 @@
 
     - name: Create Cluster with gcluster
       register: deployment
+      until: deployment.rc == 0
+      retries: 2
+      delay: 15
       changed_when: deployment.changed
       ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
       args:

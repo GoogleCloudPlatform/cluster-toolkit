@@ -24,7 +24,6 @@ output "service_account_email" {
   value       = module.service_account.email
   depends_on = [
     module.service_account,
-    time_sleep.wait_for_sa,
   ]
 }
 
@@ -33,6 +32,5 @@ output "service_account_iam_email" {
   value       = module.service_account.iam_email
   depends_on = [
     module.service_account,
-    time_sleep.wait_for_sa,
   ]
 }
