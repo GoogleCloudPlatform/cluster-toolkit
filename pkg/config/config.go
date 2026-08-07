@@ -1146,7 +1146,9 @@ func fetchExampleFilesFromGitHub(version string) []string {
 		for _, item := range treeResp.Tree {
 			// Check for YAML files in the examples directories.
 			if item.Type == "blob" &&
-				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+				(strings.HasPrefix(item.Path, "examples/") ||
+					strings.HasPrefix(item.Path, "community/examples/") ||
+					strings.HasPrefix(item.Path, "tools/cloud-build/daily-tests/blueprints/")) &&
 				(strings.HasSuffix(item.Path, ".yaml") || strings.HasSuffix(item.Path, ".yml")) {
 
 				predefinedExamples = append(predefinedExamples, item.Path)
