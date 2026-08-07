@@ -30,8 +30,7 @@ substitutions:
 timeout: 86400s
 queueTtl: 86400s  # 24hr
 
-options:
-  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
 
 steps:
 # 1. Build an image containing the current workspace
