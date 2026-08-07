@@ -15,7 +15,7 @@
 name: GitHub Actions Scan - Develop
 
 on:
-  pull_request_target:
+  pull_request:
     branches:
     - develop
 
