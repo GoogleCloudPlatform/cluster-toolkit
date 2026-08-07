@@ -61,7 +61,11 @@ variable "kueue_migrated_tests" {
     "slurm-gke",
     "slurm-flex",
     "ml-slurm",
-    "htc-slurm"
+    "htc-slurm",
+    "hpc-build-slurm-image",
+    "hpc-enterprise-slurm",
+    "spack-gromacs",
+    "gcluster-dockerfile"
   ]
 }
 
