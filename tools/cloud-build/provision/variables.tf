@@ -69,7 +69,10 @@ variable "kueue_migrated_tests" {
     "gke",
     "gke-inactive-reservation",
     "ml-gke",
-    "ml-gke-e2e"
+    "ml-gke-e2e",
+    "gke-storage",
+    "gke-managed-hyperdisk",
+    "slurm-rapid-storage"
   ]
 }
 
