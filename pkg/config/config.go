@@ -1144,7 +1144,7 @@ func fetchExampleFilesFromGitHub(version string) []string {
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// Check for YAML files in the examples directories.
+			// Check for YAML files in the examples and daily tests directories.
 			if item.Type == "blob" &&
 				(strings.HasPrefix(item.Path, "examples/") ||
 					strings.HasPrefix(item.Path, "community/examples/") ||
