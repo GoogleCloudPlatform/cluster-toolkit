@@ -34,6 +34,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func addCreateFlags(c *cobra.Command) *cobra.Command {
@@ -74,7 +75,6 @@ var (
 
 func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 	var client *storage.Client
-	var err error
 	ctx := context.Background()
 	defer func() {
 		if client != nil {
@@ -82,11 +82,28 @@ func promptAndCreateGcsBuckets(bp config.Blueprint) error {
 		}
 	}()
 
+	seenBuckets := make(map[string]bool)
+
 	for _, g := range bp.Groups {
 		if g.TerraformBackend.Type != "gcs" || !g.TerraformBackend.Configuration.Has("bucket") {
 			continue
 		}
-		bucketName := g.TerraformBackend.Configuration.Get("bucket").AsString()
+		evaluatedConfig, err := bp.EvalDict(g.TerraformBackend.Configuration)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate terraform backend configuration: %w", err)
+		}
+		bucketVal := evaluatedConfig.Get("bucket")
+		if bucketVal.IsNull() || bucketVal.Type() != cty.String {
+			return fmt.Errorf("GCS backend bucket name cannot be empty")
+		}
+		bucketName := bucketVal.AsString()
+		if bucketName == "" {
+			return fmt.Errorf("GCS backend bucket name cannot be empty")
+		}
+		if seenBuckets[bucketName] {
+			continue
+		}
+		seenBuckets[bucketName] = true
 
 		if client == nil {
 			client, err = storage.NewClient(ctx)

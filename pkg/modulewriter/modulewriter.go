@@ -34,6 +34,7 @@ import (
 
 	"github.com/hashicorp/go-getter"
 	"github.com/otiai10/copy"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // strings that get re-used throughout this package and others
@@ -456,7 +457,16 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
 		}
 		if grp.TerraformBackend.Type == "gcs" && grp.TerraformBackend.Configuration.Has("bucket") {
-			gcsBuckets = append(gcsBuckets, grp.TerraformBackend.Configuration.Get("bucket").AsString())
+			evaluatedConfig, err := bp.EvalDict(grp.TerraformBackend.Configuration)
+			if err == nil {
+				val := evaluatedConfig.Get("bucket")
+				if !val.IsNull() && val.Type() == cty.String {
+					bucketName := val.AsString()
+					if bucketName != "" {
+						gcsBuckets = append(gcsBuckets, bucketName)
+					}
+				}
+			}
 		}
 	}
 
