@@ -704,3 +704,41 @@ func TestReplaceDeprecatedRbacProxyImage(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderResourceFlavor_TopologyFiltering(t *testing.T) {
+	orc := &GKEOrchestrator{}
+
+	inputLabels := map[string]string{
+		"cloud.google.com/gke-tpu-accelerator":      "tpu7x",
+		"cloud.google.com/gke-nodepool":             "tpu-pool",
+		"cloud.google.com/gke-tpu-topology":         "4x4x4",
+		"cloud.google.com/gke-tpu-slice-1x1-id":     "some-id",
+		"cloud.google.com/gke-tpu-partition-2x2-id": "some-partition-id",
+	}
+
+	bytes, err := orc.renderResourceFlavor("flavor-tpu7x", inputLabels)
+	if err != nil {
+		t.Fatalf("renderResourceFlavor failed: %v", err)
+	}
+
+	output := string(bytes)
+
+	// Allowed labels must be preserved
+	if !strings.Contains(output, "cloud.google.com/gke-tpu-accelerator: tpu7x") {
+		t.Errorf("expected cloud.google.com/gke-tpu-accelerator to be present, got:\n%s", output)
+	}
+	if !strings.Contains(output, "cloud.google.com/gke-nodepool: tpu-pool") {
+		t.Errorf("expected cloud.google.com/gke-nodepool to be present, got:\n%s", output)
+	}
+
+	// Blocked topology labels must be filtered out
+	if strings.Contains(output, "cloud.google.com/gke-tpu-topology") {
+		t.Errorf("cloud.google.com/gke-tpu-topology should be filtered out, got:\n%s", output)
+	}
+	if strings.Contains(output, "cloud.google.com/gke-tpu-slice-") {
+		t.Errorf("cloud.google.com/gke-tpu-slice-* labels should be filtered out, got:\n%s", output)
+	}
+	if strings.Contains(output, "cloud.google.com/gke-tpu-partition-") {
+		t.Errorf("cloud.google.com/gke-tpu-partition-* labels should be filtered out, got:\n%s", output)
+	}
+}

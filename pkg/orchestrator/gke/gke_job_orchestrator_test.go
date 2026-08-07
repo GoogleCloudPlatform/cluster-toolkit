@@ -3016,7 +3016,6 @@ func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
 			wantFlavor: "flavor-tpu-v5-lite-podslice",
 			wantLabels: map[string]string{
 				"cloud.google.com/gke-tpu-accelerator": "tpu-v5-lite-podslice",
-				"cloud.google.com/gke-tpu-topology":    "2x2",
 			},
 			wantErr: false,
 		},
