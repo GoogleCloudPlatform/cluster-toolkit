@@ -295,17 +295,14 @@ deployment_groups:
               - name: Install NVIDIA Packages
                 ansible.builtin.apt:
                   name: "{{ nvidia_packages }}"
-                  update_cache: yes
+                  state: present
                   allow_downgrade: yes
 
               - name: Freeze DCGM packages
                 ansible.builtin.dpkg_selections:
-                  name: "{{ item }}"
+                  name: "{{ item.split('=')[0] }}"
                   selection: hold
-                loop:
-                  - datacenter-gpu-manager-4-core
-                  - datacenter-gpu-manager-4-dev
-                  - datacenter-gpu-manager-4-cuda13
+                loop: "{{ nvidia_packages }}"
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
