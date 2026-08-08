@@ -1,0 +1,200 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: kms-key
+
+# An end-to-end CMEK Slurm cluster. community/modules/security/kms-key creates
+# one symmetric CryptoKey and grants encrypt/decrypt on it, and every encrypted
+# resource in the cluster picks that key up through `use: [kms_key_iam]`:
+#
+#   * homefs            -- the Filestore /home instance (kms_key_name)
+#   * slurm_controller  -- controller boot disk (disk_encryption_key) and the
+#                          Slurm configuration bucket (slurm_bucket_kms_key)
+#   * slurm_login       -- login node boot disk (disk_encryption_key)
+#   * *_nodeset         -- compute node boot disks, and any additional
+#                          disks, via disk_encryption_key
+#
+# `use` is what makes this correct as well as concise. Each match becomes a
+# Terraform reference to the kms-key module, and the module's outputs are
+# themselves ordered behind its IAM grants, so no encrypted resource is ever
+# created before the service agent that encrypts it can use the key -- and on
+# destroy the resource goes before the grant. Nothing here reconstructs a Cloud
+# KMS resource name by hand.
+#
+# If you already have a CryptoKey and only want to point a Slurm cluster at it,
+# use community/examples/hpc-slurm-kms.yaml instead. This blueprint is the one
+# that creates and grants the key as part of the deployment.
+#
+# Cost note: applying this builds a real cluster -- a controller, a login node
+# and a 1 TiB ZONAL Filestore instance are charged from the moment they exist,
+# whether or not any job runs.
+#
+# Teardown note: Cloud KMS key rings can never be deleted and CryptoKey names
+# can never be reused, so `terraform destroy` intentionally leaves the key ring,
+# the CryptoKey and its key versions behind (data encrypted with the key stays
+# decryptable). The key ring below is created from deployment_name, so
+# redeploying under the same deployment_name fails on the retained ring. Either
+# pick a fresh deployment_name, or set the kms_key module's key_ring_id to the
+# retained ring together with a new key_name, which places a new key inside it
+# instead of stranding another permanent ring.
+vars:
+  # Set to true to enable the secure Slurm Native Authentication standard.
+  # Default fallback remains false (MUNGE) to guarantee zero regression risk on upgrades.
+  enable_slurm_auth: true
+  project_id: ## Set GCP Workload Project ID Here ##
+  deployment_name: kms-key-example
+  region: us-central1
+  zone: us-central1-a
+
+  # Where the key itself lives. Defaults to the workload project, which is the
+  # co-located topology. Override it (e.g. `--vars key_project_id=my-key-project`)
+  # to hold the key in a dedicated key project instead; the service agents below
+  # still belong to the WORKLOAD project, and the module grants them across the
+  # project boundary. Nothing else in this blueprint changes.
+  key_project_id: $(vars.project_id)
+
+  # Google service agents are created on demand, so provision the ones this
+  # cluster needs before deploying. Their addresses are derived by the
+  # kms-key-iam module below, so no project number is needed here:
+  #
+  #   gcloud storage service-agent --project=PROJECT_ID
+  #   gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
+  #   gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+
+  # One key for the whole cluster. `location` is the region, not the zone:
+  # Cloud KMS requires the key to be reachable from every resource it encrypts,
+  # and the zonal boot disks and Filestore instance below all sit inside this
+  # region.
+  - id: kms_key
+    source: community/modules/security/kms-key
+    settings:
+      project_id: $(vars.key_project_id)
+      location: $(vars.region)
+      key_ring_name: $(vars.deployment_name)-ring
+      key_name: $(vars.deployment_name)-key
+
+  # Granting is a separate module so that consumers can depend on the grants
+  # rather than merely on the key. Everything below `use`s this, not kms_key:
+  # the key id exists before any agent can use it, so a consumer wired
+  # straight to kms_key can be created first and fail with a KMS
+  # PERMISSION_DENIED that depends only on Terraform's scheduling.
+  - id: kms_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [kms_key]
+    settings:
+      # The identities that perform the encryption on Google's side. The
+      # module resolves each address from project_id, so the project number
+      # never appears in the blueprint.
+      #
+      #   compute    every boot and additional disk
+      #   storage    the Slurm configuration bucket
+      #   filestore  the /home instance
+      project_id: $(vars.project_id)
+      service_agents: [compute, storage, filestore]
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network, private_service_access, kms_key_iam]
+    settings:
+      local_mount: /home
+      # ZONAL is the cheapest Filestore tier that supports CMEK; BASIC_HDD, the
+      # module default, does not. size_gb is pinned to the tier minimum because
+      # this is a demonstration blueprint -- the module default (2560) costs
+      # substantially more to apply.
+      filestore_tier: ZONAL
+      size_gb: 1024
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, kms_key_iam]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, kms_key_iam]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      # Additional disks need the key written in explicitly. `use` matches
+      # a module output to an input variable by name, and additional_disks
+      # is a list of objects the caller supplies -- there is no input for
+      # `use` to bind to, so the boot disk above is covered automatically
+      # and these are not. Without this line the scratch disk is encrypted
+      # with a Google-managed key while everything around it is not.
+      additional_disks:
+      - device_name: scratch0
+        disk_name: null
+        disk_size_gb: 375
+        disk_type: pd-balanced
+        disk_labels: {}
+        auto_delete: true
+        boot: false
+        disk_encryption_key: $(kms_key_iam.disk_encryption_key)
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, kms_key_iam]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - homefs
+    - slurm_login
+    - kms_key_iam
+    settings:
+      enable_controller_public_ips: true
