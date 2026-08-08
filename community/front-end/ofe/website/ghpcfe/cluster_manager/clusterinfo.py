@@ -26,6 +26,7 @@ import logging
 import subprocess
 import os
 import re
+import textwrap
 
 from django.template import engines as template_engines
 from google.api_core.exceptions import PermissionDenied as GCPPermissionDenied
@@ -33,12 +34,115 @@ from website.settings import SITE_NAME
 
 from . import c2
 from . import cloud_info
+from . import cmek
 from . import utils
 
 from .. import grafana
 from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance, ContainerRegistry
 
 logger = logging.getLogger(__name__)
+
+
+# the slurm-gcp v6 controller's default slurm.conf unconditionally
+# sets `AccountingStorageType=accounting_storage/slurmdbd`, and its
+# boot-time setup.py mis-provisions the on-controller MariaDB whenever no
+# Cloud SQL federation is attached (it creates the `slurm` DB user but
+# never runs `CREATE DATABASE`, and conf.py writes a mismatched
+# `StoragePass`). The result is that slurmctld hangs forever on the
+# accounting-registration handshake and `sinfo`/`sbatch` never respond.
+# OFE works around this by disabling accounting when it is not attaching
+# Cloud SQL, via the controller module's `slurm_conf_template` override.
+#
+# This is a byte-for-byte copy of the module default at
+# community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/
+# slurm_files/etc/slurm.conf.tpl, with only the two accounting lines
+# changed (type -> none, AccountingStorageHost dropped). The `{...}`
+# fields are Python str.format placeholders filled on the controller at
+# boot by slurm-gcp's install_slurm_conf(); OFE never formats this string.
+# Keep it in sync when bumping the slurm-gcp module version.
+_SLURM_CONF_NO_ACCOUNTING_TPL = """\
+# slurm.conf
+# https://slurm.schedmd.com/slurm.conf.html
+# https://slurm.schedmd.com/configurator.html
+
+ProctrackType=proctrack/cgroup
+SlurmctldPidFile=/var/run/slurm/slurmctld.pid
+SlurmdPidFile=/var/run/slurm/slurmd.pid
+TaskPlugin=task/affinity,task/cgroup
+MaxNodeCount=64000
+
+#
+#
+# SCHEDULING
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+
+#
+#
+# LOGGING AND ACCOUNTING
+AccountingStoreFlags=job_comment
+JobAcctGatherFrequency=30
+JobAcctGatherType=jobacct_gather/cgroup
+SlurmctldDebug=info
+SlurmdDebug=info
+DebugFlags=Power
+
+#
+#
+# TIMERS
+MessageTimeout=60
+
+################################################################################
+#              vvvvv  WARNING: DO NOT MODIFY SECTION BELOW  vvvvv              #
+################################################################################
+
+SlurmctldHost={control_host}({control_addr})
+
+AuthType=auth/{auth_key}
+AuthInfo=cred_expire=120
+AuthAltTypes=auth/jwt
+CredType=cred/{auth_key}
+MpiDefault={mpi_default}
+ReturnToService=2
+SlurmctldPort={control_host_port}
+SlurmdPort=6818
+SlurmdSpoolDir=/var/spool/slurmd
+SlurmUser=slurm
+StateSaveLocation={state_save}
+
+#
+#
+# LOGGING AND ACCOUNTING
+AccountingStorageType=accounting_storage/none
+ClusterName={name}
+SlurmctldLogFile={slurmlog}/slurmctld.log
+SlurmdLogFile={slurmlog}/slurmd-%n.log
+
+#
+#
+# GENERATED CLOUD CONFIGURATIONS
+include cloud.conf
+
+################################################################################
+#              ^^^^^  WARNING: DO NOT MODIFY SECTION ABOVE  ^^^^^              #
+################################################################################
+"""
+
+
+def slurm_conf_template_setting(use_cloudsql: bool) -> str:
+    """the ``slurm_conf_template:`` YAML block for the controller.
+
+    Returns an empty string when Cloud SQL is attached (the module's own
+    default slurm.conf, which points slurmdbd at the federation, is
+    correct then). When no Cloud SQL is attached, returns a fully
+    indented ``slurm_conf_template: |`` block that disables accounting so
+    slurmctld does not hang on a database that OFE never provisions.
+    """
+    if use_cloudsql:
+        return ""
+    body = textwrap.indent(_SLURM_CONF_NO_ACCOUNTING_TPL, " " * 8)
+    return "      slurm_conf_template: |\n" + body
 
 
 class ClusterInfo:
@@ -100,6 +204,18 @@ class ClusterInfo:
 
         self._create_cluster_dir()
         self._set_credentials(credentials)
+
+        try:
+            # a malformed or wrong-region key must fail before any
+            # resource is created, not partway through the apply.
+            self._cmek_context()
+        except cmek.CmekError as err:
+            self.cluster.status = "e"
+            self.cluster.cloud_state = "nm"
+            self.cluster.status_message = str(err)
+            self.cluster.save()
+            raise
+
         self.update()
 
         try:
@@ -193,6 +309,40 @@ class ClusterInfo:
         indent = '  ' * indent_level  # 2 spaces per indent level, adjust as needed
         return '\n'.join(indent + line if line else line for line in text.split('\n'))
 
+    # -- CMEK ------------------------------------------------------------
+
+    def _cmek_service_agents(self):
+        """Which Google service agents this cluster needs granted on its key.
+
+        Only what the blueprint actually creates. Filestore is absent on
+        purpose: the cluster blueprint mounts filesystems, it does not
+        create them -- a CMEK Filestore is created by its own blueprint,
+        which grants the Filestore agent itself.
+        """
+        agents = {
+            "compute",  # controller, login and compute boot/additional disks
+            "storage",  # the Slurm configuration bucket
+        }
+        if getattr(self.cluster, "use_cloudsql", False):
+            agents.add("cloudsql")
+        if getattr(self.cluster, "use_containers", False):
+            # Artifact Registry, plus the Secret Manager secret holding
+            # its upstream credentials.
+            agents.update({"artifactregistry", "secretmanager"})
+        return agents
+
+    def _cmek_context(self):
+        """Blueprint template context for CMEK, or None when the cluster
+        has no key. Cached so every renderer sees the same value."""
+        if not hasattr(self, "_cmek_context_cache"):
+            self._cmek_context_cache = cmek.blueprint_context(
+                getattr(self.cluster, "cmek_key", "") or None,
+                region=self.cluster.cloud_region,
+                zone=self.cluster.cloud_zone,
+                service_agents=self._cmek_service_agents(),
+            )
+        return self._cmek_context_cache
+
     def _prepare_ghpc_filesystems(self):
         filesystems_yaml = []
         refs = []
@@ -234,6 +384,7 @@ class ClusterInfo:
             registry.cloud_state = "nm"
             registry.save(update_fields=["status"])
 
+            cmek_ctx = self._cmek_context()
             context = {
                 "registry_id": f"registry_{registry.id}",
                 "repo_mode": registry.repo_mode,
@@ -243,6 +394,8 @@ class ClusterInfo:
                 "repo_username": registry.repo_username,
                 "repo_password": registry.repo_password,
                 "use_upstream_credentials": registry.use_upstream_credentials,
+                "cluster": self.cluster,
+                "cmek": cmek_ctx,
             }
 
             # logger.info(f"Registry Context: {json.dumps(context, indent=2)}")
@@ -272,6 +425,7 @@ class ClusterInfo:
                 'disk_range': disk_range,
                 'exclusive': exclusive,
                 "startup_bucket": self.config["server"]["gcs_bucket"],
+                "cmek": self._cmek_context(),
             }
             rendered_yaml = template.render(context)
             indented_yaml = self.indent_text(rendered_yaml, 1)   # Same here
@@ -284,8 +438,11 @@ class ClusterInfo:
         if not self.cluster.use_cloudsql:
             return "", []
         template = self.env.get_template('blueprint/cloudsql_config.yaml.j2')
+        cmek_ctx = self._cmek_context()
         context = {
-            'cluster_id': self.cluster.cloud_id
+            'cluster_id': self.cluster.cloud_id,
+            'cluster': self.cluster,
+            'cmek': cmek_ctx,
         }
         rendered_yaml = template.render(context)
         indented_yaml = self.indent_text(rendered_yaml, 1)  # Adjust indent as necessary
@@ -321,6 +478,10 @@ class ClusterInfo:
                 "login_uses": self._yaml_refs_to_uses(filesystems_refs, indent_level=2),
                 "controller_sa": "sa",
                 "startup_bucket": self.config["server"]["gcs_bucket"],
+                "cmek": self._cmek_context(),
+                "slurm_conf_template_yaml": slurm_conf_template_setting(
+                    getattr(self.cluster, "use_cloudsql", False)
+                ),
             }
             rendered_yaml = template.render(context)
 
@@ -757,9 +918,14 @@ class ClusterInfo:
                 registry.save(update_fields=["status"])
                 registry_count += 1
 
-            controller_sa = self.cluster.controller_node.service_account
-
-            self.cluster.controller_node.delete()
+            # A cluster whose start_cluster() failed before recording its
+            # controller has no controller_node; tearing it down must not
+            # crash on that or the status/cleanup below is skipped
+            # and the cluster stays stuck in "t".
+            controller_sa = None
+            if self.cluster.controller_node is not None:
+                controller_sa = self.cluster.controller_node.service_account
+                self.cluster.controller_node.delete()
             self.cluster.login_nodes.all().delete()
             # Refresh so our python object gets the SET_NULL's from the above
             # deletes

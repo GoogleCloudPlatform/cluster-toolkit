@@ -18,6 +18,7 @@ Frontend views will talk with functions here to perform real actions.
 '''
 
 import logging
+from . import cmek
 from . import utils
 import json
 import subprocess
@@ -108,14 +109,58 @@ class ImageBackend:
         try:
             blueprint_file = self.image_dir / "image.yaml"
             project_id = json.loads(self.image.cloud_credential.detail)["project_id"]
+
+            # Encrypt the produced image. Disks later created from it
+            # carry their own key via the cluster blueprint settings.
+            #
+            # The key is resolved and granted in the terraform group, and
+            # the packer module `use`s the IAM module across groups, so the
+            # image build is ordered behind the grant. Packer creates a
+            # Compute Engine disk and then an image from it, which is why
+            # the agent granted is `compute`.
+            cmek_key = getattr(self.image, "cmek_key", "") or None
+            cmek_modules = ""
+            cmek_uses = ""
+            if cmek_key:
+                parsed = cmek.check_key_location(
+                    cmek_key, self.image.cloud_region)
+                cmek_modules = f"""
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+        - cloudkms.googleapis.com
+
+  - id: {cmek.KEY_MODULE_ID}
+    source: community/modules/security/pre-existing-kms-key
+    settings:
+      project_id: {parsed.project}
+      location: {parsed.location}
+      key_ring_name: {parsed.key_ring}
+      key_name: {parsed.key}
+
+  - id: {cmek.IAM_MODULE_ID}
+    source: community/modules/security/kms-key-iam
+    use: [{cmek.KEY_MODULE_ID}]
+    settings:
+      project_id: {project_id}
+      service_agents: [compute]
+"""
+                cmek_uses = f"\n    - {cmek.IAM_MODULE_ID}"
+
             scripts = self.image.startup_script.all()
             runners = ""
             for script in scripts:
                 script_path = os.path.join(settings.MEDIA_ROOT, script.content.name)
-                runners+=f"""        
+                runners+=f"""
       - type: {script.type}
         destination: {script.name}
         source: {script_path}"""
+            if not runners:
+                # No startup scripts selected: the startup-script module
+                # rejects null runners, so render an explicit
+                # empty list for a no-op builder script.
+                runners = " []"
 
             with blueprint_file.open("w") as f:
                 f.write(
@@ -132,7 +177,7 @@ vars:
 
 deployment_groups:
 - group: builder-env
-  modules:
+  modules:{cmek_modules}
   - id: network1
     source: modules/network/vpc
     settings:
@@ -150,7 +195,8 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - scripts_for_image
+    - network1
+    - scripts_for_image{cmek_uses}
     settings:
       source_image_project_id: [{self.image.source_image_project}]
       source_image_family: {self.image.source_image_family}
@@ -158,7 +204,6 @@ deployment_groups:
       image_family: $(vars.image_family)
       state_timeout: 30m
       zone: $(vars.zone)
-      subnetwork_name: $(vars.subnetwork_name)
       image_storage_locations: ["{self.image.cloud_region}"]
       metadata:
         enable-oslogin: {self.image.enable_os_login}
@@ -182,7 +227,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path, "create", "image.yaml"],
+                        [self.ghpc_path, "create", "image.yaml", "-w"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,
@@ -195,6 +240,46 @@ deployment_groups:
             # No logs from stdout/err - get dumped to files
             raise
       
+    def _run_ghpc_import_inputs(self):
+        """Bridge builder-env outputs into the packer group.
+
+        Mirrors the deployment instructions ghpc generates for
+        cross-group `use`: export-outputs from the applied builder
+        group, then import-inputs into the packer group.
+        """
+        target_dir = self.image_dir
+        log_out_fn = target_dir / "ghpc_import_log.stdout"
+        log_err_fn = target_dir / "ghpc_import_log.stderr"
+        env = os.environ.copy()
+        env["GOOGLE_APPLICATION_CREDENTIALS"] = self._get_credentials_file()
+        try:
+            with log_out_fn.open("ab") as log_out:
+                with log_err_fn.open("ab") as log_err:
+                    subprocess.run(
+                        [self.ghpc_path, "export-outputs",
+                         f"{self.blueprint_name}/builder-env"],
+                        cwd=target_dir,
+                        stdout=log_out,
+                        stderr=log_err,
+                        check=True,
+                        env=env,
+                    )
+                    subprocess.run(
+                        [self.ghpc_path, "import-inputs",
+                         f"{self.blueprint_name}/packer-image"],
+                        cwd=target_dir,
+                        stdout=log_out,
+                        stderr=log_err,
+                        check=True,
+                        env=env,
+                    )
+        except subprocess.CalledProcessError as cpe:
+            self.update_image_status("e")
+            logger.error(
+                f"gcluster export/import bridge failed for image "
+                f"{self.image.id}", exc_info=cpe)
+            raise
+
     def _create_builder_env(self):
         """Setup builder environment on GCP."""
         extra_env = {
@@ -215,12 +300,20 @@ deployment_groups:
             logger.info("Invoking Terraform Apply for builder env.")
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
             logger.info("Exporting startup script from builder env.")
-            utils.run_terraform(terraform_dir, "output", extra_env=extra_env, 
+            utils.run_terraform(terraform_dir, "output", extra_env=extra_env,
                                 arguments=[
                                     "-raw",
                                     "startup_script_scripts_for_image"],
                                     )
             utils.copy_file(f"{terraform_dir}/terraform_output_log.stdout",f"{packer_dir}/custom-image/startup_script.sh")
+            # The packer module consumes the builder VPC via `use`
+            # (ghpc create hard-errors on unused modules), so
+            # its subnetwork input arrives through the toolkit's own
+            # cross-group bridge. startup_script also flows through it,
+            # but the explicit startup_script_file -var below still
+            # overrides it, keeping the historical behavior.
+            logger.info("Importing packer group inputs from builder env.")
+            self._run_ghpc_import_inputs()
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
             logger.error(f"Terraform exec failed for builder env, image: {self.image.id}", exc_info=cpe)

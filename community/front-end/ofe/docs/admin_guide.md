@@ -470,6 +470,126 @@ Please see the [application installation guide](Applications.md).
 
 Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
 
+## Customer-Managed Encryption Keys (CMEK)
+
+TKFE can protect the resources it creates for a cluster with a
+customer-managed Cloud KMS key instead of Google-managed encryption:
+Slurm controller/login/compute boot and additional disks (including
+dynamically created compute nodes), the Slurm configuration bucket,
+Filestore (ZONAL/REGIONAL/ENTERPRISE tiers), Artifact Registry
+repositories and their credential secrets, Cloud SQL instances, custom
+images, and workbench boot/data disks.
+
+TKFE's own infrastructure — the server boot disk, the control bucket
+and the Pub/Sub topics — is not CMEK-encrypted. Encrypt it, if required,
+by managing that deployment's Terraform directly.
+
+### Enabling CMEK
+
+1. Enable `cloudkms.googleapis.com` on the project the resources will be
+   created in:
+
+       gcloud services enable cloudkms.googleapis.com --project=PROJECT_ID
+
+   TKFE's own deployment project has this already, but a cluster or
+   filesystem can use a credential pointing at a different project, and
+   that project needs it too. A cluster blueprint also enables it during
+   apply, so this only has to be done in advance for filesystems and
+   images, whose blueprints fail at generation time if the API is off.
+2. Create (or identify) a symmetric Cloud KMS key in the same region as
+   the deployment. Key rings cannot be deleted, so name them
+   deliberately.
+3. Provision the Google service identities. TKFE grants them on the key
+   itself — the cluster and filesystem blueprints do it with the
+   `kms-key-iam` module, and the workbench Terraform does it directly —
+   but an agent must already exist before it can be granted, and some are
+   only created on demand:
+
+       gcloud storage service-agent --project=PROJECT_ID
+       gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
+       gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
+       gcloud beta services identity create --service=notebooks.googleapis.com --project=PROJECT_ID
+
+   Each grant is made **on the key**, never at project level. The agents
+   involved, and what each protects:
+
+   | Principal | Protects |
+   | --- | --- |
+   | `service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com` | Boot and additional disks, images, snapshots |
+   | `service-PROJECT_NUMBER@gs-project-accounts.iam.gserviceaccount.com` | Cloud Storage buckets and objects |
+   | `service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com` | Filestore instances |
+   | `service-PROJECT_NUMBER@gcp-sa-cloud-sql.iam.gserviceaccount.com` | Cloud SQL data, when enabled |
+   | `service-PROJECT_NUMBER@gcp-sa-artifactregistry.iam.gserviceaccount.com` | Artifact Registry contents, when enabled |
+   | `service-PROJECT_NUMBER@gcp-sa-secretmanager.iam.gserviceaccount.com` | Registry credential secrets, when enabled |
+   | `service-PROJECT_NUMBER@gcp-sa-notebooks.iam.gserviceaccount.com` | Vertex AI Workbench instances, when enabled |
+
+   Because TKFE makes those grants, the credential it deploys with needs
+   `cloudkms.cryptoKeys.getIamPolicy` and `cloudkms.cryptoKeys.setIamPolicy`
+   on the key — for example `roles/cloudkms.admin` scoped to that key
+   alone, and never held by a runtime service account. Granting the key
+   by hand instead is possible; the grants are idempotent, so a
+   pre-granted agent simply results in no change.
+There is no enforcement mode and no fallback logic. A resource with no
+key set uses Google-managed encryption; a resource with a key uses that
+key. Nothing switches silently between the two.
+
+A key that is malformed, or in a region that cannot serve the resource,
+is rejected when the resource is created, with an error naming the key
+and what to do about it. Everything else — a disabled key version, a
+missing grant, a key deleted out from under a resource — is reported by
+Cloud KMS at apply time, since Cloud KMS is what enforces it.
+
+### Checking coverage
+
+Google Cloud reports which key encrypts a resource, so query it directly
+rather than a TKFE-side record:
+
+    gcloud kms keys list --keyring=RING --location=LOCATION --project=KEY_PROJECT
+    gcloud compute disks describe DISK --zone=ZONE \
+        --format='value(diskEncryptionKey.kmsKeyName)'
+    gcloud filestore instances describe INSTANCE --zone=ZONE \
+        --format='value(kmsKeyName)'
+    gcloud storage buckets describe gs://BUCKET \
+        --format='value(default_kms_key)'
+
+### Rotation and re-encryption
+
+Rotating the key (a new primary version) affects **new** data only;
+existing disks, objects, and databases stay on their old version, which
+must remain enabled until nothing depends on it. Note that services
+adopt a new primary version after a short propagation delay (minutes).
+Rotate with `gcloud`, or set `rotation_period` on the key so Cloud KMS
+rotates it on a schedule:
+
+    gcloud kms keys versions create --key=KEY --keyring=RING \
+        --location=LOCATION --primary
+
+To move existing bucket objects onto the current primary version,
+rewrite them in place — this is resumable and non-destructive, and
+objects already on the target key are unchanged:
+
+    gcloud storage objects update gs://BUCKET/** --encryption-key=KEY
+
+TKFE never disables, retires, or destroys key versions itself — that
+authority stays with the key owners.
+
+### Revocation and recovery
+
+Disabling a key version is reversible and takes effect at the services
+within minutes; a resource that needs it then fails to build, with a
+Cloud KMS permission or state error. Re-enabling restores service. Scheduling destruction becomes irreversible once the
+destruction interval elapses — destroyed key versions make all data
+they protect permanently unrecoverable.
+
+### Teardown ownership
+
+Cluster teardown removes only the per-cluster service account's key
+binding; it never touches keys, key rings, versions, or other bindings.
+The Slurm configuration bucket survives cluster destroy and remains
+key-dependent until deleted manually. Key rings cannot be deleted at
+all — do not expect `terraform destroy` to return a key project to an
+empty state.
+
 ## Teardown Process
 
 The TKFE package contains a `teardown.sh` script that will destroy the running

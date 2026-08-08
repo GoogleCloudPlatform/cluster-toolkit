@@ -1,4 +1,4 @@
-{#
+{% comment %}
 Copyright 2026 "Google LLC"
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +12,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-#}
+{% endcomment %}
 
 blueprint_name: {{ cluster.cloud_id }}
 
@@ -37,14 +37,43 @@ deployment_groups:
       subnetwork_name: {{ cluster.subnet.cloud_id }}
     id: hpc_network
 
-{% if artifact_registry_yaml %}
+{% if cmek %}
+  # Resolve the chosen CryptoKey, then grant the service agents that
+  # encrypt with it. Everything below refers to cmek_key_iam rather than
+  # naming the key, so each encrypted resource depends on the grants: the
+  # key exists before any agent can use it, and an unordered grant fails
+  # intermittently depending only on Terraform's scheduling.
+  - id: cmek_key
+    source: community/modules/security/pre-existing-kms-key
+    settings:
+      project_id: {{ cmek.key_project }}
+      location: {{ cmek.key_location }}
+      key_ring_name: {{ cmek.key_ring }}
+      key_name: {{ cmek.key_name }}
+
+  - id: cmek_key_iam
+    source: community/modules/security/kms-key-iam
+    use: [cmek_key]
+    settings:
+      project_id: {{ project_id }}
+      service_agents: [{{ cmek.service_agents|join:", " }}]
+{% endif %}
+
+{% if artifact_registry_yaml or cmek %}
+  # One services-api module, not one per feature: the module id has to be
+  # unique, so a second block would fail blueprint expansion outright.
   - id: services-api
     source: community/modules/project/service-enablement
     settings:
       gcp_service_list:
+{% if artifact_registry_yaml %}
         - secretmanager.googleapis.com
         - cloudbuild.googleapis.com
         - artifactregistry.googleapis.com
+{% endif %}
+{% if cmek %}
+        - cloudkms.googleapis.com
+{% endif %}
 {% endif %}
 
 {{ artifact_registry_yaml | safe }}
@@ -92,6 +121,11 @@ deployment_groups:
       machine_type: {{ cluster.controller_instance_type }}
       disk_type: {{ cluster.controller_disk_type }}
       disk_size_gb: {{ cluster.controller_disk_size }}
+      {% if cmek %}
+      disk_encryption_key: {{ cmek.disk_key }}
+      slurm_bucket_kms_key: {{ cmek.bucket_key }}
+      {% endif %}
+{{ slurm_conf_template_yaml | safe }}
       {{ controller_image_yaml | safe }}
       service_account_email: $(hpc_service_account.service_account_email)
       service_account_scopes:
@@ -105,11 +139,11 @@ deployment_groups:
       controller_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
-        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh - | bash
+        gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh | bash
       login_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING LOGIN STARTUP"
-        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_login.sh - | bash
+        gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_login.sh | bash
     use:
     - slurm_login
 {{ controller_uses | safe }}
@@ -126,6 +160,9 @@ deployment_groups:
       machine_type: {{ cluster.login_node_instance_type }}
       disk_type: {{ cluster.login_node_disk_type }}
       disk_size_gb: {{ cluster.login_node_disk_size }}
+      {% if cmek %}
+      disk_encryption_key: {{ cmek.disk_key }}
+      {% endif %}
       {{ login_image_yaml | safe }}
       service_account_email: $(hpc_service_account.service_account_email)
       service_account_scopes:

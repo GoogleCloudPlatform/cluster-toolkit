@@ -785,6 +785,54 @@ def get_gcp_filestores(credentials):
     return result["instances"]
 
 
+@lru_cache
+def _get_gcp_kms_keys(credentials, location, ttl_hash=None):
+    del ttl_hash  # Ignored; forces the cache to expire (see _get_ttl_hash)
+    (project, client) = _get_gcp_client(credentials, "cloudkms", "v1")
+    rings = (
+        client.projects()
+        .locations()
+        .keyRings()
+        .list(parent=f"projects/{project}/locations/{location}")
+        .execute()
+    )
+    keys = []
+    for ring in rings.get("keyRings", []):
+        resp = (
+            client.projects()
+            .locations()
+            .keyRings()
+            .cryptoKeys()
+            .list(parent=ring["name"])
+            .execute()
+        )
+        for key in resp.get("cryptoKeys", []):
+            # Only symmetric encrypt/decrypt keys can protect a resource;
+            # signing and asymmetric keys would be rejected at apply time.
+            if key.get("purpose") != "ENCRYPT_DECRYPT":
+                continue
+            keys.append({
+                "name": key["name"],
+                "primary_state": key.get("primary", {}).get("state", ""),
+            })
+    return keys
+
+
+def get_kms_keys(cloud_provider, credentials, location):
+    """Cloud KMS symmetric keys available in `location`.
+
+    `location` is a region (or "global"); zonal resources are served by
+    their region's keys. Returns the full CryptoKey resource names, which
+    is the form every CMEK field expects.
+    """
+    if cloud_provider == "GCP":
+        return _get_gcp_kms_keys(
+            credentials, location, ttl_hash=_get_ttl_hash()
+        )
+    else:
+        raise Exception(f'Unsupport Cloud Provider "{cloud_provider}"')
+
+
 def get_secret_value(credentials_json, project_id, secret_name):
     """
     Retrieve the latest secret value from Google Secret Manager.

@@ -334,6 +334,108 @@ Finally, `templates` directory contains the web view templates. Django ships
 with its own template engine to process these template files and insert dynamic
 contents to them.
 
+## CMEK Architecture
+
+A customer-managed encryption key is chosen **per resource** and stored on
+that resource, via the `CmekProtected` mixin in `models.py` (Cluster,
+Filesystem, Image, Workbench). It is not on `CloudResource`: networks,
+subnets and the `ComputeInstance` records are not encrypted resources and
+would gain a column that is always empty.
+
+There is deliberately no policy engine. Enforcement is an organization
+policy (`constraints/gcp.restrictNonCmekServices`), rotation is a Cloud KMS
+setting, and which key protects a resource is readable from that resource's
+own API, so OFE holds none of it.
+
+`website/ghpcfe/cluster_manager/cmek.py` is correspondingly small:
+
+- `parse_crypto_key_name(name)` parses
+  `projects/P/locations/L/keyRings/R/cryptoKeys/K` and raises
+  `CmekConfigError` for anything else, including bare key ids and key
+  *version* names.
+- `check_key_location(key, location)` additionally rejects a key that cannot
+  serve the resource's region. Cloud KMS refuses a cross-region key only
+  once the resource is being created, so this turns a late, opaque apply
+  failure into an immediate, specific one. A `global` key serves anywhere.
+- `blueprint_context(key, region=, zone=, service_agents=)` returns the
+  `cmek` template context, or `None` when the resource has no key so the
+  blueprint renders exactly as it did before CMEK existed.
+
+**Grants are made by the blueprint, not by OFE at runtime.** For clusters
+and filesystems, the generated blueprint emits two Cluster Toolkit modules
+— `pre-existing-kms-key` to resolve the key and `kms-key-iam` to grant the
+service agents on it — and the encrypted resources refer to the *IAM*
+module's outputs rather than naming the key:
+
+    disk_encryption_key: $(cmek_key_iam.disk_encryption_key)
+
+That reference is the point. gcluster turns it into a Terraform edge, so
+every encrypted resource depends on the grants: nothing is created before
+its service agent can use the key, and on destroy the resource is removed
+before the grant it relies on. Writing the key name in directly encrypts
+the resources just the same and races with the grant, which fails
+intermittently depending only on Terraform's scheduling.
+
+Which agents are granted follows what the blueprint creates
+(`_cmek_service_agents`): a cluster gets `compute` and `storage`, plus
+`cloudsql` and `artifactregistry`/`secretmanager` when those are attached.
+It does not get `filestore` — the cluster blueprint *mounts* filesystems
+rather than creating them, and the standalone Filestore blueprint grants
+that agent itself.
+
+`disk_encryption_key_service_account` is deliberately left unset, so
+Compute Engine encrypts as the project's Compute Engine service agent, an
+identity that already exists. Naming the per-cluster service account
+instead would mean granting an account the same blueprint creates.
+
+Images (`image.py`) use the same two modules, placed in the blueprint's
+first deployment group alongside the network. The Packer module lives in
+a second group and reaches the IAM module's output across the group
+boundary, which gcluster bridges by exporting the value from the
+terraform group and importing it into the packer group.
+
+Workbenches (`workbenchinfo.py`) are the one exception. A workbench is a
+Terraform root copied per workbench rather than a generated blueprint, so
+it cannot `use` a Cluster Toolkit module — the relative module path would
+not survive the copy. It therefore grants the Notebooks and Compute
+service agents in the root itself, with the instance carrying a
+`depends_on` to the grants. Same ordering property, made locally rather
+than by a module.
+
+`cloud_info.get_kms_keys(provider, credentials, location)` lists the
+symmetric keys available in a location, following that file's existing
+dispatcher and `@lru_cache`/`_get_ttl_hash` patterns. `KmsKeyViewSet`
+(`api/kms_keys?credential=&region=`) exposes it to the browser, and the
+shared `_cmek_key_datalist.html` partial turns the result into
+suggestions on every form that offers a key.
+
+The field stays free text. A `<select>` would forbid naming a key in a
+project the selected credential cannot list, which is the cross-project
+case `pre-existing-kms-key` exists to serve — so the datalist suggests
+without constraining, and a failed lookup leaves the field usable rather
+than blocking the form. The endpoint queries both the resource's region
+and `global`, because a global key can encrypt anywhere while a regional
+key cannot leave its region.
+
+Coverage is not mirrored in the OFE database. Cloud KMS and each
+resource's own API already report which key encrypts what, so coverage
+is a live query (see the admin guide) rather than a table that can
+drift from reality.
+
+To add a new CMEK-integrated service: give its model the `CmekProtected`
+mixin, surface the field on its form *and its template* (a field no
+template renders is unreachable — see `CmekKeyFieldReachabilityTests`),
+pass the key into the service's Terraform or API field, add the service
+agent to `_cmek_service_agents` if the cluster blueprint creates the
+resource, and cover the renderer with a parsed-output test (see
+`ghpcfe/tests/test_blueprint_cmek.py` for the pattern).
+
+Test fixtures: the suite runs from a source checkout with
+`python manage.py test ghpcfe.tests --settings=website.test_settings`
+(console logging, in-memory SQLite, empty URLconf, C2 startup skipped).
+Blueprint templates are DjangoTemplates despite the `.j2` extension —
+do not introduce Jinja2-only syntax.
+
 ## Workbenches Architecture
 
 The workbench process is fairly straight-forward. Gather configuration values

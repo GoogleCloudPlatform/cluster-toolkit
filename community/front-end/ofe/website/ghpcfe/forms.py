@@ -118,7 +118,6 @@ class ClusterForm(forms.ModelForm):
         return creds
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         # Set default for new creations to True (Native Auth)
@@ -185,6 +184,7 @@ class ClusterForm(forms.ModelForm):
             "use_bigquery",
             "use_containers",
             "enable_slurm_auth",
+            "cmek_key",
         )
 
         widgets = {
@@ -230,6 +230,15 @@ class ClusterForm(forms.ModelForm):
             "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "use_containers": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "enable_slurm_auth": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "cmek_key": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    # Free text with suggestions, not a select: the key
+                    # may live in a project this credential cannot list.
+                    "list": "cmek-key-options",
+                    "autocomplete": "off",
+                }
+            ),
         }
 
 
@@ -1077,6 +1086,38 @@ class FilesystemImportForm(forms.ModelForm):
         ]
 
 
+# per-tier capacity rules, keyed by the model's stored tier code
+# (see GCPFilestoreFilesystem.FILESTORE_TIER). "step" is the required
+# capacity increment in GiB (None = any 1 GiB step allowed). Values are from
+# Google's Filestore service-tiers documentation. Without this the form only
+# enforced a single hard-coded HTML min=2660, which both blocked the real
+# ENTERPRISE minimum (1024) and permitted values GCP rejects at apply time
+# (e.g. 2660 is not a multiple of 256 GiB).
+FILESTORE_CAPACITY_RULES = {
+    "bh": {"min": 1024, "max": 65433, "step": None},   # BASIC_HDD
+    "bs": {"min": 2560, "max": 65433, "step": None},   # BASIC_SSD
+    "hs": {"min": 1024, "max": 102400, "step": 256},   # HIGH_SCALE_SSD
+    "en": {"min": 1024, "max": 10240, "step": 256},    # ENTERPRISE
+}
+
+
+def filestore_capacity_error(tier, capacity):
+    """Return a human-readable error string if `capacity` (GiB) is invalid
+    for the Filestore `tier` (a FILESTORE_TIER code), else None."""
+    rules = FILESTORE_CAPACITY_RULES.get(tier)
+    if capacity is None or rules is None:
+        return None
+    label = dict(GCPFilestoreFilesystem.FILESTORE_TIER).get(tier, tier)
+    if capacity < rules["min"]:
+        return f"{label} Filestore requires at least {rules['min']} GiB."
+    if capacity > rules["max"]:
+        return f"{label} Filestore allows at most {rules['max']} GiB."
+    if rules["step"] and capacity % rules["step"] != 0:
+        return (f"{label} Filestore capacity must be a multiple of "
+                f"{rules['step']} GiB.")
+    return None
+
+
 class FilestoreForm(forms.ModelForm):
     """Custom form for GCP Filestoremodel implementing option filtering"""
 
@@ -1133,6 +1174,15 @@ class FilestoreForm(forms.ModelForm):
             self.fields["share_name"].disabled = True
             self.fields["performance_tier"].disabled = True
 
+    def clean(self):
+        # reject capacities GCP will refuse at apply time, per tier.
+        cleaned = super().clean()
+        error = filestore_capacity_error(
+            cleaned.get("performance_tier"), cleaned.get("capacity"))
+        if error:
+            self.add_error("capacity", error)
+        return cleaned
+
     class Meta:
         model = GCPFilestoreFilesystem
 
@@ -1143,15 +1193,28 @@ class FilestoreForm(forms.ModelForm):
             "cloud_credential",
             "capacity",
             "performance_tier",
+            "cmek_key",
         )
 
         widgets = {
+            "cmek_key": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    # Free text with suggestions, not a select: the key
+                    # may live in a project this credential cannot list.
+                    "list": "cmek-key-options",
+                    "autocomplete": "off",
+                }
+            ),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_credential": forms.Select(
                 attrs={"class": "form-control", "disabled": True}
             ),
             "vpc": forms.Select(attrs={"class": "form-control"}),
-            "capacity": forms.NumberInput(attrs={"min": 2660, "default": 2660}),
+            # 1024 is the smallest valid tier minimum (ENTERPRISE /
+            # BASIC_HDD / HIGH_SCALE_SSD); precise per-tier limits and the
+            # 256 GiB increment are enforced in clean().
+            "capacity": forms.NumberInput(attrs={"min": 1024, "default": 1024}),
             "share_name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
         }
@@ -1222,10 +1285,20 @@ class ImageForm(forms.ModelForm):
             "startup_script",
             "enable_os_login",
             "block_project_ssh_keys",
-            "authorised_users"
+            "authorised_users",
+            "cmek_key",
         )
 
         widgets = {
+            "cmek_key": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    # Free text with suggestions, not a select: the key
+                    # may live in a project this credential cannot list.
+                    "list": "cmek-key-options",
+                    "autocomplete": "off",
+                }
+            ),
             "cloud_credential": forms.Select(attrs={"class": "form-control"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "family": forms.TextInput(attrs={"class": "form-control"}),

@@ -23,6 +23,7 @@ from rest_framework.authentication import (
     TokenAuthentication,
 )
 from rest_framework.permissions import IsAuthenticated
+from ..permissions import CredentialPermission
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import render, get_object_or_404, redirect
@@ -979,6 +980,50 @@ class DiskAvailabilityViewSet(viewsets.ViewSet):
             pass
 
         return JsonResponse({})
+
+
+class KmsKeyViewSet(viewsets.ViewSet):
+    """API View listing the Cloud KMS keys usable for CMEK in a region.
+
+    Keyed on a credential rather than on a cluster/filesystem/workbench, so
+    the same endpoint serves create forms, where no object exists yet.
+    """
+
+    permission_classes = (IsAuthenticated, CredentialPermission)
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def list(self, request):
+        credential = get_object_or_404(
+            Credential, pk=request.query_params.get("credential", -1)
+        )
+        region = request.query_params.get("region", None)
+
+        # A "global" key can encrypt resources in any region, so it belongs
+        # in the list whatever the region is; a regional key only works in
+        # its own region. Querying both is what makes the suggestions match
+        # the set Cloud KMS will actually accept.
+        locations = ["global"]
+        if region:
+            locations.insert(0, region)
+
+        keys = []
+        for location in locations:
+            try:
+                keys.extend(
+                    cloud_info.get_kms_keys("GCP", credential.detail, location)
+                )
+            # One bad location should not empty the whole list -- a project
+            # with no key ring in a region returns an error here, which is a
+            # normal state rather than a failure.
+            except Exception as err:  # pylint: disable=broad-except
+                logger.info(
+                    "No Cloud KMS keys retrieved for location %s: %s",
+                    location,
+                    err,
+                )
+
+        return JsonResponse({"keys": keys})
+
 
 # Other supporting views
 
