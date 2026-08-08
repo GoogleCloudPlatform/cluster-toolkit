@@ -157,6 +157,18 @@ variable "subnetwork_self_link" {
   default     = null
 }
 
+variable "encryption_key_name" {
+  description = <<-DOC
+    The full resource name of a Cloud KMS CryptoKey used to encrypt the
+    Cloud SQL instance data (CMEK). The Cloud SQL service identity must
+    hold roles/cloudkms.cryptoKeyEncrypterDecrypter on the key, and the
+    key location must match the instance region. Encryption mode is
+    fixed at instance creation and cannot be changed in place.
+  DOC
+  type        = string
+  default     = null
+}
+
 variable "user_managed_replication" {
   type = list(object({
     location     = string

@@ -202,6 +202,18 @@ variable "protocol" {
   }
 }
 
+variable "kms_key_name" {
+  description = <<-DOC
+    The name (full resource name) of a Cloud KMS CryptoKey used to encrypt
+    the Filestore instance (CMEK). Only supported for ZONAL, REGIONAL, and
+    ENTERPRISE tiers. The Filestore service agent must hold
+    roles/cloudkms.cryptoKeyEncrypterDecrypter on the key, and the key
+    location must match the instance location.
+  DOC
+  type        = string
+  default     = null
+}
+
 variable "description" {
   description = "A description of the filestore instance."
   type        = string
