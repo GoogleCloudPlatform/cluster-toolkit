@@ -344,7 +344,7 @@ func TestEnsurePriorityClassesInstalled_Missing(t *testing.T) {
 				// Return only system priority classes to simulate no user priority classes
 				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical"}
 			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
 				applyCalled = true
 				return shell.CommandResult{ExitCode: 0}
 			}
@@ -375,7 +375,7 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 				// Return system classes and at least one user class (e.g. 'low') to simulate pre-existing classes
 				return shell.CommandResult{ExitCode: 0, Stdout: "system-cluster-critical system-node-critical low"}
 			}
-			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "priority-classes.yaml") {
+			if strings.Contains(fullCmd, "kubectl apply") && strings.Contains(fullCmd, "kueue_priority_classes.yaml") {
 				applyCalled = true
 				return shell.CommandResult{ExitCode: 0}
 			}

@@ -1064,6 +1064,34 @@ When GKE NAP options are used, GCluster performs several operations to structure
   * Reservation: Injects reservation tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`) to allow scheduling on nodes spawned by GKE to consume the target reservation. If a block/sub-block path format is provided, the short reservation identifier is automatically extracted and used as the `<reservation-name>`.
 * **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type (e.g., `ct6e-standard-4t`, `a3-megagpu-8g`) is explicitly configured in GKE NAP limits. If the machine type is not covered by GKE NAP limits, GCluster **fails fast** during submission, preventing scheduling locks.
 
+### 8.4 Custom Kubernetes Manifest Templates
+
+GCluster uses embedded Go templates to generate the Kubernetes manifests (JobSets, Kueue configurations, etc.) deployed to your GKE cluster. If you need to deeply customize the generated manifests beyond what the CLI flags provide (e.g., adding custom sidecars, specific annotations, or modifying the core structure), you can override these embedded templates with your own local copies.
+
+#### 1. Extract the Default Templates
+First, use the `gke-template-extract` command to extract the embedded default templates into a local directory so you have a starting point:
+
+```bash
+./gcluster job gke-template-extract --output-dir=/path/to/my-templates
+```
+
+*(Use `--overwrite` if the directory already contains files you want to replace).*
+
+#### 2. Modify the Templates
+Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
+
+#### 3. Use Your Custom Templates
+When submitting your job, you can tell `gcluster` to use your custom templates instead of the embedded ones.
+
+Pass the `--gke-custom-templates-path` flag to the `submit` command:
+
+```bash
+./gcluster job submit ... --gke-custom-templates-path=/path/to/my-templates
+```
+
+> [!TIP]
+> If a template file (e.g., `jobset.tmpl`) is not found in your custom directory, `gcluster` will automatically fall back to using its embedded default version for that specific file.
+
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
@@ -1173,6 +1201,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
 | `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
+| `--gke-custom-templates-path` | `string` | Path to a local directory containing custom GKE manifest template overrides. |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
