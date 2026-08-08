@@ -1,0 +1,169 @@
+## Description
+
+Creates a symmetric Cloud KMS CryptoKey, in a key ring it creates
+(`key_ring_name`) or one that already exists (`key_ring_id`). It supports both
+co-located keys (pass the workload project as `project_id`) and centralized keys
+(pass a dedicated key project). The CryptoKey uses
+`deletion_policy = "ABANDON"`, so an ordinary `terraform destroy` removes the
+CryptoKey from Terraform state without deleting the key ring, the CryptoKey, or
+any CryptoKeyVersion.
+
+This module creates the key and nothing else. Two companions complete the set:
+
+* [kms-key-iam] grants service agents on a key, and is what CMEK consumers
+  should `use` — consuming this module directly is a race, see below.
+* [pre-existing-kms-key] adopts a key someone else owns, and is
+  interchangeable with this module downstream.
+
+## Example usage
+
+```yaml
+- id: kms_key
+  source: community/modules/security/kms-key
+  settings:
+    project_id: my-project
+    location: us-central1
+    key_ring_name: my-deployment-key-ring
+    key_name: my-deployment-key
+
+- id: kms_key_iam
+  source: community/modules/security/kms-key-iam
+  use: [kms_key]
+  settings:
+    service_agent_principals:
+    - "serviceAccount:service-1234567890@cloud-filer.iam.gserviceaccount.com"
+    - "serviceAccount:service-1234567890@compute-system.iam.gserviceaccount.com"
+
+- id: homefs
+  source: modules/file-system/filestore
+  use: [network, kms_key_iam]
+  settings:
+    local_mount: /home
+    filestore_tier: ZONAL   # CMEK needs ZONAL, REGIONAL or ENTERPRISE
+    size_gb: 1024
+```
+
+### Consuming the key
+
+**`use` the [kms-key-iam] module, not this one.** This module's
+`crypto_key_id` is available as soon as the key exists, which is before any
+service agent has been granted on it. A consumer wired directly to it can be
+created first and fail with a KMS `PERMISSION_DENIED` that depends only on how
+Terraform happened to schedule the two. kms-key-iam re-exports the same id
+ordered behind its grants, under a name matching each consumer's own input.
+
+## Lifecycle and naming
+
+Cloud KMS makes several of this module's inputs permanent, so they deserve
+care before the first apply:
+
+* **Key rings can never be deleted, and CryptoKey names can never be
+  reused.** Pick `key_ring_name` and `key_name` deliberately.
+* **Create a ring, or reuse one — supply exactly one of `key_ring_name` or
+  `key_ring_id`.** `key_ring_name` creates a new ring. `key_ring_id` points at
+  an existing ring and creates only the CryptoKey inside it, which is how many
+  CryptoKeys can share a single long-lived ring instead of each deployment
+  stranding another permanent one. The ring may live in any project, including
+  a dedicated key project, but `project_id` and `location` must then name that
+  ring's project and location.
+* **Re-applying a destroyed deployment needs one of those two paths.** Teardown
+  retains the key ring and CryptoKey, so re-running with the same
+  `key_ring_name` fails with `Error 409: ... already exists`. Either pass the
+  retained ring as `key_ring_id` together with a fresh `key_name`, or choose new
+  names (for example derived from `deployment_name`). Nothing is silently
+  reused and nothing is lost, but a redeploy is never fully automatic.
+* **Teardown is non-destructive by default.** `terraform destroy` drops the
+  key ring and CryptoKey from Terraform state but leaves them, and every key
+  version, intact and enabled in Cloud KMS. Data encrypted with the key
+  therefore stays decryptable after the deployment is gone. Set
+  `deletion_policy = "DELETE"` only for a key whose data is genuinely
+  disposable: that destroys every key version and makes anything they protect
+  permanently unrecoverable. Unlike `protection_level` and
+  `destroy_scheduled_duration`, `deletion_policy` is an in-place update, so it
+  can be changed on an existing key by re-applying.
+* **`protection_level` and `destroy_scheduled_duration` are chosen at creation,
+  not changed later.** Cloud KMS cannot alter either on an existing CryptoKey,
+  so Terraform would have to replace the CryptoKey — which fails with
+  `Error 409: ... already exists` because the retained key still holds the
+  name. Use a new `key_name` to move to a different protection level or
+  destroy-scheduled duration. `rotation_period` and `labels`, by contrast, are
+  updated in place.
+* **Recovering a CryptoKey that is missing from state** (after the above, or
+  after state loss) is done by importing it rather than renaming it:
+
+  ```shell
+  terraform import module.<id>.google_kms_crypto_key.this <crypto_key_id>
+  ```
+
+Automatic rotation creates a new primary version but does not re-encrypt
+existing data or retire old versions, so previous versions remain required
+for previously encrypted data. This module never disables, destroys, or
+deletes a key version.
+
+## License
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+## Requirements
+
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.33.0 |
+
+## Providers
+
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.33.0 |
+
+## Modules
+
+No modules.
+
+## Resources
+
+| Name | Type |
+| ---- | ---- |
+| [google_kms_crypto_key.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/kms_crypto_key) | resource |
+| [google_kms_key_ring.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/kms_key_ring) | resource |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | What `terraform destroy` does with the CryptoKey.<br/><br/>  ABANDON  drop it from Terraform state, leaving the CryptoKey and<br/>           every key version intact and enabled in Cloud KMS<br/>  DELETE   destroy all key versions, rendering data encrypted with<br/>           them permanently unrecoverable<br/><br/>ABANDON is the default because key material routinely outlives the<br/>deployment that created it, and because destroying versions cannot be<br/>undone. Only set DELETE for a key whose data is genuinely disposable.<br/><br/>Changing this is an in-place update, so it can be set on an existing<br/>key by re-applying -- unlike protection\_level and<br/>destroy\_scheduled\_duration, which are fixed at creation. | `string` | `"ABANDON"` | no |
+| <a name="input_destroy_scheduled_duration"></a> [destroy\_scheduled\_duration](#input\_destroy\_scheduled\_duration) | The period a CryptoKeyVersion spends in DESTROY\_SCHEDULED before transitioning to DESTROYED, expressed as a duration string ending in "s" (seconds), e.g. "2592000s" for 30 days. Chosen at creation and immutable afterwards; use a new key\_name to change it. See the module README. | `string` | `"2592000s"` | no |
+| <a name="input_key_name"></a> [key\_name](#input\_key\_name) | The permanent name of the symmetric CryptoKey. Cloud KMS CryptoKey names cannot be renamed and cannot be reused once destroyed. | `string` | n/a | yes |
+| <a name="input_key_ring_id"></a> [key\_ring\_id](#input\_key\_ring\_id) | The id of an existing Cloud KMS key ring to create the CryptoKey in, for<br/>example "projects/my-project/locations/us-central1/keyRings/my-ring".<br/>Set this instead of key\_ring\_name to reuse a key ring rather than create<br/>one, which is what makes it possible to hold many CryptoKeys in a single<br/>long-lived ring and to redeploy after a teardown that retained the ring.<br/>Exactly one of key\_ring\_name or key\_ring\_id must be supplied. | `string` | `null` | no |
+| <a name="input_key_ring_name"></a> [key\_ring\_name](#input\_key\_ring\_name) | The permanent name of a Cloud KMS key ring to create. Cloud KMS key ring names cannot be changed or reused once created. Leave null when adopting an existing ring with key\_ring\_id. | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the CryptoKey. Key-value pairs. Cloud KMS key rings and IAM members do not support labels. | `map(string)` | `{}` | no |
+| <a name="input_location"></a> [location](#input\_location) | The Cloud KMS location (region or multi-region) in which to create the key ring, e.g. "us-central1" or "us". Must be a location that can serve the resources being encrypted; Cloud KMS validates it. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project in which to create the Cloud KMS key ring and CryptoKey. Pass the workload project for co-located keys, or a dedicated key project for centralized keys. | `string` | n/a | yes |
+| <a name="input_protection_level"></a> [protection\_level](#input\_protection\_level) | The protection level for new CryptoKeyVersions, either "SOFTWARE" or "HSM". Chosen at creation and effectively immutable afterwards; use a new key\_name to change it. See the module README. | `string` | `"SOFTWARE"` | no |
+| <a name="input_rotation_period"></a> [rotation\_period](#input\_rotation\_period) | The interval between automatic CryptoKeyVersion rotations, expressed as a duration string ending in "s" (seconds), e.g. "7776000s" for 90 days. Must be greater than one day (86400s). Cannot currently be disabled. | `string` | `"7776000s"` | no |
+
+## Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_crypto_key_id"></a> [crypto\_key\_id](#output\_crypto\_key\_id) | The canonical resource ID of the CryptoKey. Pass this to a kms-key-iam module; CMEK consumers should `use` that module rather than this one, so they are ordered behind the grants. |
+| <a name="output_key_ring_id"></a> [key\_ring\_id](#output\_key\_ring\_id) | The canonical resource ID of the Cloud KMS key ring holding the CryptoKey, whether this module created it or adopted an existing one. |
+| <a name="output_primary_crypto_key_version_id"></a> [primary\_crypto\_key\_version\_id](#output\_primary\_crypto\_key\_version\_id) | The resource name of the CryptoKey's current primary CryptoKeyVersion. |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+[kms-key-iam]: ../kms-key-iam/README.md
+[pre-existing-kms-key]: ../pre-existing-kms-key/README.md
