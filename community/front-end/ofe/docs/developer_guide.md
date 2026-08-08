@@ -338,9 +338,9 @@ contents to them.
 
 A customer-managed encryption key is chosen **per resource** and stored on
 that resource, via the `CmekProtected` mixin in `models.py` (Cluster,
-Filesystem, Image, Workbench). It is not on `CloudResource`: networks,
-subnets and the `ComputeInstance` records are not encrypted resources and
-would gain a column that is always empty.
+Filesystem, Image). It is not on `CloudResource`: networks, subnets and
+the `ComputeInstance` records are not encrypted resources and would gain
+a column that is always empty.
 
 There is deliberately no policy engine. Enforcement is an organization
 policy (`constraints/gcp.restrictNonCmekServices`), rotation is a Cloud KMS
@@ -394,13 +394,14 @@ a second group and reaches the IAM module's output across the group
 boundary, which gcluster bridges by exporting the value from the
 terraform group and importing it into the packer group.
 
-Workbenches (`workbenchinfo.py`) are the one exception. A workbench is a
-Terraform root copied per workbench rather than a generated blueprint, so
-it cannot `use` a Cluster Toolkit module — the relative module path would
-not survive the copy. It therefore grants the Notebooks and Compute
-service agents in the root itself, with the instance carrying a
-`depends_on` to the grants. Same ordering property, made locally rather
-than by a module.
+Workbenches are **not** CMEK-capable. A workbench is a Terraform root
+copied per workbench (`workbench_tf/`) rather than a generated blueprint,
+so it cannot `use` a Cluster Toolkit module — the relative module path
+would not survive the copy. Covering it means granting the service agents
+in that root directly and ordering the instance behind them, which is a
+change to `workbench_tf` outside this feature. `Workbench` therefore does
+not carry the `CmekProtected` mixin, and no workbench form offers a key:
+a field nothing renders and nothing consumes is worse than no field.
 
 `cloud_info.get_kms_keys(provider, credentials, location)` lists the
 symmetric keys available in a location, following that file's existing

@@ -477,8 +477,13 @@ customer-managed Cloud KMS key instead of Google-managed encryption:
 Slurm controller/login/compute boot and additional disks (including
 dynamically created compute nodes), the Slurm configuration bucket,
 Filestore (ZONAL/REGIONAL/ENTERPRISE tiers), Artifact Registry
-repositories and their credential secrets, Cloud SQL instances, custom
-images, and workbench boot/data disks.
+repositories and their credential secrets, Cloud SQL instances, and
+custom images.
+
+Workbench instances are not covered. A workbench is a Terraform root
+copied per workbench rather than a generated blueprint, so it cannot
+reference the key modules the way a cluster can; giving it CMEK needs
+changes to that root and is not part of this feature.
 
 TKFE's own infrastructure — the server boot disk, the control bucket
 and the Pub/Sub topics — is not CMEK-encrypted. Encrypt it, if required,
@@ -500,15 +505,13 @@ by managing that deployment's Terraform directly.
    the deployment. Key rings cannot be deleted, so name them
    deliberately.
 3. Provision the Google service identities. TKFE grants them on the key
-   itself — the cluster and filesystem blueprints do it with the
-   `kms-key-iam` module, and the workbench Terraform does it directly —
+   itself, using the `kms-key-iam` module in the generated blueprint,
    but an agent must already exist before it can be granted, and some are
    only created on demand:
 
        gcloud storage service-agent --project=PROJECT_ID
        gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
        gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
-       gcloud beta services identity create --service=notebooks.googleapis.com --project=PROJECT_ID
 
    Each grant is made **on the key**, never at project level. The agents
    involved, and what each protects:
@@ -521,7 +524,6 @@ by managing that deployment's Terraform directly.
    | `service-PROJECT_NUMBER@gcp-sa-cloud-sql.iam.gserviceaccount.com` | Cloud SQL data, when enabled |
    | `service-PROJECT_NUMBER@gcp-sa-artifactregistry.iam.gserviceaccount.com` | Artifact Registry contents, when enabled |
    | `service-PROJECT_NUMBER@gcp-sa-secretmanager.iam.gserviceaccount.com` | Registry credential secrets, when enabled |
-   | `service-PROJECT_NUMBER@gcp-sa-notebooks.iam.gserviceaccount.com` | Vertex AI Workbench instances, when enabled |
 
    Because TKFE makes those grants, the credential it deploys with needs
    `cloudkms.cryptoKeys.getIamPolicy` and `cloudkms.cryptoKeys.setIamPolicy`

@@ -31,6 +31,14 @@ from website.settings import SITE_NAME
 logger = logging.getLogger(__name__)
 
 
+# Filestore tiers that accept a CMEK key, matching the allow-list in
+# modules/file-system/filestore/main.tf. Of the tiers OFE offers, only
+# ENTERPRISE is in this set: HIGH_SCALE_SSD is Google's legacy name for
+# ZONAL, but the module's precondition matches on the literal tier string
+# and rejects it.
+CMEK_FILESTORE_TIERS = ("ZONAL", "REGIONAL", "ENTERPRISE")
+
+
 def _filestore_cmek_key(fs, tier):
     """the CMEK key for a Filestore instance, or None.
 
@@ -42,13 +50,18 @@ def _filestore_cmek_key(fs, tier):
     key = getattr(fs, "cmek_key", "") or None
     if not key:
         return None
-    if tier.startswith("BASIC"):
+    # Allow-list, matching the precondition in
+    # modules/file-system/filestore/main.tf exactly. A deny-list on BASIC*
+    # let HIGH_SCALE_SSD through here and failed later at terraform plan,
+    # by which point the error names the module rather than the choice the
+    # user actually made.
+    if tier not in CMEK_FILESTORE_TIERS:
         raise cmek.CmekConfigError(
             f"Filestore tier {tier} does not support CMEK",
             key_name=key,
             remediation=(
-                "Use the ZONAL, REGIONAL or ENTERPRISE tier, or clear the "
-                "CMEK key on this filesystem."
+                "Use the ENTERPRISE tier, or clear the CMEK key on this "
+                "filesystem."
             ),
         )
     location = (fs.cloud_region if tier in ("ENTERPRISE", "REGIONAL")

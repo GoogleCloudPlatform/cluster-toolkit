@@ -606,3 +606,63 @@ class CmekKeySuggestionTests(SimpleTestCase):
         urls = pathlib.Path(
             __file__).resolve().parent.parent / "urls.py"
         self.assertIn('basename="api-kmskeys"', urls.read_text())
+
+
+class FilestoreCmekTierTests(SimpleTestCase):
+    """OFE must reject a CMEK tier the Filestore module will reject.
+
+    OFE used to deny only BASIC* while the module allows only
+    ZONAL/REGIONAL/ENTERPRISE, so HIGH_SCALE_SSD passed here and failed at
+    terraform plan -- an error naming the module rather than the tier the
+    user picked. These pin the two rules to each other.
+    """
+
+    KEY = ("projects/key-proj/locations/us-central1"
+           "/keyRings/ring/cryptoKeys/k")
+
+    def _check(self, tier):
+        from ghpcfe.cluster_manager import filesystem
+        fs = types.SimpleNamespace(
+            cmek_key=self.KEY, cloud_region="us-central1",
+            cloud_zone="us-central1-a")
+        return filesystem._filestore_cmek_key(fs, tier)
+
+    def test_allowed_tiers_pass(self):
+        for tier in ("ZONAL", "REGIONAL", "ENTERPRISE"):
+            with self.subTest(tier=tier):
+                self.assertIn("cryptoKeys/k", self._check(tier))
+
+    def test_rejected_tiers_raise(self):
+        # HIGH_SCALE_SSD is the case that regressed: OFE offers it, and it
+        # is not in the module's allow-list.
+        from ghpcfe.cluster_manager import cmek
+        for tier in ("HIGH_SCALE_SSD", "BASIC_HDD", "BASIC_SSD"):
+            with self.subTest(tier=tier):
+                with self.assertRaises(cmek.CmekConfigError):
+                    self._check(tier)
+
+    def test_ofe_list_matches_the_module_precondition(self):
+        # The module is the authority; if its allow-list changes, this
+        # fails rather than OFE silently drifting out of step again.
+        import pathlib, re
+        from ghpcfe.cluster_manager import filesystem
+        main_tf = (pathlib.Path(__file__).resolve()
+                   .parents[6] / "modules" / "file-system" / "filestore"
+                   / "main.tf")
+        text = main_tf.read_text()
+        # Anchor on the kms_key_name precondition specifically: main.tf
+        # has several contains(...) over filestore_tier, and the first one
+        # (is_high_capacity_tier) is not the CMEK rule.
+        m = re.search(
+            r'var\.kms_key_name == null \|\| contains\(\[([^\]]*)\],'
+            r'\s*var\.filestore_tier\)', text)
+        self.assertIsNotNone(m, "CMEK precondition not found in main.tf")
+        module_tiers = set(re.findall(r'"([A-Z_]+)"', m.group(1)))
+        self.assertEqual(set(filesystem.CMEK_FILESTORE_TIERS), module_tiers)
+
+    def test_no_key_returns_none_whatever_the_tier(self):
+        fs = types.SimpleNamespace(
+            cmek_key="", cloud_region="us-central1",
+            cloud_zone="us-central1-a")
+        from ghpcfe.cluster_manager import filesystem
+        self.assertIsNone(filesystem._filestore_cmek_key(fs, "BASIC_HDD"))
