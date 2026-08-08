@@ -16,9 +16,9 @@
 
 blueprint_name: kms-key
 
-# An end-to-end CMEK Slurm cluster. community/modules/security/kms-key creates
-# one symmetric CryptoKey and grants encrypt/decrypt on it, and every encrypted
-# resource in the cluster picks that key up through `use: [kms_key_iam]`:
+# An end-to-end CMEK Slurm cluster. kms-key creates one symmetric CryptoKey,
+# kms-key-iam grants the service agents that encrypt with it, and every
+# encrypted resource picks the key up through `use: [kms_key_iam]`:
 #
 #   * homefs            -- the Filestore /home instance (kms_key_name)
 #   * slurm_controller  -- controller boot disk (disk_encryption_key) and the
@@ -28,11 +28,13 @@ blueprint_name: kms-key
 #                          disks, via disk_encryption_key
 #
 # `use` is what makes this correct as well as concise. Each match becomes a
-# Terraform reference to the kms-key module, and the module's outputs are
-# themselves ordered behind its IAM grants, so no encrypted resource is ever
-# created before the service agent that encrypts it can use the key -- and on
-# destroy the resource goes before the grant. Nothing here reconstructs a Cloud
-# KMS resource name by hand.
+# Terraform reference to kms_key_iam, whose outputs are ordered behind its
+# grants, so no encrypted resource is created before the service agent that
+# encrypts it can use the key -- and on destroy the resource goes before the
+# grant. Note that everything below uses kms_key_iam rather than kms_key:
+# consuming the key module directly would order the resource behind the key
+# but not the grant, which is a race rather than a guarantee. Nothing here
+# reconstructs a Cloud KMS resource name by hand.
 #
 # If you already have a CryptoKey and only want to point a Slurm cluster at it,
 # use community/examples/hpc-slurm-kms.yaml instead. This blueprint is the one
@@ -77,9 +79,26 @@ vars:
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
+# test_apis_enabled runs at blueprint-expansion time, before any module is
+# applied, so the service-enablement module below cannot satisfy it on a
+# project where the API is still off. Skipping the validator is what lets
+# the module do the enabling; without the skip a cold project fails before
+# it gets the chance.
+validators:
+- validator: test_apis_enabled
+  skip: true  # enable_apis below turns cloudkms on
+
 deployment_groups:
 - group: primary
   modules:
+
+  # The kms-key, kms-key-iam and pre-existing-kms-key modules all declare
+  # cloudkms.googleapis.com in their metadata, so a project that has never
+  # used Cloud KMS needs it switched on before the key can be created.
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list: ["cloudkms.googleapis.com"]
   - id: network
     source: modules/network/vpc
 
