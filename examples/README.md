@@ -62,6 +62,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
+  * [kms-key.yaml](#kms-keyyaml--) ![community-badge] ![experimental-badge]
+  * [kms-key-per-service.yaml](#kms-key-per-serviceyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v5e](#gke-tpu-v5e-) ![core-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
@@ -1599,6 +1601,55 @@ See [README](../community/examples/flux-framework/README.md)
 Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket.
 
 [hpc-slurm-kms.yaml]: ../community/examples/hpc-slurm-kms.yaml
+
+### [kms-key.yaml] ![community-badge] ![experimental-badge]
+
+An end-to-end CMEK Slurm cluster. The [kms-key] module creates one Cloud KMS
+key ring and symmetric CryptoKey and grants encrypt/decrypt on it, and every
+encrypted resource picks that key up through `use: [kms_key]`: the Filestore
+`/home` instance, the controller, login and compute boot disks, and the Slurm
+configuration bucket. Nothing reconstructs a Cloud KMS resource name by hand,
+and because the module's outputs are ordered behind its IAM grants, no
+encrypted resource is created before its service agent can use the key.
+
+Set `key_project_id` to hold the key in a dedicated key project instead of the
+workload project; the service agents stay in the workload project and the
+module grants them across the project boundary.
+
+Contrast with [hpc-slurm-kms.yaml], which points a Slurm cluster at a CryptoKey
+that already exists rather than creating one.
+
+Requires the workload project's Filestore, Compute Engine and Cloud Storage
+service agents to exist, with `filestore_service_agent`,
+`compute_service_agent` and `storage_service_agent` set to their real
+addresses. Note that Cloud KMS key rings cannot be deleted and CryptoKey names
+cannot be reused, so `terraform destroy` deliberately retains the key material
+and redeploying needs a fresh `deployment_name`; see the [kms-key] README for
+details.
+
+[kms-key.yaml]: ../community/examples/kms-key.yaml
+[kms-key]: ../community/modules/security/kms-key/README.md
+
+### [kms-key-per-service.yaml] ![community-badge] ![experimental-badge]
+
+The same CMEK Slurm cluster as [kms-key.yaml], but with one key per class of
+resource instead of one shared key, each granted only to the service agent that
+uses it: the Compute Engine agent can decrypt the disks and nothing else, the
+Cloud Storage agent the Slurm configuration bucket and nothing else.
+
+It also shows two things the single-key example does not. The Filestore key is
+created outside the blueprint and adopted with [pre-existing-kms-key], which is
+how a key owned by a security team or held in a dedicated key project is used —
+it is never in Terraform state, so `terraform destroy` cannot touch it. And one
+nodeset sets `disk_encryption_key_service_account`, encrypting as the cluster's
+own service account rather than the Compute Engine agent, which is why that key
+grants both.
+
+Requires an existing CryptoKey for Filestore; see the comments at the top of the
+blueprint for the `gcloud kms` commands that create one.
+
+[kms-key-per-service.yaml]: ../community/examples/kms-key-per-service.yaml
+[pre-existing-kms-key]: ../community/modules/security/pre-existing-kms-key/README.md
 
 ### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
