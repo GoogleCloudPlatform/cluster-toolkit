@@ -25,6 +25,7 @@ locals {
       disk_name                           = ad.disk_name
       device_name                         = ad.device_name
       disk_type                           = ad.disk_type
+      disk_storage_pool                   = ad.disk_storage_pool
       disk_size_gb                        = ad.disk_size_gb
       disk_labels                         = merge(ad.disk_labels, local.labels)
       auto_delete                         = ad.auto_delete
@@ -39,6 +40,7 @@ locals {
     source                              = google_compute_disk.controller_disk[0].name
     device_name                         = google_compute_disk.controller_disk[0].name
     disk_labels                         = null
+    disk_storage_pool                   = null
     auto_delete                         = false
     boot                                = false
     disk_encryption_key                 = var.disk_encryption_key
@@ -111,6 +113,7 @@ module "slurm_controller_template" {
   disk_labels                = merge(var.disk_labels, local.labels)
   disk_size_gb               = var.disk_size_gb
   disk_type                  = var.disk_type
+  disk_storage_pool          = var.disk_storage_pool
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = concat(local.additional_disks, local.state_disk)
 

@@ -33,6 +33,7 @@ locals {
       source_image                        = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
       disk_size_gb                        = var.disk_size_gb
       disk_type                           = var.disk_type
+      disk_storage_pool                   = var.disk_storage_pool
       disk_labels                         = var.disk_labels
       auto_delete                         = var.auto_delete
       disk_resource_manager_tags          = var.disk_resource_manager_tags
@@ -105,6 +106,7 @@ resource "google_compute_instance_template" "tpl" {
       disk_name             = lookup(disk.value, "disk_name", null)
       disk_size_gb          = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
       disk_type             = lookup(disk.value, "disk_type", null)
+      storage_pool          = try(disk.value.disk_storage_pool, null) == "" ? null : try(disk.value.disk_storage_pool, null)
       interface             = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
       mode                  = lookup(disk.value, "mode", null)
       source                = lookup(disk.value, "source", null)
@@ -202,6 +204,26 @@ resource "google_compute_instance_template" "tpl" {
     precondition {
       condition     = var.enable_confidential_vm ? contains(["SEV", "SEV_SNP", "TDX"], local.confidential_instance_type) : true
       error_message = "If enable_confidential_vm is true, confidential_instance_type must be one of 'SEV', 'SEV_SNP', or 'TDX'."
+    }
+
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || tonumber(var.disk_size_gb) >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
+    }
+
+    precondition {
+      condition     = length(var.additional_disks) == 0 || alltrue([for disk in var.additional_disks : disk.disk_storage_pool == null || disk.disk_storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(try(disk.disk_type, "")))])
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
   }
 
