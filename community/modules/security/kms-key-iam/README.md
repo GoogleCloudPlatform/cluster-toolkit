@@ -73,6 +73,9 @@ input name:
 | `kms_key_name` | `modules/file-system/filestore` |
 | `disk_encryption_key` | `schedmd-slurm-gcp-v6-controller`, `-login`, `-nodeset` |
 | `slurm_bucket_kms_key` | `schedmd-slurm-gcp-v6-controller` |
+| `image_encryption_key` | `modules/packer/custom-image` |
+| `repository_kms_key_name` | `community/modules/container/artifact-registry` |
+| `encryption_key_name` | `community/modules/database/slurm-cloudsql-federation` |
 | `crypto_key_id` | anything whose input is named otherwise |
 
 All are the same key id; the separate names exist only so `use` matches.
@@ -134,6 +137,9 @@ No modules.
 | ---- | ----------- |
 | <a name="output_crypto_key_id"></a> [crypto\_key\_id](#output\_crypto\_key\_id) | The CryptoKey id, ordered after the encrypt/decrypt grants. This is the output to pass to any CMEK-consuming module whose input is not named below. |
 | <a name="output_disk_encryption_key"></a> [disk\_encryption\_key](#output\_disk\_encryption\_key) | The CryptoKey id under the name used by Slurm instance modules, so `use` wires it automatically. Consumed by the schedmd-slurm-gcp-v6 controller, login and nodeset modules to encrypt boot disks. Leave their disk\_encryption\_key\_service\_account unset, so Compute Engine encrypts as the project's Compute Engine service agent -- that agent, not the instances' own service account, is the principal that needs the grant. |
+| <a name="output_encryption_key_name"></a> [encryption\_key\_name](#output\_encryption\_key\_name) | The CryptoKey id under the name used by the Cloud SQL federation module, so `use` wires it automatically. Consumed by community/modules/database/slurm-cloudsql-federation's encryption\_key\_name. Grant the `cloudsql` service agent. |
+| <a name="output_image_encryption_key"></a> [image\_encryption\_key](#output\_image\_encryption\_key) | The CryptoKey id under the name used by the custom-image Packer module, so `use` wires it automatically. Consumed by modules/packer/custom-image's image\_encryption\_key. Grant the `compute` service agent: a Packer build creates a Compute Engine disk and then an image from it. |
 | <a name="output_kms_key_name"></a> [kms\_key\_name](#output\_kms\_key\_name) | The CryptoKey id under the name used by CMEK-capable storage modules, so `use` wires it automatically. Consumed by modules/file-system/filestore's kms\_key\_name. |
+| <a name="output_repository_kms_key_name"></a> [repository\_kms\_key\_name](#output\_repository\_kms\_key\_name) | The CryptoKey id under the name used by the Artifact Registry module, so `use` wires it automatically. Consumed by community/modules/container/artifact-registry's repository\_kms\_key\_name. Grant the `artifactregistry` service agent, and note the key location must match the repository location. |
 | <a name="output_slurm_bucket_kms_key"></a> [slurm\_bucket\_kms\_key](#output\_slurm\_bucket\_kms\_key) | The CryptoKey id under the name used by the Slurm controller for its configuration bucket, so `use` wires it automatically. Consumed by schedmd-slurm-gcp-v6-controller's slurm\_bucket\_kms\_key. The bucket is written by Cloud Storage, so that project's Cloud Storage service agent needs the grant. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -53,6 +53,27 @@ output "disk_encryption_key" {
   depends_on = [google_kms_crypto_key_iam_member.this]
 }
 
+output "image_encryption_key" {
+  description = "The CryptoKey id under the name used by the custom-image Packer module, so `use` wires it automatically. Consumed by modules/packer/custom-image's image_encryption_key. Grant the `compute` service agent: a Packer build creates a Compute Engine disk and then an image from it."
+  value       = var.crypto_key_id
+
+  depends_on = [google_kms_crypto_key_iam_member.this]
+}
+
+output "repository_kms_key_name" {
+  description = "The CryptoKey id under the name used by the Artifact Registry module, so `use` wires it automatically. Consumed by community/modules/container/artifact-registry's repository_kms_key_name. Grant the `artifactregistry` service agent, and note the key location must match the repository location."
+  value       = var.crypto_key_id
+
+  depends_on = [google_kms_crypto_key_iam_member.this]
+}
+
+output "encryption_key_name" {
+  description = "The CryptoKey id under the name used by the Cloud SQL federation module, so `use` wires it automatically. Consumed by community/modules/database/slurm-cloudsql-federation's encryption_key_name. Grant the `cloudsql` service agent."
+  value       = var.crypto_key_id
+
+  depends_on = [google_kms_crypto_key_iam_member.this]
+}
+
 output "slurm_bucket_kms_key" {
   description = "The CryptoKey id under the name used by the Slurm controller for its configuration bucket, so `use` wires it automatically. Consumed by schedmd-slurm-gcp-v6-controller's slurm_bucket_kms_key. The bucket is written by Cloud Storage, so that project's Cloud Storage service agent needs the grant."
   value       = var.crypto_key_id
