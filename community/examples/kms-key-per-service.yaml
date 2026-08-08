@@ -84,9 +84,26 @@ vars:
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
+# test_apis_enabled runs at blueprint-expansion time, before any module is
+# applied, so the service-enablement module below cannot satisfy it on a
+# project where the API is still off. Skipping the validator is what lets
+# the module do the enabling; without the skip a cold project fails before
+# it gets the chance.
+validators:
+- validator: test_apis_enabled
+  skip: true  # enable_apis below turns cloudkms on
+
 deployment_groups:
 - group: primary
   modules:
+
+  # The kms-key, kms-key-iam and pre-existing-kms-key modules all declare
+  # cloudkms.googleapis.com in their metadata, so a project that has never
+  # used Cloud KMS needs it switched on before the key can be created.
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list: ["cloudkms.googleapis.com"]
   - id: network
     source: modules/network/vpc
 
