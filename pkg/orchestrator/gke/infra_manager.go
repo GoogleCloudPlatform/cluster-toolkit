@@ -563,8 +563,18 @@ func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[strin
 		},
 	}
 	if len(nodeLabels) > 0 {
-		rfMap["spec"] = map[string]interface{}{
-			"nodeLabels": nodeLabels,
+		filteredLabels := make(map[string]string)
+		for k, v := range nodeLabels {
+			if k != tpuTopologyLabel &&
+				!strings.HasPrefix(k, "cloud.google.com/gke-tpu-slice-") &&
+				!strings.HasPrefix(k, "cloud.google.com/gke-tpu-partition-") {
+				filteredLabels[k] = v
+			}
+		}
+		if len(filteredLabels) > 0 {
+			rfMap["spec"] = map[string]interface{}{
+				"nodeLabels": filteredLabels,
+			}
 		}
 	}
 	return yaml.Marshal(rfMap)

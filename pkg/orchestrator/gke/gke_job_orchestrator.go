@@ -700,10 +700,6 @@ func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineType
 		return 0, 0, "flavor-default", make(map[string]string), nil
 	}
 
-	if tpus > 0 && np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
-		nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
-	}
-
 	return gpus, tpus, flavor, nodeLabels, nil
 }
 
@@ -1352,7 +1348,7 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing {
+	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 
