@@ -66,6 +66,7 @@ func NewGKEOrchestrator() *GKEOrchestrator {
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
+		policyCache:              make(map[string]string),
 	}
 }
 
