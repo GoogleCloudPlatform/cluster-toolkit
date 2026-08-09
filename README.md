@@ -12,7 +12,7 @@ Cluster Toolkit comes with a suite of [tutorials](docs/tutorials/README.md), [ex
 
 The main components of Cluster Toolkit include:
 
-- **Cluster blueprint**: A YAML file that defines the cluster's infrastructure and configuration.
+- **Cluster blueprints**: YAML files that define the cluster's infrastructure and configuration.
 - **Modules**: Reusable building blocks (Terraform or Packer) used to compose a blueprint.
 - **gcluster engine**: The command-line tool that processes blueprints to create a deployment folder.
 - **Deployment folder**: A self-contained folder containing the Terraform or Packer code needed to provision the environment.
@@ -61,10 +61,10 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 | **macOS (amd64 / arm64)** | ✅ | Native support via the Mac binary. Includes amd64 (Intel) and arm64 (Apple Silicon) builds starting v1.85.0. |
 | **Windows** | ❎ | Please [Build from source](#building-from-source). |
 
-1. Download and extract the bundle:
+> [!NOTE]
+> Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
 
-    > [!NOTE]
-    > Multi-architecture builds (amd64 and arm64) are available starting with version 1.85.0. Tarball bundles (.tgz) are supported starting with version 1.89.0.
+1. Download and extract the bundle:
 
     For versions v1.89.0 and newer (Multi-architecture Tarball):
 
@@ -94,7 +94,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
     cd cluster-toolkit
     ```
 
-2. Verify the Installation:
+2. Verify the installation:
 
     ```shell
     ./gcluster --version
