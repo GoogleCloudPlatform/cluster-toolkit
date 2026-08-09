@@ -102,6 +102,7 @@ locals {
     labels                = local.labels
     machine_type          = var.machine_type
     metadata              = local.metadata
+    instance_metadata     = try(var.instance_metadata != null ? var.instance_metadata : {}, {})
     min_cpu_platform      = var.min_cpu_platform
     num_instances         = var.num_instances
     on_host_maintenance   = var.on_host_maintenance

@@ -96,6 +96,12 @@ variable "instance_template" {
   type        = string
 }
 
+variable "metadata" {
+  description = "Metadata applied directly to the instances."
+  type        = map(string)
+  default     = {}
+}
+
 variable "region" {
   description = "Region where the instances should be created."
   type        = string

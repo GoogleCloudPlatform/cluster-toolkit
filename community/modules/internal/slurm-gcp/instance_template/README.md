@@ -83,6 +83,7 @@
 | ---- | ----------- |
 | <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template details |
 | <a name="output_labels"></a> [labels](#output\_labels) | Labels attached to the instance template |
+| <a name="output_metadata"></a> [metadata](#output\_metadata) | Complete metadata inherited by instances created from this template. |
 | <a name="output_name"></a> [name](#output\_name) | Name of instance template |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | Self\_link of instance template |
 | <a name="output_service_account"></a> [service\_account](#output\_service\_account) | Service account object, includes email and scopes. |

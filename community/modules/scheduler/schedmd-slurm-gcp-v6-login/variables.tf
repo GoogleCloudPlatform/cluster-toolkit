@@ -307,6 +307,12 @@ variable "metadata" {
   default     = {}
 }
 
+variable "instance_metadata" {
+  type        = map(string)
+  description = "Metadata applied directly to login instances. Unlike metadata inherited from the instance template, changes to these values update instances in place."
+  default     = {}
+}
+
 variable "min_cpu_platform" {
   type        = string
   description = <<EOD
