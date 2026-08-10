@@ -975,31 +975,33 @@ completed step: 4, seconds: 1.182, TFLOP/s/device: 167.154, Tokens/s/device: 346
 completed step: 5, seconds: 1.186, TFLOP/s/device: 166.597, Tokens/s/device: 3452.840, loss: 9.184
 ```
 
-## 8. Advanced GKE Infrastructure Features
+## 8. Advanced GKE infrastructure features
 
-This section details how `gcluster job submit` orchestrates advanced GKE hardware and scheduling capabilities—such as dynamic slice reconfiguration, the Pathways distributed AI framework, and GKE Node Auto-Provisioning (NAP).
+This section details how the `gcluster job submit` command orchestrates advanced Google Kubernetes Engine (GKE) hardware and scheduling capabilities, such as dynamic slice reconfiguration, the Pathways distributed AI framework, and GKE Node Auto-Provisioning (NAP).
 
 > [!NOTE]
-> For complete infrastructure formation guidelines, cluster blueprint Terraform variable configurations, and module requirements for deploying clusters that support these features, see the [GKE Advanced Infrastructure Features Guide](gke-advanced-features.md).
+> For complete infrastructure formation guidelines, cluster blueprint Terraform variable configurations, and module requirements for deploying clusters that support these features, see the [guide to advanced GKE infrastructure features](gke-advanced-features.md).
 
 ---
 
-### 8.1 Dynamic Slicing (TPU v7x and Future Generations)
+### 8.1 Dynamic slicing (TPU v7x and future generations)
 
-GKE Dynamic Slicing provides unparalleled flexibility in TPU capacity scheduling by allowing physical nodes to be logically grouped or sliced dynamically. In Cluster Toolkit and GKE, dynamic slicing is supported starting with **TPU v7x (Ironwood) and future TPU generations onwards** (earlier generations like TPU v4, v5e, v5p, and v6e require static slice topologies).
+GKE Dynamic Slicing provides flexible TPU capacity scheduling by letting you logically group or slice physical nodes dynamically. In Cluster Toolkit and GKE, dynamic slicing is supported starting with TPU v7x (Ironwood) and future TPU generations (earlier generations like TPU v4, TPU v5e, TPU v5p, and TPU v6e require static slice topologies).
 
-#### Capabilities & Scheduling Benefits
+#### Capabilities and scheduling benefits
 
-* **Elastic Topology Provisioning:** Stitch multiple physical TPU v7x blocks together into a larger logical slice (e.g., wiring multiple `4x4x4` blocks together).
-* **Latency Optimization:** Kueue's Topology-Aware Scheduling (TAS) guarantees that TPU pods are placed with minimal network hop latency across the physical TPU architecture, ensuring maximum distributed training and inference throughput.
-* **Multi-Slice Synchronization:** For multi-slice jobs (`--num-slices > 1`), GCluster dynamically coordinates slice-level reservations to ensure all slices are acquired concurrently, preventing mismatched scaling or execution hangs.
-* **Under-The-Hood Mappings:** GCluster automatically translates high-level TPU requests into partition-level requirements (`cloud.google.com/gke-tpu-partition-<topology>-id`) and switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys.
+Dynamic slicing provides the following scheduling capabilities:
 
-#### Example CLI Command
+* **Elastic topology provisioning:** Connect multiple physical TPU v7x blocks together into a larger logical slice (for example, connecting multiple `4x4x4` blocks together).
+* **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh, maximizing distributed training throughput.
+* **Multi-slice synchronization:** For multi-slice jobs (`--num-slices > 1`), Cluster Toolkit coordinates slice-level reservations to ensure that all slices are acquired concurrently, preventing mismatched scaling.
+* **Internal scheduling annotations:** Cluster Toolkit automatically translates high-level TPU requests into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys.
 
-Submit a dynamic slicing workload targeting TPU v7x nodes:
+#### Example CLI command
 
-```bash
+To submit a dynamic slicing workload targeting TPU v7x nodes, enter the following command:
+
+```shell
 ./gcluster job submit \
   --name my-dynamic-slice-job \
   --command "python train.py" \
@@ -1008,82 +1010,68 @@ Submit a dynamic slicing workload targeting TPU v7x nodes:
   --gke-scheduler gke.io/topology-aware-auto
 ```
 
-#### GKE Documentation Reference
-
-For a deeper conceptual understanding or custom configurations, refer to Google Cloud's official public guides:
+#### GKE documentation reference
 
 * [TPU Dynamic Slicing on GKE Concepts](https://cloud.google.com/kubernetes-engine/docs/concepts/tpu-dynamic-slicing)
 * [Scheduling Dynamic Slices with Kueue and TAS on GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-tpu-dynamic-slicing)
-* [GKE Workloads with Topology-Aware Scheduling (TAS)](https://cloud.google.com/kubernetes-engine/docs/how-to/kueue-topology-aware-scheduling)
 
 ---
 
-### 8.2 Pathways Distributed AI Orchestration
+### 8.2 Pathways distributed AI framework
 
-Pathways is a specialized distributed AI execution framework designed to coordinate large-scale multi-slice TPU workloads. GCluster provides first-class integration for compiling and deploying Pathways-enabled workloads without complex manual manifest configuration.
+Pathways is a distributed execution framework for large-scale multi-slice machine learning workloads. The `gcluster job submit` command provides end-to-end integration for deploying Pathways-enabled jobs on GKE.
 
-#### Capabilities & Workload Orchestration Roles
+#### Capabilities and workload orchestration roles
 
-When the `--pathways` flag is specified during job submission, GCluster automatically refactors the JobSet manifest to deploy and coordinate three distinct functional roles across your GKE cluster:
+Pathways integration provides the following orchestration capabilities:
 
-* **Pathways ResourceManager/Server (`pathways-rm`):** Deployed within the coordinator job to manage dynamic TPU worker allocations and host mappings.
-* **Pathways Proxy (`pathways-proxy`):** Handles execution requests and acts as the coordinator/entry point for the client workload.
-* **Co-located JAX Workers & Sidecars:** Deployed as worker pods hosting JAX and PJRT runtimes across independent TPU slices, with optional co-located sidecar containers specified via `--pathways-colocated-python-sidecar-image`.
+* **Multi-role JobSet orchestration:** When you specify the `--pathways` flag, Cluster Toolkit generates and coordinates a multi-role JobSet comprising the Resource Manager (`pathways-rm`), Proxy server (`pathways-proxy`), and JAX worker pods.
+* **Kueue resource management:** Cluster Toolkit automatically maps multi-slice resource limits and unifies Kueue ClusterQueue resource groups so that coordinator and worker pods schedule without resource deadlocks.
+* **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster.
 
-#### Headless Pathways Orchestration
+#### Example CLI commands
 
-When `--pathways-headless` is enabled, GCluster deploys the Pathways infrastructure without running a workload container inside the cluster:
-* **Optional Image and Command Flags**: Since no client workload container is deployed inside GKE, the `--image`, `--base-image`, and `--command` flags are **not required**.
-* **Infrastructure-Only Manifest**: The manifest compiles `pathways-rm` and `pathways-proxy` as direct main containers inside the coordinator replicatedJob (`pathways-head`). No `workload-container` is generated.
-* **External Client Connection**: You can connect to the running Pathways cluster externally (e.g. from a local notebook or Vertex AI development instance) by port-forwarding the proxy server container port `29000`:
+To submit a standard multi-slice Pathways training workload, enter the following command:
 
-  ```bash
-  kubectl port-forward <pathways-head-pod> 29000:29000
-  ```
-
-  And then initializing JAX/Pathways client pointing to `grpc://127.0.0.1:29000`.
-
-#### Example CLI Commands
-
-Submit a standard multi-slice Pathways distributed training job:
-
-```bash
+```shell
 ./gcluster job submit \
   --name my-pathways-job \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
   --pathways \
-  --pathways-gcs-location gs://<YOUR_BUCKET_NAME>/pathways-artifacts
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts
 ```
 
-Submit a headless Pathways cluster infrastructure for external client connections:
+To submit a headless Pathways server cluster, enter the following command:
 
-```bash
+```shell
 ./gcluster job submit \
   --name my-pathways-headless \
   --compute-type v6e-16 \
   --pathways \
-  --pathways-gcs-location gs://<YOUR_BUCKET_NAME>/pathways-artifacts \
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
   --pathways-headless
 ```
 
 ---
 
-### 8.3 Node Auto-Provisioning (NAP) and Compute Consumption
+### 8.3 Node auto-provisioning (NAP) and compute consumption
 
-Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaler feature that dynamically creates and deletes node pools based on unschedulable pod resource requirements. GCluster integrates with NAP to allow users to target specific compute consumption models without pre-provisioning static node pools.
+GKE Node Auto-Provisioning (NAP) automatically provisions and manages node pools based on unschedulable pod requirements.
 
-#### Capabilities, Scheduling & Pre-flight Verification
+#### Capabilities, scheduling, and pre-flight verification
 
-* **Spot and On-Demand Provisioning:** Workloads can request `spot` or `on-demand` VMs via `--gke-nap-provisioning`. If you explicitly target Spot, pre-flight checks and node selectors ensure the workload does not silently fall back to standard pools.
-* **Reservation Targeting:** Target GCE reservations by name via `--gke-nap-reservation`. GCluster automatically extracts short reservation identifiers to populate pod node selectors and tolerations (`cloud.google.com/reservation-name=<reservation-name>:NoSchedule`), enabling GKE NAP to spawn nodes directly into your target GCE reservation. You can also pass a full GCP resource URI (e.g., `projects/<project-id>/reservations/<reservation-name>`) to target shared reservations in other projects, which automatically configures the `cloud.google.com/reservation-project` label.
-* **Pre-flight Limit Verification:** GCluster queries GKE Cluster Metadata to retrieve autoprovisioning limits. It validates that the requested machine type is explicitly covered by GKE NAP limits. If not covered, GCluster **fails fast** during submission to prevent scheduling deadlocks.
+NAP integration provides the following capabilities:
 
-#### Example CLI Commands
+* **Consumption targeting:** The `--gke-nap-provisioning` flag lets you target `spot`, `on-demand`, or `reservation` compute models.
+* **Reservation integration:** The `--gke-nap-reservation RESERVATION_NAME` flag injects reservation affinity selectors, letting NAP spawn node pools directly in specific Compute Engine reservations.
+* **Pre-flight limit verification:** Cluster Toolkit validates requested machine types against cluster NAP limits before job submission, failing quickly with a diagnostic error if limits would be exceeded.
 
-Target Spot VMs via GKE Node Auto-Provisioning:
+#### Example CLI commands
 
-```bash
+To target Spot VMs, enter the following command:
+
+```shell
 ./gcluster job submit \
   --name my-nap-spot-job \
   --command "python app.py" \
@@ -1091,22 +1079,25 @@ Target Spot VMs via GKE Node Auto-Provisioning:
   --gke-nap-provisioning spot
 ```
 
-Target a GCE reservation via GKE Node Auto-Provisioning:
+To target a Compute Engine reservation, enter the following command:
 
-```bash
+```shell
 ./gcluster job submit \
   --name my-nap-reservation-job \
   --command "python app.py" \
   --compute-type v6e-4 \
   --gke-nap-provisioning reservation \
-  --gke-nap-reservation my-tpu-reservation
+  --gke-nap-reservation RESERVATION_NAME
 ```
 
-### 8.4 Custom Kubernetes Manifest Templates
+---
+
+### 8.4 Custom Kubernetes manifest templates
 
 GCluster uses embedded Go templates to generate the Kubernetes manifests (JobSets, Kueue configurations, etc.) deployed to your GKE cluster. If you need to deeply customize the generated manifests beyond what the CLI flags provide (e.g., adding custom sidecars, specific annotations, or modifying the core structure), you can override these embedded templates with your own local copies.
 
-#### 1. Extract the Default Templates
+#### 1. Extract the default templates
+
 First, use the `gke-template-extract` command to extract the embedded default templates into a local directory so you have a starting point:
 
 ```bash
@@ -1115,10 +1106,12 @@ First, use the `gke-template-extract` command to extract the embedded default te
 
 *(Use `--overwrite` if the directory already contains files you want to replace).*
 
-#### 2. Modify the Templates
+#### 2. Modify the templates
+
 Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
 
-#### 3. Use Your Custom Templates
+#### 3. Use your custom templates
+
 When submitting your job, you can tell `gcluster` to use your custom templates instead of the embedded ones.
 
 Pass the `--gke-custom-templates-path` flag to the `submit` command:
