@@ -277,7 +277,7 @@ For complete step-by-step tutorials, advanced multi-slice topologies, storage mo
 
 The `gcluster job submit` command integrates natively with advanced Google Kubernetes Engine (GKE) hardware and scheduling capabilities:
 
-- **Dynamic TPU slicing:** Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically by using the `--topology` flag and Kueue Topology-Aware Scheduling.
+- **Dynamic TPU slicing:** Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically (supporting both superslicing and subslicing) by using the `--topology` flag and Kueue Topology-Aware Scheduling.
 - **Pathways distributed AI orchestration:** Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) by using the `--pathways` and `--pathways-gcs-location` flags.
 - **GKE node auto-provisioning (NAP):** Automatically scale and provision compute nodes on demand by using the `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation` flags.
 
