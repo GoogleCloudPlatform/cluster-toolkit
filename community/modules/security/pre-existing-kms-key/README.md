@@ -29,7 +29,7 @@ This module does not grant anyone access to the key. Pass `crypto_key_id` to a
   use: [existing_key]
   settings:
     service_agent_principals:
-    - "serviceAccount:service-1234567890@compute-system.iam.gserviceaccount.com"
+    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
 ```
 
 `project_id` is the *key* project, which need not be the project the encrypted

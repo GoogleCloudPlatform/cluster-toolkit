@@ -23,16 +23,16 @@ This module creates the key and nothing else. Two companions complete the set:
   settings:
     project_id: my-project
     location: us-central1
-    key_ring_name: my-deployment-key-ring
-    key_name: my-deployment-key
+    key_ring_name: my-keyring
+    key_name: my-key
 
 - id: kms_key_iam
   source: community/modules/security/kms-key-iam
   use: [kms_key]
   settings:
     service_agent_principals:
-    - "serviceAccount:service-1234567890@cloud-filer.iam.gserviceaccount.com"
-    - "serviceAccount:service-1234567890@compute-system.iam.gserviceaccount.com"
+    - "serviceAccount:service-PROJECT_NUMBER@cloud-filer.iam.gserviceaccount.com"
+    - "serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com"
 
 - id: homefs
   source: modules/file-system/filestore
@@ -148,7 +148,7 @@ No modules.
 | <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | What `terraform destroy` does with the CryptoKey.<br/><br/>  ABANDON  drop it from Terraform state, leaving the CryptoKey and<br/>           every key version intact and enabled in Cloud KMS<br/>  DELETE   destroy all key versions, rendering data encrypted with<br/>           them permanently unrecoverable<br/><br/>ABANDON is the default because key material routinely outlives the<br/>deployment that created it, and because destroying versions cannot be<br/>undone. Only set DELETE for a key whose data is genuinely disposable.<br/><br/>Changing this is an in-place update, so it can be set on an existing<br/>key by re-applying -- unlike protection\_level and<br/>destroy\_scheduled\_duration, which are fixed at creation. | `string` | `"ABANDON"` | no |
 | <a name="input_destroy_scheduled_duration"></a> [destroy\_scheduled\_duration](#input\_destroy\_scheduled\_duration) | The period a CryptoKeyVersion spends in DESTROY\_SCHEDULED before transitioning to DESTROYED, expressed as a duration string ending in "s" (seconds), e.g. "2592000s" for 30 days. Chosen at creation and immutable afterwards; use a new key\_name to change it. See the module README. | `string` | `"2592000s"` | no |
 | <a name="input_key_name"></a> [key\_name](#input\_key\_name) | The permanent name of the symmetric CryptoKey. Cloud KMS CryptoKey names cannot be renamed and cannot be reused once destroyed. | `string` | n/a | yes |
-| <a name="input_key_ring_id"></a> [key\_ring\_id](#input\_key\_ring\_id) | The id of an existing Cloud KMS key ring to create the CryptoKey in, for<br/>example "projects/my-project/locations/us-central1/keyRings/my-ring".<br/>Set this instead of key\_ring\_name to reuse a key ring rather than create<br/>one, which is what makes it possible to hold many CryptoKeys in a single<br/>long-lived ring and to redeploy after a teardown that retained the ring.<br/>Exactly one of key\_ring\_name or key\_ring\_id must be supplied. | `string` | `null` | no |
+| <a name="input_key_ring_id"></a> [key\_ring\_id](#input\_key\_ring\_id) | The id of an existing Cloud KMS key ring to create the CryptoKey in, for<br/>example "projects/my-project/locations/us-central1/keyRings/my-keyring".<br/>Set this instead of key\_ring\_name to reuse a key ring rather than create<br/>one, which is what makes it possible to hold many CryptoKeys in a single<br/>long-lived ring and to redeploy after a teardown that retained the ring.<br/>Exactly one of key\_ring\_name or key\_ring\_id must be supplied. | `string` | `null` | no |
 | <a name="input_key_ring_name"></a> [key\_ring\_name](#input\_key\_ring\_name) | The permanent name of a Cloud KMS key ring to create. Cloud KMS key ring names cannot be changed or reused once created. Leave null when adopting an existing ring with key\_ring\_id. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the CryptoKey. Key-value pairs. Cloud KMS key rings and IAM members do not support labels. | `map(string)` | `{}` | no |
 | <a name="input_location"></a> [location](#input\_location) | The Cloud KMS location (region or multi-region) in which to create the key ring, e.g. "us-central1" or "us". Must be a location that can serve the resources being encrypted; Cloud KMS validates it. | `string` | n/a | yes |
