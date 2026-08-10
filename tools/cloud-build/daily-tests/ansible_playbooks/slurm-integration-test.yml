@@ -337,8 +337,10 @@
         #!/bin/bash
         NODES=$(sinfo --noheader --format "%n")
         if [ -z "$NODES" ]; then exit 0; fi
+        
+        # Use srun -N 1 to bypass the multi-node prolog bug and patch safely
         for NODE in $NODES; do
-          ssh -o StrictHostKeyChecking=no "$NODE" "
+          srun -N 1 -w "$NODE" bash -c "
             HEADER=\$(sudo lspci -s 06:00.0 -xxx 2>/dev/null | grep -E '^00:' | awk '{print \$16}')
             if [ \"\$HEADER\" == \"80\" ]; then
               sudo sed -i 's/s0\"/s0f0\"/g' /opt/tcpdirect_benchmark/gpu_rxq_configuration.textproto 2>/dev/null || true
