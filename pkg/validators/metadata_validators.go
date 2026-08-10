@@ -590,3 +590,67 @@ func evalTriggers(
 	}
 	return true
 }
+
+// ServiceAccountIDValidator validates if the combined deployment_name and name
+// form a valid GCP Service Account ID.
+type ServiceAccountIDValidator struct{}
+
+// Validate checks if the generated service account ID is valid.
+func (v *ServiceAccountIDValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int,
+) error {
+	depNameSetting, ok := rule.Inputs["deployment_name"].(string)
+	if !ok {
+		depNameSetting = "deployment_name"
+	}
+	nameSetting, ok := rule.Inputs["name"].(string)
+	if !ok {
+		nameSetting = "name"
+	}
+
+	depNameValues, depNamePath, err := getModuleSettingValues(bp, group, modIdx, mod, depNameSetting)
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("failed to resolve setting %q: %w", depNameSetting, err), Path: depNamePath}
+	}
+	if len(depNameValues) == 0 || depNameValues[0].Type() != cty.String {
+		return config.BpError{Err: fmt.Errorf("setting %q must be a string", depNameSetting), Path: depNamePath}
+	}
+	depName := depNameValues[0].AsString()
+
+	nameValues, namePath, err := getModuleSettingValues(bp, group, modIdx, mod, nameSetting)
+	if err != nil {
+		return config.BpError{Err: fmt.Errorf("failed to resolve setting %q: %w", nameSetting, err), Path: namePath}
+	}
+	if len(nameValues) == 0 || nameValues[0].Type() != cty.String {
+		return config.BpError{Err: fmt.Errorf("setting %q must be a string", nameSetting), Path: namePath}
+	}
+	name := nameValues[0].AsString()
+
+	var saID string
+	if depName == "" {
+		saID = name
+	} else {
+		saID = fmt.Sprintf("%s-%s", depName, name)
+	}
+
+	if len(saID) < 6 || len(saID) > 30 {
+		return config.BpError{
+			Err:  fmt.Errorf("generated service account ID %q is invalid: length must be between 6 and 30 characters, but got %d (deployment_name: %d, name: %d)", saID, len(saID), len(depName), len(name)),
+			Path: namePath,
+		}
+	}
+
+	re := regexp.MustCompile(`^[a-z][-a-z0-9]*[a-z0-9]$`)
+	if !re.MatchString(saID) {
+		return config.BpError{
+			Err:  fmt.Errorf("generated service account ID %q is invalid: must begin with a lowercase letter, contain only lowercase alphanumeric characters and dashes, and cannot end with a dash", saID),
+			Path: namePath,
+		}
+	}
+
+	return nil
+}

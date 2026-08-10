@@ -34,3 +34,7 @@ ghpc:
       vars: [prefix]
       deprecated: true
     error_message: "Unsupported variable: 'prefix'. Please use 'deployment_name' instead."
+  - validator: service_account_id
+    inputs:
+      deployment_name: deployment_name
+      name: name
