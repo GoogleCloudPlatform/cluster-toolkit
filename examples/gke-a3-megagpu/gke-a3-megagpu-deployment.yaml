@@ -38,11 +38,30 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The number of nodes to be created
-  static_node_count:
+## Choose ONE consumption model from the options below (default is On-Demand):
 
-  # The name of the compute engine reservation in the form of
-  # <reservation-name>
-  # To target a BLOCK_NAME, the name of the extended reservation
-  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
-  reservation:
+## --- Option 1: DWS Flex Start ---
+  #enable_flex_start: true
+  #static_node_count: $(null)
+
+## --- Option 2: DWS Flex Start + Queued Provisioning ---
+  ## Change this variable if you want to have a custom kueue config file
+  #kueue_configuration_path: $(ghpc_stage("../dws-sample-workloads/dws-queues.yaml.tftpl"))
+  #enable_flex_start: true
+  #enable_queued_provisioning: true
+  #static_node_count: $(null)
+
+## --- Option 3: Spot ---
+  #spot: true
+  #static_node_count:
+
+## --- Option 4: Specific Reservation ---
+## See for more information: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool#using-gce-reservations
+  #reservation_affinity:
+  #  consume_reservation_type: SPECIFIC_RESERVATION
+  #  specific_reservations:
+  #  - name:
+  #static_node_count:
+
+## --- Option 5: On-Demand (Default) ---
+  static_node_count:

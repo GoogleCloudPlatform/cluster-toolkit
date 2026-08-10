@@ -34,6 +34,7 @@ cli_deployment_vars:
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16
   gcp_public_cidrs_access_enabled: true
+  spot: "{{ enable_spot | default(true) }}"
 custom_vars:
   project: "{{ project }}"
   instance_labels:
