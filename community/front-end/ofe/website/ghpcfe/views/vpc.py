@@ -52,6 +52,40 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _probe_private_google_access(credential_detail, region, subnet):
+    """Read a subnet's real Private Google Access state, or keep the default.
+
+    Imported subnets are not managed by OFE, so the model default does not
+    describe them; recording the true state keeps egress validation at
+    cluster-create accurate. The probe is best effort in two ways -- it can
+    raise, and it can return ``found`` False when the subnet could not be read
+    without raising -- and neither means "no Private Google Access". A wrong
+    False is surfaced in the VPC detail page and is written into the
+    managed-VPC Terraform template, so fall back to the model default whenever
+    the real state is unknown.
+    """
+    default = VirtualSubnet._meta.get_field(
+        "private_google_access_enabled"
+    ).default
+    try:
+        egress = cloud_info.get_subnet_egress_info(
+            "GCP", credential_detail, region, subnet
+        )
+    except Exception as e:  # noqa: BLE001 - best effort, keep default
+        logger.warning(
+            "Could not read Private Google Access for subnet %s: %s", subnet, e
+        )
+        return default
+    if not egress["found"]:
+        logger.warning(
+            "Subnet %s in %s could not be read; keeping default Private "
+            "Google Access state (%s)",
+            subnet, region, default,
+        )
+        return default
+    return egress["private_google_access"]
+
+
 # list view
 class VPCListView(SuperUserRequiredMixin, generic.ListView):
     """Custom ListView for VirtualNetwork model"""
@@ -227,20 +261,9 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
         form_subnets = form.cleaned_data["subnets"]
 
         def add_subnet(unused_vpc_name, region, subnet, cidr):
-            # Record the subnet's real Private Google Access state instead of
-            # the model default, so egress validation at cluster-create is
-            # accurate for imported subnets (which OFE does not manage).
-            try:
-                pga = cloud_info.get_subnet_egress_info(
-                    "GCP", self.cloud_credential.detail, region, subnet
-                )["private_google_access"]
-            except Exception as e:  # noqa: BLE001 - best effort, keep default
-                logger.warning(
-                    "Could not read Private Google Access for subnet %s: %s",
-                    subnet,
-                    e,
-                )
-                pga = False
+            pga = _probe_private_google_access(
+                self.cloud_credential.detail, region, subnet
+            )
             vs = VirtualSubnet(
                 name=subnet,
                 vpc=self.object,
@@ -305,23 +328,9 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
         form_subnets = form.cleaned_data["subnets"]
 
         def add_subnet(unused_vpc_name, region, subnet, cidr):
-            # Record the subnet's real Private Google Access state instead of
-            # the model default, so egress validation at cluster-create is
-            # accurate for imported subnets (which OFE does not manage).
-            try:
-                pga = cloud_info.get_subnet_egress_info(
-                    "GCP",
-                    self.object.cloud_credential.detail,
-                    region,
-                    subnet,
-                )["private_google_access"]
-            except Exception as e:  # noqa: BLE001 - best effort, keep default
-                logger.warning(
-                    "Could not read Private Google Access for subnet %s: %s",
-                    subnet,
-                    e,
-                )
-                pga = False
+            pga = _probe_private_google_access(
+                self.object.cloud_credential.detail, region, subnet
+            )
             vs = VirtualSubnet(
                 name=subnet,
                 vpc=self.object,

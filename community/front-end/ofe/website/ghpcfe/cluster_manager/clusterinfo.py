@@ -829,10 +829,18 @@ class ClusterInfo:
                         "(cluster %s left it running after destroy)",
                         instance.name, zone, cluster_name,
                     )
-                    client.delete(
-                        project=project_id, zone=zone, instance=instance.name
-                    )
-                    deleted += 1
+                    # One failed delete (transient API error, node already
+                    # going away) must not abandon the rest of the sweep.
+                    try:
+                        client.delete(
+                            project=project_id, zone=zone, instance=instance.name
+                        )
+                        deleted += 1
+                    except Exception as delete_err:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to delete orphaned node %s in %s: %s",
+                            instance.name, zone, delete_err,
+                        )
 
             if deleted:
                 logger.warning(

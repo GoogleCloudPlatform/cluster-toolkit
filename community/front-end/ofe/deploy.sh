@@ -608,7 +608,7 @@ TFVARS
 			--project="${project_id}" >/dev/null 2>&1; then
 			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
 				echo "Found existing service account ${fe_sa_email}; importing into Terraform state."
-				terraform import "${fe_sa_address}" \
+				terraform import -input=false "${fe_sa_address}" \
 					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
 			fi
 		fi
@@ -633,7 +633,7 @@ TFVARS
 			# would then hit "409 already exists", so adopt the existing account
 			# back into state before retrying.
 			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
-				terraform import "${fe_sa_address}" \
+				terraform import -input=false "${fe_sa_address}" \
 					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
 			fi
 			terraform apply -auto-approve 2>&1 | tee tfapply.log
