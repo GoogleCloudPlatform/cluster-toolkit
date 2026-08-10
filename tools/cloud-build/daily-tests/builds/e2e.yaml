@@ -21,31 +21,253 @@ tags:
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
-timeout: 3600s  # 1hr
+timeout: 86400s
+queueTtl: 86400s  # 24hr
+logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
+
 steps:
-# While using static network names we are guarding against more than 1 instance running at a time (for multi-group tests)
-- id: check_for_running_build
+# 1. Build and push workspace container containing the current code layer
+- id: build-workspace-image
+  name: gcr.io/cloud-builders/docker
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID -f- . <<EOF
+    FROM us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:latest
+    COPY . /workspace
+    WORKDIR /workspace
+    EOF
+    docker push us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
+
+# 2. Generate Job Manifest
+- id: generate-job-manifest
   name: gcr.io/cloud-builders/gcloud
-  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/e2e.yaml"
+  entrypoint: /bin/bash
+  secretEnv: ['SA_EMAIL']
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
 
-- name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
-  automapSubstitutions: true
-  script: |
-    #!/usr/bin/env bash
-    set -ex
+    if [ "${_TEST_PREFIX}" == "hotfix-" ]; then
+      PRIORITY_LINE="priorityClassName: emergency-hotfix-priority"
+    else
+      PRIORITY_LINE=""
+    fi
 
-    depl_name="e2e-${BUILD_ID:0:6}"
-    region="us-central1"
-    zone="us-central1-a"
-    vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zone"
+    SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
+    OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
 
-    cd /workspace
-    bash tools/get_binary.sh "" "true"
-    BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
-    bash tools/add_ttl_label.sh "${BLUEPRINT}"
-    ./gcluster deploy "${BLUEPRINT}" --vars="$vars" --auto-approve
+    cat <<EOF > job.yaml
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: e2e-$$BUILD_ID_SHORT
+      namespace: default
+      labels:
+        kueue.x-k8s.io/queue-name: local-queue-test-locks
+        build-id: "$BUILD_ID"
+    spec:
+      suspend: true
+      backoffLimit: 0
+      template:
+        metadata:
+          annotations:
+            cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+        spec:
+          $$PRIORITY_LINE
+          terminationGracePeriodSeconds: 1800
+          serviceAccountName: test-kueue-cluster-runner-ksa
+          restartPolicy: Never
+          containers:
+          - name: runner
+            image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
+            env:
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: _TEST_PREFIX
+              value: "${_TEST_PREFIX}"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -x -e
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/e2e.yaml"
+              cd /workspace
 
-    # check instance was created
-    gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
+              DEPLOYMENT_NAME="e2e-$$BUILD_ID_SHORT"
 
-    ./gcluster destroy "$depl_name" --auto-approve --robust
+              RUN_CLEANUP=true
+              cleanup_pod() {
+                local exit_code=\$$?
+                trap - EXIT SIGTERM SIGINT ERR
+                set +e
+
+                if [ "\$$RUN_CLEANUP" = "false" ]; then
+                  exit 0
+                fi
+                if [ \$$exit_code -eq 0 ]; then exit_code=1; fi
+
+                echo ""
+                echo "=========================================================================="
+                echo "CAUGHT SIGTERM OR SCRIPT ERROR!"
+                echo "Halting execution..."
+                echo "=========================================================================="
+                if [ -n "\$${CMD_PID:-}" ]; then
+                    kill -TERM \$$CMD_PID 2>/dev/null || true
+                    wait \$$CMD_PID 2>/dev/null || true
+                fi
+
+                echo ""
+                echo "INITIATING RESCUE PLAYBOOK: Destroying leaked infrastructure for \$$DEPLOYMENT_NAME..."
+                echo "- hosts: localhost" > /workspace/cleanup-playbook.yml
+                echo "  tasks:" >> /workspace/cleanup-playbook.yml
+                echo "  - ansible.builtin.include_tasks:" >> /workspace/cleanup-playbook.yml
+                echo "      file: tools/cloud-build/daily-tests/ansible_playbooks/tasks/rescue_gcluster_failure.yml" >> /workspace/cleanup-playbook.yml
+
+                ansible-playbook /workspace/cleanup-playbook.yml -e deployment_name="\$$DEPLOYMENT_NAME" -e workspace="/workspace" || true
+
+                echo "Graceful cleanup finished."
+                exit \$$exit_code
+              }
+              trap cleanup_pod EXIT SIGTERM SIGINT
+
+              region="us-central1"
+              zone="us-central1-a"
+              vars="project_id=\$$PROJECT_ID,deployment_name=\$$DEPLOYMENT_NAME,region=\$$region,zone=\$$zone"
+
+              bash tools/get_binary.sh "" "true"
+              BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
+              bash tools/add_ttl_label.sh "\$$BLUEPRINT"
+
+              ./gcluster deploy "\$$BLUEPRINT" --vars="\$$vars" --auto-approve &
+              CMD_PID=\$$!
+              wait \$$CMD_PID
+
+              # check instance was created
+              gcloud compute instances describe "\$${DEPLOYMENT_NAME}-0" --project="\$$PROJECT_ID" --zone="\$$zone" >/dev/null &
+              CMD_PID=\$$!
+              wait \$$CMD_PID
+
+              ./gcluster destroy "\$$DEPLOYMENT_NAME" --auto-approve --robust &
+              CMD_PID=\$$!
+              wait \$$CMD_PID
+
+              RUN_CLEANUP=false
+            resources:
+              requests:
+                cpu: 200m
+                memory: "2Gi"
+                test-locks/e2e: 1
+              limits:
+                cpu: 1
+                memory: "2Gi"
+                test-locks/e2e: 1
+    EOF
+
+# 3. Submit and Monitor GKE Kueue Job with Retry
+- id: submit-and-monitor-gke-job
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
+    JOB_NAME="e2e-$$BUILD_ID_SHORT"
+
+    cleanup_cb() {
+      echo ""
+      echo "=========================================================================="
+      echo "PIPELINE CANCELLED: The Cloud Build step received a termination signal."
+      echo "Deleting GKE Kueue Job ($$JOB_NAME) to force the Pod to clean itself up!"
+      echo "=========================================================================="
+      kubectl delete job "$$JOB_NAME" -n default || true
+      exit 1
+    }
+    trap cleanup_cb SIGTERM SIGINT
+
+    MAX_RETRIES=10
+    RETRY_DELAY=300
+    ATTEMPT=1
+
+    while true; do
+      echo "=== ATTEMPT $$ATTEMPT: Submitting Kueue Job ==="
+      kubectl apply -f /workspace/job.yaml
+
+      set +e
+      ( bash tools/cloud-build/monitor_kueue_job.sh \
+          test-kueue-cluster \
+          us-central1 \
+          "$$JOB_NAME" \
+          default | tee /workspace/job_logs.txt; exit $${PIPESTATUS[0]} ) &
+      MONITOR_PID=$$!
+      wait $$MONITOR_PID
+      EXIT_CODE=$$?
+      set -e
+
+      if [ $$EXIT_CODE -eq 0 ]; then
+        echo "Job succeeded!"
+        break
+      fi
+
+      if bash tools/cloud-build/check_retriable_error.sh /workspace/job_logs.txt; then
+        echo "WARNING: Retriable error detected. Kueue Job has already been deleted. Retrying in $$RETRY_DELAY seconds..."
+      else
+        echo "ERROR: Test failed due to an actual error (not zone capacity). Failing pipeline." >&2
+        exit 1
+      fi
+
+      if [ $$ATTEMPT -ge $$MAX_RETRIES ]; then
+        echo "ERROR: Job failed to find zone capacity after $$MAX_RETRIES attempts." >&2
+        exit 1
+      fi
+
+      sleep $$RETRY_DELAY
+      ATTEMPT=$$((ATTEMPT + 1))
+    done
+
+# 4. Cleanup the built image from Registry to save costs
+- id: cleanup-image
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  allowFailure: true
+  args:
+  - -c
+  - |
+    set -eo pipefail
+    IMAGE="us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID"
+    MAX_RETRIES=5
+    RETRY_DELAY=10
+    ATTEMPT=1
+
+    echo "Starting cleanup for image: $$IMAGE"
+
+    while [ "$$ATTEMPT" -le "$$MAX_RETRIES" ]; do
+      echo "Attempt $$ATTEMPT of $$MAX_RETRIES..."
+
+      if gcloud artifacts docker images delete "$$IMAGE" --quiet; then
+        echo "Image successfully deleted."
+        exit 0
+      fi
+
+      if [ "$$ATTEMPT" -lt "$$MAX_RETRIES" ]; then
+        echo "Deletion failed. Retrying in $$RETRY_DELAY seconds..."
+        sleep $$RETRY_DELAY
+      fi
+
+      ATTEMPT=$$((ATTEMPT + 1))
+    done
+
+    echo "Failed to delete image after $$MAX_RETRIES attempts."
+    echo "Image will be handled by Artifact Registry background cleanup policies."
+    exit 1
+availableSecrets:
+  secretManager:
+  - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
+    env: 'SA_EMAIL'

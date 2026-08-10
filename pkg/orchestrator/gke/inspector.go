@@ -53,6 +53,7 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	g.namespace = opts.GKENamespace
 	// 1. Setup Kubectl (Critical, fail fast)
 	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
 		return fmt.Errorf("failed to configure kubectl: %w", err)
@@ -74,10 +75,9 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	}()
 
 	// Resolve namespace context
-	targetNamespace, err := g.getCurrentNamespace()
+	targetNamespace, err := g.getCurrentNamespace(opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 	if err != nil {
-		logging.Warn("Failed to resolve current namespace: %v. Defaulting to 'default'", err)
-		targetNamespace = "default"
+		return err
 	}
 
 	var outputTarget io.Writer = file
@@ -135,7 +135,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	logWorkloadList(outputTarget, g.executor, "QUEUED", "", targetNamespace)
 	logWorkloadList(outputTarget, g.executor, "RUNNING", "", targetNamespace)
 
-	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName)
+	workloadNamespace := g.inspectWorkload(writer, opts.WorkloadName, opts.ClusterName, opts.ClusterLocation, opts.ProjectID)
 
 	// --- 7. Console Links ---
 	logConsoleLinks(outputTarget, opts, workloadNamespace)
@@ -144,17 +144,18 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	return nil
 }
 
-func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName string) string {
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, clusterName, clusterLocation, projectID string) string {
 	workloadNamespace := "default"
 	if workloadName == "" {
 		return workloadNamespace
 	}
 
-	ns, err := g.getJobNamespace(workloadName)
+	ns, err := g.getCurrentNamespace(clusterName, clusterLocation, projectID)
 	if err == nil {
 		workloadNamespace = ns
 	} else {
-		logging.Warn("Failed to auto-discover namespace for workload %s, defaulting to 'default': %v", workloadName, err)
+		// Non-critical diagnostic path.
+		logging.Warn("Failed to get current namespace, defaulting to 'default' for inspection: %v", err)
 	}
 
 	logWorkloadList(writer.writer, g.executor, "EVERYTHING", workloadName, workloadNamespace)

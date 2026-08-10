@@ -28,6 +28,8 @@ import (
 	"github.com/hashicorp/go-version"
 )
 
+const docLink = "https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies"
+
 type DownloadDecision int
 
 const (
@@ -88,13 +90,13 @@ func ensureBinary(binaryName, version string, decision DownloadDecision) error {
 
 	installedVersion, err := getInstalledTfVersion(path)
 	if err != nil {
-		fmt.Printf("Warning: Could not determine installed terraform version: %v. Proceeding to download recommended version %s.\n", err, version)
+		fmt.Fprintf(os.Stderr, "Warning: Could not determine installed terraform version: %v. Proceeding to download recommended version %s. See: %s\n", err, version, docLink)
 		return downloadFlow(binaryName, version, decision)
 	}
 
 	cmp, err := compareVersions(installedVersion, version)
 	if err != nil {
-		fmt.Printf("Warning: Could not parse installed terraform version %q: %v. Proceeding to download recommended version %s.\n", installedVersion, err, version)
+		fmt.Fprintf(os.Stderr, "Warning: Could not parse installed terraform version %q: %v. Proceeding to download recommended version %s. See: %s\n", installedVersion, err, version, docLink)
 		return downloadFlow(binaryName, version, decision)
 	}
 
@@ -103,11 +105,11 @@ func ensureBinary(binaryName, version string, decision DownloadDecision) error {
 		return nil // exact match, use installed version
 	case cmp > 0:
 		// installed version is newer
-		fmt.Printf("WARNING: Terraform version %s is currently installed. We recommend using version %s for compatibility with all features.\n", installedVersion, version)
+		fmt.Fprintf(os.Stderr, "Warning: Terraform version %s is currently installed. We recommend using version %s for compatibility with all features. See: %s\n", installedVersion, version, docLink)
 		return nil // proceed with newer version
 	default:
 		// installed version is older (cmp < 0)
-		fmt.Printf("Installed terraform version %s is older than required version %s.\n", installedVersion, version)
+		fmt.Fprintf(os.Stderr, "Installed terraform version %s is older than required version %s. For version requirements and installation instructions, please see: %s\n", installedVersion, version, docLink)
 		return downloadFlow(binaryName, version, decision)
 	}
 }
@@ -162,16 +164,16 @@ func compareVersions(v1, v2 string) (int, error) {
 
 func confirmDownload(binaryName, version string, decision DownloadDecision) error {
 	if decision == DownloadDecisionNo {
-		return fmt.Errorf("%s is missing. Download is explicitly disabled. Enable download by specifying --download-dependencies flag.", binaryName)
+		return fmt.Errorf("%s is missing or incompatible; download is explicitly disabled, enable download by specifying --download-dependencies flag (see %s)", binaryName, docLink)
 	}
 
 	if decision == DownloadDecisionAsk {
-		fmt.Printf("%s v%s is missing. Do you want to download it? [y/N]: ", binaryName, version)
+		fmt.Fprintf(os.Stderr, "%s v%s is missing or incompatible. Do you want to download it? [y/N]: ", binaryName, version)
 		reader := bufio.NewReader(os.Stdin)
 		response, _ := reader.ReadString('\n')
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			return fmt.Errorf("user declined to download %s", binaryName)
+			return fmt.Errorf("user declined to download %s; see %s", binaryName, docLink)
 		}
 	}
 

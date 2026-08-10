@@ -46,9 +46,9 @@
       exit 0
     fi
 
-    CONFIG_CONTENT=$(gcloud storage cat "gs://$TRIAGE_GCS_BUCKET/config_triage_agent.env" 2>/dev/null || echo "enable_agent=false")
-    if ! echo "$CONFIG_CONTENT" | grep -qi '^[[:space:]]*enable_agent[[:space:]]*=[[:space:]]*true'; then
-      echo "SKIPPED: Failure Triage Agent is currently disabled in config_triage_agent.env." >&2
+    ENABLE_AGENT=$(gcloud secrets versions access latest --secret="triage_agent_enabled" --project="$TRIAGE_PROJECT_NUMBER" || echo "false")
+    if [ "$ENABLE_AGENT" != "true" ]; then
+      echo "SKIPPED: Failure Triage Agent is currently disabled in Secret Manager, or the secret could not be accessed." >&2
       exit 0
     fi
 
@@ -140,8 +140,8 @@
         {{ (agent_state.stdout | default('{}', true) | from_json).executive_summary | default('No summary available.') | wordwrap(100) }}
 
         Full diagnostic report available at:
-        https://storage.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
+        https://storage.mtls.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/report.txt
         {% endif %}
 
         For detailed intermediate state information, please review the diagnostic state file:
-        https://console.cloud.google.com/storage/browser/_details/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json
+        https://storage.mtls.cloud.google.com/{{ triage_gcs_bucket }}/{{ triage_build_id }}/state.json

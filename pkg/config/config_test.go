@@ -1183,10 +1183,13 @@ func TestGetPredefinedExampleFiles(t *testing.T) {
 		"tree": [
 			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
 			{"path": "community/examples/ml-cluster.yml", "type": "blob"},
-			{"path": "examples/README.md", "type": "blob"}
+			{"path": "examples/README.md", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/test-blueprint.yaml", "type": "blob"},
+			{"path": "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/not-yaml.txt", "type": "blob"}
 		]
 	}`
-	expectedExamples := []string{"community/examples/ml-cluster.yml", "examples/hpc-slurm.yaml"}
+	expectedExamples := []string{"community/examples/ml-cluster.yml", "examples/hpc-slurm.yaml", "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "tools/cloud-build/daily-tests/blueprints/test-blueprint.yaml"}
 
 	tests := []struct {
 		name       string

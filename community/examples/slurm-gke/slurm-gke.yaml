@@ -188,6 +188,5 @@ deployment_groups:
     - homefs
     settings:
       slurm_cluster_name: $(vars.deployment_name)
-      enable_slurm_auth: true
       cgroup_conf_tpl: $(ghpc_stage("./files/cgroup.conf.tpl"))
       enable_controller_public_ips: true

@@ -48,7 +48,31 @@ variable "kueue_migrated_tests" {
   description = "List of tests migrated to Kueue"
   type        = list(string)
   default = [
-    "slurm-gcp-v6-rocky8"
+    "slurm-gcp-v6-rocky8",
+    "batch-mpi",
+    "htcondor",
+    "packer",
+    "monitoring",
+    "chrome-remote-desktop",
+    "chrome-remote-desktop-ubuntu",
+    "ansible-vm",
+    "e2e",
+    "hcls",
+    "slurm-gke",
+    "slurm-flex",
+    "ml-slurm",
+    "htc-slurm",
+    "hpc-build-slurm-image",
+    "hpc-enterprise-slurm",
+    "spack-gromacs",
+    "gcluster-dockerfile",
+    "gke",
+    "gke-inactive-reservation",
+    "ml-gke",
+    "ml-gke-e2e",
+    "gke-storage",
+    "gke-managed-hyperdisk",
+    "slurm-rapid-storage"
   ]
 }
 

@@ -1824,7 +1824,9 @@ func TestGetDeploymentFile(t *testing.T) {
 	mockJSON := `{
 		"tree": [
 			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
-			{"path": "community/examples/ml-cluster.yml", "type": "blob"}
+			{"path": "community/examples/ml-cluster.yml", "type": "blob"},
+			{"path": "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml", "type": "blob"}
 		]
 	}`
 
@@ -1835,6 +1837,26 @@ func TestGetDeploymentFile(t *testing.T) {
 		mockResp   *http.Response
 		expected   string
 	}{
+		{
+			name:       "success: match machine learning deployment file",
+			flagValue:  "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml",
+		},
+		{
+			name:       "success: match cloud build daily test blueprint",
+			flagValue:  "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml",
+			flagExists: true,
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(mockJSON)),
+			},
+			expected: "tools/cloud-build/daily-tests/blueprints/ml-gke-e2e.yaml",
+		},
 		{
 			name:       "success: exact match standard file",
 			flagValue:  "community/examples/ml-cluster.yml",

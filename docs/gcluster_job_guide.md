@@ -289,6 +289,19 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
 
+> [!TIP]
+> **Targeting a Specific Namespace**
+> By default, `gcluster job` commands operate on the namespace detected from your active `kubeconfig` context (falling back to `default` if the context is found but its namespace is empty). If the context cannot be resolved, the command will abort with an error. To submit or manage jobs in a custom namespace, use the `--gke-namespace` flag:
+>
+> ```bash
+> ./gcluster job submit ... --gke-namespace custom-namespace
+> ./gcluster job list --gke-namespace custom-namespace
+> ./gcluster job logs my-python-app-job --gke-namespace custom-namespace
+> ./gcluster job cancel my-python-app-job --gke-namespace custom-namespace
+> ./gcluster job inspect --gke-namespace custom-namespace
+> ./gcluster job inspect --name my-python-app-job --gke-namespace custom-namespace
+> ```
+
 ## 6. Advanced Workloads
 
 *Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
@@ -1089,16 +1102,45 @@ Target a GCE reservation via GKE Node Auto-Provisioning:
   --gke-nap-reservation my-tpu-reservation
 ```
 
+### 8.4 Custom Kubernetes Manifest Templates
+
+GCluster uses embedded Go templates to generate the Kubernetes manifests (JobSets, Kueue configurations, etc.) deployed to your GKE cluster. If you need to deeply customize the generated manifests beyond what the CLI flags provide (e.g., adding custom sidecars, specific annotations, or modifying the core structure), you can override these embedded templates with your own local copies.
+
+#### 1. Extract the Default Templates
+First, use the `gke-template-extract` command to extract the embedded default templates into a local directory so you have a starting point:
+
+```bash
+./gcluster job gke-template-extract --output-dir=/path/to/my-templates
+```
+
+*(Use `--overwrite` if the directory already contains files you want to replace).*
+
+#### 2. Modify the Templates
+Open the extracted `.tmpl` files in your preferred editor. These are standard Go text templates (`text/template` and `yamltemplate`). You can inject any static Kubernetes YAML or modify the existing template variables.
+
+#### 3. Use Your Custom Templates
+When submitting your job, you can tell `gcluster` to use your custom templates instead of the embedded ones.
+
+Pass the `--gke-custom-templates-path` flag to the `submit` command:
+
+```bash
+./gcluster job submit ... --gke-custom-templates-path=/path/to/my-templates
+```
+
+> [!TIP]
+> If a template file (e.g., `jobset.tmpl`) is not found in your custom directory, `gcluster` will automatically fall back to using its embedded default version for that specific file.
+
 ## 9. `gcluster job` Command Reference
 
 ### 9.1 Common Flags
-*These flags are common to almost all `gcluster job` subcommands (except `config`). They can be set as defaults via `config set`.*
+*These flags are common to almost all `gcluster job` subcommands (except `config`). `project`, `cluster`, and `location` can be set as defaults via `config set`.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-c, --cluster` | `string` | Name of the target GKE cluster. |
 | `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
 | `-p, --project` | `string` | Google Cloud Project ID. |
+| `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
 
 ### 9.2 Configuration Commands
 *Use these commands to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
@@ -1197,6 +1239,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-disable-parallel-containers` | `bool` | Disable parallel containers for TPU v7/v7x on GKE. (Default: `false`) |
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
 | `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
+| `--gke-custom-templates-path` | `string` | Path to a local directory containing custom GKE manifest template overrides. |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
