@@ -70,6 +70,6 @@ limitations under the License.
         count: {{ part.GPU_per_node }}
     {% endif %}
     startup_script: |
-      echo "******************************************** CALLING COMPUTE STARTUP"
       #!/bin/bash
+      echo "******************************************** CALLING COMPUTE STARTUP"
       gcloud storage cat gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh | bash

@@ -479,16 +479,18 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         # neither, so validate before deploying. The probe fails open: a
         # subnet we cannot read (or an API error) does not block the deploy.
         subnet = self.object.subnet
-        try:
-            egress = cloud_info.get_subnet_egress_info(
-                "GCP",
-                self.object.cloud_credential.detail,
-                subnet.cloud_region,
-                subnet.cloud_id,
-            )
-        except Exception as e:  # noqa: BLE001 - never block deploy on a probe error
-            logger.warning("Subnet egress check failed, allowing deploy: %s", e)
-            egress = None
+        egress = None
+        if subnet:
+            try:
+                egress = cloud_info.get_subnet_egress_info(
+                    "GCP",
+                    self.object.cloud_credential.detail,
+                    subnet.cloud_region,
+                    subnet.cloud_id,
+                )
+            except Exception as e:  # noqa: BLE001 - never block deploy on a probe error
+                logger.warning("Subnet egress check failed, allowing deploy: %s", e)
+                egress = None
         if (
             egress
             and egress["found"]

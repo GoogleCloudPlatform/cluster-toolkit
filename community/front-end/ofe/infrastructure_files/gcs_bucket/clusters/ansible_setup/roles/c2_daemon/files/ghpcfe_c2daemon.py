@@ -786,15 +786,26 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
         # When there is no single fetched file to execute directly -- an
         # archive that was unpacked, or a recursive directory fetch that has
         # no filename at all -- run the shallowest 'run.sh' in the result.
+        # Sort on the number of path components (awk -F/ NF), not on string
+        # length: './a/b/run.sh' is deeper than './long_directory_name/run.sh'
+        # but shorter as a string, so a length sort picks the wrong script.
+        # The extracted file may not be executable (zip archives carry no
+        # permission bits on some platforms), so chmod before running it.
         run_toplevel_script = (
             "# Find and execute most top-level 'run.sh' we can find\n"
-            "$("
+            "toplevel_script=$("
             "find . -maxdepth 3 -name run.sh | "
-            "awk '{print length, $0}' | "
+            "awk -F/ '{print NF, $0}' | "
             "sort -n  | "
             "cut -d' ' -f2- | "
             "head -n1"
-            ")"
+            ")\n"
+            'if [ -z "$toplevel_script" ]; then\n'
+            '  echo "No run.sh found in the fetched job files" >&2\n'
+            "  exit 1\n"
+            "fi\n"
+            'chmod 755 "$toplevel_script"\n'
+            '"$toplevel_script"'
         )
 
         # Defaults cover the recursive/directory case (fname == ""), where no
