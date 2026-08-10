@@ -993,9 +993,15 @@ class KmsKeyViewSet(viewsets.ViewSet):
     authentication_classes = [SessionAuthentication, TokenAuthentication]
 
     def list(self, request):
-        credential = get_object_or_404(
-            Credential, pk=request.query_params.get("credential", -1)
-        )
+        # get_object_or_404 only catches DoesNotExist. A non-numeric pk
+        # raises ValueError from the field conversion instead, which would
+        # surface as an unhandled 500 rather than a client error.
+        credential_id = request.query_params.get("credential", "")
+        if not str(credential_id).isdigit():
+            return JsonResponse(
+                {"detail": "credential must be a numeric id",
+                 "keys": []}, status=400)
+        credential = get_object_or_404(Credential, pk=credential_id)
         region = request.query_params.get("region", None)
 
         # A "global" key can encrypt resources in any region, so it belongs

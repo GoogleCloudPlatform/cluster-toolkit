@@ -690,3 +690,94 @@ class FilestoreCmekTierTests(SimpleTestCase):
             cloud_zone="us-central1-a")
         from ghpcfe.cluster_manager import filesystem
         self.assertIsNone(filesystem._filestore_cmek_key(fs, "BASIC_HDD"))
+
+
+def _import_clusters_view():
+    """Import ghpcfe.views.clusters without a deployed config file.
+
+    ClusterLogFileView reads the server configuration in its class body, so
+    importing the module from a source checkout fails. That is also why
+    test_settings uses an empty URLconf.
+    """
+    from unittest import mock
+    from ghpcfe.cluster_manager import utils
+    stub = {"server": {"gcs_bucket": "test-bucket"}}
+    with mock.patch.object(utils, "load_config", return_value=stub):
+        from ghpcfe.views import clusters
+    return clusters
+
+
+class KmsKeyListingRobustnessTests(SimpleTestCase):
+    """The key listing must survive the shapes the API actually returns.
+
+    Both cases here produced a 500 rather than a degraded-but-working
+    suggestion list: a CryptoKey whose only version was destroyed comes
+    back with "primary": null, and a non-numeric credential id reached the
+    ORM, where the field conversion raises ValueError rather than the
+    DoesNotExist that get_object_or_404 catches.
+    """
+
+    def test_null_primary_does_not_raise(self):
+        from unittest import mock
+        from ghpcfe.cluster_manager import cloud_info
+
+        rings_page = {"keyRings": [{"name": "projects/p/l/keyRings/r"}]}
+        keys_page = {"cryptoKeys": [
+            {"name": ".../k1", "purpose": "ENCRYPT_DECRYPT",
+             "primary": None},                       # destroyed-only key
+            {"name": ".../k2", "purpose": "ENCRYPT_DECRYPT"},  # absent
+            {"name": ".../k3", "purpose": "ENCRYPT_DECRYPT",
+             "primary": {"state": "ENABLED"}},
+        ]}
+
+        rings_api = mock.MagicMock()
+        rings_api.list.return_value.execute.return_value = rings_page
+        rings_api.list_next.return_value = None
+        keys_api = rings_api.cryptoKeys.return_value
+        keys_api.list.return_value.execute.return_value = keys_page
+        keys_api.list_next.return_value = None
+        client = mock.MagicMock()
+        client.projects.return_value.locations.return_value.keyRings.return_value = rings_api
+
+        with mock.patch.object(cloud_info, "_get_gcp_client",
+                               return_value=("proj", client)):
+            keys = cloud_info._get_gcp_kms_keys("{}", "us-central1")
+
+        self.assertEqual(len(keys), 3)
+        self.assertEqual([k["primary_state"] for k in keys],
+                         ["", "", "ENABLED"])
+
+    def test_non_numeric_credential_is_a_client_error(self):
+        from unittest import mock
+        KmsKeyViewSet = _import_clusters_view().KmsKeyViewSet
+
+        for bad in ("abc", "", "1.5", "../1"):
+            with self.subTest(credential=bad):
+                request = mock.Mock(query_params={"credential": bad})
+                response = KmsKeyViewSet().list(request)
+                self.assertEqual(
+                    response.status_code, 400,
+                    f"{bad!r} should be a 400, not an unhandled 500")
+
+    def test_numeric_credential_reaches_the_lookup(self):
+        # Guards the other direction: the digit check must not reject a
+        # legitimate id. Asserted by stubbing the lookup rather than
+        # touching the database, so this stays a SimpleTestCase.
+        from unittest import mock
+        clusters = _import_clusters_view()
+
+        cred = mock.Mock(detail="{}")
+        with mock.patch.object(clusters, "get_object_or_404",
+                               return_value=cred) as lookup, \
+             mock.patch.object(clusters.cloud_info, "get_kms_keys",
+                               return_value=[]) as listing:
+            request = mock.Mock(
+                query_params={"credential": "99999", "region": "us-central1"})
+            response = clusters.KmsKeyViewSet().list(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(lookup.call_args.kwargs.get("pk"), "99999")
+        # region plus "global": a global key encrypts anywhere.
+        self.assertEqual(
+            [c.args[2] for c in listing.call_args_list],
+            ["us-central1", "global"])

@@ -816,7 +816,11 @@ def _get_gcp_kms_keys(credentials, location, ttl_hash=None):
                     continue
                 keys.append({
                     "name": key["name"],
-                    "primary_state": key.get("primary", {}).get("state", ""),
+                    # `or {}` not a .get default: the API may return
+                    # "primary": null for a key whose only version was
+                    # destroyed, and a default only applies to a missing key.
+                    "primary_state": (key.get("primary") or {}).get(
+                        "state", ""),
                 })
             request = keys_api.list_next(request, response)
     return keys
