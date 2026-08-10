@@ -47,7 +47,7 @@ variable "key_ring_name" {
 variable "key_ring_id" {
   description = <<-EOT
     The id of an existing Cloud KMS key ring to create the CryptoKey in, for
-    example "projects/my-project/locations/us-central1/keyRings/my-ring".
+    example "projects/my-project/locations/us-central1/keyRings/my-keyring".
     Set this instead of key_ring_name to reuse a key ring rather than create
     one, which is what makes it possible to hold many CryptoKeys in a single
     long-lived ring and to redeploy after a teardown that retained the ring.
