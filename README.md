@@ -183,15 +183,15 @@ Be aware that Cloud Shell has [several limitations][cloud-shell-limitations],
 in particular an inactivity timeout that will close running shells after 20
 minutes. Please consider it only for blueprints that are quickly deployed.
 
-## Advanced GKE Infrastructure Orchestration
+## Advanced GKE infrastructure orchestration
 
-`gcluster job submit` integrates natively with advanced GKE hardware and scheduling capabilities:
+The `gcluster job submit` command integrates natively with advanced Google Kubernetes Engine (GKE) hardware and scheduling capabilities:
 
-* **Dynamic TPU Slicing**: Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically using `--topology` and Kueue's Topology-Aware Scheduling (`--gke-scheduler`).
-* **Pathways Distributed AI Orchestration**: Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) using `--pathways` and `--pathways-gcs-location`.
-* **GKE Node Auto-Provisioning (NAP)**: Automatically scale and provision compute nodes on demand using `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation`.
+* **Dynamic TPU slicing:** Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically by using the `--topology` flag and Kueue Topology-Aware Scheduling (`--gke-scheduler`).
+* **Pathways distributed AI orchestration:** Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) by using the `--pathways` and `--pathways-gcs-location` flags.
+* **GKE node auto-provisioning (NAP):** Automatically scale and provision compute nodes on demand by using the `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation` flags.
 
-For cluster blueprint Terraform deployment instructions and comprehensive workload orchestration guidelines, see [GKE Advanced Infrastructure Features Guide](docs/gke-advanced-features.md) and [Gcluster Job Submission Guide](docs/gcluster_job_guide.md#8-advanced-gke-infrastructure-features).
+For cluster blueprint Terraform deployment instructions and comprehensive workload orchestration guidelines, see the [guide to advanced GKE infrastructure features](docs/gke-advanced-features.md) and the [gcluster job submission guide](docs/gcluster_job_guide.md#8-advanced-gke-infrastructure-features).
 
 ## VM Image Support
 
