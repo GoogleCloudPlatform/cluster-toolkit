@@ -72,7 +72,11 @@ variable "kueue_migrated_tests" {
     "ml-gke-e2e",
     "gke-storage",
     "gke-managed-hyperdisk",
-    "slurm-rapid-storage"
+    "slurm-rapid-storage",
+    "gke-managed-lustre",
+    "pfs-managed-lustre-slurm",
+    "pfs-managed-lustre-vm",
+    "netapp-volumes"
   ]
 }
 
