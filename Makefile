@@ -64,7 +64,7 @@ format: warn-go-version warn-terraform-version warn-packer-version terraform-for
 
 install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint check-shellcheck
 	$(info *********** installing developer dependencies *********)
-	go install github.com/terraform-docs/terraform-docs@latest
+	go install github.com/terraform-docs/terraform-docs@v0.21.0
 	go install golang.org/x/lint/golint@latest
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	go install github.com/go-critic/go-critic/cmd/gocritic@latest
