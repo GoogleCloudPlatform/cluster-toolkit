@@ -1059,6 +1059,11 @@ To submit a headless Pathways server cluster, enter the following command:
 
 GKE Node Auto-Provisioning (NAP) automatically provisions and manages node pools based on unschedulable pod requirements.
 
+> [!NOTE]
+> When running on a NAP-enabled cluster, standard job submissions without `--gke-nap-*` flags automatically trigger on-demand node pool creation if existing nodes lack sufficient capacity. The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are only required when you want to target **Spot VMs** or specific **Compute Engine reservations**.
+>
+> Cluster Toolkit currently supports **On-Demand**, **Spot**, and **Reservation** models with Node Auto-Provisioning. Dynamic Workload Scheduler (DWS) Flex-Start and Queued Provisioning are supported via static cluster blueprints.
+
 #### Capabilities, scheduling, and pre-flight verification
 
 NAP integration provides the following capabilities:

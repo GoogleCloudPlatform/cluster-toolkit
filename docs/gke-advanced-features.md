@@ -166,6 +166,11 @@ NAP cluster configuration requires the following settings:
 
 ### 3.2 Job submission and workload scheduling (`gcluster job submit`)
 
+> [!NOTE]
+> When running on a NAP-enabled cluster, standard job submissions without `--gke-nap-*` flags automatically trigger on-demand node pool creation if existing nodes lack sufficient capacity. The `--gke-nap-provisioning` and `--gke-nap-reservation` flags are only required when you want to target **Spot VMs** or specific **Compute Engine reservations**.
+>
+> Cluster Toolkit currently supports **On-Demand**, **Spot**, and **Reservation** models with Node Auto-Provisioning. Dynamic Workload Scheduler (DWS) Flex-Start and Queued Provisioning are supported via static cluster blueprints.
+
 When submitting jobs to a NAP-enabled GKE cluster by using the `gcluster job submit` command, you can target specific compute consumption models without modifying Kubernetes manifests manually:
 
 * **Spot versus on-demand provisioning:** Use `--gke-nap-provisioning spot` or `--gke-nap-provisioning on-demand`. When you specify `spot`, Cluster Toolkit injects the standard GKE provisioning toleration (`cloud.google.com/gke-provisioning=spot:NoSchedule`) and node selector into the pod template.
