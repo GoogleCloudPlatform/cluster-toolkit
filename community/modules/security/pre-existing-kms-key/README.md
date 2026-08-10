@@ -21,8 +21,8 @@ This module does not grant anyone access to the key. Pass `crypto_key_id` to a
   settings:
     project_id: my-key-project
     location: us-central1
-    key_ring_name: security-team-ring
-    key_name: hpc-cmek
+    key_ring_name: my-keyring
+    key_name: my-key
 
 - id: kms_key_iam
   source: community/modules/security/kms-key-iam

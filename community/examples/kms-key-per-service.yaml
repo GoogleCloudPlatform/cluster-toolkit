@@ -65,14 +65,14 @@ vars:
   # blueprint. Replace with a real one; the module fails at plan time if it
   # does not exist or is not a symmetric ENCRYPT_DECRYPT key. To make one:
   #
-  #   gcloud kms keyrings create security-team-ring --location=us-central1
-  #   gcloud kms keys create hpc-filestore --location=us-central1 \
-  #       --keyring=security-team-ring --purpose=encryption
+  #   gcloud kms keyrings create my-filestore-keyring --location=us-central1
+  #   gcloud kms keys create my-filestore-key --location=us-central1 \
+  #       --keyring=my-filestore-keyring --purpose=encryption
   #
   # It may live in another project; set filestore_key_project accordingly.
   filestore_key_project: $(vars.project_id)
-  filestore_key_ring: security-team-ring
-  filestore_key_name: hpc-filestore
+  filestore_key_ring: my-filestore-keyring
+  filestore_key_name: my-filestore-key
 
   # Provision the service agents before deploying -- they are created on
   # demand, and a grant to an agent that does not exist yet fails:
