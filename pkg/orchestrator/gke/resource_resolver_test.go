@@ -1020,3 +1020,131 @@ func TestFetchMachineCapabilities_NodePoolEmptyLocations_ClusterZonesFallback(t 
 		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
 	}
 }
+
+func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          ManifestOptions
+		nodePools     []gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantResult    bool
+		wantErr       bool
+	}{
+		{
+			name: "Success - Dynamic slicing active via PolicyName lookup",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+				{
+					Name: "np-1",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				},
+			},
+			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Success - Dynamic slicing active with mixed policyName formats (full path vs short name)",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+				{
+					Name: "np-1",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "tpu7x-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				},
+			},
+			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Failure - Policy lookup command fails with actionable error",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "invalid-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Could not fetch resource policy"},
+				},
+			},
+			wantResult: false,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.opts.ProjectID
+			g.clusterDesc.NodePools = tt.nodePools
+
+			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts, true)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("checkNodePoolsDynamicSlicing() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantResult {
+				t.Errorf("checkNodePoolsDynamicSlicing() = %v, want %v", got, tt.wantResult)
+			}
+			if tt.wantResult && len(g.policyCache) == 0 {
+				t.Errorf("expected policyCache to be populated")
+			}
+		})
+	}
+}
