@@ -65,7 +65,7 @@ variable "service_agents" {
 }
 
 variable "service_agent_principals" {
-  description = "Fully qualified principal strings granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"serviceAccount:service-1234567890@compute-system.iam.gserviceaccount.com\". Use this for principals service_agents cannot derive: agents belonging to a different project, or a user-managed service account. Unioned with service_agents; each principal must already exist."
+  description = "Fully qualified principal strings granted roles/cloudkms.cryptoKeyEncrypterDecrypter on the CryptoKey, e.g. \"serviceAccount:service-PROJECT_NUMBER@compute-system.iam.gserviceaccount.com\". Use this for principals service_agents cannot derive: agents belonging to a different project, or a user-managed service account. Unioned with service_agents; each principal must already exist."
   type        = set(string)
   default     = []
   nullable    = false
