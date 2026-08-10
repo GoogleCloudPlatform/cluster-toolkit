@@ -279,7 +279,7 @@ The `gcluster job submit` command integrates natively with advanced Google Kuber
 
 - **Dynamic TPU slicing:** Reconfigure and pack TPU v7x (and future TPU generation) nodes into logical slices dynamically (supporting both superslicing and subslicing) by using the `--topology` flag and Kueue Topology-Aware Scheduling.
 - **Pathways distributed AI orchestration:** Compile and deploy multi-slice Pathways training jobs (Resource Manager, Proxy, Workers, and optional headless mode) by using the `--pathways` and `--pathways-gcs-location` flags.
-- **GKE node auto-provisioning (NAP):** Automatically scale and provision compute nodes on demand by using the `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation` flags.
+- **GKE node auto-provisioning (NAP):** Automatically scale and provision compute nodes dynamically by using the `--gke-nap-provisioning` (`spot`, `reservation`, `on-demand`) and `--gke-nap-reservation` flags.
 
 For cluster blueprint Terraform deployment instructions and comprehensive workload orchestration guidelines, see the [guide to advanced GKE infrastructure features](docs/gke-advanced-features.md) and the [gcluster job submission guide](docs/gcluster_job_guide.md#8-advanced-gke-infrastructure-features).
 

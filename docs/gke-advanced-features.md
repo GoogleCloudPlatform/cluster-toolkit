@@ -6,7 +6,7 @@ Cluster Toolkit simplifies deploying and orchestrating high-performance AI and m
 
 ## 1. Dynamic TPU slicing (TPU v7x and future generations)
 
-GKE Dynamic Slicing provides flexible Tensor Processing Unit (TPU) capacity scheduling by letting you logically group or slice physical hardware cubes dynamically on demand. In Cluster Toolkit and GKE, dynamic slicing is supported starting with TPU v7x (Ironwood) and future TPU generations. Earlier TPU generations (such as TPU v4, TPU v5e, TPU v5p, and TPU v6e) do not support dynamic slicing and require static slice topologies configured at node pool creation time. Dynamic slicing supports both superslicing (aggregating multiple physical cubes into larger topologies) and subslicing (partitioning a single cube into smaller fractional topologies) on demand.
+GKE Dynamic Slicing provides flexible Tensor Processing Unit (TPU) capacity scheduling by letting you logically group or slice physical hardware cubes dynamically. In Cluster Toolkit and GKE, dynamic slicing is supported starting with TPU v7x (Ironwood) and future TPU generations. Earlier TPU generations (such as TPU v4, TPU v5e, TPU v5p, and TPU v6e) do not support dynamic slicing and require static slice topologies configured at node pool creation time. Dynamic slicing supports both superslicing (aggregating multiple physical cubes into larger topologies) and subslicing (partitioning a single cube into smaller fractional topologies) dynamically at job submission time.
 
 ### 1.1 Cluster blueprint provisioning and configuration
 
@@ -31,8 +31,8 @@ Configuring dynamic slicing requires the following settings:
 
 Workload scheduling with dynamic slicing provides the following capabilities:
 
-* **Dynamic superslicing:** Aggregate multiple physical TPU v7x cubes together into a larger logical slice (such as combining multiple `4x4x4` cubes into `4x4x8` or `4x4x16` topologies) dynamically on demand for large-scale distributed training.
-* **Dynamic subslicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) on demand, enabling efficient bin-packing and co-tenancy for smaller workloads.
+* **Dynamic superslicing:** Aggregate multiple physical TPU v7x cubes together into a larger logical slice (such as combining multiple `4x4x4` cubes into `4x4x8` or `4x4x16` topologies) dynamically for large-scale distributed training.
+* **Dynamic subslicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) dynamically, enabling efficient bin-packing and co-tenancy for smaller workloads.
 * **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh.
 * **Automated scheduling annotations:** When you submit a job with `--compute-type tpu-v7x-slice` and `--topology TOPOLOGY`, Cluster Toolkit automatically translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys based on `--num-slices`.
 
@@ -129,7 +129,7 @@ Deploy a headless Pathways server cluster for interactive client connections:
 
 ## 3. Node auto-provisioning (NAP) and compute consumption
 
-Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaling capability that dynamically creates, manages, and deletes node pools based on unschedulable pod resource requirements. Rather than pre-provisioning static node pools, NAP lets your cluster scale compute resources on demand.
+Node Auto-Provisioning (NAP) is a GKE cluster-level autoscaling capability that dynamically creates, manages, and deletes node pools based on unschedulable pod resource requirements. Rather than pre-provisioning static node pools, NAP lets your cluster scale compute resources dynamically based on incoming workload requirements.
 
 ### 3.1 Cluster blueprint provisioning and configuration
 
@@ -179,7 +179,7 @@ When submitting jobs to a NAP-enabled GKE cluster by using the `gcluster job sub
 
 #### Example CLI commands
 
-Submit a workload that provisions Spot VMs on demand:
+Submit a workload that provisions Spot VMs dynamically:
 
 ```shell
 ./gcluster job submit \
