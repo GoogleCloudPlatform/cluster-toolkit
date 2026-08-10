@@ -134,6 +134,14 @@ variable "rotation_period" {
   type        = string
   default     = "7776000s"
   nullable    = false
+
+  # Cloud KMS rejects anything under 24h, and the provider only accepts a
+  # seconds-suffixed duration. Checking here names the variable; failing in
+  # the API names the resource.
+  validation {
+    condition     = can(regex("^[0-9]+s$", var.rotation_period)) && tonumber(trimsuffix(var.rotation_period, "s")) >= 86400
+    error_message = "rotation_period must be a duration string of whole seconds ending in \"s\" (e.g. \"7776000s\") and at least 86400s (24 hours)."
+  }
 }
 
 variable "destroy_scheduled_duration" {
@@ -146,6 +154,17 @@ variable "destroy_scheduled_duration" {
   type        = string
   default     = "2592000s"
   nullable    = false
+
+  # Cloud KMS accepts 24 hours to 120 days. Worth catching at plan time
+  # because this input is immutable: a rejected value applied by mistake
+  # cannot be corrected in place, only by creating a new key.
+  validation {
+    condition = can(regex("^[0-9]+s$", var.destroy_scheduled_duration)) && (
+      tonumber(trimsuffix(var.destroy_scheduled_duration, "s")) >= 86400 &&
+      tonumber(trimsuffix(var.destroy_scheduled_duration, "s")) <= 10368000
+    )
+    error_message = "destroy_scheduled_duration must be a duration string of whole seconds ending in \"s\" (e.g. \"2592000s\"), between 86400s (24 hours) and 10368000s (120 days)."
+  }
 }
 
 variable "deletion_policy" {
