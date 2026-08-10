@@ -6,7 +6,7 @@ Cluster Toolkit simplifies deploying and orchestrating high-performance AI and m
 
 ## 1. Dynamic TPU slicing (TPU v7x and future generations)
 
-GKE Dynamic Slicing provides flexible Tensor Processing Unit (TPU) capacity scheduling by letting you logically group or slice physical hardware blocks dynamically on demand. In Cluster Toolkit and GKE, dynamic slicing is supported starting with TPU v7x (Ironwood) and future TPU generations. Earlier TPU generations (such as TPU v4, TPU v5e, TPU v5p, and TPU v6e) do not support dynamic slicing and require static slice topologies configured at node pool creation time.
+GKE Dynamic Slicing provides flexible Tensor Processing Unit (TPU) capacity scheduling by letting you logically group or slice physical hardware cubes dynamically on demand. In Cluster Toolkit and GKE, dynamic slicing is supported starting with TPU v7x (Ironwood) and future TPU generations. Earlier TPU generations (such as TPU v4, TPU v5e, TPU v5p, and TPU v6e) do not support dynamic slicing and require static slice topologies configured at node pool creation time.
 
 ### 1.1 Cluster blueprint provisioning and configuration
 
@@ -31,7 +31,8 @@ Configuring dynamic slicing requires the following settings:
 
 Workload scheduling with dynamic slicing provides the following capabilities:
 
-* **Elastic topology provisioning:** Connect multiple physical TPU v7x blocks together into a larger logical slice (for example, connecting multiple `4x4x4` blocks together).
+* **Elastic topology provisioning:** Connect multiple physical TPU v7x cubes together into a larger logical slice (for example, connecting multiple `4x4x4` cubes together).
+* **Dynamic sub-slicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) on demand, enabling efficient bin-packing and co-tenancy for smaller workloads.
 * **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh.
 * **Automated scheduling annotations:** When you submit a job with `--compute-type tpu-v7x-slice` and `--topology TOPOLOGY`, Cluster Toolkit automatically translates the request into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and dynamically switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys based on `--num-slices`.
 
@@ -44,8 +45,7 @@ Submit a dynamic slicing workload that requests a `4x4x4` TPU v7x topology:
   --name my-dynamic-slice-job \
   --command "python train.py" \
   --compute-type tpu-v7x-slice \
-  --topology 4x4x4 \
-  --gke-scheduler gke.io/topology-aware-auto
+  --topology 4x4x4
 ```
 
 #### GKE documentation reference

@@ -992,7 +992,8 @@ GKE Dynamic Slicing provides flexible TPU capacity scheduling by letting you log
 
 Dynamic slicing provides the following scheduling capabilities:
 
-* **Elastic topology provisioning:** Connect multiple physical TPU v7x blocks together into a larger logical slice (for example, connecting multiple `4x4x4` blocks together).
+* **Elastic topology provisioning:** Connect multiple physical TPU v7x cubes together into a larger logical slice (for example, connecting multiple `4x4x4` cubes together).
+* **Dynamic sub-slicing:** Partition a single physical TPU cube into smaller fractional topologies (such as slicing a `4x4x4` cube into `2x2x4` or `2x4x4` sub-slices) on demand, enabling efficient bin-packing and co-tenancy for smaller workloads.
 * **Latency optimization:** Kueue Topology-Aware Scheduling (TAS) places TPU pods with minimal network hop latency across the physical TPU interconnect mesh, maximizing distributed training throughput.
 * **Multi-slice synchronization:** For multi-slice jobs (`--num-slices > 1`), Cluster Toolkit coordinates slice-level reservations to ensure that all slices are acquired concurrently, preventing mismatched scaling.
 * **Internal scheduling annotations:** Cluster Toolkit automatically translates high-level TPU requests into partition-level requirements (`cloud.google.com/gke-tpu-partition-TOPOLOGY-id`) and switches between single-slice (`kueue.x-k8s.io/podset-required-topology`) and multi-slice (`kueue.x-k8s.io/podset-slice-required-topology`) admission annotation keys.
@@ -1006,8 +1007,7 @@ To submit a dynamic slicing workload targeting TPU v7x nodes, enter the followin
   --name my-dynamic-slice-job \
   --command "python train.py" \
   --compute-type tpu-v7x-slice \
-  --topology 4x4x4 \
-  --gke-scheduler gke.io/topology-aware-auto
+  --topology 4x4x4
 ```
 
 #### GKE documentation reference
