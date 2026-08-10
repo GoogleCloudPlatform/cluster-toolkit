@@ -64,20 +64,25 @@ variable "key_ring_id" {
   }
 
   validation {
-    condition     = var.key_ring_id == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[a-zA-Z0-9_-]{1,63}$", coalesce(var.key_ring_id, "projects/p/locations/l/keyRings/r")))
+    condition     = var.key_ring_id == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[a-zA-Z0-9_-]{1,63}$", var.key_ring_id))
     error_message = "key_ring_id must be a full key ring id of the form projects/<project>/locations/<location>/keyRings/<name>."
   }
 
   # An adopted ring already encodes its own project and location, so nothing
   # reads project_id or location in that mode. Rather than let a contradictory
   # value pass unnoticed, require that they agree with the ring being adopted.
+  #
+  # try() rather than a bare index: a malformed id has fewer than four
+  # segments, and indexing past the end is an evaluation error that aborts
+  # the plan before any validation message is printed -- so the caller
+  # would never see the format error above, only a Terraform crash.
   validation {
-    condition     = var.key_ring_id == null || split("/", coalesce(var.key_ring_id, "projects/x/locations/x/keyRings/x"))[1] == var.project_id
+    condition     = var.key_ring_id == null || try(split("/", var.key_ring_id)[1], "") == var.project_id
     error_message = "key_ring_id names a different project than project_id. The CryptoKey is created inside the supplied key ring, so project_id must be that ring's project."
   }
 
   validation {
-    condition     = var.key_ring_id == null || split("/", coalesce(var.key_ring_id, "projects/x/locations/x/keyRings/x"))[3] == var.location
+    condition     = var.key_ring_id == null || try(split("/", var.key_ring_id)[3], "") == var.location
     error_message = "key_ring_id names a different location than location. The CryptoKey inherits its ring's location, so location must be that ring's location."
   }
 }
