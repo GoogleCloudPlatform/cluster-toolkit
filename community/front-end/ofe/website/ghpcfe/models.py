@@ -188,9 +188,9 @@ class User(AbstractUser):
         # extract
         if SocialAccount.objects.filter(user=self.id).exists():
             extra_data = SocialAccount.objects.get(user=self.id).extra_data
-            json_data = json.dumps(extra_data)
-            data = json.loads(json_data)
-            url = data.get("picture", url)
+            # extra_data is already a dict; the json round-trip that used
+            # to be here changed nothing.
+            url = extra_data.get("picture", url)
         return url
 
     def has_viewer_role(self):

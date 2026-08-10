@@ -115,8 +115,13 @@ resource "google_filestore_instance" "filestore_instance" {
     }
 
     precondition {
-      condition     = var.kms_key_name == null || contains(["ZONAL", "REGIONAL", "ENTERPRISE"], var.filestore_tier)
-      error_message = "kms_key_name (CMEK) is only supported for ZONAL, REGIONAL, and ENTERPRISE Filestore tiers."
+      # HIGH_SCALE_SSD is the legacy name for ZONAL and is functionally the
+      # same tier, so it supports CMEK too. Matching on the literal string
+      # without it blocked callers using the older name -- including OFE,
+      # which offers HIGH_SCALE_SSD rather than ZONAL -- from any CMEK
+      # Filestore below the far more expensive ENTERPRISE tier.
+      condition     = var.kms_key_name == null || contains(["ZONAL", "HIGH_SCALE_SSD", "REGIONAL", "ENTERPRISE"], var.filestore_tier)
+      error_message = "kms_key_name (CMEK) is only supported for the ZONAL (a.k.a. HIGH_SCALE_SSD), REGIONAL and ENTERPRISE Filestore tiers."
     }
   }
 }

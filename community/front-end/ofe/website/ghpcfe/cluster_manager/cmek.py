@@ -117,6 +117,11 @@ def normalize_location(location) -> str:
     `us-central1-a` -> `us-central1`; regions and multi-regions are
     returned lower-cased and otherwise unchanged.
     """
+    # A resource with no region/zone set reaches here as None or "";
+    # returning "" lets check_key_location report a mismatch rather than
+    # raising AttributeError from inside a normalisation helper.
+    if not location:
+        return ""
     loc = location.strip().lower()
     if _ZONE_RE.match(loc):
         return loc.rsplit("-", 1)[0]

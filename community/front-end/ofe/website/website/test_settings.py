@@ -26,6 +26,10 @@ Run the suite with:
 
 from .settings import *  # noqa: F401,F403  pylint: disable=wildcard-import,unused-wildcard-import
 
+# Lets application code detect the test environment without inspecting
+# sys.argv, which does not survive pytest or coverage runners.
+TESTING = True
+
 # ghpcfe.views.clusters reads the server configuration file at import
 # time (ClusterLogFileView class body), and the URLconf imports every
 # view module. Unit tests exercise application logic, not routing, so

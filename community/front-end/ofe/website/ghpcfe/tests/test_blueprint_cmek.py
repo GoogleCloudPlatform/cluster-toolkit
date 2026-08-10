@@ -611,10 +611,10 @@ class CmekKeySuggestionTests(SimpleTestCase):
 class FilestoreCmekTierTests(SimpleTestCase):
     """OFE must reject a CMEK tier the Filestore module will reject.
 
-    OFE used to deny only BASIC* while the module allows only
-    ZONAL/REGIONAL/ENTERPRISE, so HIGH_SCALE_SSD passed here and failed at
-    terraform plan -- an error naming the module rather than the tier the
-    user picked. These pin the two rules to each other.
+    OFE used to deny only BASIC* while the module matched a literal
+    allow-list, so a tier could pass here and fail at terraform plan with
+    an error naming the module rather than the tier the user picked. These
+    pin the two rules to each other, whichever way the list changes.
     """
 
     KEY = ("projects/key-proj/locations/us-central1"
@@ -628,15 +628,15 @@ class FilestoreCmekTierTests(SimpleTestCase):
         return filesystem._filestore_cmek_key(fs, tier)
 
     def test_allowed_tiers_pass(self):
-        for tier in ("ZONAL", "REGIONAL", "ENTERPRISE"):
+        # HIGH_SCALE_SSD is the legacy name for ZONAL and the same tier, so
+        # it must be accepted -- it is also the only zonal tier OFE offers.
+        for tier in ("ZONAL", "HIGH_SCALE_SSD", "REGIONAL", "ENTERPRISE"):
             with self.subTest(tier=tier):
                 self.assertIn("cryptoKeys/k", self._check(tier))
 
     def test_rejected_tiers_raise(self):
-        # HIGH_SCALE_SSD is the case that regressed: OFE offers it, and it
-        # is not in the module's allow-list.
         from ghpcfe.cluster_manager import cmek
-        for tier in ("HIGH_SCALE_SSD", "BASIC_HDD", "BASIC_SSD"):
+        for tier in ("BASIC_HDD", "BASIC_SSD"):
             with self.subTest(tier=tier):
                 with self.assertRaises(cmek.CmekConfigError):
                     self._check(tier)
@@ -659,6 +659,30 @@ class FilestoreCmekTierTests(SimpleTestCase):
         self.assertIsNotNone(m, "CMEK precondition not found in main.tf")
         module_tiers = set(re.findall(r'"([A-Z_]+)"', m.group(1)))
         self.assertEqual(set(filesystem.CMEK_FILESTORE_TIERS), module_tiers)
+
+    def test_remediation_names_only_allowed_tiers(self):
+        """The advice must not drift from the rule.
+
+        The message said "Use the ENTERPRISE tier" after HIGH_SCALE_SSD was
+        allowed, i.e. it told users to pay for the expensive tier when the
+        one they had already selected would have worked.
+        """
+        from ghpcfe.cluster_manager import cmek, filesystem
+        try:
+            self._check("BASIC_HDD")
+        except cmek.CmekConfigError as err:
+            advice = str(getattr(err, "remediation", "")) or str(err)
+        else:
+            self.fail("BASIC_HDD should have been rejected")
+
+        named = [t for t in ("ZONAL", "HIGH_SCALE_SSD", "REGIONAL",
+                             "ENTERPRISE", "BASIC_HDD", "BASIC_SSD")
+                 if t in advice]
+        self.assertTrue(named, f"remediation names no tier: {advice!r}")
+        for tier in named:
+            self.assertIn(
+                tier, filesystem.CMEK_FILESTORE_TIERS,
+                f"remediation suggests {tier}, which is not allowed")
 
     def test_no_key_returns_none_whatever_the_tier(self):
         fs = types.SimpleNamespace(

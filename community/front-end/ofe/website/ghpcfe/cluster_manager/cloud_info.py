@@ -789,32 +789,36 @@ def get_gcp_filestores(credentials):
 def _get_gcp_kms_keys(credentials, location, ttl_hash=None):
     del ttl_hash  # Ignored; forces the cache to expire (see _get_ttl_hash)
     (project, client) = _get_gcp_client(credentials, "cloudkms", "v1")
-    rings = (
-        client.projects()
-        .locations()
-        .keyRings()
-        .list(parent=f"projects/{project}/locations/{location}")
-        .execute()
-    )
+    # Both listings are paginated. Without list_next a project with more
+    # than one page of key rings, or a ring with more than one page of
+    # keys, silently loses the remainder -- and a missing suggestion looks
+    # identical to a key that does not exist.
+    rings_api = client.projects().locations().keyRings()
+    keys_api = rings_api.cryptoKeys()
+
+    rings = []
+    request = rings_api.list(parent=f"projects/{project}/locations/{location}")
+    while request is not None:
+        response = request.execute()
+        rings.extend(response.get("keyRings", []))
+        request = rings_api.list_next(request, response)
+
     keys = []
-    for ring in rings.get("keyRings", []):
-        resp = (
-            client.projects()
-            .locations()
-            .keyRings()
-            .cryptoKeys()
-            .list(parent=ring["name"])
-            .execute()
-        )
-        for key in resp.get("cryptoKeys", []):
-            # Only symmetric encrypt/decrypt keys can protect a resource;
-            # signing and asymmetric keys would be rejected at apply time.
-            if key.get("purpose") != "ENCRYPT_DECRYPT":
-                continue
-            keys.append({
-                "name": key["name"],
-                "primary_state": key.get("primary", {}).get("state", ""),
-            })
+    for ring in rings:
+        request = keys_api.list(parent=ring["name"])
+        while request is not None:
+            response = request.execute()
+            for key in response.get("cryptoKeys", []):
+                # Only symmetric encrypt/decrypt keys can protect a
+                # resource; signing and asymmetric keys would be rejected
+                # at apply time.
+                if key.get("purpose") != "ENCRYPT_DECRYPT":
+                    continue
+                keys.append({
+                    "name": key["name"],
+                    "primary_state": key.get("primary", {}).get("state", ""),
+                })
+            request = keys_api.list_next(request, response)
     return keys
 
 

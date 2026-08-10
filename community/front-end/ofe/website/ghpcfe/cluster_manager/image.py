@@ -222,7 +222,10 @@ deployment_groups:
             log_err_fn = target_dir / "ghpc_create_log.stderr"
 
             env = os.environ.copy()
-            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
+            # subprocess requires str environment values; this helper
+            # returns a Path.
+            env['GOOGLE_APPLICATION_CREDENTIALS'] = str(
+                self._get_credentials_file())
 
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
@@ -251,7 +254,8 @@ deployment_groups:
         log_out_fn = target_dir / "ghpc_import_log.stdout"
         log_err_fn = target_dir / "ghpc_import_log.stderr"
         env = os.environ.copy()
-        env["GOOGLE_APPLICATION_CREDENTIALS"] = self._get_credentials_file()
+        env["GOOGLE_APPLICATION_CREDENTIALS"] = str(
+            self._get_credentials_file())
         try:
             with log_out_fn.open("ab") as log_out:
                 with log_err_fn.open("ab") as log_err:
@@ -283,7 +287,10 @@ deployment_groups:
     def _create_builder_env(self):
         """Setup builder environment on GCP."""
         extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
+            # str, not Path: these land in subprocess env via
+            # new_env.update(extra_env), and every other site in this file
+            # passes a string.
+            "GOOGLE_APPLICATION_CREDENTIALS": str(self.credentials_file)
         }
         try:
             logger.info("Invoking Terraform Init for builder env.")
@@ -326,7 +333,10 @@ deployment_groups:
     def _create_image(self):
         """Create image on GCP."""
         extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
+            # str, not Path: these land in subprocess env via
+            # new_env.update(extra_env), and every other site in this file
+            # passes a string.
+            "GOOGLE_APPLICATION_CREDENTIALS": str(self.credentials_file)
         }
         try:
             logger.info("Invoking Packer Init for image.")
@@ -357,7 +367,10 @@ deployment_groups:
     def _destroy_builder_env(self):
         """Destroy builder environment on GCP."""
         extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
+            # str, not Path: these land in subprocess env via
+            # new_env.update(extra_env), and every other site in this file
+            # passes a string.
+            "GOOGLE_APPLICATION_CREDENTIALS": str(self.credentials_file)
         }
         try:
             logger.info("Invoking Terraform Destroy for builder env.")
