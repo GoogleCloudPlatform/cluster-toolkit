@@ -2289,9 +2289,9 @@ func TestGetErrorType(t *testing.T) {
 		{
 			name:     "Text Match Stockout",
 			err:      errors.New("A c2-standard-60 VM instance is currently unavailable"),
-			expected: ErrTypeStockout,
+			expected: ErrTypeExtraStockout,
 		},
-		{
+	{
 			name:     "Text Match APIDisabled",
 			err:      errors.New("Cloud Filestore API has not been used in project 12345 before or it is disabled."),
 			expected: ErrTypeAPIDisabled,
@@ -2305,6 +2305,21 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Capitalization Test",
 			err:      errors.New("PERMISSION DENIED TO ACCESS THIS RESOURCE"),
 			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "Extra Substring Match",
+			err:      errors.New("accelerator_topology must be divisible by number of gpus in machine"),
+			expected: ErrTypeA4XTopologyIssue,
+		},
+		{
+			name:     "Extra Regex Match",
+			err:      errors.New("container \"my-job-container\" in pod \"my-job-someid\" is waiting to start: trying and failing to pull image"),
+			expected: ErrTypeServerError,
+		},
+		{
+			name:     "Extra Multi Substring Match",
+			err:      errors.New("failed with error: mkdir: cannot create directory /run/enroot : Permission denied"),
+			expected: ErrTypeEnrootPermissionDenied,
 		},
 	}
 

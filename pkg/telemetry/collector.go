@@ -444,16 +444,16 @@ func getErrorType(err error) string {
 		return ErrTypeNetwork
 	}
 
-	errMsg := strings.ToLower(err.Error())
-	for _, m := range substringErrMatchers {
-		if strings.Contains(errMsg, m.substring) {
-			return m.category
-		}
-	}
-
 	errMsgExact := err.Error()
-	for _, m := range extraSubstringErrMatchers {
-		if strings.Contains(errMsgExact, m.substring) {
+	for _, m := range extraMultiSubstringErrMatchers {
+		allMatch := true
+		for _, sub := range m.substrings {
+			if !strings.Contains(errMsgExact, sub) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
 			return m.category
 		}
 	}
@@ -464,15 +464,15 @@ func getErrorType(err error) string {
 		}
 	}
 
-	for _, m := range extraMultiSubstringErrMatchers {
-		allMatch := true
-		for _, sub := range m.substrings {
-			if !strings.Contains(errMsgExact, sub) {
-				allMatch = false
-				break
-			}
+	for _, m := range extraSubstringErrMatchers {
+		if strings.Contains(errMsgExact, m.substring) {
+			return m.category
 		}
-		if allMatch {
+	}
+
+	errMsg := strings.ToLower(err.Error())
+	for _, m := range substringErrMatchers {
+		if strings.Contains(errMsg, m.substring) {
 			return m.category
 		}
 	}
