@@ -591,6 +591,8 @@ func evalTriggers(
 	return true
 }
 
+var serviceAccountIDRegexp = regexp.MustCompile(`^[a-z][-a-z0-9]*[a-z0-9]$`)
+
 // ServiceAccountIDValidator validates if the combined deployment_name and name
 // form a valid GCP Service Account ID.
 type ServiceAccountIDValidator struct{}
@@ -619,7 +621,13 @@ func (v *ServiceAccountIDValidator) Validate(
 	if len(depNameValues) == 0 || depNameValues[0].Type() != cty.String {
 		return config.BpError{Err: fmt.Errorf("setting %q must be a string", depNameSetting), Path: depNamePath}
 	}
-	depName := depNameValues[0].AsString()
+	if !depNameValues[0].IsKnown() {
+		return nil
+	}
+	var depName string
+	if !depNameValues[0].IsNull() {
+		depName = depNameValues[0].AsString()
+	}
 
 	nameValues, namePath, err := getModuleSettingValues(bp, group, modIdx, mod, nameSetting)
 	if err != nil {
@@ -627,6 +635,12 @@ func (v *ServiceAccountIDValidator) Validate(
 	}
 	if len(nameValues) == 0 || nameValues[0].Type() != cty.String {
 		return config.BpError{Err: fmt.Errorf("setting %q must be a string", nameSetting), Path: namePath}
+	}
+	if !nameValues[0].IsKnown() {
+		return nil
+	}
+	if nameValues[0].IsNull() {
+		return config.BpError{Err: fmt.Errorf("setting %q cannot be null", nameSetting), Path: namePath}
 	}
 	name := nameValues[0].AsString()
 
@@ -644,8 +658,7 @@ func (v *ServiceAccountIDValidator) Validate(
 		}
 	}
 
-	re := regexp.MustCompile(`^[a-z][-a-z0-9]*[a-z0-9]$`)
-	if !re.MatchString(saID) {
+	if !serviceAccountIDRegexp.MatchString(saID) {
 		return config.BpError{
 			Err:  fmt.Errorf("generated service account ID %q is invalid: must begin with a lowercase letter, contain only lowercase alphanumeric characters and dashes, and cannot end with a dash", saID),
 			Path: namePath,

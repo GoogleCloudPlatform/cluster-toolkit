@@ -1243,4 +1243,54 @@ func TestServiceAccountIDValidator(t *testing.T) {
 			t.Fatalf("expected error message to contain 'cannot end with a dash', got: %q", err.Error())
 		}
 	})
+
+	t.Run("passes_when_deployment_name_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Vars = config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.UnknownVal(cty.String),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("passes_when_name_is_unknown", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.UnknownVal(cty.String),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("fails_when_name_is_null", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.NullVal(cty.String),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error, got nil")
+		}
+		if !strings.Contains(err.Error(), "cannot be null") {
+			t.Fatalf("expected error message to contain 'cannot be null', got: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_when_deployment_name_is_null", func(t *testing.T) {
+		bp := baseBP
+		bp.Vars = config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.NullVal(cty.String),
+		})
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"name": cty.StringVal("valid-sa-name"),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
 }
