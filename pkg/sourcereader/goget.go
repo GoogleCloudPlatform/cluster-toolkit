@@ -30,6 +30,7 @@ import (
 
 var defaultDetectors = []getter.Detector{
 	new(getter.GitHubDetector),
+	new(getter.GitLabDetector),
 	new(getter.GitDetector),
 	new(getter.GCSDetector),
 }
