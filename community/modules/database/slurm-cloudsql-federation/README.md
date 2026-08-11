@@ -85,6 +85,7 @@ No modules.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of the database disk in GiB. | `number` | `null` | no |
 | <a name="input_edition"></a> [edition](#input\_edition) | value | `string` | `"ENTERPRISE"` | no |
 | <a name="input_enable_backups"></a> [enable\_backups](#input\_enable\_backups) | Set true to enable backups | `bool` | `false` | no |
+| <a name="input_encryption_key_name"></a> [encryption\_key\_name](#input\_encryption\_key\_name) | The full resource name of a Cloud KMS CryptoKey used to encrypt the<br/>Cloud SQL instance data (CMEK). The Cloud SQL service identity must<br/>hold roles/cloudkms.cryptoKeyEncrypterDecrypter on the key, and the<br/>key location must match the instance region. Encryption mode is<br/>fixed at instance creation and cannot be changed in place. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is going to be created in.:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation. | `string` | `null` | no |
