@@ -232,7 +232,9 @@ def _normalize_slurm_state(state):
 
 
 def _parse_slurm_time(value):
-    if not value or value in ["Unknown", "None", "N/A"]:
+    # UNLIMITED is what Slurm reports for the end time of a running or
+    # non-expiring job, so it is an absent time rather than an unparsable one.
+    if not value or value in ["Unknown", "None", "N/A", "UNLIMITED"]:
         return None
 
     for fmt in [
@@ -267,6 +269,12 @@ def _slurm_get_job_info_from_sacct(jobid):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        # A requeued job has one accounting row per run all under the same JobID.
+        # Take the latest rather than whichever comes first.
+        # Rows with no parseable start time sort earliest so a row that has one always wins.
+        latest_start = None
+        latest_result = None
+
         for line in proc.stdout.splitlines():
             if not line.strip():
                 continue
@@ -290,11 +298,23 @@ def _slurm_get_job_info_from_sacct(jobid):
             if end_epoch is not None:
                 result["end_time"] = {"number": end_epoch}
 
-            if normalized_state:
+            if not result:
+                continue
+
+            if latest_result is None or (
+                start_epoch is not None
+                and (latest_start is None or start_epoch >= latest_start)
+            ):
+                latest_start = start_epoch
+                latest_result = result
+
+        if latest_result:
+            job_state = latest_result.get("job_state")
+            if job_state:
                 logger.info(
-                    "sacct returned job %s with state %s", jobid, normalized_state
+                    "sacct returned job %s with state %s", jobid, job_state[0]
                 )
-            return result or None
+            return latest_result
     except Exception as err:
         logger.error("sacct lookup failed for job %s", jobid, exc_info=err)
 

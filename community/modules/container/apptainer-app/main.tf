@@ -157,7 +157,7 @@ locals {
       fi
 
       install -d -m 0700 "$${HOME:-/root}/.apptainer"
-      apptainer registry login --username=oauth2accesstoken --password="$access_token" "oras://$registry_host"
+      apptainer registry login --username=oauth2accesstoken --password="$access_token" "docker://$registry_host"
     EOT
   }
 

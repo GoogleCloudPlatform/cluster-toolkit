@@ -88,13 +88,13 @@ Runtime expectations:
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -104,13 +104,13 @@ No modules.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [terraform_data.module_ready](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_app_id"></a> [app\_id](#input\_app\_id) | Stable machine-readable identifier used for generated filenames. | `string` | n/a | yes |
 | <a name="input_apptainer_package"></a> [apptainer\_package](#input\_apptainer\_package) | Package name used by the optional install runner. | `string` | `"apptainer"` | no |
 | <a name="input_bin_subdir"></a> [bin\_subdir](#input\_bin\_subdir) | Relative subdirectory under install\_root where wrapper commands are written. | `string` | `"bin"` | no |
@@ -138,7 +138,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_auth_runner"></a> [auth\_runner](#output\_auth\_runner) | Shell runner that authenticates Apptainer to Google Artifact Registry using gcloud. |
 | <a name="output_install_root_resolved"></a> [install\_root\_resolved](#output\_install\_root\_resolved) | Resolved install root, either from install\_root or the selected network\_storage local\_mount. |
 | <a name="output_install_runner"></a> [install\_runner](#output\_install\_runner) | Shell runner that optionally installs Apptainer when install\_apptainer is true. |

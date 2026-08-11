@@ -148,13 +148,12 @@ deployment_groups:
 
   - id: vm
     source: modules/compute/vm-instance
-    use: [network, appsfs, app-startup]
+    use: [network, appsfs, app-startup, hpc_service_account]
     outputs:
     - name
     settings:
       name_prefix: $(vars.deployment_name)-vm
       machine_type: $(vars.vm_machine_type)
-      service_account_email: $(hpc_service_account.service_account_email)
       allow_automatic_updates: false
 
   - id: wait
