@@ -99,8 +99,6 @@ func EnsureDependencies(decision DownloadDecision, tools ...string) error {
 			err = ensureBinary("terraform", TerraformVersion, decision)
 		case "packer":
 			err = ensureBinary("packer", PackerVersion, decision)
-		default:
-			return fmt.Errorf("unknown tool requested: %s", tool)
 		}
 		if err != nil {
 			return err

@@ -101,16 +101,18 @@ func (r GoGetterSourceReader) GetModule(source string, dst string) error {
 	}
 
 	tmp, err := os.MkdirTemp("", "get-module-*")
-	defer os.RemoveAll(tmp)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = os.RemoveAll(tmp)
+	}()
 
 	writeDir := filepath.Join(tmp, "mod")
 	client := getterClient(detected, writeDir)
 
 	if err := client.Get(); err != nil {
-		return fmt.Errorf("failed to get module at %s to %s: %w", detected, writeDir, err)
+		return fmt.Errorf("failed to get module at %q to %q: %w", detected, writeDir, err)
 	}
 
 	return copyFromPath(writeDir, dst)
