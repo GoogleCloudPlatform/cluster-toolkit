@@ -18,6 +18,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -91,11 +92,21 @@ func validateVars(bp Blueprint) error {
 		Add(validateDeploymentName(bp)).
 		Add(validateGlobalLabels(bp)).
 		Add(validateSlurmClusterName(bp))
-	// Check for any nil values
-	// Iterator over non evaluated variables, it's Ok if evaluated value is null
+
+	// Check for any nil or invalid values
 	for key, val := range bp.Vars.Items() {
 		if val.IsNull() {
 			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %q was not set", key))
+			continue
+		}
+		if _, isExpr := IsExpressionValue(val); isExpr {
+			continue
+		}
+		if strings.Contains(strings.ToLower(key), "cidr") && val.Type() == cty.String {
+			str := val.AsString()
+			if _, _, err := net.ParseCIDR(str); err != nil {
+				errs.At(Root.Vars.Dot(key), fmt.Errorf("invalid CIDR address: %s", str))
+			}
 		}
 	}
 	return errs.OrNil()

@@ -50,6 +50,16 @@ func (s *zeroSuite) TestValidateVars(c *C) {
 			With("buz", GlobalRef("ar").AsValue())
 		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
+
+	{ // Fail: invalid CIDR variable <your-ip-address>/32
+		vars := base.With("authorized_cidr", cty.StringVal("<your-ip-address>/32"))
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
+	}
+
+	{ // Success: valid CIDR variable
+		vars := base.With("authorized_cidr", cty.StringVal("1.2.3.4/32"))
+		c.Check(validateVars(Blueprint{Vars: vars}), IsNil)
+	}
 }
 
 func (s *zeroSuite) TestValidateSettings(c *C) {

@@ -21,7 +21,7 @@ vars:
   zone: us-central1-b
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
 
 deployment_groups:
