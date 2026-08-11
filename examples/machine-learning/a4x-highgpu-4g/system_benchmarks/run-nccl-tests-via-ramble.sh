@@ -21,6 +21,13 @@ trap "printf '\nCaught Ctrl+c. Exiting...\n'; exit" INT
 TAG=$(date +%s)
 TEST_DIR=${PWD}/nccl-tests-"${TAG}"
 SOFTWARE_INSTALL=${1:-/opt/apps}
+NCCL_MNNVL_ENABLE=${2:-"1"}
+
+NCCL_NVLS_ENABLE=${NCCL_NVLS_ENABLE:-"2"}
+NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-"0"}
+NCCL_SHM_DISABLE=${NCCL_SHM_DISABLE:-"0"}
+NCCL_DEBUG=${NCCL_DEBUG:-"INFO"}
+NCCL_DEBUG_SUBSYS=${NCCL_DEBUG_SUBSYS:-"INIT,ENV,NET,COLL,NVLS"}
 
 cat <<EOF
 This script will install the following packages using on this VM:
@@ -107,9 +114,9 @@ ramble:
     srun_args: >-
       --mpi=pmix
       --container-workdir /third_party/nccl-tests/build/
-      --container-env LD_LIBRARY_PATH
+      --container-env {container_env_vars}
       --container-image {container_path}
-      --container-mounts "/usr/local/gib,/var/tmp"
+      --container-mounts={experiment_run_dir}:{experiment_run_dir}
       --container-writable
       --wait=60
       --kill-on-bad-exit=1
@@ -119,7 +126,7 @@ ramble:
     hostlist: \${SLURM_JOB_NODELIST}
 
     container_dir: "${SOFTWARE_INSTALL}/ramble/sqsh"
-    container_name: nccl-plugin-gib-diagnostic-arm64-v1.1.2
+    container_name: nccl-plugin-gib-diagnostic-arm64:v1.1.2
     container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.1.2
     processes_per_node: 4
     processes_per_node: '{gpus_per_node}'
@@ -128,14 +135,22 @@ ramble:
 
   env_vars:
     set:
-      OMPI_MCA_btl_tcp_if_include: enp0s3,enp192s2
+      NCCL_DEBUG: ${NCCL_DEBUG}
+      NCCL_DEBUG_SUBSYS: ${NCCL_DEBUG_SUBSYS}
+      NCCL_DEBUG_FILE: "{experiment_run_dir}/nccl_debug_%h_%p.log"
+      OMPI_MCA_btl_tcp_if_include: enp0s3
       PMIX_MCA_gds: ^ds12
       UCX_NET_DEVICES: gpu0rdma0,gpu1rdma0,gpu2rdma0,gpu3rdma0
       PMIX_MCA_psec: native
       UCX_IB_FORK_INIT: n
       NCCL_NET: gIB
       NCCL_SOCKET_IFNAME: enp0s3,enp192s2
-      LD_LIBRARY_PATH: /usr/local/gib/lib64:usr/local/nvidia/lib
+
+      NCCL_NVLS_ENABLE: ${NCCL_NVLS_ENABLE}
+      NCCL_MNNVL_ENABLE: ${NCCL_MNNVL_ENABLE}
+      NCCL_P2P_DISABLE: ${NCCL_P2P_DISABLE}
+      NCCL_SHM_DISABLE: ${NCCL_SHM_DISABLE}
+      LD_LIBRARY_PATH: /third_party/nccl/build/lib:/usr/local/gib/lib64:/usr/local/nvidia/lib64:/usr/local/nvidia/lib
 
   applications:
     nccl-tests:
