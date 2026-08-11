@@ -444,10 +444,35 @@ func getErrorType(err error) string {
 		return ErrTypeNetwork
 	}
 
-	// Fallback string matching on safe keywords
 	errMsg := strings.ToLower(err.Error())
 	for _, m := range substringErrMatchers {
 		if strings.Contains(errMsg, m.substring) {
+			return m.category
+		}
+	}
+
+	errMsgExact := err.Error()
+	for _, m := range extraSubstringErrMatchers {
+		if strings.Contains(errMsgExact, m.substring) {
+			return m.category
+		}
+	}
+
+	for _, m := range extraRegexErrMatchers {
+		if m.pattern.MatchString(errMsgExact) {
+			return m.category
+		}
+	}
+
+	for _, m := range extraMultiSubstringErrMatchers {
+		allMatch := true
+		for _, sub := range m.substrings {
+			if !strings.Contains(errMsgExact, sub) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
 			return m.category
 		}
 	}
