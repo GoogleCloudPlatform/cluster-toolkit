@@ -445,6 +445,21 @@ func getErrorType(err error) string {
 	}
 
 	errMsgExact := err.Error()
+	if cat := getExtendedErrorType(errMsgExact); cat != "" {
+		return cat
+	}
+
+	errMsg := strings.ToLower(errMsgExact)
+	for _, m := range substringErrMatchers {
+		if strings.Contains(errMsg, m.substring) {
+			return m.category
+		}
+	}
+
+	return ErrTypeUnknown
+}
+
+func getExtendedErrorType(errMsgExact string) string {
 	for _, m := range extraMultiSubstringErrMatchers {
 		allMatch := true
 		for _, sub := range m.substrings {
@@ -470,14 +485,7 @@ func getErrorType(err error) string {
 		}
 	}
 
-	errMsg := strings.ToLower(err.Error())
-	for _, m := range substringErrMatchers {
-		if strings.Contains(errMsg, m.substring) {
-			return m.category
-		}
-	}
-
-	return ErrTypeUnknown
+	return ""
 }
 
 // This method returns "true" for test projects, and "false" otherwise.
