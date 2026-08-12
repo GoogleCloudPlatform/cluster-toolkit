@@ -661,6 +661,7 @@ func TestAwaitJobCompletion(t *testing.T) {
 			mockKube := &MockKubeClient{Namespace: tt.mockNamespace, Workloads: tt.mockWorkloads}
 			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.kubeClient = mockKube
+			orc.dynClient = &mockDynamicClient{} // Avoid loading real kubeconfig
 
 			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
 
@@ -3353,9 +3354,253 @@ func TestGetFirstContainerName_JobSetDiscovery(t *testing.T) {
 	}
 }
 
+func TestValidateMTCConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		clusterDesc   gkeCluster
+		dynClient     dynamic.Interface
+		kubeClient    KubeClient
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "MTC Disabled - Pass",
+			job:  &orchestrator.JobDefinition{GKEMTCEnabled: false},
+		},
+		{
+			name:          "MTC Enabled without HighScaleCheckpointing Addon - Fail",
+			job:           &orchestrator.JobDefinition{GKEMTCEnabled: true, GKEMTCRamdiskDirectory: "/tmp/ramdisk"},
+			wantErr:       true,
+			wantErrSubstr: "HighScaleCheckpointing addon",
+		},
+		{
+			name: "MTC Enabled with DryRunManifest - Pass without k8s client",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				DryRunManifest:         "manifest.yaml",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+		},
+		{
+			name: "MTC Enabled with CheckpointConfiguration CR present - Pass",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				GKENamespace:           "custom-ns",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return &unstructured.UnstructuredList{
+						Items: []unstructured.Unstructured{
+							{Object: map[string]interface{}{"kind": "CheckpointConfiguration"}},
+						},
+					}, nil
+				},
+			},
+		},
+		{
+			name: "MTC Enabled with CheckpointConfiguration CR missing - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				GKENamespace:           "custom-ns",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "requires a CheckpointConfiguration resource",
+		},
+		{
+			name: "MTC Enabled with 403 Forbidden - Pass with warning",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				GKENamespace:           "restricted-ns",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, apierrors.NewForbidden(schema.GroupResource{Resource: "checkpointconfigurations"}, "test", fmt.Errorf("forbidden"))
+				},
+			},
+		},
+		{
+			name: "MTC Enabled with CheckpointConfiguration CRD Unregistered - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				GKENamespace:           "custom-ns",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "checkpointconfigurations"}, "")
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "is not registered on the cluster",
+		},
+		{
+			name: "MTC Enabled with Empty Ramdisk Directory - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "",
+			},
+			wantErr:       true,
+			wantErrSubstr: "ramdisk directory path (--gke-mtc-ramdisk-dir) cannot be empty",
+		},
+		{
+			name: "MTC Enabled with namespace resolution failure - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			kubeClient:    &MockKubeClient{ExplicitEmpty: true, Err: fmt.Errorf("failed to get namespace")},
+			dynClient:     &mockDynamicClient{},
+			wantErr:       true,
+			wantErrSubstr: "failed to resolve namespace for MTC verification",
+		},
+		{
+			name: "MTC Enabled with generic k8s client error - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "/tmp/ramdisk",
+				GKENamespace:           "custom-ns",
+			},
+			clusterDesc: gkeCluster{
+				AddonsConfig: &gkeAddonsConfig{
+					HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{Enabled: true},
+				},
+			},
+			dynClient: &mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					return nil, fmt.Errorf("internal server error")
+				},
+			},
+			wantErr:       true,
+			wantErrSubstr: "failed to verify CheckpointConfiguration resource",
+		},
+		{
+			name: "MTC Enabled with Invalid Ramdisk Path (Relative) - Fail",
+			job: &orchestrator.JobDefinition{
+				GKEMTCEnabled:          true,
+				GKEMTCRamdiskDirectory: "relative/path",
+			},
+			wantErr:       true,
+			wantErrSubstr: "--gke-mtc-ramdisk-dir must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				clusterDesc: tt.clusterDesc,
+				dynClient:   tt.dynClient,
+				kubeClient:  tt.kubeClient,
+			}
+			err := orc.validateMTCConfig(tt.job)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected an error, but got nil")
+				} else if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+					t.Errorf("expected error to contain %q, but got: %v", tt.wantErrSubstr, err)
+				}
+			} else if err != nil {
+				t.Errorf("expected no error, but got: %v", err)
+			}
+		})
+	}
+}
+
+func TestGetTargetNamespace(t *testing.T) {
+	tests := []struct {
+		name       string
+		job        *orchestrator.JobDefinition
+		kubeClient KubeClient
+		want       string
+		wantErr    bool
+	}{
+		{
+			name:    "nil job",
+			job:     nil,
+			wantErr: true,
+		},
+		{
+			name: "explicit namespace",
+			job: &orchestrator.JobDefinition{
+				GKENamespace: "explicit-ns",
+			},
+			want: "explicit-ns",
+		},
+		{
+			name: "fallback to current namespace success",
+			job: &orchestrator.JobDefinition{
+				ClusterName: "cluster",
+			},
+			kubeClient: &MockKubeClient{Namespace: "current-ns"},
+			want:       "current-ns",
+		},
+		{
+			name: "fallback to current namespace failure",
+			job: &orchestrator.JobDefinition{
+				ClusterName: "cluster",
+			},
+			kubeClient: &MockKubeClient{Err: fmt.Errorf("kubeclient error")},
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := &GKEOrchestrator{kubeClient: tt.kubeClient}
+			got, err := g.getTargetNamespace(tt.job)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getTargetNamespace() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("getTargetNamespace() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3365,13 +3610,25 @@ func (m *mockNamespaceableResource) Get(ctx context.Context, name string, option
 	return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "namespaces"}, name)
 }
 
+func (m *mockNamespaceableResource) Namespace(ns string) dynamic.ResourceInterface {
+	return m
+}
+
+func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, opts)
+	}
+	return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
+}
+
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
-	return &mockNamespaceableResource{getFunc: m.getFunc}
+	return &mockNamespaceableResource{getFunc: m.getFunc, listFunc: m.listFunc}
 }
 
 func TestValidateNamespaceExists(t *testing.T) {

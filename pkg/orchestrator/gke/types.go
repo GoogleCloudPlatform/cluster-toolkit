@@ -35,7 +35,16 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
+	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )
+
+// checkpointConfigurationGVR defines the GroupVersionResource for GKE CheckpointConfiguration resources.
+var checkpointConfigurationGVR = schema.GroupVersionResource{
+	Group:    "checkpointing.gke.io",
+	Version:  "v1alpha1",
+	Resource: "checkpointconfigurations",
+}
 
 // namespaceGVR defines the GroupVersionResource for core Kubernetes Namespace resources.
 var namespaceGVR = schema.GroupVersionResource{
