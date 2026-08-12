@@ -335,7 +335,7 @@ const (
 	ErrTypeSubnetNotFoundInZone                      = "Subnet_NOT_FOUND_IN_ZONE"
 	ErrTypeTerraformVersionUnavailable               = "TERRAFORM_VERSION_UNAVAILABLE"
 	ErrTypeTestCollision                             = "TEST_COLLISION"
-	ErrTypeTestZoneValidatorFalied                   = "TEST_ZONE_VALIDATOR_FALIED"
+	ErrTypeTestZoneValidatorFailed                   = "TEST_ZONE_VALIDATOR_FAILED"
 	ErrTypeTfInconsistentDependency                  = "TF_INCONSISTENT_DEPENDENCY"
 	ErrTypeTfProjectIamCrash                         = "TF_PROJECT_IAM_CRASH"
 	ErrTypeTfProviderInconsistency                   = "TF_PROVIDER_INCONSISTENCY"
