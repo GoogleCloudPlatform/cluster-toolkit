@@ -93,12 +93,51 @@ module "nodeset_cleanup" {
   nodeset_template       = module.slurm_nodeset_template[each.value.nodeset_name].self_link
 }
 
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+}
+
+resource "google_compute_region_instance_group_manager" "nodeset_mig" {
+  for_each           = var.provisioning_engine == "MIG" ? local.nodeset_map : {}
+  name               = "${local.slurm_cluster_name}-${each.value.nodeset_name}-mig"
+  base_instance_name = each.value.nodeset_name
+  region             = coalesce(each.value.region, var.region)
+  target_size        = each.value.node_count_static
+
+  version {
+    instance_template = module.slurm_nodeset_template[each.value.nodeset_name].self_link
+  }
+
+  distribution_policy_zones        = length(coalesce(each.value.zone_policy_allow, [])) > 0 ? each.value.zone_policy_allow : (var.zone != null ? [var.zone] : null)
+  distribution_policy_target_shape = "ANY_SINGLE_ZONE"
+
+  update_policy {
+    type                         = "OPPORTUNISTIC"
+    minimal_action               = "REPLACE"
+    instance_redistribution_type = "NONE"
+    max_surge_fixed              = length(coalesce(each.value.zone_policy_allow, (var.zone != null ? [var.zone] : data.google_compute_zones.available.names)))
+    max_unavailable_fixed        = 0
+  }
+
+  instance_lifecycle_policy {
+    default_action_on_failure = "REPAIR"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      target_size,
+    ]
+  }
+}
+
 locals {
   nodesets = [for name, ns in local.nodeset_map : {
     nodeset_name                     = ns.nodeset_name
     node_conf                        = ns.node_conf
     dws_flex                         = ns.dws_flex
     instance_template                = module.slurm_nodeset_template[ns.nodeset_name].self_link
+    mig_name                         = var.provisioning_engine == "MIG" ? try(google_compute_region_instance_group_manager.nodeset_mig[ns.nodeset_name].name, null) : null
     node_count_dynamic_max           = ns.node_count_dynamic_max
     node_count_static                = ns.node_count_static
     subnetwork                       = ns.subnetwork_self_link

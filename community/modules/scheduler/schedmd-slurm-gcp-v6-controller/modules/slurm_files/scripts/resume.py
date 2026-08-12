@@ -303,6 +303,44 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     return {chunk.name: chunk for chunk in chunks}
 
 
+def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup) -> None:
+    """Provisions nodes using Tiered AIC metadata stamping & Lightweight PIC creation."""
+    if not nodes:
+        return
+
+    nodeset_name = lkp.node_nodeset_name(nodes[0])
+    mig_name = lkp.mig_name(nodeset_name)
+    nodeset = lkp.node_nodeset(nodes[0])
+    region = lkp.node_region(nodes[0])
+
+    log.info(f"Resuming {len(nodes)} MIG nodes ({to_hostlist(nodes)}) for MIG {mig_name}")
+
+    # 1. All-Instances Config (AIC) - Stamp group-wide metadata in 1 API call
+    template_link = getattr(nodeset, "instance_template", None)
+    if template_link:
+        try:
+            aic_req = lkp.compute.regionInstanceGroupManagers().setInstanceTemplate(
+                project=lkp.project,
+                region=region,
+                instanceGroupManager=mig_name,
+                body={"instanceTemplate": template_link}
+            )
+            execute_with_futures(lambda req: req.execute(), [aic_req])
+        except Exception as e:
+            log.warning(f"Failed to setInstanceTemplate on MIG {mig_name}: {e}")
+
+    # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
+    pic_instances = [{"name": node} for node in nodes]
+    pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
+        project=lkp.project,
+        region=region,
+        instanceGroupManager=mig_name,
+        body={"instances": pic_instances}
+    )
+    res = execute_with_futures(lambda req: req.execute(), [pic_req])
+    log.debug(f"createInstances response for {mig_name}: {res}")
+
+
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
@@ -333,7 +371,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_chunks, flex_chunks = [], []
+    tpu_chunks, flex_chunks, mig_chunks = [], [], []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
@@ -343,6 +381,8 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             tpu_chunks.append(chunk.nodes)
         elif lkp.is_flex_node(model):
             flex_chunks.append(chunk)
+        elif lkp.is_mig_engine():
+            mig_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id, chunk.is_job_request
@@ -350,6 +390,9 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
 
     for chunk in flex_chunks:
         mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp, chunk.placement_group)
+
+    for chunk in mig_chunks:
+        resume_mig_nodes(chunk.nodes, chunk.excl_job_id, lkp)
 
 
     # execute all bulkInsert requests  with batch

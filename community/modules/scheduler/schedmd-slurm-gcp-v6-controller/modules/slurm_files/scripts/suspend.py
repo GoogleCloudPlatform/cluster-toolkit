@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Any
+from typing import List, Any, Dict
 import argparse
 import logging
 
@@ -84,13 +84,83 @@ def delete_instances(instances):
 
 
 
+def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
+    """Deletes specific instance names from MIG and reduces target size atomically."""
+    if not nodes:
+        return
+
+    by_nodeset: Dict[str, List[str]] = {}
+    for node in nodes:
+        ns_name = lkp.node_nodeset_name(node)
+        if ns_name not in by_nodeset:
+            by_nodeset[ns_name] = []
+        by_nodeset[ns_name].append(node)
+
+    for ns_name, ns_nodes in by_nodeset.items():
+        mig_name = lkp.mig_name(ns_name)
+        region = lkp.node_region(ns_nodes[0])
+
+        # Resolve instance URLs from MIG or local lookup
+        try:
+            list_res = lkp.compute.regionInstanceGroupManagers().listManagedInstances(
+                project=lkp.project,
+                region=region,
+                instanceGroupManager=mig_name
+            ).execute()
+            mig_inst_map = {
+                item["instance"].split("/")[-1]: item["instance"]
+                for item in list_res.get("managedInstances", [])
+                if "instance" in item
+            }
+        except Exception as e:
+            log.warning(f"Could not list managed instances for MIG {mig_name}: {e}")
+            mig_inst_map = {}
+
+        links = []
+        for node in ns_nodes:
+            if node in mig_inst_map:
+                links.append(mig_inst_map[node])
+            else:
+                inst = lkp.instance(node)
+                zone = getattr(inst, "zone", None)
+                if zone:
+                    zone_name = zone.split("/")[-1]
+                    links.append(f"zones/{zone_name}/instances/{node}")
+                else:
+                    nodeset = lkp.node_nodeset(node)
+                    zone_name = getattr(nodeset, "zone", None)
+                    if zone_name:
+                        links.append(f"zones/{zone_name}/instances/{node}")
+                    else:
+                        links.append(f"zones/us-central1-a/instances/{node}")
+
+        log.info(f"Deleting {len(ns_nodes)} MIG instances ({to_hostlist(ns_nodes)}) from MIG {mig_name}")
+        req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
+            project=lkp.project,
+            region=region,
+            instanceGroupManager=mig_name,
+            body={
+                "instances": links,
+                "decreaseTargetSize": True
+            }
+        )
+        try:
+            res = util.execute_with_futures(lambda r: r.execute(), [req])
+            log.debug(f"deleteInstances response for {mig_name}: {res}")
+        except Exception as e:
+            log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
+
+
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    delete_instances(bulk_nodes)
+    if lkp.is_mig_engine():
+        suspend_mig_nodes(bulk_nodes, lkp)
+    else:
+        delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
 

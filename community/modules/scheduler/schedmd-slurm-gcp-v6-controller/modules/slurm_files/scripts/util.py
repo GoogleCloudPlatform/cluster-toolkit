@@ -301,6 +301,7 @@ class Instance:
   metadata: Dict[str, str]
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
+  current_action: Optional[str] = None
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
@@ -312,7 +313,8 @@ class Instance:
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
       role = jo.get("labels", {}).get("slurm_instance_role"),
-      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
+      current_action = jo.get("currentAction"),
     )
 
 
@@ -1810,6 +1812,17 @@ class Lookup:
 
     def nodeset_is_tpu(self, nodeset_name=None) -> bool:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
+    def is_mig_engine(self) -> bool:
+        """Returns True if the cluster deployment is configured with provisioning_engine == 'MIG'."""
+        return getattr(self.cfg, "provisioning_engine", "BULK_INSERT") == "MIG"
+
+    def mig_name(self, nodeset_name: str, shard_index: int = 0) -> str:
+        """Returns target MIG name for a given NodeSet, supporting sharding for >1000 VMs."""
+        nodeset = self.cfg.nodeset.get(nodeset_name)
+        if nodeset and getattr(nodeset, "node_count_dynamic_max", 0) > 1000:
+            return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-shard-{shard_index}-mig"
+        return f"{self.cfg.slurm_cluster_name}-{nodeset_name}-mig"
 
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)

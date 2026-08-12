@@ -59,6 +59,12 @@ EOD
   default     = true
 }
 
+variable "provisioning_engine" {
+  type        = string
+  default     = "BULK_INSERT"
+  description = "Compute node provisioning engine: 'MIG' or 'BULK_INSERT'"
+}
+
 #########
 # SLURM #
 #########

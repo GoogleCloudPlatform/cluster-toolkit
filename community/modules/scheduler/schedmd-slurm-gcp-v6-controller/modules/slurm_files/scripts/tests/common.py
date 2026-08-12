@@ -45,6 +45,7 @@ class TstNodeset:
     placement_max_distance: Optional[int] = None
     accelerator_topology: Optional[str] = ""
     future_reservation: Optional[str] = ""
+    subnetwork: str = "projects/p/regions/us-central1/subnetworks/default"
 
 @dataclass
 class TstPartition:
@@ -56,11 +57,14 @@ class TstPartition:
 @dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
+    project: str = "p"
+    provisioning_engine: str = "BULK_INSERT"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
     enable_health_check_start_only: bool = False
     enable_expedited_requeue: bool = False
     enable_openmetrics: bool = False
+    google_app_cred_path: Optional[str] = None
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)

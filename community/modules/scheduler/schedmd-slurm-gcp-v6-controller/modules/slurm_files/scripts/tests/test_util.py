@@ -839,3 +839,27 @@ def test_compute_service_custom_universe_domain(mocker):
     assert kwargs.get("static_discovery") is True
     assert kwargs.get("client_options").api_endpoint == "https://compute.apis-sovereign.goog/compute/beta/"
     assert kwargs.get("client_options").universe_domain == "apis-sovereign.goog"
+
+
+def test_is_mig_engine():
+    cfg_bulk = TstCfg(provisioning_engine="BULK_INSERT")
+    lkp_bulk = util.Lookup(cfg_bulk)
+    assert not lkp_bulk.is_mig_engine()
+
+    cfg_mig = TstCfg(provisioning_engine="MIG")
+    lkp_mig = util.Lookup(cfg_mig)
+    assert lkp_mig.is_mig_engine()
+
+
+def test_mig_name():
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        provisioning_engine="MIG",
+        nodeset={
+            "ns1": TstNodeset(nodeset_name="ns1", node_count_dynamic_max=100),
+            "ns2": TstNodeset(nodeset_name="ns2", node_count_dynamic_max=1200),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.mig_name("ns1") == "testcl-ns1-mig"
+    assert lkp.mig_name("ns2", shard_index=0) == "testcl-ns2-shard-0-mig"
