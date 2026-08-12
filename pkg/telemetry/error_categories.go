@@ -350,7 +350,7 @@ const (
 	ErrTypeTopologyGcloudCmdFailure                  = "TOPOLOGY_GCLOUD_CMD_FAILURE"
 	ErrTypeUnavailableCapactiy                       = "UNAVAILABLE_CAPACTIY"
 	ErrTypeUnboundVariable                           = "UNBOUND_VARIABLE"
-	ErrTypeUnknownGcsTraningModule                   = "UNKNOWN_GCS_TRANING_MODULE"
+	ErrTypeUnknownGcsTrainingModule                  = "UNKNOWN_GCS_TRAINING_MODULE"
 	ErrTypeValidationError                           = "VALIDATION_ERROR"
 	ErrTypeValidatorFailed                           = "VALIDATOR_FAILED"
 	ErrTypeValidatorIssue                            = "VALIDATOR_ISSUE"
