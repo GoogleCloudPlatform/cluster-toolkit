@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -75,6 +76,10 @@ func (sm *StorageManager) ProcessMounts(mounts []string, job orchestrator.JobDef
 	return mountInfos, additionalManifests, nil
 }
 
+func normalizeMountPath(p string) string {
+	return filepath.ToSlash(filepath.Clean(p))
+}
+
 // ValidateMounts checks mounts for duplicate sources/destinations and valid formats.
 func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	seenSources := make(map[string]bool)
@@ -86,14 +91,36 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 			return err
 		}
 
+		cleanDest := normalizeMountPath(dest)
 		if seenSources[src] {
 			return fmt.Errorf("duplicate volume source: %s", src)
 		}
-		if seenDestinations[dest] {
+		if seenDestinations[cleanDest] {
 			return fmt.Errorf("duplicate volume destination: %s", dest)
 		}
 		seenSources[src] = true
-		seenDestinations[dest] = true
+		seenDestinations[cleanDest] = true
+	}
+	return nil
+}
+
+// ValidateRamdiskDir checks --ramdisk-dir for valid path format, root '/' prohibition, and conflicts with user mounts.
+func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []string) error {
+	if ramdiskDir == "" {
+		return nil
+	}
+	if !strings.HasPrefix(ramdiskDir, "/") {
+		return fmt.Errorf("--ramdisk-dir must be an absolute path (e.g. /tmp/ramdisk), got: %q", ramdiskDir)
+	}
+	cleanRamdisk := normalizeMountPath(ramdiskDir)
+	if cleanRamdisk == "/" {
+		return fmt.Errorf("--ramdisk-dir cannot be the root directory '/'")
+	}
+	for _, m := range rawMounts {
+		_, dest, _, _, err := sm.parseSingleVolume(m)
+		if err == nil && normalizeMountPath(dest) == cleanRamdisk {
+			return fmt.Errorf("--ramdisk-dir path %q conflicts with duplicate mount destination in --mount flag", ramdiskDir)
+		}
 	}
 	return nil
 }

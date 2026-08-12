@@ -34,6 +34,7 @@ import (
 
 	"github.com/google/safetext/yamltemplate"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -554,9 +555,9 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobD
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	crdList, err := g.dynClient.Resource(checkpointConfigurationGVR).Namespace(targetNamespace).List(ctx, metav1.ListOptions{})
+	crdList, err := g.dynClient.Resource(checkpointConfigurationGVR).Namespace(targetNamespace).List(ctx, metav1.ListOptions{Limit: 1})
 	if err != nil {
-		if statusErr, ok := err.(interface{ Status() metav1.Status }); ok && statusErr.Status().Reason == metav1.StatusReasonNotFound {
+		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
 		}
 		return fmt.Errorf("failed to verify CheckpointConfiguration resource in namespace %s: %w", targetNamespace, err)
@@ -573,6 +574,10 @@ func (g *GKEOrchestrator) validateMTCConfig(job *orchestrator.JobDefinition) err
 	docRemediationMsg := fmt.Sprintf("Please follow the official GKE documentation to enable this feature on your cluster: %s", mtcDocURL)
 
 	if job.RamdiskDirectory != "" {
+		sm := &StorageManager{orchestrator: g}
+		if err := sm.ValidateRamdiskDir(job.RamdiskDirectory, job.RawMounts); err != nil {
+			return err
+		}
 		if g.clusterDesc.AddonsConfig == nil || g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig == nil || !g.clusterDesc.AddonsConfig.HighScaleCheckpointingConfig.Enabled {
 			return fmt.Errorf("using --ramdisk-dir requires the HighScaleCheckpointing addon to be enabled on the target GKE cluster. %s", docRemediationMsg)
 		}
@@ -613,10 +618,8 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 		return err
 	}
 
-	if job.GKEMTCEnabled {
-		if err := g.validateMTCConfig(job); err != nil {
-			return err
-		}
+	if err := g.validateMTCConfig(job); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1580,24 +1583,47 @@ func parseConditions(conditions []interface{}, statusStr *string, completionTime
 	}
 }
 
+func (g *GKEOrchestrator) validateNamespaceExists(clusterName, location, projectID, ns string) error {
+	if g.dynClient == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := g.dynClient.Resource(namespaceGVR).Get(ctx, ns, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
+		}
+		return fmt.Errorf("failed to verify existence of namespace %q on cluster %q: %w", ns, clusterName, err)
+	}
+
+	return nil
+}
+
 func (g *GKEOrchestrator) getCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	if g.namespace != "" {
-		return g.namespace, nil
-	}
+	ns := g.namespace
+	if ns == "" {
+		var err error
+		if g.kubeClient == nil {
+			client := &DefaultKubeClient{}
+			ns, err = client.GetCurrentNamespace(clusterName, location, projectID)
+		} else {
+			ns, err = g.kubeClient.GetCurrentNamespace(clusterName, location, projectID)
+		}
 
-	var ns string
-	var err error
-	if g.kubeClient == nil {
-		client := &DefaultKubeClient{}
-		ns, err = client.GetCurrentNamespace(clusterName, location, projectID)
-	} else {
-		ns, err = g.kubeClient.GetCurrentNamespace(clusterName, location, projectID)
-	}
-
-	if err == nil {
+		if err != nil {
+			return "", err
+		}
 		g.namespace = ns
 	}
-	return ns, err
+
+	if err := g.validateNamespaceExists(clusterName, location, projectID, ns); err != nil {
+		return "", err
+	}
+
+	return ns, nil
 }
 
 func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns string, uid string) (string, error) {

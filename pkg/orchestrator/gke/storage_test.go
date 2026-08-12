@@ -267,6 +267,44 @@ func TestValidateMounts(t *testing.T) {
 	}
 }
 
+func TestValidateRamdiskDir(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("Empty Ramdisk - Pass", func(t *testing.T) {
+		if err := sm.ValidateRamdiskDir("", nil); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Relative Path - Fail", func(t *testing.T) {
+		err := sm.ValidateRamdiskDir("relative/path", nil)
+		if err == nil || !strings.Contains(err.Error(), "--ramdisk-dir must be an absolute path") {
+			t.Errorf("expected absolute path error, got: %v", err)
+		}
+	})
+
+	t.Run("Root Directory - Fail", func(t *testing.T) {
+		err := sm.ValidateRamdiskDir("/", nil)
+		if err == nil || !strings.Contains(err.Error(), "cannot be the root directory") {
+			t.Errorf("expected root directory error, got: %v", err)
+		}
+	})
+
+	t.Run("Mount Conflict - Fail", func(t *testing.T) {
+		err := sm.ValidateRamdiskDir("/tmp/ramdisk", []string{"gs://bucket;/tmp/ramdisk"})
+		if err == nil || !strings.Contains(err.Error(), "conflicts with duplicate mount destination") {
+			t.Errorf("expected mount conflict error, got: %v", err)
+		}
+	})
+
+	t.Run("Valid Path without Conflict - Pass", func(t *testing.T) {
+		err := sm.ValidateRamdiskDir("/tmp/ramdisk", []string{"gs://bucket;/data"})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestProcessMounts_Basic(t *testing.T) {
 	sm := &StorageManager{}
 	job := orchestrator.JobDefinition{}

@@ -3312,3 +3312,10 @@ func TestValidateMTCConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateNamespaceExists(t *testing.T) {
+	orch := &GKEOrchestrator{}
+	if err := orch.validateNamespaceExists("cluster", "zone", "project", "my-ns"); err != nil {
+		t.Errorf("unexpected error when dynClient is nil: %v", err)
+	}
+}

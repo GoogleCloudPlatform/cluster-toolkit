@@ -48,6 +48,13 @@ var checkpointConfigurationGVR = schema.GroupVersionResource{
 	Resource: "checkpointconfigurations",
 }
 
+// namespaceGVR defines the GroupVersionResource for core Kubernetes Namespace resources.
+var namespaceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "namespaces",
+}
+
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
