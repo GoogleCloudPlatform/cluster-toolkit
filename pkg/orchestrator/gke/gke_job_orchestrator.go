@@ -66,6 +66,7 @@ func NewGKEOrchestrator() *GKEOrchestrator {
 		topologyCache:            make(map[string]string),
 		dynamicSlicingCache:      make(map[string]bool),
 		staticSlicingCache:       make(map[string]bool),
+		policyCache:              make(map[string]string),
 	}
 }
 
@@ -86,6 +87,7 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
+	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
 	sm := &StorageManager{orchestrator: g}
 	if err := sm.ValidateMounts(job.RawMounts); err != nil {
@@ -389,7 +391,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		job.Pathways.WorkerImage = job.Pathways.ServerImage
 	}
 
-	tmpl, err := yamltemplate.New("pathways_jobset.tmpl").ParseFS(templatesFS, "templates/pathways_jobset.tmpl")
+	tmpl, err := g.parseGKETemplate("pathways_jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse pathways jobset template: %w", err)
 	}
@@ -697,10 +699,6 @@ func (g *GKEOrchestrator) resolveAccelerators(np gkeJobNodePool, cap MachineType
 		g.acceleratorToMachineType[strings.ToLower(accType)] = np.Config.MachineType
 	} else {
 		return 0, 0, "flavor-default", make(map[string]string), nil
-	}
-
-	if tpus > 0 && np.PlacementPolicy != nil && np.PlacementPolicy.TpuTopology != "" {
-		nodeLabels["cloud.google.com/gke-tpu-topology"] = np.PlacementPolicy.TpuTopology
 	}
 
 	return gpus, tpus, flavor, nodeLabels, nil
@@ -1351,7 +1349,7 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing {
+	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
 		exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 	}
 

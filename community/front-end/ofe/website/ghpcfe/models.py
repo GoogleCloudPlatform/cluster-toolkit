@@ -817,7 +817,7 @@ class Cluster(CloudResource):
         ),        
     )
     enable_slurm_auth = models.BooleanField(
-        default=False,
+        default=True,
         help_text=(
             "Enable Slurm native authentication instead of MUNGE."
         ),

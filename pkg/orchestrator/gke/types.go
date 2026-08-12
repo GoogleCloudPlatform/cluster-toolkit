@@ -85,8 +85,10 @@ type GKEOrchestrator struct {
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
+	policyCache                 map[string]string
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
+	gkeCustomTemplatesPath      string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -255,9 +257,10 @@ type gkeAutoscaling struct {
 }
 
 type gkePlacementPolicy struct {
-	AcceleratorTopologyMode string `json:"acceleratorTopologyMode"`
-	Type                    string `json:"type"`
-	TpuTopology             string `json:"tpuTopology"`
+	PolicyName              string `json:"policyName,omitempty"`
+	AcceleratorTopologyMode string `json:"acceleratorTopologyMode,omitempty"`
+	Type                    string `json:"type,omitempty"`
+	TpuTopology             string `json:"tpuTopology,omitempty"`
 }
 
 type gkeJobNodePool struct {
