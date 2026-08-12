@@ -180,7 +180,7 @@ const (
 	ErrTypeHtcondorPacker                            = "HTCONDOR_PACKER"
 	ErrTypeIamBindingsExceeded                       = "IAM_BINDINGS_EXCEEDED"
 	ErrTypeIamDeniedError                            = "IAM_DENIED_ERROR"
-	ErrTypeIamPermissionDeined                       = "IAM_PERMISSION_DEINED"
+	ErrTypeIamPermissionDenied                       = "IAM_PERMISSION_DENIED"
 	ErrTypeIamUnsupportedRole                        = "IAM_UNSUPPORTED_ROLE"
 	ErrTypeImageNotFound                             = "IMAGE_NOT_FOUND"
 	ErrTypeIncompatibleGkeVersion                    = "INCOMPATIBLE_GKE_VERSION"
