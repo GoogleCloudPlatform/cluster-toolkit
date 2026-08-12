@@ -80,7 +80,10 @@ variable "kueue_migrated_tests" {
     "slurm-gcp-v6-reconfig-size",
     "slurm-gcp-v6-simple-job-completion",
     "slurm-gcp-v6-startup-scripts",
-    "slurm-gcp-v6-topology"
+    "slurm-gcp-v6-topology",
+    "slurm-gcp-v6-debian",
+    "slurm-gcp-v6-ubuntu",
+    "slurm-gcp-v6-ssd"
   ]
 }
 
