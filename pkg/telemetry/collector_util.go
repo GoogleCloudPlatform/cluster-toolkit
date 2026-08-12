@@ -1130,7 +1130,7 @@ func getExtendedErrorType(errMsgExact string) string {
 	for _, m := range extraMultiSubstringErrMatchers {
 		allMatch := true
 		for _, sub := range m.substrings {
-			if !strings.Contains(errMsgExact, sub) {
+			if !strings.Contains(strings.ToLower(errMsgExact), strings.ToLower(sub)) {
 				allMatch = false
 				break
 			}
@@ -1147,7 +1147,7 @@ func getExtendedErrorType(errMsgExact string) string {
 	}
 
 	for _, m := range extraSubstringErrMatchers {
-		if strings.Contains(errMsgExact, m.substring) {
+		if strings.Contains(strings.ToLower(errMsgExact), strings.ToLower(m.substring)) {
 			return m.category
 		}
 	}

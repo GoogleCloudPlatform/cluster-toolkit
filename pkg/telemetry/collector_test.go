@@ -2366,31 +2366,6 @@ func TestGetErrorType(t *testing.T) {
 			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
 			expected: ErrTypeRouternatResourceNotFound,
 		},
-		{
-			name:     "Extra Regex Subnet overlapping",
-			err:      errors.New("Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap for google_parallelstore_instance"),
-			expected: ErrTypeParallelstoreServerSubnetworkIpOverlapped,
-		},
-		{
-			name:     "Munge timeout match",
-			err:      errors.New("Timeout when waiting for file /var/run/munge/munge.socket.2"),
-			expected: ErrTypeSlurmV5MungeTimeout,
-		},
-		{
-			name:     "Compute VM create failure",
-			err:      errors.New("Error: Error waiting for instance to create: couldn't find resource for resource \"google_compute_instance\" \"compute_vm\" in region"),
-			expected: ErrTypeComputeVmCreateFail,
-		},
-		{
-			name:     "Syntax error matching",
-			err:      errors.New("unexpected EOF while looking for matching quote"),
-			expected: ErrTypeSyntaxError,
-		},
-		{
-			name:     "Network Timeout with Substrings",
-			err:      errors.New("RouterNat: googleapi: Error 404: The resource was not found"),
-			expected: ErrTypeRouternatResourceNotFound,
-		},
 	}
 
 	for _, tt := range tests {

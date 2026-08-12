@@ -259,7 +259,6 @@ const (
 	ErrTypePrivateServiceAccessIpExhausted           = "PRIVATE_SERVICE_ACCESS_IP_EXHAUSTED"
 	ErrTypeProcessError                              = "PROCESS_ERROR"
 	ErrTypeProviderDownloadFailure                   = "PROVIDER_DOWNLOAD_FAILURE"
-	ErrTypeProvisionerError                          = "PROVISIONER_ERROR"
 	ErrTypePsCreationTimeout                         = "PS_CREATION_TIMEOUT"
 	ErrTypePsInstanceCreationFailure                 = "PS_INSTANCE_CREATION_FAILURE"
 	ErrTypePsSlurmMungeTimeout                       = "PS_SLURM_MUNGE_TIMEOUT"
