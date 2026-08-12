@@ -97,6 +97,20 @@ deployment_groups:
           ExecStart=/lib/systemd/systemd-networkd-wait-online --ipv4 --timeout=60 --any --operational-state=routable
           EOF
           sudo systemctl daemon-reload
+      - type: shell
+        destination: configure_grub_acs_overrides.sh
+        content: |
+          #!/bin/bash
+          set -e -x
+          # Apply PCIe ACS overrides to prevent kernel IOMMU isolation on PCIe root ports
+          # and switches, enabling GPUDirect RDMA peer-to-peer traffic between GPUs and CX-8 NICs.
+          echo "Configuring GRUB kernel command line for A4X-Max PCIe ACS overrides"
+          sudo mkdir -p /etc/default/grub.d
+          cat << 'EOF' | sudo tee /etc/default/grub.d/99-a4xmax-acs-overrides.cfg
+          # A4X-Max PCIe ACS overrides for GPUDirect RDMA between GB300 GPUs and ConnectX-8 NICs.
+          GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX pci=config_acs=\"xx111x0@0008:00:00.0;xx110x1@0008:02:00.0;xx101x1@0008:02:03.0;xx111x0@0009:00:00.0;xx110x1@0009:02:00.0;xx101x1@0009:02:01.0;xx111x0@0018:00:00.0;xx110x1@0018:02:00.0;xx101x1@0018:02:03.0;xx111x0@0019:00:00.0;xx110x1@0019:02:00.0;xx101x1@0019:02:01.0\" console=ttyS0,115200 panic=-1"
+          EOF
+          sudo update-grub
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |
