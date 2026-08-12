@@ -39,9 +39,9 @@ RUN wget -q "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terra
     rm terraform.zip
 
 # Install Packer
-ARG PACKER_VERSION=1.8.6
+ARG PACKER_VERSION=1.15.3
 RUN wget -q "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -O packer.zip && \
-    unzip packer.zip && \
+    unzip -o packer.zip && \
     mv packer /usr/local/bin/ && \
     rm packer.zip
 

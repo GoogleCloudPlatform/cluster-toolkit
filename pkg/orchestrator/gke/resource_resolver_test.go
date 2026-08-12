@@ -103,6 +103,7 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 	g := newTestGKEOrchestrator(nil)
 	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
 	g.clusterZones = []string{"europe-west2-a", "europe-west2-c", "europe-west2-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = true
 
 	_, err := g.FetchMachineCapacity("tpu7x-1", "europe-west2")
 
@@ -224,6 +225,27 @@ func (m *MockMachineTypeClient) GetMachineType(project, zone, machineType string
 	return nil, fmt.Errorf("mock not configured")
 }
 
+func injectDefaultMocksForShorthand(mockResponses map[string][]shell.CommandResult) {
+	if _, ok := mockResponses["kubectl get resourceflavors.kueue.x-k8s.io"]; !ok {
+		mockResponses["kubectl get resourceflavors.kueue.x-k8s.io"] = []shell.CommandResult{
+			{ExitCode: 0, Stdout: ""},
+			{ExitCode: 0, Stdout: ""},
+		}
+	}
+	if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
+		mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{
+			{ExitCode: 0, Stdout: "16x16\n"},
+			{ExitCode: 0, Stdout: "16x16\n"},
+		}
+	}
+	if _, ok := mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"]; !ok {
+		mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"] = []shell.CommandResult{
+			{ExitCode: 0, Stdout: `{"items":[{"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-4x8-id"}]}}]}`},
+			{ExitCode: 0, Stdout: `{"items":[{"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-4x8-id"}]}}]}`},
+		}
+	}
+}
+
 func TestResolveAcceleratorShorthand(t *testing.T) {
 	setupMockMachineConfig(t)
 
@@ -337,16 +359,12 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 				mockResponses = make(map[string][]shell.CommandResult)
 			}
 			// Add default mocks for topology discovery if not provided
-			if _, ok := mockResponses["kubectl get resourceflavors"]; !ok {
-				mockResponses["kubectl get resourceflavors"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
-			}
-			if _, ok := mockResponses["kubectl get nodes -o jsonpath"]; !ok {
-				mockResponses["kubectl get nodes -o jsonpath"] = []shell.CommandResult{{ExitCode: 0, Stdout: "16x16\n"}}
-			}
+			injectDefaultMocksForShorthand(mockResponses)
 
 			mockExecutor := NewMockExecutor(mockResponses)
 			orc := newTestGKEOrchestrator(mockExecutor)
 			orc.projectID = "mock-project"
+			orc.clusterZones = []string{"us-central1-a"}
 			if len(tt.nodePools) > 0 {
 				for _, mt := range tt.nodePools {
 					orc.clusterDesc.NodePools = append(orc.clusterDesc.NodePools, gkeJobNodePool{
@@ -386,6 +404,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 		machineType    string
 		requestedTopo  string
 		mockResponses  map[string][]shell.CommandResult
+		nodePools      []gkeJobNodePool
 		wantActive     bool
 		wantErr        bool
 		verifyCacheHit bool
@@ -436,7 +455,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			requestedTopo: "2x2",
 			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get topologies.kueue.x-k8s.io -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`},
 				},
 				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
 					{ExitCode: 0, Stdout: "4x4\n"},
@@ -451,7 +470,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			requestedTopo: "4x4",
 			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get topologies.kueue.x-k8s.io -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-4x4-id"}]}}]}`},
 				},
 				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
 					{ExitCode: 0, Stdout: "4x4\n"},
@@ -465,7 +484,7 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			requestedTopo: "8x8",
 			mockResponses: map[string][]shell.CommandResult{
 				"kubectl get topologies.kueue.x-k8s.io -o json": {
-					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-4x4-id"}]}}]}`},
 				},
 				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
 					{ExitCode: 0, Stdout: "4x4\n"},
@@ -473,12 +492,43 @@ func TestVerifyStaticSlicingActive(t *testing.T) {
 			},
 			wantActive: false,
 		},
+		{
+			name:          "Static sub-slicing active (discovered from scaled-to-0 node pool)",
+			machineType:   "ct6e-standard-8t",
+			requestedTopo: "2x2",
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get topologies.kueue.x-k8s.io -o json": {
+					{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`},
+				},
+				"kubectl get resourceflavors.kueue.x-k8s.io -o jsonpath={range .items[*]}{.spec.nodeLabels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu-v6e-slice": {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "tpu-pool-4x4",
+					Config: gkeNodePoolConfig{
+						MachineType: "ct6e-standard-8t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						TpuTopology: "4x4",
+					},
+				},
+			},
+			wantActive: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExec := NewMockExecutor(tt.mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
+			if len(tt.nodePools) > 0 {
+				orc.clusterDesc.NodePools = tt.nodePools
+			}
 
 			job := &orchestrator.JobDefinition{
 				MachineType: tt.machineType,
@@ -549,7 +599,13 @@ func TestResolveHardwareRequirements_NAPIncompatibilities(t *testing.T) {
 			machineType:        "v6e-standard-8t",
 			topology:           "2x4",
 			mockResponses: map[string][]shell.CommandResult{
-				"kubectl get topologies.kueue.x-k8s.io": {{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"topologies":["4x8"]}}]}`}},
+				"kubectl get topologies.kueue.x-k8s.io": {
+					{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x4-id"}]}}]}`},
+					{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x4-id"}]}}]}`},
+					{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"tpu-v6e-slice"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x4-id"}]}}]}`},
+				},
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes":           {{ExitCode: 0, Stdout: "4x8\n"}},
 			},
 			wantErr:          true,
 			expectedErrMatch: "TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads",
@@ -750,6 +806,46 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 			wantErr:     true,
 			expectedErr: "unknown accelerator label: \"unknown-gpu\"",
 		},
+		{
+			name:       "NAP Cluster - TPU: Specific limit configured, requesting different TPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"tpu-v6e-slice":  8,
+				"google.com/tpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "ct5lp-hightpu-4t", // TPU v5e (tpu-v5-lite-podslice)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Specific limit configured, requesting different GPU (Should Fail)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia-h100-mega-80gb": 8,
+				"nvidia.com/gpu":        8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12", // L4 GPU (nvidia-l4)
+				GKENAPProvisioning: "spot",
+			},
+			wantErr:     true,
+			expectedErr: "is not configured within your cluster's Node Auto-Provisioning (NAP) limits",
+		},
+		{
+			name:       "NAP Cluster - GPU: Generic limit only, requesting GPU (Should Pass)",
+			napEnabled: true,
+			napLimits: map[string]int64{
+				"nvidia.com/gpu": 8,
+			},
+			job: orchestrator.JobDefinition{
+				MachineType:        "g2-standard-12",
+				GKENAPProvisioning: "spot",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -776,6 +872,19 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 						},
 					},
 				},
+				"g2-standard-12:": {
+					GuestCpus: 12,
+					MemoryMb:  48000,
+					Accelerators: []struct {
+						Count int    `json:"guestAcceleratorCount"`
+						Type  string `json:"guestAcceleratorType"`
+					}{
+						{
+							Count: 1,
+							Type:  "nvidia-l4",
+						},
+					},
+				},
 			}
 
 			err := orc.validateConsumptionForStaticCluster(&tt.job)
@@ -790,6 +899,251 @@ func TestValidateConsumptionForStaticCluster(t *testing.T) {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+			}
+		})
+	}
+}
+
+type ZoneSelectiveMockMachineTypeClient struct {
+	AllowedZone string
+	MT          *compute.MachineType
+}
+
+func (m *ZoneSelectiveMockMachineTypeClient) GetMachineType(project, zone, machineType string) (*compute.MachineType, error) {
+	if zone != m.AllowedZone {
+		return nil, fmt.Errorf("machine type not found in zone %s", zone)
+	}
+	return m.MT, nil
+}
+
+func TestFetchMachineCapabilities_NodePoolSpecificZones(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-np-0",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu-v5-lite-podslice",
+			},
+			Locations: []string{"us-central1-c"},
+		},
+	}
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-c",
+		MT: &compute.MachineType{
+			GuestCpus: 4,
+			MemoryMb:  16384,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 4 {
+		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
+	}
+}
+
+func TestFetchMachineCapabilities_NoPools_NAPDisabled_Fails(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = false
+
+	_, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err == nil {
+		t.Fatalf("Expected error, got nil")
+	}
+
+	expectedErr := "no node pool matching machine type found and GKE Node Auto-Provisioning is disabled"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestFetchMachineCapabilities_NoPools_NAPEnabled_Fallback(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+	g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = true
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-b",
+		MT: &compute.MachineType{
+			GuestCpus: 8,
+			MemoryMb:  32768,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 8 {
+		t.Errorf("cap.GuestCpus = %d, want 8", cap.GuestCpus)
+	}
+}
+
+func TestFetchMachineCapabilities_NodePoolEmptyLocations_ClusterZonesFallback(t *testing.T) {
+	g := newTestGKEOrchestrator(nil)
+	g.projectID = "test-project"
+	g.clusterZones = []string{"us-central1-b"}
+	g.clusterDesc.NodePools = []gkeJobNodePool{
+		{
+			Name: "tpu-np-0",
+			Config: gkeNodePoolConfig{
+				MachineType: "tpu-v5-lite-podslice",
+			},
+			Locations: []string{}, // Empty/inherited locations
+		},
+	}
+
+	g.machineTypeClient = &ZoneSelectiveMockMachineTypeClient{
+		AllowedZone: "us-central1-b",
+		MT: &compute.MachineType{
+			GuestCpus: 4,
+			MemoryMb:  16384,
+		},
+	}
+
+	cap, err := g.FetchMachineCapabilities("tpu-v5-lite-podslice", "us-central1")
+	if err != nil {
+		t.Fatalf("FetchMachineCapabilities failed: %v", err)
+	}
+
+	if cap.GuestCpus != 4 {
+		t.Errorf("cap.GuestCpus = %d, want 4", cap.GuestCpus)
+	}
+}
+
+func TestCheckNodePoolsDynamicSlicing_PolicyLookupAndCaching(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          ManifestOptions
+		nodePools     []gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantResult    bool
+		wantErr       bool
+	}{
+		{
+			name: "Success - Dynamic slicing active via PolicyName lookup",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+				{
+					Name: "np-1",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				},
+			},
+			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Success - Dynamic slicing active with mixed policyName formats (full path vs short name)",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "projects/12345/regions/us-central1/resourcePolicies/tpu7x-policy",
+					},
+				},
+				{
+					Name: "np-1",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "tpu7x-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe tpu7x-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 0, Stdout: "PROVISION_ONLY\n"},
+				},
+			},
+			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name: "Failure - Policy lookup command fails with actionable error",
+			opts: ManifestOptions{
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "cloud-tpu-dev",
+				Topology:        "2x2x2",
+			},
+			nodePools: []gkeJobNodePool{
+				{
+					Name: "np-0",
+					Config: gkeNodePoolConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+					PlacementPolicy: &gkePlacementPolicy{
+						PolicyName: "invalid-policy",
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe invalid-policy --region=us-central1 --project=cloud-tpu-dev --format=value(workloadPolicy.acceleratorTopologyMode)": {
+					{ExitCode: 1, Stderr: "ERROR: (gcloud.compute.resource-policies.describe) Could not fetch resource policy"},
+				},
+			},
+			wantResult: false,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.opts.ProjectID
+			g.clusterDesc.NodePools = tt.nodePools
+
+			got, err := g.checkNodePoolsDynamicSlicing("tpu7x-standard-4t", tt.opts, true)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("checkNodePoolsDynamicSlicing() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.wantResult {
+				t.Errorf("checkNodePoolsDynamicSlicing() = %v, want %v", got, tt.wantResult)
+			}
+			if tt.wantResult && len(g.policyCache) == 0 {
+				t.Errorf("expected policyCache to be populated")
 			}
 		})
 	}

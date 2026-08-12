@@ -58,16 +58,16 @@
         <td>{{ job.threads_per_rank }}</td>
         <td>
           {% if job.status == "p" or job.status == "q" or job.status == "d" or job.status == "r" or job.status == "u" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if job.status == "e" %}
-          <img src="/static/img/status-error.png" style="width:32px;height:20px;">
+          <img src="/static/img/status-error.png" style="width:32px;height:20px;" alt="">
           {% endif %}
           {% if job.status == "c" %}
-          <img src="/static/img/status-completed.png" style="width:22px;height:32px;">
+          <img src="/static/img/status-completed.png" style="width:22px;height:32px;" alt="">
           {% endif %}
           {% if job.status == "n" %}
-          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
           {% endif %}
           {{ job.get_status_display }}
         </td>

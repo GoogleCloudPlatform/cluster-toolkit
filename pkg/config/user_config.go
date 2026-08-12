@@ -41,29 +41,43 @@ var (
 
 // InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
 func InitUserConfig() error {
-	// Set the defaults
-	mu.Lock()
-	globalUserConfig = UserConfig{
-		UserID:           generateUniqueID(),
+	// Prepare defaults locally
+	defaultConfig := UserConfig{
+		UserID:           GenerateUniqueIDFunc(),
 		TelemetryEnabled: true, // Default telemetry state
 	}
-	mu.Unlock()
 
 	configFile := filepath.Join(getLocalDirPath(false), configFileName)
 
 	// Try to read from the local config file
 	if data, err := os.ReadFile(configFile); err == nil {
-		// If the file exists and is valid, overwrite the defaults
-		mu.Lock()
-		err := json.Unmarshal(data, &globalUserConfig)
-		mu.Unlock()
+		// Unmarshal into the local struct to avoid partial state corruption
+		tempConfig := defaultConfig
+		if err := json.Unmarshal(data, &tempConfig); err == nil {
+			needsRepair := false
+			if tempConfig.UserID == "" {
+				tempConfig.UserID = GenerateUniqueIDFunc()
+				needsRepair = true
+			}
 
-		if err == nil {
+			// Atomically apply the loaded config
+			mu.Lock()
+			globalUserConfig = tempConfig
+			mu.Unlock()
+
+			// If we repaired an empty ID, write the fix back to the JSON file
+			if needsRepair {
+				return SaveToFile()
+			}
 			return nil
 		}
 	}
 
-	// If file doesn't exist or is invalid, save defaults to file
+	// If the file is missing or invalid, atomically apply defaults
+	mu.Lock()
+	globalUserConfig = defaultConfig
+	mu.Unlock()
+
 	return SaveToFile()
 }
 
@@ -129,6 +143,9 @@ func SaveToFile() error {
 	}
 	return nil
 }
+
+// GenerateUniqueIDFunc is exposed as a variable so it can be mocked in tests.
+var GenerateUniqueIDFunc = generateUniqueID
 
 // generateUniqueID creates a stable hash based on the machine and user
 func generateUniqueID() string {

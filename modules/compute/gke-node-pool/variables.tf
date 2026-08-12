@@ -71,6 +71,12 @@ variable "disk_type" {
   default     = null
 }
 
+variable "disk_storage_pool" {
+  description = "Storage pool to use for the node's boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones."
+  type        = string
+  default     = null
+}
+
 variable "enable_gcfs" {
   description = "Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config)."
   type        = bool
@@ -504,8 +510,8 @@ variable "enable_numa_aware_scheduling" {
 
 variable "enable_dranet" {
   type        = bool
-  default     = null
-  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). If null, automatically enabled for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster."
+  default     = false
+  description = "Enable GKE managed Dynamic Resource Allocation (DRA) driver for networking (DRANET) and Accelerator Network Profile (ANP). When set to true, this enables the driver for supported GPU/TPU nodes on GKE 1.34.1-gke.1829001 or later when Dataplane V2 is enabled on the cluster."
 }
 
 variable "autoscaling_min_node_count" {
@@ -548,4 +554,53 @@ variable "machine_configs" {
   description = "Definition of GCE machine types and counts"
   type        = any
   default     = {}
+}
+
+variable "dranet_device_class_name" {
+  type        = string
+  default     = null
+  description = "DRA device class name. If null, automatically detected based on machine type. Default is mrdma.google.com (RDMA) for RDMA-supported machines, netdev.google.com for others."
+}
+
+variable "install_dranet_template" {
+  type        = bool
+  default     = true
+  description = "If true, automatically deploys the DRANET ResourceClaimTemplate. The compiler automatically overrides this to false for subsequent node pools in the same cluster if they use the same device class."
+}
+
+
+variable "dranet_allocation_mode" {
+  type        = string
+  default     = "All"
+  description = "Allocation mode for the auto-applied DRANET ResourceClaimTemplate (e.g., 'All' or 'ExactCount')."
+}
+
+variable "dranet_device_count" {
+  type        = number
+  default     = null
+  description = "Device count for the auto-applied DRANET ResourceClaimTemplate. Required if dranet_allocation_mode is 'ExactCount'."
+}
+
+variable "enable_confidential_nodes" {
+  description = "Enable Confidential Nodes for this node pool."
+  type        = bool
+  default     = false
+}
+
+variable "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes (e.g., SEV, SEV_SNP, TDX). Leave null for default."
+  type        = string
+  default     = null
+}
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage on the node pool. Node boot disks will be encrypted using keys protected by the Confidential VM."
+  type        = bool
+  default     = false
+}
+
+variable "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable_confidential_storage is true."
+  type        = string
+  default     = null
 }

@@ -33,7 +33,7 @@ type SchedulingOptions struct {
 	IsStaticSlicing    bool
 }
 
-func GetNodeSelector(opts SchedulingOptions) map[string]string {
+func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 	nodeSelector := make(map[string]string)
 
 	if opts.PlacementPolicy != "" {
@@ -45,17 +45,22 @@ func GetNodeSelector(opts SchedulingOptions) map[string]string {
 		if strings.Contains(v, "|") {
 			continue
 		}
-		// Skip if it's topology (will go to affinity)
+		// Validate topology format
 		if k == tpuTopologyLabel {
+			trimmed := strings.ToLower(strings.TrimSpace(v))
+			if !config.TopologyRegex.MatchString(trimmed) {
+				return nil, fmt.Errorf("invalid topology format %q for key %s", v, k)
+			}
+			nodeSelector[k] = trimmed
 			continue
 		}
 		nodeSelector[k] = v
 	}
 
 	if len(nodeSelector) == 0 {
-		return nil
+		return nil, nil
 	}
-	return nodeSelector
+	return nodeSelector, nil
 }
 
 func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
@@ -89,14 +94,13 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 
 	for _, k := range keys {
 		v := opts.NodeAffinityLabels[k]
-		isTopologyMerge := (k == tpuTopologyLabel) && (opts.Topology != "") && !(opts.IsDynamicSlicing || opts.IsStaticSlicing)
 		hasPipe := strings.Contains(v, "|")
 
-		if !hasPipe && k != tpuTopologyLabel {
+		if !hasPipe {
 			continue
 		}
 
-		values, err := parseAffinityValues(k, v, opts.Topology, isTopologyMerge)
+		values, err := parseAffinityValues(k, v)
 		if err != nil {
 			return nil, err
 		}
@@ -117,28 +121,23 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 	return affinity, nil
 }
 
-func parseAffinityValues(k string, v string, topology string, isTopologyMerge bool) ([]string, error) {
-	if v == "" && !isTopologyMerge {
+func parseAffinityValues(k string, v string) ([]string, error) {
+	if v == "" {
 		return nil, nil
 	}
 
-	var values []string
-	if isTopologyMerge {
-		values = append(values, topology)
+	if k == tpuTopologyLabel && strings.Contains(v, "|") {
+		return nil, fmt.Errorf("multiple topologies in node constraints are not supported for key %s: got %q. GKE Warden validation rejects templates targeting multiple topologies", k, v)
 	}
 
-	if v != "" {
-		for _, val := range strings.Split(v, "|") {
-			trimmed := strings.TrimSpace(val)
-			if trimmed == "" {
-				return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
-			}
-			if k == tpuTopologyLabel && !config.TopologyRegex.MatchString(trimmed) {
-				return nil, fmt.Errorf("invalid topology format %q for key %s", trimmed, k)
-			}
-			if !slices.Contains(values, trimmed) {
-				values = append(values, trimmed)
-			}
+	var values []string
+	for _, val := range strings.Split(v, "|") {
+		trimmed := strings.TrimSpace(val)
+		if trimmed == "" {
+			return nil, fmt.Errorf("invalid node constraint for key %s: empty element in %q", k, v)
+		}
+		if !slices.Contains(values, trimmed) {
+			values = append(values, trimmed)
 		}
 	}
 

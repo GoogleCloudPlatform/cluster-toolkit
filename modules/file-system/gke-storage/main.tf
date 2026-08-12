@@ -36,6 +36,13 @@ check "private_vpc_connection_peering" {
   }
 }
 
+check "storage_pool_supported_types" {
+  assert {
+    condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.storage_type))
+    error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+  }
+}
+
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
@@ -50,12 +57,16 @@ module "kubectl_apply" {
         content = templatefile(
           "${path.module}/storage-class/${local.storage_class_name}.yaml.tftpl",
           {
-            name                = local.storage_class_name
-            labels              = local.labels
-            volume_binding_mode = var.sc_volume_binding_mode
-            reclaim_policy      = var.sc_reclaim_policy
-            topology_zones      = var.sc_topology_zones
+            name                        = local.storage_class_name
+            labels                      = local.labels
+            volume_binding_mode         = var.sc_volume_binding_mode
+            reclaim_policy              = var.sc_reclaim_policy
+            topology_zones              = var.sc_topology_zones
+            enable_confidential_storage = var.enable_confidential_storage
+            disk_encryption_kms_key     = var.disk_encryption_kms_key
+            disk_storage_pool           = var.disk_storage_pool
         })
+        wait_for_rollout = false
       },
       var.namespace != "default" ? [{
         content = templatefile(
@@ -63,6 +74,7 @@ module "kubectl_apply" {
           {
             namespace = var.namespace
         })
+        wait_for_rollout = false
       }] : [],
       # create PersistentVolumeClaim in the cluster
       flatten([
@@ -79,8 +91,18 @@ module "kubectl_apply" {
                 namespace          = var.namespace
               }
             )
+            wait_for_rollout = false
           }
         ]
       ])
   ])
+}
+
+resource "terraform_data" "validate_confidential_storage" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_encryption_kms_key != null && var.disk_encryption_kms_key != "")
+      error_message = "Confidential Storage requires a Customer-Managed Encryption Key (CMEK). Please provide a valid 'disk_encryption_kms_key'."
+    }
+  }
 }

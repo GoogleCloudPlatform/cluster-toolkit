@@ -529,6 +529,37 @@ dragon: "Lews Therin Telamon"`))
 	c.Check(err, NotNil)
 }
 
+func (s *zeroSuite) TestParseBlueprint_AIAssisted(c *C) {
+	// Case 1: ai_assisted is true
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+ai_assisted: true
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AIAssisted, Equals, true)
+	}
+
+	// Case 2: ai_assisted is false
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+ai_assisted: false
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AIAssisted, Equals, false)
+	}
+
+	// Case 3: ai_assisted is missing (should default to false, no error)
+	{
+		bp, _, err := parseYaml[Blueprint]([]byte(`
+blueprint_name: test-bp
+`))
+		c.Assert(err, IsNil)
+		c.Check(bp.AIAssisted, Equals, false)
+	}
+}
+
 func (s *zeroSuite) TestExportBlueprint(c *C) {
 	bp := Blueprint{BlueprintName: "goo"}
 	outFilename := c.TestName() + ".yaml"
@@ -1152,10 +1183,13 @@ func TestGetPredefinedExampleFiles(t *testing.T) {
 		"tree": [
 			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
 			{"path": "community/examples/ml-cluster.yml", "type": "blob"},
-			{"path": "examples/README.md", "type": "blob"}
+			{"path": "examples/README.md", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/test-blueprint.yaml", "type": "blob"},
+			{"path": "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "type": "blob"},
+			{"path": "tools/cloud-build/daily-tests/blueprints/not-yaml.txt", "type": "blob"}
 		]
 	}`
-	expectedExamples := []string{"community/examples/ml-cluster.yml", "examples/hpc-slurm.yaml"}
+	expectedExamples := []string{"community/examples/ml-cluster.yml", "examples/hpc-slurm.yaml", "examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml", "tools/cloud-build/daily-tests/blueprints/test-blueprint.yaml"}
 
 	tests := []struct {
 		name       string
@@ -1407,6 +1441,62 @@ func TestGetStandardBlueprintNames(t *testing.T) {
 			}
 			if !reflect.DeepEqual(blueprints, tc.expected) {
 				t.Errorf("expected blueprints %v, got %v", tc.expected, blueprints)
+			}
+		})
+	}
+}
+
+// TestGetKeyFromBlueprint verifies that the keys are correctly extracted from the blueprint.
+func TestGetKeyFromBlueprint(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		setupBp  func() Blueprint
+		expected string
+	}{
+		{
+			name: "Valid region",
+			key:  "region",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"region": cty.StringVal("us-central1"),
+					}),
+				}
+			},
+			expected: "us-central1",
+		},
+		{
+			name: "Valid zone",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{
+						"zone": cty.StringVal("us-central1-a"),
+					}),
+				}
+			},
+			expected: "us-central1-a",
+		},
+		{
+			name: "Missing key",
+			key:  "zone",
+			setupBp: func() Blueprint {
+				return Blueprint{
+					Vars: NewDict(map[string]cty.Value{}),
+				}
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := tt.setupBp()
+			actual := GetKeyFromBlueprint(tt.key, bp)
+
+			if actual != tt.expected {
+				t.Errorf("getKeyFromBlueprint(%q) = %q, want %q", tt.key, actual, tt.expected)
 			}
 		})
 	}

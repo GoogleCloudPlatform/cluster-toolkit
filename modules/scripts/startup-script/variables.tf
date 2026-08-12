@@ -213,13 +213,13 @@ variable "local_ssd_filesystem" {
 }
 
 variable "install_cloud_ops_agent" {
-  description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
+  description = "Run Google Cloud Ops Agent installation script if set to true. Recommended for modern OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+) where the legacy agent is unsupported."
   type        = bool
   default     = false
 }
 
 variable "install_stackdriver_agent" {
-  description = "Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance."
+  description = "Run Google Stackdriver (legacy) Agent installation script if set to true. Note: This agent is deprecated and unsupported on newer OSes (Rocky 9+, RHEL 9+, Ubuntu 24.04+, Debian 12+)."
   type        = bool
   default     = false
 }

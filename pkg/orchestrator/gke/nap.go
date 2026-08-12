@@ -30,8 +30,7 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 	resolvedType := config.ResolveMachineType(machineType)
 
 	if config.IsTPU(resolvedType) {
-		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
-		return g.napLimits[key] > 0 || g.napLimits["google.com/tpu"] > 0, nil
+		return g.validateTPUNAPLimit(resolvedType)
 	}
 
 	cap, err := g.FetchMachineCapabilities(resolvedType, zone)
@@ -39,17 +38,44 @@ func (g *GKEOrchestrator) isNAPEnabledForMachineType(machineType, zone string) (
 		return false, err
 	}
 	if len(cap.Accelerators) > 0 {
-		key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
-		if strings.EqualFold(key, resolvedType) {
-			key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
-		}
-		if !isKnownGKEAccelerator(key) {
-			return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
-		}
-		return g.napLimits[key] > 0 || g.napLimits["nvidia.com/gpu"] > 0, nil
+		return g.validateGPUNAPLimit(resolvedType, cap)
 	}
 
 	return g.napLimits["cpu"] > 0, nil
+}
+
+func (g *GKEOrchestrator) validateTPUNAPLimit(resolvedType string) (bool, error) {
+	key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+	if limit, exists := g.napLimits[key]; exists {
+		return limit > 0, nil
+	}
+	// Fallback to generic TPU limit ONLY if no specific TPU limits are configured.
+	for k := range g.napLimits {
+		if isSpecificTPUKey(k) {
+			return false, nil
+		}
+	}
+	return g.napLimits["google.com/tpu"] > 0, nil
+}
+
+func (g *GKEOrchestrator) validateGPUNAPLimit(resolvedType string, cap MachineTypeCap) (bool, error) {
+	key := strings.ToLower(g.GenerateGKENodeSelectorLabel(resolvedType))
+	if strings.EqualFold(key, resolvedType) {
+		key = strings.ToLower(g.GenerateGKENodeSelectorLabel(cap.Accelerators[0].Type))
+	}
+	if !isKnownGKEAccelerator(key) {
+		return false, fmt.Errorf("unknown accelerator label: %q", cap.Accelerators[0].Type)
+	}
+	if limit, exists := g.napLimits[key]; exists {
+		return limit > 0, nil
+	}
+	// Fallback to generic GPU limit ONLY if no specific GPU limits are configured.
+	for k := range g.napLimits {
+		if isSpecificGPUKey(k) {
+			return false, nil
+		}
+	}
+	return g.napLimits["nvidia.com/gpu"] > 0, nil
 }
 
 func (g *GKEOrchestrator) checkNAPFlagsSupported(hasNAPFlags bool, job *orchestrator.JobDefinition) error {
@@ -93,37 +119,61 @@ func (g *GKEOrchestrator) validateConsumptionForStaticCluster(job *orchestrator.
 	return nil
 }
 
-// extractShortReservationName extracts the reservation name from a GCE reservation resource URI or reservation path.
-// It handles standard URIs, simple names, and paths containing reservationBlocks/reservationSubBlocks.
-// E.g.,
-// - "my-res" -> "my-res"
-// - "projects/my-project/reservations/my-res" -> "my-res"
-// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
-// - "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> "my-res"
-func extractShortReservationName(resName string) string {
-	resName = strings.TrimSuffix(resName, "/")
-	if !strings.Contains(resName, "/") {
-		return resName
+// resolveFallbackName returns a fallback reservation name from the URI parts.
+func resolveFallbackName(parts []string) string {
+	if len(parts) == 0 {
+		return ""
 	}
-
-	parts := strings.Split(resName, "/")
-
-	// Case 1: Full GCP URI containing ".../reservations/RESERVATION_NAME/..."
-	for i, part := range parts {
-		if part == "reservations" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-
-	// Case 2: Path containing ".../reservationBlocks/..." but not "reservations" prefix
+	// If it has reservationBlocks, the name is the one before it
 	for i, part := range parts {
 		if part == "reservationBlocks" && i > 0 {
 			return parts[i-1]
 		}
 	}
-
-	// Fallback: Return the last segment
+	// Fallback to last element
 	return parts[len(parts)-1]
+}
+
+// parseReservationURI parses a GCE reservation resource URI or reservation path into its components.
+// E.g.,
+// - "my-res" -> Name: "my-res"
+// - "projects/my-project/reservations/my-res" -> Project: "my-project", Name: "my-res"
+// - "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2" -> Project: "my-project", Name: "my-res", Block: "block-1", Subblock: "subblock-2"
+func parseReservationURI(resName string) parsedReservation {
+	resName = strings.TrimSuffix(resName, "/")
+	var parsed parsedReservation
+	if !strings.Contains(resName, "/") {
+		parsed.Name = strings.ToLower(resName)
+		return parsed
+	}
+
+	parts := strings.Split(resName, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		switch parts[i] {
+		case "projects":
+			parsed.Project = strings.ToLower(parts[i+1])
+		case "reservations":
+			parsed.Name = strings.ToLower(parts[i+1])
+		case "reservationBlocks":
+			parsed.Block = strings.ToLower(parts[i+1])
+		case "reservationSubBlocks":
+			parsed.Subblock = strings.ToLower(parts[i+1])
+		}
+	}
+
+	if parsed.Name == "" {
+		parsed.Name = strings.ToLower(resolveFallbackName(parts))
+	}
+
+	return parsed
+}
+
+func isSpecificGPUKey(key string) bool {
+	return strings.HasPrefix(key, "nvidia-")
+}
+
+func isSpecificTPUKey(key string) bool {
+	return strings.HasPrefix(key, "tpu-") || strings.HasPrefix(key, "tpu7")
 }
 
 func isKnownGKEAccelerator(key string) bool {
@@ -131,7 +181,7 @@ func isKnownGKEAccelerator(key string) bool {
 	case "nvidia-tesla-t4", "nvidia-tesla-v100":
 		return true
 	}
-	for _, val := range machineFamilyToLabelMap {
+	for _, val := range config.GetMachineMappings().MachineFamilyToLabelMap {
 		if val == key {
 			return true
 		}
@@ -184,7 +234,7 @@ func resolveFlavorFromResource(resName string) (string, map[string]string, error
 		nodeLabels = map[string]string{
 			"cloud.google.com/gke-accelerator": resName,
 		}
-	case strings.HasPrefix(resName, "tpu-"):
+	case strings.HasPrefix(resName, "tpu-") || strings.HasPrefix(resName, "tpu7"):
 		flavorName = "flavor-" + resName
 		nodeLabels = map[string]string{
 			"cloud.google.com/gke-tpu-accelerator": resName,

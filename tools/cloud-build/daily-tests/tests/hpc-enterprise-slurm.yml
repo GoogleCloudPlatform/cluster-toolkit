@@ -20,7 +20,7 @@ deployment_name: "enter-{{ build }}"
 slurm_cluster_name: "enter{{ build[0:5] }}"
 zone: us-central1-a
 cli_deployment_vars:
-  network_name: "{{ network }}"
+  test_name: "{{ test_name }}"
   region: us-central1
   zone: "{{ zone }}"
   gpu_zones: "[us-central1-a, us-central1-b, us-central1-c, us-central1-f]"

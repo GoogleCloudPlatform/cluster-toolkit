@@ -155,3 +155,13 @@ output "accelerator_topology_mode" {
   description = "The accelerator topology mode for the resource policy."
   value       = var.accelerator_topology_mode
 }
+
+output "enable_dranet" {
+  description = "Boolean indicating whether managed DRANET is enabled on this node pool."
+  value       = local.enable_dranet_actual
+}
+
+output "dranet_template_name" {
+  description = "The name of the DRANET ResourceClaimTemplate deployed for this node pool."
+  value       = local.enable_dranet_actual ? local.dranet_template_name_actual : null
+}

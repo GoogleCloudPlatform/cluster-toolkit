@@ -119,11 +119,12 @@ resource "google_compute_disk" "additional_disks" {
   count = var.instance_count * var.additional_persistent_disks.count
 
   # NB: this resource array must be sliced accounting for var.instance_count
-  name   = "${local.resource_prefix}-disk-${count.index}"
-  type   = var.additional_persistent_disks.type
-  size   = var.additional_persistent_disks.size
-  labels = local.labels
-  zone   = var.zone
+  name         = "${local.resource_prefix}-disk-${count.index}"
+  type         = var.additional_persistent_disks.type
+  size         = var.additional_persistent_disks.size
+  labels       = local.labels
+  zone         = var.zone
+  storage_pool = var.additional_persistent_disks.storage_pool == "" ? null : var.additional_persistent_disks.storage_pool
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -188,10 +189,11 @@ resource "google_compute_instance" "compute_vm" {
 
   boot_disk {
     initialize_params {
-      image  = data.google_compute_image.compute_image.self_link
-      size   = var.disk_size_gb
-      type   = var.disk_type
-      labels = local.labels
+      image        = data.google_compute_image.compute_image.self_link
+      size         = var.disk_size_gb
+      type         = var.disk_type
+      labels       = local.labels
+      storage_pool = var.disk_storage_pool == "" ? null : var.disk_storage_pool
     }
 
     device_name = "${local.resource_prefix}-boot-disk-${count.index}"
@@ -332,6 +334,22 @@ resource "google_compute_instance" "compute_vm" {
         "h3-:pd-ssd",
       ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
       error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || var.disk_size_gb >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
+    }
+    precondition {
+      condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.storage_pool == null || var.additional_persistent_disks.storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.additional_persistent_disks.type))
+      error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
     }
   }
 }

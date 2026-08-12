@@ -123,7 +123,7 @@ func TestExtractTopology(t *testing.T) {
 	mod1 := &Module{
 		Settings: Dict{}.With("tpu_topology", cty.StringVal("4x4x4")),
 	}
-	if topo, ok := extractTopology(bp, mod1); !ok || topo != "4x4x4" {
+	if topo, ok := ExtractTopology(bp, mod1); !ok || topo != "4x4x4" {
 		t.Errorf("expected 4x4x4, got %v (ok=%v)", topo, ok)
 	}
 
@@ -132,7 +132,7 @@ func TestExtractTopology(t *testing.T) {
 	mod2 := &Module{
 		Settings: Dict{}.With("placement_policy", pp3D),
 	}
-	if topo, ok := extractTopology(bp, mod2); !ok || topo != "2x2x2" {
+	if topo, ok := ExtractTopology(bp, mod2); !ok || topo != "2x2x2" {
 		t.Errorf("expected 2x2x2, got %v (ok=%v)", topo, ok)
 	}
 
@@ -141,14 +141,14 @@ func TestExtractTopology(t *testing.T) {
 	mod4 := &Module{
 		Settings: Dict{}.With("placement_policy", pp2D),
 	}
-	if topo, ok := extractTopology(bp, mod4); !ok || topo != "4x4" {
+	if topo, ok := ExtractTopology(bp, mod4); !ok || topo != "4x4" {
 		t.Errorf("expected 4x4 from placement_policy, got %v (ok=%v)", topo, ok)
 	}
 
 	mod3 := &Module{
 		Settings: Dict{},
 	}
-	if topo, ok := extractTopology(bp, mod3); ok {
+	if topo, ok := ExtractTopology(bp, mod3); ok {
 		t.Errorf("expected false, got %v", topo)
 	}
 }

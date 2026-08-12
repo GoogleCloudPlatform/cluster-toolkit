@@ -392,7 +392,7 @@ func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
 			defer wg.Done()
 			// This simulates multiple goroutines hitting logging.Fatal concurrently,
 			// or a recursive logging.Fatal call inside the collector.
-			logging.FatalHook(1)
+			logging.FatalHook(1, nil)
 		}()
 	}
 
@@ -402,5 +402,39 @@ func TestFatalHook_ConcurrencyAndReentrancy(t *testing.T) {
 	// 4. Verify that the atomic flag was flipped to true and handled concurrency safely
 	if !telemetryFlushed.Load() {
 		t.Errorf("Expected telemetryFlushed to be true after FatalHook execution")
+	}
+}
+
+func TestWrapTelemetryDynamic(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	_ = config.InitUserConfig()
+
+	telemetryCollector = nil
+	userConfigExists = false
+
+	// Create a command with a custom hook
+	customCmd := &cobra.Command{
+		Use: "custom",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	// Wrap it
+	wrapTelemetry(customCmd)
+
+	// Execute the hook
+	err := customCmd.PersistentPreRunE(customCmd, []string{})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Assert telemetry was initialized
+	if telemetryCollector == nil {
+		t.Errorf("Expected telemetryCollector to be initialized by wrapTelemetry")
+	}
+	if !userConfigExists {
+		t.Errorf("Expected userConfigExists to be true")
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,6 +40,76 @@ import (
 	billing "cloud.google.com/go/billing/apiv1"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
+)
+
+type result struct {
+	mi  modulereader.ModuleInfo
+	err error
+}
+
+// Storage constants
+const (
+	StoragePrefixGCS         = "gcs"            // Prefix for Google Cloud Storage metrics
+	StoragePrefixFilestore   = "filestore"      // Prefix for Filestore tiers
+	StoragePrefixRedis       = "redis"          // Prefix for Redis database usage
+	StoragePrefixSpanner     = "spanner"        // Prefix for Spanner database usage
+	StoragePrefixNetapp      = "netapp"         // Prefix for Netapp tiers
+	StorageTypeLocalSSD      = "local-ssd"      // Standalone metric base for Local SSDs
+	StorageTypeLustre        = "managed-lustre" // Standalone metric base for Managed Lustre
+	StorageTypeParallelstore = "parallelstore"  // Standalone metric base for Parallelstore
+
+	ModuleSourceRedis         = "database/redis"                  // Module origin to detect Redis
+	ModuleSourceSpanner       = "database/spanner"                // Module origin to detect Spanner
+	ModuleSourceLustre        = "file-system/managed-lustre"      // Module origin to detect Lustre
+	ModuleSourceParallelstore = "file-system/parallelstore"       // Module origin to detect Parallelstore
+	ModuleSourceNetappPool    = "file-system/netapp-storage-pool" // Module origin to detect Netapp Pool
+	ModuleSourceNetappVolume  = "file-system/netapp-volume"       // Module origin to detect Netapp Volume
+)
+
+var (
+	machineTypeSettings = []string{
+		"machine_type",                  // Usual setting for specifying machine type.
+		"node_type",                     // For modules that use node_type setting instead of machine_type to set machines.
+		"system_node_pool_machine_type", // For gke-cluster system node pools.
+	}
+	staticNodeCountSettings = []string{
+		"static_node_count", // Used in GKE node pool. If set, autoscaling will be disabled. Defaults to 0.
+		"node_count_static", // Standalone Slurm V6 CPU and TPU nodesets use 'node_count_static'. Defaults to 0.
+		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
+		"target_size",       // Used by HTCondor execute points and MIGs for pool capacity.
+	}
+	staticNodeCountInlineKeys   = []string{"nodeset", "nodeset_tpu", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
+	dynamicMinNodeCountSettings = []string{
+		"autoscaling_min_node_count",
+		"autoscaling_total_min_nodes",
+		"system_node_pool_node_count.total_min_nodes", // Used by gke-cluster system node pools
+	}
+	dynamicMaxNodeCountSettings = []string{
+		"autoscaling_max_node_count",
+		"autoscaling_total_max_nodes",
+		"node_count_dynamic_max",
+		"max_size",                                    // Used by HTCondor execute points for unbounded scaling limit.
+		"system_node_pool_node_count.total_max_nodes", // Used by gke-cluster system node pools
+	}
+	storageTypeSettings = []string{
+		"disk_type",
+		"system_node_pool_disk_type",
+		"filestore_tier",
+		"fs_type",
+		"storage_type",
+		"storage_class",
+	}
+	localSsdCountSettings = []string{
+		"local_ssd_count_ephemeral_storage",
+		"local_ssd_count_nvme",
+		"local_nvme_ssd_count",
+		"local_ssd_count",
+	}
+	zonalNodeCountSettings = []string{
+		"static_node_count",
+		"autoscaling_min_node_count",
+		"autoscaling_max_node_count",
+	}
 )
 
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
@@ -141,19 +212,214 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	return "false"
 }
 
-func getKeyFromBlueprint(key string, bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef(key).AsValue())
-	if err == nil {
-		v, _ := val.Unmark()
-		if !v.IsNull() && v.Type() == cty.String {
-			return v.AsString()
+func getStorageTypesFromModule(m config.Module, bp config.Blueprint) []string {
+	var storageTypes []string
+
+	addStorageType := func(t string) {
+		t = strings.ToLower(strings.Trim(strings.TrimSpace(t), "\""))
+		if t != "" {
+			storageTypes = append(storageTypes, t)
 		}
 	}
+
+	extractExplicitAndDefaultStorageTypes(m, bp, addStorageType)
+	extractLocalSsdStorageTypes(m, bp, addStorageType)
+	extractControllerStateDiskStorage(m, bp, addStorageType)
+	extractNetworkStorage(m, bp, addStorageType)
+	extractAdditionalDisks(m, bp, addStorageType)
+	extractInlineNodesets(m, bp, addStorageType)
+	extractDatabaseStorageTypes(m, bp, addStorageType)
+	extractFileSystemStorageTypes(m, bp, addStorageType)
+
+	return storageTypes
+}
+
+func extractExplicitAndDefaultStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	formatType := func(key, val string) string {
+		val = strings.TrimSpace(val)
+		switch key {
+		case "storage_class":
+			return StoragePrefixGCS + "-" + val
+		case "filestore_tier":
+			return StoragePrefixFilestore + "-" + val
+		}
+		return val
+	}
+
+	// Explicit string settings
+	var remainingKeys []string
+	for _, key := range storageTypeSettings {
+		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			addStorageType(formatType(key, t))
+		}
+		if !m.Settings.Has(key) {
+			remainingKeys = append(remainingKeys, key)
+		}
+	}
+
+	// Default string settings
+	if len(remainingKeys) > 0 {
+		if t, key, found := extractDefaultSetting[string](remainingKeys, m); found && t != "" {
+			addStorageType(formatType(key, t))
+		}
+	}
+}
+
+// extractPrefixedSetting is a helper function that extracts explicit or default settings and prepends a prefix.
+func extractPrefixedSetting(prefix, key string, m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if val := extractExplicitStringSetting(key, m, bp); val != "" {
+		addStorageType(prefix + "-" + val)
+	} else if val, _, found := extractDefaultSetting[string]([]string{key}, m); found {
+		if trimmed := strings.TrimSpace(val); trimmed != "" {
+			addStorageType(prefix + "-" + trimmed)
+		}
+	}
+}
+
+func extractDatabaseStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	src := string(m.Source)
+
+	if strings.Contains(src, ModuleSourceRedis) {
+		extractPrefixedSetting(StoragePrefixRedis, "tier", m, bp, addStorageType)
+	} else if strings.Contains(src, ModuleSourceSpanner) {
+		extractPrefixedSetting(StoragePrefixSpanner, "edition", m, bp, addStorageType)
+	}
+}
+
+func extractFileSystemStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	src := string(m.Source)
+
+	if strings.Contains(src, ModuleSourceLustre) {
+		addStorageType(StorageTypeLustre)
+	} else if strings.Contains(src, ModuleSourceParallelstore) {
+		addStorageType(StorageTypeParallelstore)
+	} else if strings.Contains(src, ModuleSourceNetappPool) {
+		extractPrefixedSetting(StoragePrefixNetapp, "service_level", m, bp, addStorageType)
+	} else if strings.Contains(src, ModuleSourceNetappVolume) {
+		addStorageType(StoragePrefixNetapp)
+	}
+}
+
+func extractLocalSsdStorageTypes(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	hasExplicit := false
+	for _, key := range localSsdCountSettings {
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			hasExplicit = true
+			if count > 0 {
+				addStorageType(StorageTypeLocalSSD)
+				return
+			}
+		}
+	}
+	if !hasExplicit {
+		if count, _, ok := extractDefaultSetting[int](localSsdCountSettings, m); ok && count > 0 {
+			addStorageType(StorageTypeLocalSSD)
+		}
+	}
+}
+
+func extractControllerStateDiskStorage(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if m.Settings.Has("controller_state_disk") {
+		val, err := bp.Eval(m.Settings.Get("controller_state_disk"))
+		if err == nil {
+			unmarked, _ := val.Unmark()
+			if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsObjectType() || unmarked.Type().IsMapType()) {
+				if diskType := extractStringFromCtyMap(unmarked, []string{"type"}); diskType != "" {
+					addStorageType(diskType)
+				}
+			}
+		}
+	}
+}
+
+func processCtyList(val cty.Value, processItem func(item cty.Value)) {
+	val, _ = val.Unmark()
+	if !val.IsKnown() || val.IsNull() || (!val.Type().IsListType() && !val.Type().IsTupleType() && !val.Type().IsSetType()) {
+		return
+	}
+	for _, item := range val.AsValueSlice() {
+		itemUnmarked, _ := item.Unmark()
+		if itemUnmarked.IsKnown() && !itemUnmarked.IsNull() && (itemUnmarked.Type().IsObjectType() || itemUnmarked.Type().IsMapType()) {
+			processItem(itemUnmarked)
+		}
+	}
+}
+
+func extractNetworkStorage(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	for _, key := range []string{"network_storage", "login_network_storage"} {
+		if m.Settings.Has(key) {
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(item cty.Value) {
+					if fsType := extractStringFromCtyMap(item, []string{"fs_type"}); fsType != "" {
+						addStorageType(fsType)
+					}
+				})
+			}
+		}
+	}
+}
+
+func extractAdditionalDisks(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	if m.Settings.Has("additional_disks") {
+		if val, err := bp.Eval(m.Settings.Get("additional_disks")); err == nil {
+			processCtyList(val, func(item cty.Value) {
+				if diskType := extractStringFromCtyMap(item, []string{"disk_type"}); diskType != "" {
+					addStorageType(diskType)
+				}
+			})
+		}
+	}
+}
+
+func extractInlineNodesets(m config.Module, bp config.Blueprint, addStorageType func(string)) {
+	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "partition", "login_nodes"} {
+		if m.Settings.Has(key) {
+			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
+				processCtyList(val, func(itemUnmarked cty.Value) {
+					if diskType := extractStringFromCtyMap(itemUnmarked, []string{"disk_type"}); diskType != "" {
+						addStorageType(diskType)
+					}
+					// network_storage in inline item
+					for _, nsKey := range []string{"network_storage", "login_network_storage"} {
+						if ns, exists := itemUnmarked.AsValueMap()[nsKey]; exists {
+							processCtyList(ns, func(nsItemUnmarked cty.Value) {
+								if fsType := extractStringFromCtyMap(nsItemUnmarked, []string{"fs_type"}); fsType != "" {
+									addStorageType(fsType)
+								}
+							})
+						}
+					}
+					// additional_disks in inline item
+					if ad, exists := itemUnmarked.AsValueMap()["additional_disks"]; exists {
+						processCtyList(ad, func(adItemUnmarked cty.Value) {
+							if diskType := extractStringFromCtyMap(adItemUnmarked, []string{"disk_type"}); diskType != "" {
+								addStorageType(diskType)
+							}
+						})
+					}
+				})
+			}
+		}
+	}
+}
+
+func getMachineTypeFromModule(m config.Module, bp config.Blueprint) string {
+	// 1. Try explicit settings first
+	for _, key := range machineTypeSettings {
+		if t := extractExplicitStringSetting(key, m, bp); t != "" {
+			return strings.Trim(t, "\"")
+		}
+	}
+	// 2. If no explicit setting, try defaults
+	if t, _, found := extractDefaultSetting[string](machineTypeSettings, m); found && t != "" {
+		return strings.Trim(t, "\"")
+	}
+
 	return ""
 }
 
-// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
-func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+// extractExplicitStringSetting attempts to get the given key string value if explicitly defined in the module's settings.
+func extractExplicitStringSetting(key string, m config.Module, bp config.Blueprint) string {
 	if !m.Settings.Has(key) {
 		return ""
 	}
@@ -167,38 +433,279 @@ func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module
 
 	// Some module outputs or references carry cty marks, so we unmark them safely before use.
 	unmarkedKey, _ := evaluatedKey.Unmark()
-	if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
-		return unmarkedKey.AsString()
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+		return strings.TrimSpace(unmarkedKey.AsString())
+	}
+	return ""
+}
+func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
+	counts := make(map[string]int)
+	topMachineType := getMachineTypeFromModule(m, bp)
+	inlineFound := false
+
+	// Process complex inline iterables (Slurm V6)
+	for _, key := range staticNodeCountInlineKeys {
+		if processInlineKey(m, bp, key, topMachineType, counts, staticNodeCountSettings) {
+			inlineFound = true
+		}
 	}
 
+	if inlineFound {
+		return counts
+	}
+
+	// Fallback to standard top-level extraction
+	if topMachineType != "" {
+		if count, found := getTopLevelNodeCount(m, bp, topMachineType, staticNodeCountSettings); found {
+			counts[topMachineType] += count
+		}
+	}
+	return counts
+}
+
+// processInlineKey evaluates a specific key for iterable structures and processes its items.
+func processInlineKey(m config.Module, bp config.Blueprint, key string, topMachineType string, counts map[string]int, targetKeys []string) bool {
+	if !m.Settings.Has(key) {
+		return false
+	}
+	val, err := bp.Eval(m.Settings.Get(key))
+	if err != nil {
+		return false
+	}
+	unmarked, _ := val.Unmark()
+	if !unmarked.IsKnown() || unmarked.IsNull() {
+		return false
+	}
+
+	ty := unmarked.Type()
+	if !ty.IsListType() && !ty.IsTupleType() && !ty.IsSetType() {
+		return false
+	}
+
+	for _, item := range unmarked.AsValueSlice() {
+		processInlineItem(item, topMachineType, counts, targetKeys)
+	}
+	return true
+}
+
+// processInlineItem extracts machine types and counts from an individual map/object in an inline list.
+func processInlineItem(item cty.Value, topMachineType string, counts map[string]int, targetKeys []string) {
+	item, _ = item.Unmark()
+	if !item.IsKnown() || item.IsNull() {
+		return
+	}
+	ty := item.Type()
+
+	if !ty.IsObjectType() && !ty.IsMapType() {
+		return
+	}
+
+	inlineMType := extractStringFromCtyMap(item, machineTypeSettings)
+	if inlineMType == "" {
+		inlineMType = topMachineType
+	}
+
+	if count, found := extractIntFromCtyMap(item, targetKeys); found && inlineMType != "" {
+		counts[inlineMType] += count
+	}
+}
+
+func extractTargetNodeCount(m config.Module, bp config.Blueprint, targetKeys []string) (int, bool) {
+	for _, key := range targetKeys {
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			// Apply zonal multipliers only to variables explicitly spanning a single zone natively.
+			// Global metrics (e.g. autoscaling_total_max_nodes) span the entire cluster and should not be multiplied.
+			if slices.Contains(zonalNodeCountSettings, key) {
+				count *= getZonalMultiplier(m, bp)
+			}
+			return count, true
+		}
+	}
+	return 0, false
+}
+
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string, targetKeys []string) (int, bool) {
+	baseCount, found := extractTargetNodeCount(m, bp, targetKeys)
+
+	// Static node count is calculated from the Topology for TPU machines.
+	isStatic := len(targetKeys) > 0 && targetKeys[0] == "static_node_count"
+	if !found && isStatic {
+		if count, ok := getTPUNodeCount(m, bp, topMachineType); ok {
+			baseCount = count
+			found = true
+		}
+	}
+
+	if !found {
+		if count, key, ok := extractDefaultSetting[int](targetKeys, m); ok {
+			baseCount = count
+			found = true
+			if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
+				// Apply zonal multipliers only to variables explicitly spanning a single zone natively.
+				// Global metrics (e.g. autoscaling_total_max_nodes) span the entire cluster and should not be multiplied.
+				if slices.Contains(zonalNodeCountSettings, key) {
+					baseCount *= getZonalMultiplier(m, bp)
+				}
+			}
+		}
+	}
+
+	if !found {
+		return 0, false
+	}
+
+	pools := getMultiplier("num_node_pools", m, bp)
+	slices := getMultiplier("num_slices", m, bp)
+	multiplier := max(slices, pools)
+
+	return baseCount * multiplier, true
+}
+
+// getZonalMultiplier retrieves the length of the zones list if it exists.
+func getZonalMultiplier(m config.Module, bp config.Blueprint) int {
+	keys := []string{"zones", "system_node_pool_zones"}
+	for _, key := range keys {
+		if !m.Settings.Has(key) {
+			continue
+		}
+		evaluated, err := bp.Eval(m.Settings.Get(key))
+		if err != nil {
+			continue
+		}
+		unmarked, _ := evaluated.Unmark()
+		if unmarked.IsKnown() && !unmarked.IsNull() && (unmarked.Type().IsTupleType() || unmarked.Type().IsListType() || unmarked.Type().IsSetType()) {
+			if length := len(unmarked.AsValueSlice()); length > 0 {
+				return length
+			}
+		}
+	}
+	return 1
+}
+
+func getMultiplier(key string, m config.Module, bp config.Blueprint) int {
+	if val, ok := extractExplicitIntSetting(key, m, bp); ok {
+		if val > 0 {
+			return val
+		}
+		return 1
+	}
+	if val, _, ok := extractDefaultSetting[int]([]string{key}, m); ok {
+		if val > 0 {
+			return val
+		}
+	}
+	return 1
+}
+
+// Logic taken from pkg/config/hardware.go.
+func getTPUNodeCount(m config.Module, bp config.Blueprint, topMachineType string) (int, bool) {
+	if !config.IsTPU(topMachineType) {
+		return 0, false
+	}
+
+	tpuTopologyStr, hasTopology := config.ExtractTopology(bp, &m)
+	if !hasTopology {
+		return 0, false
+	}
+
+	if m.Settings.Has("enable_flex_start") {
+		val, err := bp.Eval(m.Settings.Get("enable_flex_start"))
+		if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
+			return 0, true
+		}
+	}
+
+	if nodes, err := config.CalculateAcceleratorNodes(topMachineType, tpuTopologyStr, 0); err == nil {
+		return nodes, true
+	}
+
+	return 0, false
+}
+
+func extractStringFromCtyMap(val cty.Value, targetKeys []string) string {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.String {
+				return strings.TrimSpace(strings.Trim(v.AsString(), "\""))
+			}
+		}
+	}
 	return ""
 }
 
-// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
-func extractDefaultMachineType(key string, m config.Module) string {
-	if m.Source == "" {
-		return ""
+func extractIntFromCtyMap(val cty.Value, targetKeys []string) (int, bool) {
+	valMap := val.AsValueMap()
+	for _, key := range targetKeys { // Iterate over slice for deterministic precedence
+		if v, exists := valMap[key]; exists {
+			v, _ = v.Unmark()
+			if v.IsKnown() && !v.IsNull() && v.Type() == cty.Number {
+				out, _ := v.AsBigFloat().Int64()
+				return int(out), true
+			}
+			return 0, true
+		}
+	}
+	return 0, false
+}
+
+// extractExplicitIntSetting attempts to get the given key int value if explicitly defined.
+// It returns the int value, and a boolean indicating if the setting was found.
+func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint) (int, bool) {
+	keys := strings.Split(key, ".")
+	if !m.Settings.Has(keys[0]) {
+		return 0, false
+	}
+	keyValue := m.Settings.Get(keys[0])
+
+	// Traverse nested object properties if dot notation is used
+	for i := 1; i < len(keys); i++ {
+		if ev, err := bp.Eval(keyValue); err == nil {
+			keyValue = ev
+		}
+		unmarked, _ := keyValue.Unmark()
+		if !unmarked.IsKnown() || unmarked.IsNull() {
+			return 0, false
+		}
+		if !unmarked.Type().IsObjectType() && !unmarked.Type().IsMapType() {
+			return 0, false
+		}
+		asMap := unmarked.AsValueMap()
+		if val, exists := asMap[keys[i]]; exists {
+			keyValue = val
+		} else {
+			return 0, false
+		}
 	}
 
-	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
+	evaluatedKey, err := bp.Eval(keyValue)
+	if err != nil {
+		return 0, false
+	}
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	if unmarkedKey.IsKnown() && !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.Number {
+		out, _ := unmarkedKey.AsBigFloat().Int64()
+		return int(out), true
+	}
+	return 0, true // Value exists but is unknown, return safely without fallback
+}
+
+// extractDefaultSetting attempts to get a default setting from the module's source variables.
+func extractDefaultSetting[T any](keys []string, m config.Module) (T, string, bool) {
+	var zero T
+	kindStr, valid := isValidModuleKind(m)
+	if !valid {
+		return zero, "", false
 	}
 
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return ""
-	}
-
-	type result struct {
-		mi  modulereader.ModuleInfo
-		err error
-	}
 	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				resCh <- result{err: fmt.Errorf("panic in GetModuleInfo: %v", r)}
+			}
+		}()
 		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
 		resCh <- result{mi: mi, err: err}
 	}()
@@ -206,21 +713,60 @@ func extractDefaultMachineType(key string, m config.Module) string {
 	select {
 	case res := <-resCh:
 		if res.err != nil {
-			return ""
+			return zero, "", false
 		}
-		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				// Verify the default is a string (protects against complex types)
-				if mType, ok := input.Default.(string); ok {
-					return mType
+		// Iterate over keys to maintain precedence order
+		for _, key := range keys {
+			for _, input := range res.mi.Inputs {
+				if val, ok := parseDefaultValue[T](input.Name, input.Default, key); ok {
+					return val, key, true
 				}
 			}
 		}
 	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
 
-	return ""
+	return zero, "", false
+}
+
+// isValidModuleKind checks if the module has a valid source and returns its kind.
+func isValidModuleKind(m config.Module) (string, bool) {
+	if m.Source == "" {
+		return "", false
+	}
+	kindStr := m.Kind.String()
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return "", false
+	}
+	return kindStr, true
+}
+
+// parseDefaultValue matches the input key and safely casts the default value.
+func parseDefaultValue[T any](inputName string, inputDefault any, key string) (T, bool) {
+	var zero T
+	if inputName == key && inputDefault != nil {
+		switch v := inputDefault.(type) {
+		case T:
+			return v, true
+		case int64:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		case float64:
+			// Safely cast float64 to int if T is int
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		case float32:
+			if _, isInt := any(zero).(int); isInt {
+				return any(int(v)).(T), true
+			}
+		}
+	}
+	return zero, false
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
@@ -468,7 +1014,7 @@ func getLinuxVersion() string {
 
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
@@ -480,7 +1026,7 @@ func getMacVersion() string {
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")
@@ -498,4 +1044,84 @@ func parseOsReleaseField(line string) string {
 		return ""
 	}
 	return strings.Trim(parts[1], "'\"")
+}
+
+func getModuleDynamicNodeCounts(m config.Module, bp config.Blueprint, targetKeys []string) map[string]int {
+	if ifModulesMatchPatterns([]string{string(m.Source)}, isGkeModulePatterns) == "true" {
+		if m.Settings.Has("static_node_count") {
+			if val, err := bp.Eval(m.Settings.Get("static_node_count")); err == nil {
+				unmarked, _ := val.Unmark()
+				if unmarked.IsKnown() && !unmarked.IsNull() {
+					return map[string]int{}
+				}
+			}
+		}
+	}
+	counts := make(map[string]int)
+	topMachineType := getMachineTypeFromModule(m, bp)
+	inlineFound := false
+	for _, key := range staticNodeCountInlineKeys {
+		if processInlineKey(m, bp, key, topMachineType, counts, targetKeys) {
+			inlineFound = true
+		}
+	}
+	if inlineFound {
+		return counts
+	}
+	if topMachineType != "" {
+		if count, found := getTopLevelNodeCount(m, bp, topMachineType, targetKeys); found {
+			counts[topMachineType] += count
+		}
+	}
+	return counts
+}
+
+// detectMachineCategory attempts to identify the hardware nature of an instantiated machine type by interpreting available cluster toolkit mappings (e.g. associating mapped nvidia labels with GPUs).
+// Returns "CPU", "GPU", "TPU", or "Other".
+func detectMachineCategory(mType string) string {
+	mType = strings.ToLower(strings.TrimSpace(mType))
+	mType = config.ResolveMachineType(mType)
+
+	if config.IsTPU(mType) {
+		return "TPU"
+	}
+
+	mappings := config.GetMachineMappings()
+
+	for family, label := range mappings.MachineFamilyToLabelMap {
+		if strings.HasPrefix(mType, family) && strings.Contains(label, "nvidia") {
+			return "GPU"
+		}
+	}
+
+	if strings.Contains(mType, "gpu") {
+		return "GPU"
+	}
+
+	for _, p := range mappings.CpuMachineFamilies {
+		if strings.HasPrefix(mType, p) {
+			return "CPU"
+		}
+	}
+
+	if isCPUFallback(mType) {
+		return "CPU"
+	}
+
+	return "Other"
+}
+
+var cpuKeywords = []string{
+	"-standard-", "-highmem-", "-highcpu-", "-megamem-",
+	"-ultramem-", "custom-", "-micro", "-small", "-medium", "-metal",
+}
+
+// isCPUFallback checks if the machine type contains any of the standard CPU identifiers.
+func isCPUFallback(mType string) bool {
+	for _, kw := range cpuKeywords {
+		if strings.Contains(mType, kw) {
+			return true
+		}
+	}
+	return false
 }

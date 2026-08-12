@@ -119,6 +119,9 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
+    - name: Include Failure Triage Agent trigger tasks
+      ansible.builtin.include_tasks: tasks/trigger_failure_triage_agent.yml
+
     - name: Destroy deployment
       register: gcluster_destroy
       changed_when: gcluster_destroy.changed
@@ -179,6 +182,9 @@
         - firewall-rules
         - delete
         - "{{ deployment_name }}"
+    - name: Include Failure Triage Agent trigger tasks
+      ansible.builtin.include_tasks: tasks/trigger_failure_triage_agent.yml
+
     - name: Destroy deployment
       delegate_to: localhost
       register: gcluster_destroy

@@ -70,19 +70,19 @@
         </td>        
         <td>
           {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
-          <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+          <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if cluster.status == "r" %}
-          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
           {% endif %}
           {% if cluster.status == "n" %}
-          <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+          <img src="/static/img/status-configured.png" style="width:30px;height:32px;" alt="">
           {% endif %}
           {% if cluster.status == "d" %}
-          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;">
+          <img src="/static/img/status-deleted.png" style="width:29px;height:32px;" alt="">
           {% endif %}
           {% if cluster.status == "s" %}
-          <img src="/static/img/status-paused.png" style="width:32px;height:32px;">
+          <img src="/static/img/status-paused.png" style="width:32px;height:32px;" alt="">
           {% endif %}
           {{ cluster.get_status_display }}
         </td>

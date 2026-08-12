@@ -76,34 +76,38 @@
 <p id="status-p">
   <b>Status:</b>
   {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" or cluster.status == "n" %}
-  <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+  <img src="/static/img/loading.gif" style="width:32px;height:32px;" alt="">
   <script>
-    setInterval(function () {
+    // Poll with a recursive setTimeout (rather than setInterval) so the next
+    // request is only scheduled after the previous one completes, avoiding
+    // overlapping requests if the server is slow.
+    function pollClusterStatus() {
       $.ajax({
         url: "{% url 'backend-cluster-status' object.id %}",
         type: "GET",
         dataType: "json",
         success: function (data) {
-          // update the object status display
-          var statusElement = $("#status-p");
-          var statusText = response.status;
-          statusElement.html("<b>Status: {{ object.get_status_display }}</b>");
-
-          // check if the status is "r" and stop the refresh interval
-          if (statusText == "r") {
-            clearInterval(refreshIntervalId);
+          // If the status is no longer in an active polling state, reload the
+          // page to render the final state (e.g., ready, error, deleted).
+          const activeStatuses = ["c", "i", "t", "n"];
+          if (!activeStatuses.includes(data.status)) {
+            location.reload();
+          } else {
+            setTimeout(pollClusterStatus, 5000);
           }
         },
         error: function (xhr, status, error) {
-          console.log("Error refreshing data");
+          console.log("Error refreshing data:", error);
+          setTimeout(pollClusterStatus, 5000);
         }
       });
-    }, 5000);
+    }
+    pollClusterStatus();
   </script>
   {% endif %}
 
   {% if object.status == "r" %}
-  <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+  <img src="/static/img/status-ready.png" style="width:32px;height:32px;" alt="">
   {% endif %}
   {{ object.get_status_display }}
   {% if object.grafana_dashboard_url %}

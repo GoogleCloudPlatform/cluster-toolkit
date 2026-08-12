@@ -53,13 +53,26 @@ spec:
         value: "${toleration.value}"
         effect: ${toleration.effect}
       %{~ endfor ~}
+       %{~ if length(resource_claims) > 0 ~}
+      resourceClaims:
+      %{~ for rc in resource_claims ~}
+      - name: ${rc.name}
+        resourceClaimTemplateName: ${rc.resource_claim_template_name}
+      %{~ endfor ~}
+      %{~ endif ~}
       containers:
       - name: ${name}-container
         image: ${image}
         command:
         %{for s in command}- ${indent(8, yamlencode(s))}%{~ endfor }
-        %{~ if gpu_limit != null || cpu_request != null || tpu_limit != null ~}
+        %{~ if gpu_limit != null || cpu_request != null || tpu_limit != null || length(claims) > 0 ~}
         resources:
+          %{~ if length(claims) > 0 ~}
+          claims:
+          %{~ for c in claims ~}
+          - name: ${c.name}
+          %{~ endfor ~}
+          %{~ endif ~}
           %{~ if gpu_limit != null || tpu_limit != null ~}
           limits:
             %{~ if gpu_limit != null ~}

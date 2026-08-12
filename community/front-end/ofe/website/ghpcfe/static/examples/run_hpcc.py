@@ -103,7 +103,6 @@ HPL.out      output file name (if any)
 
 
 def mem_per_core():
-    from multiprocessing import cpu_count
     nCPU = cpu_count()
 
     MemTotal = None

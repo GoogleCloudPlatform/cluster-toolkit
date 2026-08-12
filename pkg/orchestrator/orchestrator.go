@@ -33,6 +33,11 @@ type PathwaysJobDefinition struct {
 	ServerArgs string // Default: ""
 	WorkerArgs string // Default: ""
 
+	// Custom Environment Variables for Pathways components
+	ProxyEnv  map[string]string
+	ServerEnv map[string]string
+	WorkerEnv map[string]string
+
 	// Pathways-specific sidecars
 	ColocatedPythonSidecarImage string // Default: ""
 
@@ -59,6 +64,7 @@ type JobDefinition struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 
 	WorkloadName                  string
 	KueueQueueName                string
@@ -89,7 +95,14 @@ type JobDefinition struct {
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
+	// Multi-Tier Checkpointing (MTC)
+	GKEMTCEnabled          bool
+	GKEMTCRamdiskDirectory string
+
+	GkeCustomTemplatesPath string
+
 	RawMounts []string
+	Env       map[string]string
 
 	Verbose bool
 }
@@ -105,6 +118,7 @@ type ListOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	// Filters
 	Status       string
 	NameContains string
@@ -114,20 +128,38 @@ type CancelOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 }
 
 type LogsOptions struct {
 	ProjectID       string
 	ClusterName     string
 	ClusterLocation string
+	GKENamespace    string
 	Follow          bool
+	MainOnly        *bool
 }
 
+// InspectOptions defines configuration for GKE cluster diagnostic sweeps.
+type InspectOptions struct {
+	ProjectID       string
+	ClusterName     string
+	ClusterLocation string
+	GKENamespace    string
+	WorkloadName    string
+	OutputPath      string
+	Show            bool
+}
+
+// JobOrchestrator defines the interface to interact with job orchestrators like GKE.
 type JobOrchestrator interface {
+	// Initialize fetches cluster metadata and resolves the cluster location.
+	Initialize(clusterName, location, projectID string) (resolvedLocation string, err error)
 	SubmitJob(job JobDefinition) error
 	ListJobs(opts ListOptions) ([]JobStatus, error)
 	CancelJob(name string, opts CancelOptions) error
 	GetJobLogs(name string, opts LogsOptions) (string, error)
+	InspectCluster(opts InspectOptions) error
 }
 
 type ClusterStatus struct {

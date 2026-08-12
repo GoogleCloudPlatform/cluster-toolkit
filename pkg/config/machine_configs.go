@@ -90,7 +90,7 @@ func extractMachineParams(m *Module, bp Blueprint) (string, string, string) {
 }
 
 func ParseTPUCount(machineType string) int {
-	if !(strings.HasPrefix(machineType, "ct") || strings.HasPrefix(machineType, "tpu")) {
+	if !strings.HasPrefix(machineType, "ct") && !strings.HasPrefix(machineType, "tpu") {
 		return 0
 	}
 	parts := strings.Split(machineType, "-")

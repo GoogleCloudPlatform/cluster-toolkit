@@ -20,17 +20,13 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 6.40"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.94.0"
+    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.99.0"
   }
 
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.94.0"
+    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.99.0"
   }
 
   required_version = ">= 1.12.2"

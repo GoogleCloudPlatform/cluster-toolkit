@@ -16,7 +16,7 @@ from typing import List, Optional
 
 import util
 import uuid
-from addict import Dict as NSDict # type: ignore
+from util import NSDict
 from datetime import datetime, timedelta
 from collections import defaultdict
 import logging

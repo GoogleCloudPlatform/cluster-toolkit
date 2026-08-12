@@ -612,7 +612,7 @@ class Image(CloudResource):
         max_length=60,
         help_text="Enter a source image family",
         blank=False,
-        default="slurm-gcp-6-5-hpc-rocky-linux-8",
+        default="slurm-gcp-6-12-hpc-rocky-linux-9",
     )
 
     startup_script = models.ManyToManyField(
@@ -817,7 +817,7 @@ class Cluster(CloudResource):
         ),        
     )
     enable_slurm_auth = models.BooleanField(
-        default=False,
+        default=True,
         help_text=(
             "Enable Slurm native authentication instead of MUNGE."
         ),

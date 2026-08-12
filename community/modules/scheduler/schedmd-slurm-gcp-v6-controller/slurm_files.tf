@@ -154,21 +154,26 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id                    = var.project_id
-  slurm_cluster_name            = local.slurm_cluster_name
-  slurm_control_host            = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
-  slurm_control_addr            = var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null
-  slurm_backup_controller_name  = var.enable_backup_controller ? local.slurm_backup_controller_name : null
-  slurm_backup_controller_ip    = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
-  bucket_dir                    = var.bucket_dir
-  bucket_name                   = local.bucket_name
-  controller_network_attachment = var.controller_network_attachment
+  project_id                      = var.project_id
+  slurm_cluster_name              = local.slurm_cluster_name
+  slurm_control_host              = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-0" : null
+  slurm_control_addr              = (var.enable_backup_controller && var.enable_controller_load_balancer) ? one(google_compute_forwarding_rule.slurm_controller_vip[*].ip_address) : (var.enable_backup_controller && length(var.static_ips) >= 1 ? var.static_ips[0] : null)
+  slurm_backup_controller_name    = var.enable_backup_controller ? local.slurm_backup_controller_name : null
+  slurm_backup_controller_ip      = var.enable_backup_controller && length(var.static_ips) >= 2 ? var.static_ips[1] : null
+  enable_controller_load_balancer = var.enable_controller_load_balancer
+  bucket_dir                      = var.bucket_dir
+  bucket_name                     = local.bucket_name
+  controller_network_attachment   = var.controller_network_attachment
+  slurm_control_host_port         = var.slurm_control_host_port
 
-  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
-  slurm_conf_tpl      = var.slurm_conf_tpl
-  slurm_conf_template = var.slurm_conf_template
-  cgroup_conf_tpl     = var.cgroup_conf_tpl
-  cloud_parameters    = var.cloud_parameters
+  slurmdbd_conf_tpl              = var.slurmdbd_conf_tpl
+  slurm_conf_tpl                 = var.slurm_conf_tpl
+  slurm_conf_template            = var.slurm_conf_template
+  cgroup_conf_tpl                = var.cgroup_conf_tpl
+  cloud_parameters               = var.cloud_parameters
+  experimental                   = var.experimental
+  enable_expedited_requeue       = var.enable_expedited_requeue
+  enable_health_check_start_only = var.enable_health_check_start_only
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -181,6 +186,7 @@ module "slurm_files" {
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+  enable_openmetrics   = var.enable_openmetrics
 
   enable_slurm_auth = var.enable_slurm_auth
 
@@ -198,11 +204,13 @@ module "slurm_files" {
   disable_default_mounts = !var.enable_default_mounts || var.enable_backup_controller
   network_storage = [
     for storage in var.network_storage : {
-      server_ip     = storage.server_ip,
-      remote_mount  = storage.remote_mount,
-      local_mount   = storage.local_mount,
-      fs_type       = storage.fs_type,
-      mount_options = storage.mount_options
+      server_ip               = storage.server_ip,
+      remote_mount            = storage.remote_mount,
+      local_mount             = storage.local_mount,
+      local_mount_owner       = storage.local_mount_owner
+      local_mount_permissions = storage.local_mount_permissions
+      fs_type                 = storage.fs_type,
+      mount_options           = storage.mount_options
     }
     if storage.fs_type != "daos"
   ]

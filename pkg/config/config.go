@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.94.0"
+	latestToolkitVersion     = "v1.99.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -295,6 +295,7 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 type Blueprint struct {
 	BlueprintName            string      `yaml:"blueprint_name"`
 	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
+	AIAssisted               bool        `yaml:"ai_assisted,omitempty"`
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
@@ -1143,9 +1144,11 @@ func fetchExampleFilesFromGitHub(version string) []string {
 	if err == nil {
 		// Parse the remote tree
 		for _, item := range treeResp.Tree {
-			// Check for YAML files in the examples directories.
+			// Check for YAML files in the examples and daily tests directories.
 			if item.Type == "blob" &&
-				(strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/")) &&
+				(strings.HasPrefix(item.Path, "examples/") ||
+					strings.HasPrefix(item.Path, "community/examples/") ||
+					strings.HasPrefix(item.Path, "tools/cloud-build/daily-tests/blueprints/")) &&
 				(strings.HasSuffix(item.Path, ".yaml") || strings.HasSuffix(item.Path, ".yml")) {
 
 				predefinedExamples = append(predefinedExamples, item.Path)
@@ -1236,4 +1239,35 @@ func worker(version string, jobs <-chan string, results chan<- string, wg *sync.
 		resp.Body.Close()
 		cancel() // Release the context resources
 	}
+}
+
+func GetKeyFromBlueprint(key string, bp Blueprint) string {
+	val, err := bp.Eval(GlobalRef(key).AsValue())
+	if err == nil {
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
+		}
+	}
+	return ""
+}
+
+// GetEvaluatedString safely gets and evaluates a setting from a module within a blueprint.
+func GetEvaluatedString(key string, m *Module, bp *Blueprint) string {
+	val := m.Settings.Get(key)
+	if val.IsNull() {
+		return ""
+	}
+
+	// Evaluate the expression using the blueprint's evaluation context
+	evaluatedVal, err := bp.Eval(val)
+	if err != nil {
+		return ""
+	}
+
+	// Ensure the evaluated result is a string and not null
+	if evaluatedVal.Type() == cty.String && !evaluatedVal.IsNull() {
+		return evaluatedVal.AsString()
+	}
+	return ""
 }

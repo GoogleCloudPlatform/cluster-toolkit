@@ -92,27 +92,36 @@ variable "min_master_version" {
 }
 
 variable "version_prefix" {
-  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.31.` will match all `1.31` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
+  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.35.` will match all `1.35` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
   type        = string
-  default     = "1.31."
+  default     = "1.35."
 }
 
 variable "maintenance_start_time" {
-  description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
+  description = "Start time for daily maintenance operations in GMT (HH:MM format). If set to null, a daily maintenance window restriction is not configured, meaning GKE can schedule maintenance at any time."
   type        = string
   default     = "09:00"
+  nullable    = true
 }
 
 variable "maintenance_exclusions" {
   description = "List of maintenance exclusions. A cluster can have up to three. For each exclusion, exactly one of `end_time` or `exclusion_end_time_behavior` must be specified. If `exclusion_end_time_behavior` is used, its value must be `UNTIL_END_OF_SUPPORT`."
   type = list(object({
     name                        = string
-    start_time                  = string
+    start_time                  = optional(string)
     end_time                    = optional(string)
     exclusion_scope             = string
     exclusion_end_time_behavior = optional(string)
   }))
   default = []
+  validation {
+    condition = alltrue([
+      for x in var.maintenance_exclusions : (
+        x.end_time == null || (x.start_time != null && try(length(trimspace(x.start_time)) > 0, false))
+      )
+    ])
+    error_message = "For fixed-window exclusions (where 'end_time' is specified), 'start_time' must also be provided and cannot be empty."
+  }
   validation {
     condition = alltrue([
       for x in var.maintenance_exclusions : (
@@ -281,9 +290,9 @@ variable "system_node_pool_node_count" {
 }
 
 variable "system_node_pool_machine_type" {
-  description = "Machine type for the system node pool."
+  description = "Machine type for the system node pool. Defaults to n2d-standard-4 if confidential nodes are enabled, otherwise e2-standard-4."
   type        = string
-  default     = "e2-standard-4"
+  default     = null
 }
 
 variable "system_node_pool_disk_size_gb" {
@@ -696,4 +705,28 @@ variable "enable_fqdn_network_policy" {
   description = "Enable FQDN Network Policy on the cluster. This feature requires GKE Dataplane V2 to be enabled."
   type        = bool
   default     = false
+}
+
+variable "enable_confidential_nodes" {
+  description = "Enable Confidential Nodes at the cluster level. All nodes in the cluster will run on Confidential VMs."
+  type        = bool
+  default     = false
+}
+
+variable "confidential_instance_type" {
+  description = "The type of technology used by the confidential nodes (e.g., SEV, SEV_SNP, TDX). Leave null for default."
+  type        = string
+  default     = null
+}
+
+variable "enable_confidential_storage" {
+  description = "Enable Confidential Storage on the cluster nodes. Node boot disks will be encrypted using keys protected by the Confidential VM."
+  type        = bool
+  default     = false
+}
+
+variable "boot_disk_kms_key" {
+  description = "The Customer Managed Encryption Key (CMEK) used to encrypt the boot disks of the GKE nodes. Required if enable_confidential_storage is true."
+  type        = string
+  default     = null
 }

@@ -17,3 +17,12 @@ spec:
   requirements:
     services:
     - lustre.googleapis.com
+ghpc:
+  validators:
+  - validator: conditional
+    inputs:
+      trigger: enable_dynamic_tier
+      trigger_value: true
+      dependent: per_unit_storage_throughput
+      dependent_value: null
+    error_message: "per_unit_storage_throughput must not be set when enable_dynamic_tier is enabled."

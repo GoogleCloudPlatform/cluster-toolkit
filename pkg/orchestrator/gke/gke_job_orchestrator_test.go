@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -76,6 +77,7 @@ func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
 func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 	return &GKEOrchestrator{
 		executor:                 executor,
+		kubeClient:               &MockKubeClient{Namespace: "default"},
 		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
 		acceleratorToMachineType: make(map[string]string),
 		machineCapCache:          make(map[string]MachineTypeCap),
@@ -115,10 +117,6 @@ type MockKubeClient struct {
 	Err       error
 }
 
-func (m *MockKubeClient) GetJobNamespace(workloadName string) (string, error) {
-	return m.Namespace, m.Err
-}
-
 func (m *MockKubeClient) ListWorkloads(namespace string, workloadName string) ([]string, error) {
 	return m.Workloads, m.Err
 }
@@ -127,8 +125,15 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.Err
 }
 
-func (m *MockKubeClient) ListJobSets(labelSelector string) ([]orchestrator.JobStatus, error) {
+func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
 	return []orchestrator.JobStatus{}, m.Err
+}
+
+func (m *MockKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
+	if m.Namespace != "" {
+		return m.Namespace, nil
+	}
+	return "default", m.Err
 }
 
 func TestGenerateGKEManifest_Accelerators(t *testing.T) {
@@ -302,9 +307,9 @@ func TestGenerateGKEManifest_Volumes(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 		ComputeType:     "n2-standard-4",
 		RawMounts: []string{
-			"gs://my-bucket:/data",
-			"/host/path:/host",
-			"my-pvc:/pvc",
+			"gs://my-bucket;/data",
+			"/host/path;/host",
+			"my-pvc;/pvc",
 		},
 	}
 
@@ -447,11 +452,12 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
-		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1 --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	}
 	mockExec := NewMockExecutor(mockResponses)
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
 	orc.clusterDesc.NodePools = []gkeJobNodePool{
 		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
 	}
@@ -483,13 +489,103 @@ func TestGeneratePathwaysManifest(t *testing.T) {
 		`memory: "100Gi"`,
 		`cpu: "8"`,
 		`memory: "32Gi"`,
-		"restartStrategy: Recreate",
+		"restartStrategy: BlockingRecreate",
+		"privileged: true",
+		"alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool",
+		`cpu: "24"`,
+		`cpu: "2"`,
+		`memory: "8Gi"`,
+		"kill -SIGTERM $PID",
+		"echo \"Exit code: $EXIT_CODE\"",
+		"name: shared-tmp",
+		"hostPath:",
+		"path: /tmp",
+		"type: DirectoryOrCreate",
+		"mountPath: /tmp",
+		"jobset.sigs.k8s.io/hack: \"true\"",
+		"kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"",
+		"cloud.google.com/skip-tpu-webhook-check: \"true\"",
+		"backoffLimitPerIndex: 4000",
+		"podReplacementPolicy: Failed",
+		"maxFailedIndexes: 0",
 	}
 
 	for _, substr := range expectedSubstrs {
 		if !strings.Contains(manifest, substr) {
 			t.Errorf("manifest missing expected substring %q", substr)
 		}
+	}
+}
+
+func TestGeneratePathwaysManifest_MTC(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-mtc-test",
+		CommandToRun:    "echo hello",
+		NumSlices:       2,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage:            "proxy:latest",
+			ServerImage:                 "server:latest",
+			WorkerImage:                 "worker:latest",
+			ColocatedPythonSidecarImage: "sidecar:latest",
+			GCSLocation:                 "gs://my-bucket",
+			HeadNodePool:                "pathways-np",
+		},
+		IsPathwaysJob:          true,
+		GKEMTCEnabled:          true,
+		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-mtc-test",
+		"colocated-python-sidecar",
+		"restartPolicy: Always",
+		"driver: multitier-checkpoint.csi.storage.gke.io",
+		"name: sidecar-shared-memory",
+		"medium: Memory",
+		"--cloud_pathways_sidecar_shm_directory=/tmp/sidecar",
+		"mountPath: /tmp/mtc_checkpoints",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	parts := strings.Split(manifest, "name: worker")
+	if len(parts) < 2 {
+		t.Fatalf("failed to split manifest into head and worker parts")
+	}
+	headPart := parts[0]
+	workerPart := parts[1]
+
+	if strings.Contains(headPart, "colocated-python-sidecar") {
+		t.Errorf("headPart should not contain colocated-python-sidecar container")
+	}
+	if !strings.Contains(workerPart, "colocated-python-sidecar") {
+		t.Errorf("workerPart should contain colocated-python-sidecar container")
 	}
 }
 
@@ -1232,7 +1328,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			if tt.mockResponses != nil {
 				if _, ok := tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"]; !ok {
 					tt.mockResponses["kubectl get topologies.kueue.x-k8s.io -o json"] = []shell.CommandResult{
-						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`},
+						{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`},
 					}
 				}
 			}
@@ -1243,7 +1339,7 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			got, err := orc.verifyDynamicSlicingActive(tt.opts)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("verifySuperSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("verifyDynamicSlicingActive() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !tt.wantErr && got != tt.wantResult {
@@ -1789,7 +1885,7 @@ func TestResolveKueueQueue(t *testing.T) {
 			mockExec := NewMockExecutor(responses)
 			orc := newTestGKEOrchestrator(mockExec)
 
-			got, err := orc.resolveKueueQueue(tt.requestedName)
+			got, err := orc.resolveKueueQueue(tt.requestedName, "default")
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("resolveKueueQueue() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -1938,7 +2034,7 @@ func TestGenerateGKEManifest_DynamicSlicingActive_TPU7x(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
 		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
 		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "8x8x8"}},
 		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                            {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
@@ -2019,7 +2115,7 @@ func TestGeneratePathwaysManifest_DynamicSlicing(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-partition-4x4x4-id"}]}}]}`}},
 		"kubectl get admissioncheck":                    {{ExitCode: 0, Stdout: `{"items": [{"spec": {"controllerName": "accelerator.gke.io/slice"}}]}`}},
 		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end} -l cloud.google.com/gke-tpu-accelerator=tpu7x": {{ExitCode: 0, Stdout: "8x8x8"}},
 		"gcloud compute machine-types describe tpu7x-standard-4t --zone=us-central1-a --format=json":                                                                          {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu7x-standard-4t"}]}`}},
@@ -2082,7 +2178,7 @@ func TestGenerateGKEManifest_StaticSlicingActive_v6e(t *testing.T) {
 
 	mockResponses := map[string][]shell.CommandResult{
 		"kubectl get resourceflavors":                   {{ExitCode: 0, Stdout: ""}, {ExitCode: 0, Stdout: ""}},
-		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}, {ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"}}]}`}},
+		"kubectl get topologies.kueue.x-k8s.io -o json": {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`}, {ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tpu-topology"},"spec":{"levels":[{"nodeLabel":"cloud.google.com/gke-tpu-slice-2x2-id"}]}}]}`}},
 		"kubectl get nodes":                             {{ExitCode: 0, Stdout: "4x4"}, {ExitCode: 0, Stdout: "4x4"}},
 		"gcloud compute machine-types describe ct6e-standard-8t --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`}},
 	}
@@ -2175,7 +2271,12 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 		ClusterLocation: "us-central1-a",
 	}
 
-	err := orc.populateClusterMetadata(job)
+	_, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	err = orc.populateClusterMetadata(job)
 	if err != nil {
 		t.Fatalf("populateClusterMetadata failed: %v", err)
 	}
@@ -2184,6 +2285,53 @@ func TestPopulateClusterMetadata_NAPLimitsLoopOrder(t *testing.T) {
 	expectedGPULimit := int64(16)
 	if limit := orc.napLimits["nvidia.com/gpu"]; limit != expectedGPULimit {
 		t.Errorf("expected napLimits[nvidia.com/gpu] to be %d, got %d", expectedGPULimit, limit)
+	}
+}
+
+func TestPopulateClusterMetadata_LocationFallback(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	mockDescribeOutput := `{
+		"locations": ["us-central1-a", "us-central1-b"],
+		"nodePools": [],
+		"autoscaling": {}
+	}`
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud container clusters describe my-cluster --location us-central1-a --project my-project --format=json": {
+			{
+				ExitCode: 1,
+				Stderr:   "Resource my-cluster was not found in us-central1-a",
+			},
+		},
+		"gcloud container clusters describe my-cluster --location us-central1 --project my-project --format=json": {
+			{
+				ExitCode: 0,
+				Stdout:   mockDescribeOutput,
+			},
+		},
+	}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(mockResponses))
+	job := &orchestrator.JobDefinition{
+		ProjectID:       "my-project",
+		ClusterName:     "my-cluster",
+		ClusterLocation: "us-central1-a",
+	}
+
+	loc, err := orc.Initialize(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	job.ClusterLocation = loc
+
+	err = orc.populateClusterMetadata(job)
+	if err != nil {
+		t.Fatalf("populateClusterMetadata failed: %v", err)
+	}
+
+	if job.ClusterLocation != "us-central1" {
+		t.Errorf("Expected job.ClusterLocation to fall back to 'us-central1', got %q", job.ClusterLocation)
 	}
 }
 
@@ -2209,6 +2357,20 @@ func TestPopulateNAPFlavors(t *testing.T) {
 				"flavor-nvidia-l4": {
 					NodeLabels: map[string]string{
 						"cloud.google.com/gke-accelerator": "nvidia-l4",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Populate tpu7x",
+			napLimits: map[string]int64{
+				"tpu7x": 4,
+			},
+			wantFlavors: map[string]FlavorCapacity{
+				"flavor-tpu7x": {
+					NodeLabels: map[string]string{
+						"cloud.google.com/gke-tpu-accelerator": "tpu7x",
 					},
 				},
 			},
@@ -2254,6 +2416,841 @@ func TestPopulateNAPFlavors(t *testing.T) {
 					if gotCapacity.NodeLabels[k] != v {
 						t.Errorf("expected label %s=%s, got %s", k, v, gotCapacity.NodeLabels[k])
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateGKENodeSelectorLabel(t *testing.T) {
+	orc := &GKEOrchestrator{}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Mapped families (2 parts)
+		{"g2-standard-48", "nvidia-l4"},
+		{"a3-highgpu-8g", "nvidia-h100-80gb"},
+		{"a2-highgpu-1g", "nvidia-tesla-a100"},
+		{"g4-standard-4", "nvidia-rtx-pro-6000"},
+		{"ct6e-standard-8t", "tpu-v6e-slice"},
+
+		// Mapped families (1 part)
+		{"v6e-standard", "tpu-v6e-slice"},
+		{"v5litepod-slice", "tpu-v5-lite-podslice"},
+		{"v4-podslice", "tpu-v4-podslice"},
+		{"l4-standard", "nvidia-l4"},
+
+		// Old switch fallbacks (unmapped directly, but should return as is)
+		{"nvidia-tesla-a100", "nvidia-tesla-a100"},
+		{"tpu-v4-podslice", "tpu-v4-podslice"},
+		{"tpu-v6e-slice", "tpu-v6e-slice"},
+		{"tpu-v5p-slice", "tpu-v5p-slice"},
+		{"tpu-v5-lite-podslice", "tpu-v5-lite-podslice"},
+
+		// Unmapped values
+		{"unknown-accelerator", "unknown-accelerator"},
+		{"h100", "h100"},
+
+		// Case insensitivity
+		{"G2-STANDARD-48", "nvidia-l4"},
+		{"NVIDIA-TESLA-A100", "NVIDIA-TESLA-A100"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := orc.GenerateGKENodeSelectorLabel(tc.input)
+			if got != tc.want {
+				t.Errorf("GenerateGKENodeSelectorLabel(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGenerateGKEManifest_CustomEnv(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "env-test-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "n2-standard-2",
+		ClusterLocation: "us-central1-a",
+		Env: map[string]string{
+			"MY_CUSTOM_VAR": "some-value",
+			"ANOTHER_VAR":   "another=value",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	expectedLines := []string{
+		`- name: MY_CUSTOM_VAR`,
+		`  value: "some-value"`,
+		`- name: ANOTHER_VAR`,
+		`  value: "another=value"`,
+	}
+	for _, line := range expectedLines {
+		if !strings.Contains(manifest, line) {
+			t.Errorf("manifest does not contain expected line %q. Got manifest:\n%s", line, manifest)
+		}
+	}
+}
+
+func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-env-job",
+		CommandToRun:    "echo hello",
+		ComputeType:     "tpu-v5-lite-podslice",
+		ClusterLocation: "us-central1-a",
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+		},
+		Env: map[string]string{
+			"PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS": "grpc_insecure_override",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+		"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: "16x16"}},
+		"gcloud compute machine-types describe tpu-v5-lite-podslice --zone=us-central1-a --format=json":                         {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Config: gkeNodePoolConfig{MachineType: "tpu-v5-lite-podslice"}},
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+
+	// The custom environment variables must be present only in the workload-container container spec
+	expectedLines := []string{
+		`- name: PATHWAYS_UNSAFE_UNSAFE_OVERRIDE_GRPC_CREDENTIALS`,
+		`  value: "grpc_insecure_override"`,
+	}
+	for _, line := range expectedLines {
+		count := strings.Count(manifest, line)
+		// We expect it to appear exactly once: in the workload-container
+		if count != 1 {
+			t.Errorf("expected line %q to appear exactly 1 time in manifest, got %d. Manifest:\n%s", line, count, manifest)
+		}
+	}
+}
+
+func TestPrepareManifestOptions_PathwaysPlatform(t *testing.T) {
+	setupMockMachineConfig(t)
+	tests := []struct {
+		computeType  string
+		topology     string
+		wantPlatform string
+	}{
+		{
+			computeType:  "tpu-v5-lite-podslice",
+			topology:     "16x16",
+			wantPlatform: "tpuv5e:16x16",
+		},
+		{
+			computeType:  "v5litepod",
+			topology:     "8x8",
+			wantPlatform: "tpuv5e:8x8",
+		},
+		{
+			computeType:  "tpu-v6e-slice",
+			topology:     "4x4",
+			wantPlatform: "tpuv6e:4x4",
+		},
+		{
+			computeType:  "v6e",
+			topology:     "4x4",
+			wantPlatform: "tpuv6e:4x4",
+		},
+		{
+			computeType:  "tpu-v5p-slice",
+			topology:     "2x2x2",
+			wantPlatform: "tpuv5:2x2x2",
+		},
+		{
+			computeType:  "v5p",
+			topology:     "2x2x2",
+			wantPlatform: "tpuv5:2x2x2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.computeType, func(t *testing.T) {
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "pathways-test-job",
+				CommandToRun:    "echo hello",
+				ComputeType:     tc.computeType,
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Topology:        tc.topology,
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"kubectl get resourceflavors": {{ExitCode: 0, Stdout: ""}},
+				"kubectl get nodes -o jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}": {{ExitCode: 0, Stdout: tc.topology}},
+				"gcloud compute machine-types describe " + tc.computeType + " --zone=us-central1-a --format=json":                       {{ExitCode: 0, Stdout: `{"accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "` + tc.computeType + `"}]}`}},
+			}
+
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.projectID = "mock-project"
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Config: gkeNodePoolConfig{MachineType: tc.computeType}},
+			}
+
+			profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements failed: %v", err)
+			}
+
+			opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+			if err != nil {
+				t.Fatalf("PrepareManifestOptions failed: %v", err)
+			}
+
+			if opts.PathwaysInstanceType != tc.wantPlatform {
+				t.Errorf("PathwaysInstanceType = %q, want %q", opts.PathwaysInstanceType, tc.wantPlatform)
+			}
+		})
+	}
+}
+
+func TestSharedReservationManifestGeneration(t *testing.T) {
+	orc := NewGKEOrchestrator()
+	orc.projectID = "my-consumer-project"
+	orc.clusterDesc = gkeCluster{
+		Locations: []string{"us-central1-a"},
+	}
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{
+		"nvidia.com/gpu": 100,
+	}
+	// Mock machine capabilities fetcher to avoid actual API calls
+	orc.machineCapCache = map[string]MachineTypeCap{
+		"a3-highgpu-8g:us-central1-a": {
+			GuestCpus: 208,
+			MemoryMb:  1884160,
+			Accelerators: []struct {
+				Count int    `json:"guestAcceleratorCount"`
+				Type  string `json:"guestAcceleratorType"`
+			}{
+				{Count: 8, Type: "nvidia-h100-80gb"},
+			},
+		},
+	}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:       "shared-res-job",
+		MachineType:        "a3-highgpu-8g",
+		ComputeType:        "a3-highgpu-8g",
+		ClusterLocation:    "us-central1-a",
+		GKENAPProvisioning: "reservation",
+		GKENAPReservation:  "projects/my-owner-project/reservations/my-shared-res",
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Verify that the manifest contains the correct node selector labels
+	expectedLabels := []string{
+		"cloud.google.com/reservation-name: my-shared-res",
+		"cloud.google.com/reservation-project: my-owner-project",
+		"cloud.google.com/reservation-affinity: specific",
+	}
+
+	for _, label := range expectedLabels {
+		if !strings.Contains(manifest, label) {
+			t.Errorf("Expected manifest to contain nodeSelector label %q, but it was missing.\nManifest:\n%s", label, manifest)
+		}
+	}
+}
+
+func TestSharedReservationSubblockManifestGeneration(t *testing.T) {
+	orc := NewGKEOrchestrator()
+	orc.projectID = "my-consumer-project"
+	orc.clusterDesc = gkeCluster{
+		Locations: []string{"us-central1-a"},
+	}
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{
+		"nvidia.com/gpu": 100,
+	}
+	// Mock machine capabilities fetcher to avoid actual API calls
+	orc.machineCapCache = map[string]MachineTypeCap{
+		"a3-highgpu-8g:us-central1-a": {
+			GuestCpus: 208,
+			MemoryMb:  1884160,
+			Accelerators: []struct {
+				Count int    `json:"guestAcceleratorCount"`
+				Type  string `json:"guestAcceleratorType"`
+			}{
+				{Count: 8, Type: "nvidia-h100-80gb"},
+			},
+		},
+	}
+
+	job := orchestrator.JobDefinition{
+		WorkloadName:       "shared-res-subblock-job",
+		MachineType:        "a3-highgpu-8g",
+		ComputeType:        "a3-highgpu-8g",
+		ClusterLocation:    "us-central1-a",
+		GKENAPProvisioning: "reservation",
+		GKENAPReservation:  "projects/my-owner-project/reservations/my-shared-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
+	}
+
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+
+	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+
+	// Verify that the manifest contains the correct node selector labels, including subblock
+	expectedLabels := []string{
+		"cloud.google.com/reservation-name: my-shared-res",
+		"cloud.google.com/reservation-project: my-owner-project",
+		"cloud.google.com/reservation-blocks: block-1",
+		"cloud.google.com/reservation-subblocks: subblock-2",
+		"cloud.google.com/reservation-affinity: specific",
+	}
+
+	for _, label := range expectedLabels {
+		if !strings.Contains(manifest, label) {
+			t.Errorf("Expected manifest to contain nodeSelector label %q, but it was missing.\nManifest:\n%s", label, manifest)
+		}
+	}
+}
+func TestGetJobLogs(t *testing.T) {
+	jobName := "test-job"
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		desc               string
+		mainOnly           *bool
+		mockGetPods1Stdout string // response for total count check
+		mockGetPods2Stdout string // response for filtered count check
+		expectedCmdLogsKey string
+		expectErrorContain string
+	}{
+		{
+			desc:               "explicit MainOnly=true uses coordinator-only selector (1 pod, succeeds)",
+			mainOnly:           &trueVal,
+			mockGetPods2Stdout: "pod-main-0-0\n",
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "explicit MainOnly=false with pods <= 10 uses all-job selector (succeeds)",
+			mainOnly:           &falseVal,
+			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "explicit MainOnly=false with pods > 10 fails proactively with Console URL",
+			mainOnly:           &falseVal,
+			mockGetPods2Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\npod-9\npod-10\npod-11\npod-12\n", // 12 pods
+			expectErrorContain: "exceeds the max fetch limit (10). Please view logs directly in the Google Cloud Console",
+		},
+		{
+			desc:               "implicit MainOnly (nil) with pods <= 5 defaults to all pods (succeeds)",
+			mainOnly:           nil,
+			mockGetPods1Stdout: "pod-1\npod-2\n", // 2 pods (total)
+			mockGetPods2Stdout: "pod-1\npod-2\n", // 2 pods (filtered)
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=10",
+		},
+		{
+			desc:               "implicit MainOnly (nil) with pods > 5 defaults to coordinator-only (succeeds)",
+			mainOnly:           nil,
+			mockGetPods1Stdout: "pod-1\npod-2\npod-3\npod-4\npod-5\npod-6\npod-7\npod-8\n", // 8 pods total
+			mockGetPods2Stdout: "pod-main-0-0\n",                                           // 1 pod coordinator
+			expectedCmdLogsKey: "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --all-containers --max-log-requests=10",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			totalQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+			filteredQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0 --no-headers"
+			if tc.mainOnly != nil && !*tc.mainOnly {
+				filteredQuery = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job --no-headers"
+			}
+
+			mockResponses := map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0, Stdout: ""}},
+				"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			}
+			if totalQuery == filteredQuery {
+				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
+			} else {
+				mockResponses[totalQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods1Stdout}, {ExitCode: 0, Stdout: tc.mockGetPods1Stdout}}
+				mockResponses[filteredQuery] = []shell.CommandResult{{ExitCode: 0, Stdout: tc.mockGetPods2Stdout}}
+			}
+			if tc.expectedCmdLogsKey != "" {
+				mockResponses[tc.expectedCmdLogsKey] = []shell.CommandResult{{ExitCode: 0, Stdout: "mock-logs-content"}}
+			}
+
+			mockExec := NewMockExecutor(mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeClient = &MockKubeClient{Namespace: "default"}
+
+			opts := orchestrator.LogsOptions{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				Follow:          false,
+				MainOnly:        tc.mainOnly,
+			}
+
+			logs, err := orc.GetJobLogs(jobName, opts)
+
+			if tc.expectErrorContain != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.expectErrorContain)
+				}
+				if !strings.Contains(err.Error(), tc.expectErrorContain) {
+					t.Errorf("error %q does not contain %q", err.Error(), tc.expectErrorContain)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("GetJobLogs failed: %v", err)
+			}
+
+			if logs != "mock-logs-content" {
+				t.Errorf("expected logs %q, got %q", "mock-logs-content", logs)
+			}
+
+			if mockExec.callCount[tc.expectedCmdLogsKey] != 1 {
+				t.Errorf("expected command %q to be called exactly once, call count: %d", tc.expectedCmdLogsKey, mockExec.callCount[tc.expectedCmdLogsKey])
+			}
+		})
+
+	}
+}
+
+func TestGeneratePathwaysManifest_Headless(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-headless-test",
+		NumSlices:       1,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			Headless:         true,
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedSubstrs := []string{
+		"name: pathways-headless-test",
+		"image: proxy:latest",
+		"image: server:latest",
+		"--gcs_scratch_location=gs://my-bucket",
+		"cloud.google.com/gke-nodepool: pathways-np",
+	}
+
+	for _, substr := range expectedSubstrs {
+		if !strings.Contains(manifest, substr) {
+			t.Errorf("manifest missing expected substring %q", substr)
+		}
+	}
+
+	// In headless mode, the workload-container must NOT be present.
+	if strings.Contains(manifest, "workload-container") {
+		t.Errorf("manifest contains 'workload-container', which is unexpected in headless mode")
+	}
+
+	// In headless mode, the command template block must NOT be present.
+	if strings.Contains(manifest, "JAX_PLATFORMS") || strings.Contains(manifest, "kill -SIGTERM") {
+		t.Errorf("manifest contains workload command envs/traps, which is unexpected in headless mode")
+	}
+}
+
+func TestProcessNodePoolCapacity_FlavorsAndLabels(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name                 string
+		np                   gkeJobNodePool
+		resolvedHeadNodePool string
+		mockResponses        map[string][]shell.CommandResult
+		wantFlavor           string
+		wantLabels           map[string]string
+		wantErr              bool
+	}{
+		{
+			name: "CPU Pool (Non-head)",
+			np: gkeJobNodePool{
+				Name:             "cpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				InitialNodeCount: 1,
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "cpu-np",
+			},
+			wantErr: false,
+		},
+		{
+			name: "CPU Pool (Head)",
+			np: gkeJobNodePool{
+				Name:             "cpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				InitialNodeCount: 1,
+			},
+			resolvedHeadNodePool: "cpu-np",
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "pathways-flavor",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "cpu-np",
+			},
+			wantErr: false,
+		},
+		{
+			name: "TPU Pool with Topology",
+			np: gkeJobNodePool{
+				Name:             "tpu-np",
+				Config:           gkeNodePoolConfig{MachineType: "ct5lp-hightpu-4t"},
+				InitialNodeCount: 1,
+				PlacementPolicy: &gkePlacementPolicy{
+					TpuTopology: "2x2",
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe ct5lp-hightpu-4t --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 16, "memoryMb": 64000, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v5-lite-podslice"}]}`},
+				},
+			},
+			wantFlavor: "flavor-tpu-v5-lite-podslice",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-tpu-accelerator": "tpu-v5-lite-podslice",
+			},
+			wantErr: false,
+		},
+		{
+			name: "System Pool (Tainted)",
+			np: gkeJobNodePool{
+				Name:             "system-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints: []gkeTaint{
+						{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"},
+					},
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{}, // Should NOT have gke-nodepool label
+			wantErr:    false,
+		},
+		{
+			name: "System Pool (Named system) - No taints, treated as workload pool",
+			np: gkeJobNodePool{
+				Name:             "system",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+				},
+			},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute machine-types describe n2-standard-8 --zone=us-central1-a --format=json": {
+					{ExitCode: 0, Stdout: `{"guestCpus": 8, "memoryMb": 32768}`},
+				},
+			},
+			wantFlavor: "flavor-default",
+			wantLabels: map[string]string{
+				"cloud.google.com/gke-nodepool": "system",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			orc := newTestGKEOrchestrator(mockExecutor)
+			orc.projectID = "mock-project"
+			orc.resolvedHeadNodePool = tt.resolvedHeadNodePool
+
+			_, _, _, _, flavor, labels, _, err := orc.processNodePoolCapacity(tt.np, "us-central1-a")
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, but got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if flavor != tt.wantFlavor {
+				t.Errorf("flavor = %q, want %q", flavor, tt.wantFlavor)
+			}
+
+			if len(labels) != len(tt.wantLabels) {
+				t.Errorf("labels len = %d, want %d (labels: %+v)", len(labels), len(tt.wantLabels), labels)
+			}
+			for k, v := range tt.wantLabels {
+				if labels[k] != v {
+					t.Errorf("label %q = %q, want %q", k, labels[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_CommandWithQuotes(t *testing.T) {
+	setupMockMachineConfig(t)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pathways-test",
+		CommandToRun:    `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`,
+		NumSlices:       1,
+		ClusterLocation: "us-central1",
+		ComputeType:     "n2-standard-2",
+		Pathways: orchestrator.PathwaysJobDefinition{
+			ProxyServerImage: "proxy:latest",
+			ServerImage:      "server:latest",
+			WorkerImage:      "worker:latest",
+			GCSLocation:      "gs://my-bucket",
+			HeadNodePool:     "pathways-np",
+		},
+	}
+
+	mockResponses := map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
+	}
+	mockExec := NewMockExecutor(mockResponses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	profile, isDynamicSlicing, isStaticSlicing, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "test-image:latest", profile, isDynamicSlicing, isStaticSlicing)
+	if err != nil {
+		t.Fatalf("generatePathwaysManifest failed: %v", err)
+	}
+
+	expectedCommand := `pip install pathwaysutils && python -c 'import pathwaysutils; pathwaysutils.initialize(); import jax; print("JAX Device count:", jax.device_count())'`
+	if !strings.Contains(manifest, expectedCommand) {
+		t.Errorf("manifest does not contain expected command exactly.\nExpected to find: %q\nManifest: %s", expectedCommand, manifest)
+	}
+}
+
+func TestDefaultKubeClient_GetCurrentNamespace(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tempDir, "kubeconfig")
+
+	kubeconfigContent := `
+apiVersion: v1
+kind: Config
+preferences: {}
+current-context: ""
+clusters:
+- cluster:
+    server: https://1.2.3.4
+  name: gke_test-project_us-central1-a_test-cluster
+- cluster:
+    server: https://1.2.3.5
+  name: gke_test-project_us-central1-a_test-cluster-no-ns
+- cluster:
+    server: https://1.2.3.6
+  name: test-cluster
+contexts:
+- context:
+    cluster: gke_test-project_us-central1-a_test-cluster
+    namespace: custom-ns
+  name: gke_test-project_us-central1-a_test-cluster
+- context:
+    cluster: gke_test-project_us-central1-a_test-cluster-no-ns
+  name: gke_test-project_us-central1-a_test-cluster-no-ns
+- context:
+    cluster: test-cluster
+    namespace: fallback-ns
+  name: test-cluster
+- context:
+    cluster: test-cluster-fallback-cluster
+    namespace: fallback-ns-by-cluster
+  name: random-context-name
+- context:
+    cluster: other-cluster
+    namespace: other-ns
+  name: other-context
+users: []
+`
+	if err := os.WriteFile(kubeconfigPath, []byte(kubeconfigContent), 0644); err != nil {
+		t.Fatalf("Failed to write temp kubeconfig: %v", err)
+	}
+
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	client := &DefaultKubeClient{}
+
+	tests := []struct {
+		desc       string
+		cluster    string
+		location   string
+		project    string
+		wantNS     string
+		wantErr    bool
+		wantErrStr string
+	}{
+		{
+			desc:     "standard context exists with custom namespace",
+			cluster:  "test-cluster",
+			location: "us-central1-a",
+			project:  "test-project",
+			wantNS:   "custom-ns",
+		},
+		{
+			desc:     "standard context exists without namespace (returns default)",
+			cluster:  "test-cluster-no-ns",
+			location: "us-central1-a",
+			project:  "test-project",
+			wantNS:   "default",
+		},
+		{
+			desc:     "fallback by context name matching cluster name",
+			cluster:  "test-cluster",
+			location: "us-central1-b", // different location so standard doesn't match
+			project:  "test-project",
+			wantNS:   "fallback-ns",
+		},
+		{
+			desc:     "fallback by cluster name matching",
+			cluster:  "test-cluster-fallback-cluster",
+			location: "us-central1-b",
+			project:  "test-project",
+			wantNS:   "fallback-ns-by-cluster",
+		},
+		{
+			desc:       "no matching context",
+			cluster:    "non-existent",
+			location:   "us-central1-a",
+			project:    "test-project",
+			wantErr:    true,
+			wantErrStr: "no matching context found",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			ns, err := client.GetCurrentNamespace(tc.cluster, tc.location, tc.project)
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				} else if !strings.Contains(err.Error(), tc.wantErrStr) {
+					t.Errorf("expected error containing %q, got %q", tc.wantErrStr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if ns != tc.wantNS {
+					t.Errorf("expected namespace %q, got %q", tc.wantNS, ns)
 				}
 			}
 		})

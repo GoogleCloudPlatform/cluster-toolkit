@@ -338,50 +338,102 @@ func TestResolveTolerationsDoesNotMutateSharedArray(t *testing.T) {
 	}
 }
 
-func TestExtractShortReservationName(t *testing.T) {
+func TestParseReservationURI(t *testing.T) {
 	tests := []struct {
 		input string
-		want  string
+		want  parsedReservation
 	}{
 		{
 			input: "my-res",
-			want:  "my-res",
+			want: parsedReservation{
+				Name: "my-res",
+			},
 		},
 		{
 			input: "projects/my-project/reservations/my-res",
-			want:  "my-res",
+			want: parsedReservation{
+				Project: "my-project",
+				Name:    "my-res",
+			},
 		},
 		{
 			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
-			want:  "my-res",
+			want: parsedReservation{
+				Project:  "my-project",
+				Name:     "my-res",
+				Block:    "block-1",
+				Subblock: "subblock-2",
+			},
 		},
 		{
 			input: "my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2",
-			want:  "my-res",
+			want: parsedReservation{
+				Name:     "my-res",
+				Block:    "block-1",
+				Subblock: "subblock-2",
+			},
 		},
 		{
 			input: "nvidia-gb300-1elqwl23xva0f/reservationBlocks/nvidia-gb300-1elqwl23xva0f-block-0001/reservationSubBlocks/nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
-			want:  "nvidia-gb300-1elqwl23xva0f",
+			want: parsedReservation{
+				Name:     "nvidia-gb300-1elqwl23xva0f",
+				Block:    "nvidia-gb300-1elqwl23xva0f-block-0001",
+				Subblock: "nvidia-gb300-1elqwl23xva0f-block-0001-subblock-0002",
+			},
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1/reservationSubBlocks/subblock-2/",
+			want: parsedReservation{
+				Project:  "my-project",
+				Name:     "my-res",
+				Block:    "block-1",
+				Subblock: "subblock-2",
+			},
+		},
+		{
+			input: "projects/my-project/reservations/my-res/reservationBlocks/block-1",
+			want: parsedReservation{
+				Project: "my-project",
+				Name:    "my-res",
+				Block:   "block-1",
+			},
+		},
+		{
+			input: "projects/123456789/reservations/my-res",
+			want: parsedReservation{
+				Project: "123456789",
+				Name:    "my-res",
+			},
+		},
+		{
+			input: "https://www.googleapis.com/compute/v1/projects/my-project/zones/us-central1-a/reservations/my-res",
+			want: parsedReservation{
+				Project: "my-project",
+				Name:    "my-res",
+			},
 		},
 		{
 			input: "folders/my-folder/my-res",
-			want:  "my-res",
+			want: parsedReservation{
+				Name: "my-res",
+			},
 		},
 		{
-			input: "my-res/",
-			want:  "my-res",
-		},
-		{
-			input: "projects/my-project/reservations/my-res/",
-			want:  "my-res",
+			input: "projects/My-Project/reservations/My-Res/reservationBlocks/Block-1/reservationSubBlocks/Subblock-2",
+			want: parsedReservation{
+				Project:  "my-project",
+				Name:     "my-res",
+				Block:    "block-1",
+				Subblock: "subblock-2",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := extractShortReservationName(tt.input)
+			got := parseReservationURI(tt.input)
 			if got != tt.want {
-				t.Errorf("extractShortReservationName(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("parseReservationURI(%q) = %+v, want %+v", tt.input, got, tt.want)
 			}
 		})
 	}

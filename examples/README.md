@@ -63,10 +63,14 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-kms.yaml](#hpc-slurm-kmsyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
+  * [gke-tpu-v4](#gke-tpu-v4-) ![core-badge]
+  * [gke-tpu-v5e](#gke-tpu-v5e-) ![core-badge]
+  * [gke-tpu-v5p](#gke-tpu-v5p-) ![core-badge]
   * [gke-tpu-v6e](#gke-tpu-v6e-) ![core-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
+  * [gke-g4-confidential](#gke-g4-confidential-) ![core-badge]
   * [gke-a4](#gke-a4-) ![core-badge]
   * [gke-a4x](#gke-a4x-) ![core-badge]
   * [gke-a4x-max-bm](#gke-a4x-max-bm-) ![core-badge]
@@ -1635,6 +1639,18 @@ deployment_groups:
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
+### [gke-tpu-v4] ![core-badge]
+This example shows how a TPU v4 cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v4/README.md).
+[gke-tpu-v4]: ../examples/gke-tpu-v4
+
+### [gke-tpu-v5e] ![core-badge]
+This example shows how a TPU v5e cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5e/README.md).
+[gke-tpu-v5e]: ../examples/gke-tpu-v5e
+
+### [gke-tpu-v5p] ![core-badge]
+This example shows how a TPU v5p cluster can be created and used to run a job that requires TPU capacity on GKE. Additional information on this TPU blueprint and associated workloads is in this [README](/examples/gke-tpu-v5p/README.md).
+[gke-tpu-v5p]: ../examples/gke-tpu-v5p
+
 ### [gke-tpu-v6e] ![core-badge]
 
 This example shows how TPU v6e cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/examples/gke-tpu-v6e/README.md).
@@ -1698,6 +1714,12 @@ This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, a
 This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
 
 [gke-g4]: ../examples/gke-g4
+
+### [gke-g4-confidential] ![core-badge]
+
+This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk encryption for all node pools and supports dynamic Persistent Volumes encrypted with Customer-Managed Encryption Keys (CMEK) via GKE Confidential Storage. The deployment and verification instructions can be found in the [README](/examples/gke-g4-confidential/README.md).
+
+[gke-g4-confidential]: ../examples/gke-g4-confidential
 
 ### [gke-a4] ![core-badge]
 

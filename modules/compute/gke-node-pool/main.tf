@@ -59,6 +59,23 @@ locals {
   is_dataplane_v2_enabled = data.google_container_cluster.gke_cluster.datapath_provider == "ADVANCED_DATAPATH"
   enable_dranet_actual    = var.enable_dranet != null ? var.enable_dranet : (local.is_accelerator && local.is_dranet_supported_machine && local.is_dranet_compatible && length(var.additional_networks) == 0 && local.is_dataplane_v2_enabled)
 
+  is_mellanox_rdma_machine = (
+    var.machine_type == "a3-ultragpu-8g" ||
+    startswith(var.machine_type, "a4-") ||
+    startswith(var.machine_type, "a4x-")
+  )
+
+  dranet_device_class_name_default = local.is_mellanox_rdma_machine ? "mrdma.google.com" : "netdev.google.com"
+  dranet_device_class_name_actual  = coalesce(var.dranet_device_class_name, local.dranet_device_class_name_default)
+
+  dranet_template_names = {
+    "mrdma.google.com"  = "default-rdma"
+    "netdev.google.com" = "default-netdev"
+  }
+  dranet_template_name_actual = lookup(local.dranet_template_names, local.dranet_device_class_name_actual, "default-dranet-${replace(local.dranet_device_class_name_actual, ".", "-")}")
+  dranet_device_count_actual  = var.dranet_device_count != null ? var.dranet_device_count : 1
+
+
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
@@ -106,6 +123,7 @@ resource "google_container_node_pool" "node_pool" {
   name           = (max(var.num_node_pools, var.num_slices) == 1) ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
+  version        = var.gke_version
 
   node_count = var.static_node_count
   # Per-zone limits (min_node_count/max_node_count) are required to workaround a
@@ -153,17 +171,20 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb     = var.disk_size_gb
-    disk_type        = var.disk_type
-    resource_labels  = local.labels
-    labels           = local.kubernetes_labels
-    service_account  = var.service_account_email
-    oauth_scopes     = var.service_account_scopes
-    machine_type     = var.machine_type
-    spot             = var.spot
-    image_type       = var.image_type
-    flex_start       = var.enable_flex_start
-    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    disk_size_gb                = var.disk_size_gb
+    disk_type                   = var.disk_type
+    storage_pools               = (var.disk_storage_pool != null && var.disk_storage_pool != "") ? [var.disk_storage_pool] : null
+    resource_labels             = local.labels
+    labels                      = local.kubernetes_labels
+    service_account             = var.service_account_email
+    oauth_scopes                = var.service_account_scopes
+    machine_type                = var.machine_type
+    spot                        = var.spot
+    image_type                  = var.image_type
+    flex_start                  = var.enable_flex_start
+    max_run_duration            = var.max_run_duration != null ? "${var.max_run_duration}s" : null
+    enable_confidential_storage = var.enable_confidential_storage
+    boot_disk_kms_key           = var.boot_disk_kms_key
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -221,6 +242,15 @@ resource "google_container_node_pool" "node_pool" {
       enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
+
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
+
 
     dynamic "gcfs_config" {
       for_each = var.enable_gcfs ? [1] : []
@@ -317,6 +347,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
       error_message = "var.zones must be explicitly provided when using an extended reservation block."
+    }
+    precondition {
+      condition     = var.disk_storage_pool == null || var.disk_storage_pool == "" || can(regex("^hyperdisk-", lower(var.disk_type)))
+      error_message = "Storage pools are only supported with Hyperdisks. You must specify a valid hyperdisk disk_type."
+    }
+    precondition {
+      condition     = var.disk_type == null || !startswith(lower(var.disk_type), "hyperdisk-") || lower(var.disk_type) == "hyperdisk-balanced"
+      error_message = "When using Hyperdisks for boot disks, only hyperdisk-balanced is supported."
+    }
+    precondition {
+      condition     = var.disk_type == null || lower(var.disk_type) != "hyperdisk-balanced" || var.disk_size_gb == null || var.disk_size_gb >= 4
+      error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
     }
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
@@ -450,13 +492,16 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "When is_reservation_active is set to false, static_node_count, autoscaling_min_node_count, autoscaling_max_node_count, and initial_node_count must all be either null or 0."
     }
     precondition {
-      condition = !(
-        var.enable_flex_start &&
-        try(var.placement_policy.type == "COMPACT", false) &&
-        !module.tpu.is_tpu &&
-        !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type))
-      )
+      condition     = !(var.enable_flex_start && try(var.placement_policy.type == "COMPACT", false) && !module.tpu.is_tpu && !can(regex("^(a3-ultragpu-|a4-|h4d-)", var.machine_type)))
       error_message = "Compact placement with DWS Flex start is only supported for A3 Ultra, A4, and H4D machine types."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.boot_disk_kms_key != null && var.boot_disk_kms_key != "")
+      error_message = "A valid boot_disk_kms_key must be provided when enable_confidential_storage is true to satisfy GKE Confidential Storage requirements."
+    }
+    precondition {
+      condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
+      error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
     }
   }
 }
@@ -537,6 +582,24 @@ module "kubectl_apply" {
   ]) : []
 }
 
+module "dranet_template_apply" {
+  source     = "../../management/kubectl-apply"
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = (local.enable_dranet_actual && var.install_dranet_template) ? [
+    {
+      source = "${path.module}/resource-claim-template.yaml.tftpl"
+      template_vars = {
+        template_name     = local.dranet_template_name_actual
+        device_class_name = local.dranet_device_class_name_actual
+        allocation_mode   = var.dranet_allocation_mode
+        device_count      = local.dranet_device_count_actual
+      }
+    }
+  ] : []
+}
+
 check "dranet_requirements" {
   assert {
     condition     = var.enable_dranet == true ? (local.is_dranet_compatible && local.is_dranet_supported_machine && local.is_dataplane_v2_enabled) : true
@@ -548,5 +611,14 @@ check "dranet_additional_networks_conflict" {
   assert {
     condition     = var.enable_dranet == true ? length(var.additional_networks) == 0 : true
     error_message = "DRANET automatically configures networks. additional_networks must not be provided when enable_dranet is set to true."
+  }
+}
+
+resource "terraform_data" "validate_dranet_allocation" {
+  lifecycle {
+    precondition {
+      condition     = var.dranet_allocation_mode == "ExactCount" ? var.dranet_device_count != null : true
+      error_message = "dranet_device_count must be set if dranet_allocation_mode is 'ExactCount'."
+    }
   }
 }

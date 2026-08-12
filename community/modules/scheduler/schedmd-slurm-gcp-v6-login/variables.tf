@@ -387,7 +387,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-12-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
     project = "schedmd-slurm-public"
   }
 
@@ -438,4 +438,10 @@ variable "tags" {
 variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
+}
+
+variable "startup_script" {
+  description = "Startup script used by the login VMs."
+  type        = string
+  default     = "# no-op"
 }

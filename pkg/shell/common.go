@@ -160,7 +160,7 @@ func CheckWritableDir(path string) error {
 	if path == "" {
 		return nil
 	}
-	if isDir, isWritable := DirInfo(path); !(isDir && isWritable) {
+	if isDir, isWritable := DirInfo(path); !isDir || !isWritable {
 		return fmt.Errorf("%s must be a writable directory", path)
 	}
 	return nil

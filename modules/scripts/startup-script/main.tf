@@ -184,12 +184,24 @@ locals {
   ])
 
   install_ansible = coalesce(var.install_ansible, local.has_ansible_runners)
-  ansible_installer = local.install_ansible ? [{
-    type        = "shell"
-    source      = "${path.module}/files/install_ansible.sh"
-    destination = "install_ansible_automatic.sh"
-    args        = var.ansible_virtualenv_path
-  }] : []
+  ansible_installer = local.install_ansible ? [
+    {
+      type        = "file"
+      source      = "${path.module}/files/build-tools.txt"
+      destination = "build-tools.txt"
+    },
+    {
+      type        = "file"
+      source      = "${path.module}/files/install_ansible_requirements.txt"
+      destination = "install_ansible_requirements.txt"
+    },
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_ansible.sh"
+      destination = "install_ansible_automatic.sh"
+      args        = var.ansible_virtualenv_path
+    }
+  ] : []
 
   hotfix_runner = [{
     type        = "shell"

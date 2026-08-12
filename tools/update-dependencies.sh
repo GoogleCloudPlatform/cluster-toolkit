@@ -18,7 +18,7 @@
 set -euo pipefail
 
 TERRAFORM_VERSION="1.12.2"
-PACKER_VERSION="1.15.0"
+PACKER_VERSION="1.15.3"
 OUTPUT_FILE="pkg/dependencies/checksums_generated.go"
 
 mkdir -p "$(dirname "$OUTPUT_FILE")"

@@ -68,7 +68,7 @@ func TestSubmitCmd_PathwaysDryRun(t *testing.T) {
 	}
 
 	// Reset flags before each test
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -143,7 +143,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 
 	// Reset flags before each test
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -181,7 +181,7 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 }
 
 func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -221,7 +221,7 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 }
 
 func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -252,7 +252,7 @@ func TestSubmitCmd_LongWorkloadName_Fails(t *testing.T) {
 	}
 }
 
-func resetSubmitCmdFlags() {
+func setupSubmitTestEnv(t *testing.T) {
 	imageName = ""
 	baseImage = ""
 	buildContext = ""
@@ -278,16 +278,40 @@ func resetSubmitCmdFlags() {
 	topology = ""
 	gkeScheduler = ""
 	platform = "linux/amd64"
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 	awaitJobCompletion = false
-	priorityClassName = "medium"
+	priority = "medium"
 	isPathwaysJob = false
 	pathways = orchestrator.PathwaysJobDefinition{MaxSliceRestarts: 1}
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
+	envVars = nil
+	pathwaysProxyEnv = nil
+	pathwaysServerEnv = nil
+	pathwaysWorkerEnv = nil
+
+	oldFactory := gkeOrchestratorFactory
+	defer t.Cleanup(func() {
+		gkeOrchestratorFactory = oldFactory
+	})
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+	gkeMtcEnabled = false
+	gkeMtcRamdiskDirectory = ""
 }
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
+	initializeFunc func(string, string, string) (string, error)
+}
+
+func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	if m.initializeFunc != nil {
+		return m.initializeFunc(clusterName, location, projectID)
+	}
+	return location, nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
@@ -344,7 +368,7 @@ func TestParseDurationToSeconds(t *testing.T) {
 }
 
 func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	origRepo := os.Getenv("GCLUSTER_IMAGE_REPO")
 	os.Setenv("GCLUSTER_IMAGE_REPO", "")
@@ -382,7 +406,7 @@ func TestSubmitCmd_MissingRepoEnvVar(t *testing.T) {
 }
 
 func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	origUser := os.Getenv("USER")
 	origUsername := os.Getenv("USERNAME")
@@ -427,7 +451,7 @@ func TestSubmitCmd_MissingUserEnvVar(t *testing.T) {
 }
 
 func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -467,7 +491,7 @@ func TestSubmitCmd_InvalidGKENAPProvisioning(t *testing.T) {
 }
 
 func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -507,7 +531,7 @@ func TestSubmitCmd_ReservationModelWithoutName_Fails(t *testing.T) {
 }
 
 func TestSubmitCmd_NonReservationModelWithName_Fails(t *testing.T) {
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -570,7 +594,7 @@ func TestSubmitCmd_DryRunMissingDir_Approved(t *testing.T) {
 	defer func() { shell.PromptYesNo = oldPrompt }()
 	shell.PromptYesNo = func(prompt string) bool { return true }
 
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	_, err = executeCommand(JobCmd,
 		"submit",
@@ -620,7 +644,7 @@ func TestSubmitCmd_DryRunMissingDir_Rejected(t *testing.T) {
 	defer func() { shell.PromptYesNo = oldPrompt }()
 	shell.PromptYesNo = func(prompt string) bool { return false }
 
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	output, err := executeCommand(JobCmd,
 		"submit",
@@ -659,7 +683,7 @@ func TestSubmitCmd_DryRunIsDir_Existing(t *testing.T) {
 	defer func() { store = oldStore }()
 	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	_, err = executeCommand(JobCmd,
 		"submit",
@@ -688,7 +712,7 @@ func TestSubmitCmd_DryRunIsDir_TrailingSlash(t *testing.T) {
 	defer func() { store = oldStore }()
 	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
-	resetSubmitCmdFlags()
+	setupSubmitTestEnv(t)
 
 	_, err := executeCommand(JobCmd,
 		"submit",
@@ -709,5 +733,337 @@ func TestSubmitCmd_DryRunIsDir_TrailingSlash(t *testing.T) {
 	expectedErr := "must be a file path, not a directory path"
 	if !strings.Contains(err.Error(), expectedErr) {
 		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_ValidEnvVars(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--env", "MY_VAR=value",
+		"--env", "ANOTHER_VAR=foo=bar", // handles multiple '='
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_InvalidEnvFormat_Fails(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--env", "INVALID_ENV",
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "invalid environment variable format"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_PathwaysEnv_Success(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-gcs-location", "gs://foo",
+		"--name", "pathways-env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--pathways-proxy-env", "PROXY_VAR=value",
+		"--pathways-server-env", "SERVER_VAR=foo=bar",
+		"--pathways-worker-env", "WORKER_VAR=baz",
+	)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmitCmd_PathwaysEnv_InvalidFormat_Fails(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp: time.Now(),
+			LastCheckedProjectID: "test-project",
+			GCloudSDKInstalled:   true,
+			GCloudAuthenticated:  true,
+			ADCConfigured:        true,
+			KubectlInstalled:     true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-gcs-location", "gs://foo",
+		"--name", "pathways-env-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--compute-type", "n2-standard-4",
+		"--cluster", "test-cluster",
+		"--location", "test-location",
+		"--project", "test-project",
+		"--pathways-server-env", "INVALID_ENV",
+	)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	expectedErr := "invalid environment variable format"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("expected error containing %q, got: %v", expectedErr, err)
+	}
+}
+
+func TestSubmitCmd_InvalidEnvKey_Fails(t *testing.T) {
+	tests := []struct {
+		name        string
+		env         string
+		expectedErr string
+	}{
+		{
+			name:        "Starts with digit",
+			env:         "1VAR=value",
+			expectedErr: "invalid environment variable name",
+		},
+		{
+			name:        "Empty key",
+			env:         "=value",
+			expectedErr: "invalid environment variable key",
+		},
+		{
+			name:        "Special characters in key",
+			env:         "MY-VAR=value",
+			expectedErr: "invalid environment variable name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldStore := store
+			defer func() { store = oldStore }()
+			store = &MockPrereqStore{
+				State: PrereqState{
+					LastCheckedTimestamp: time.Now(),
+					LastCheckedProjectID: "test-project",
+					GCloudSDKInstalled:   true,
+					GCloudAuthenticated:  true,
+					ADCConfigured:        true,
+					KubectlInstalled:     true,
+				},
+			}
+
+			setupSubmitTestEnv(t)
+
+			_, err := executeCommand(JobCmd,
+				"submit",
+				"--name", "env-test",
+				"--image", "busybox",
+				"--command", "echo hello",
+				"--compute-type", "n2-standard-4",
+				"--cluster", "test-cluster",
+				"--location", "test-location",
+				"--project", "test-project",
+				"--env", tt.env,
+			)
+
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+
+			if !strings.Contains(err.Error(), tt.expectedErr) {
+				t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_PathwaysMTCFlags(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--name", "pathways-mtc-cli-test",
+		"--image", "busybox",
+		"--command", "echo hello",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--pathways-gcs-location", "gs://my-bucket",
+		"--compute-type", "n2-standard-4",
+		"--gke-mtc-enabled",
+		"--gke-mtc-ramdisk-dir", "/tmp/custom_mtc_dir",
+	)
+
+	if err != nil {
+		t.Fatalf("command failed with error: %v", err)
+	}
+
+	if !gkeMtcEnabled {
+		t.Errorf("expected gkeMtcEnabled to be true")
+	}
+
+	if gkeMtcRamdiskDirectory != "/tmp/custom_mtc_dir" {
+		t.Errorf("expected gkeMtcRamdiskDirectory to be /tmp/custom_mtc_dir, got %s", gkeMtcRamdiskDirectory)
+	}
+
+}
+
+func TestSubmitCmd_PathwaysHeadless(t *testing.T) {
+	oldStore := store
+	defer func() { store = oldStore }()
+	store = &MockPrereqStore{
+		State: PrereqState{
+			LastCheckedTimestamp:         time.Now(),
+			LastCheckedProjectID:         "test-project",
+			GCloudSDKInstalled:           true,
+			GCloudAuthenticated:          true,
+			ADCConfigured:                true,
+			KubectlInstalled:             true,
+			GKEGCloudAuthPluginInstalled: true,
+			DockerCredsConfigured:        true,
+		},
+	}
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return &mockOrchestrator{}
+	}
+
+	setupSubmitTestEnv(t)
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--pathways",
+		"--pathways-headless",
+		"--name", "pathways-headless-test",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--pathways-gcs-location", "gs://my-bucket",
+		"--compute-type", "n2-standard-4",
+	)
+
+	if err != nil {
+		t.Fatalf("command failed with error: %v", err)
+	}
+
+	if !pathways.Headless {
+		t.Errorf("expected pathways.Headless to be true")
 	}
 }

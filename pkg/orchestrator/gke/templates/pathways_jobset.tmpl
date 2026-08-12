@@ -5,7 +5,10 @@ metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
     kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
+  annotations:
+    jobset.sigs.k8s.io/hack: "true"
 spec:
+  suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   network:
     enableDNSHostnames: true
@@ -22,7 +25,7 @@ spec:
 {{- end }}
   failurePolicy:
     maxRestarts: {{.MaxRestarts}}
-    restartStrategy: Recreate
+    restartStrategy: BlockingRecreate
     rules:
       - action: FailJobSet
         onJobFailureReasons:
@@ -41,12 +44,13 @@ spec:
         backoffLimit: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
-{{- if .GCSFuseEnabled }}
             annotations:
+              kueue.x-k8s.io/safe-to-forcefully-delete: "true"
+{{- if .GCSFuseEnabled }}
               gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
@@ -55,12 +59,15 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
             restartPolicy: Never
+{{- if .PriorityClassName }}
+            priorityClassName: {{.PriorityClassName}}
+{{- end }}
 {{- if .ServiceAccountName }}
             serviceAccountName: {{.ServiceAccountName}}
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if not .Pathways.Headless}}
             initContainers:
@@ -69,17 +76,29 @@ spec:
 {{- end }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29000
               args:
               - --server_port=29000
               - --resource_manager_address=$(PATHWAYS_HEAD):29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
               {{- if gt .Pathways.ElasticSlices 0}}
               - --num_elastic_slices={{.Pathways.ElasticSlices}}
               {{- end}}
               {{- range .ProxyArgsList }}
               - {{.}}
+              {{- end }}
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysProxyEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
               {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
@@ -90,15 +109,16 @@ spec:
                   memory: "100Gi"
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29001
               - containerPort: 29002
               args:
               - --server_port=29001
-              - --gcs_scratch_location={{.Pathways.GCSLocation}}
+              - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
               - --node_type=resource_manager
               - --instance_count={{.NumSlices}}
-              - --instance_type={{.PathwaysInstanceType}}
+              - "--instance_type={{.PathwaysInstanceType}}"
               {{- range .ServerArgsList }}
               - {{.}}
               {{- end }}
@@ -117,6 +137,12 @@ spec:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
               - name: TPU_SKIP_MDS_QUERY
                 value: "true"
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysServerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               {{- if not .Pathways.Headless}}
               restartPolicy: Always
               {{- end }}
@@ -124,57 +150,103 @@ spec:
                 limits:
                   cpu: "8"
                   memory: "32Gi"
-              volumeMounts:
-              - mountPath: /tmp
-                name: shared-tmp
             {{- if not .Pathways.Headless}}
             containers:
             - name: workload-container
               image: {{.FullImageName}}
+              imagePullPolicy: Always
+              securityContext:
+                privileged: true
+              resources:
+                limits:
+                  cpu: "24"
+                  memory: "100Gi"
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              - name: JAX_PLATFORMS
+                value: proxy
+              - name: XCLOUD_ENVIRONMENT
+                value: GCP
+              - name: JAX_BACKEND_TARGET
+                value: grpc://$(PATHWAYS_HEAD):29000
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.Env }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
               command:
               - "/bin/bash"
               - "-c"
               - |
-                {{.CommandToRun}}
-{{- if .VolumeMountsYAML }}
+                echo "GCluster Start: $(date)"
+                _sigterm() {
+                  if [ -n "$PID" ]; then
+                    kill -SIGTERM $PID 2>/dev/null
+                    wait $PID
+                  fi
+                  exit 143
+                }
+                trap _sigterm SIGTERM
+                (
+                  {{.CommandToRun}}
+                ) & PID=$!
+                wait $PID
+                EXIT_CODE=$?
+                echo "GCluster End: $(date)"
+                echo "Exit code: $EXIT_CODE"
+                exit $EXIT_CODE
               volumeMounts:
-{{.VolumeMountsYAML}}
+                - name: shared-tmp
+                  mountPath: /tmp
+{{- if .VolumeMountsYAML }}
+{{(StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
-            {{- if .Pathways.ColocatedPythonSidecarImage}}
-            - name: python-sidecar
-              image: {{.Pathways.ColocatedPythonSidecarImage}}
-            {{- end}}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
-{{.VolumesYAML}}
+              - name: shared-tmp
+                hostPath:
+                  path: /tmp
+                  type: DirectoryOrCreate
+{{- if .VolumesYAML }}
+{{(StructuralData .VolumesYAML)}}
+{{- end }}
   - name: worker
     replicas: {{.NumSlices}}
     template:
+      metadata:
+        annotations:
+          alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool
       spec:
         completionMode: Indexed
         parallelism: {{.NodesPerSlice}}
         completions: {{.NodesPerSlice}}
         backoffLimit: {{.WorkerBackoffLimit}}
+        backoffLimitPerIndex: 4000
+        podReplacementPolicy: Failed
+        maxFailedIndexes: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{.PodFailurePolicy}}
+{{(StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
-{{- if or .TopologyAnnotation .GCSFuseEnabled }}
             annotations:
+                kueue.x-k8s.io/safe-to-forcefully-delete: "true"
+                cloud.google.com/skip-tpu-webhook-check: "true"
 {{- if .TopologyAnnotation }}
-{{.TopologyAnnotation}}
+{{(StructuralData .TopologyAnnotation)}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
-              gke-gcsfuse/volumes: "true"
-{{- end }}
+                gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
             hostNetwork: true
@@ -185,15 +257,45 @@ spec:
 {{- end }}
 {{- if .ImagePullSecrets }}
             imagePullSecrets:
-{{.ImagePullSecrets}}
+{{(StructuralData .ImagePullSecrets)}}
 {{- end }}
 {{- if .PriorityClassName }}
             priorityClassName: {{.PriorityClassName}}
 {{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
+            {{- if .Pathways.ColocatedPythonSidecarImage}}
+            initContainers:
+            - name: colocated-python-sidecar
+              image: {{.Pathways.ColocatedPythonSidecarImage}}
+              imagePullPolicy: Always
+              restartPolicy: Always
+              ports:
+              - containerPort: 50051
+                protocol: TCP
+              resources: {}
+              env:
+              - name: TCMALLOC_RELEASE_RATE
+                value: "10"
+              - name: GRPC_SERVER_ADDRESS
+                value: '0.0.0.0:50051'
+              - name: CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY
+                value: /tmp/sidecar
+              - name: PYTHONUNBUFFERED
+                value: "1"
+              volumeMounts:
+              - name: shared-tmp
+                mountPath: /tmp
+              - name: sidecar-shared-memory
+                mountPath: /tmp/sidecar
+              {{- if .GKEMTCEnabled}}
+              - name: cache
+                mountPath: {{.GKEMTCRamdiskDirectory}}
+              {{- end}}
+            {{- end}}
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
+              imagePullPolicy: Always
               ports:
               - containerPort: 29005
               - containerPort: 29006
@@ -202,7 +304,10 @@ spec:
               args:
                 - --server_port=29005
                 - --resource_manager_address=$(PATHWAYS_HEAD):29001
-                - --gcs_scratch_location={{.Pathways.GCSLocation}}
+                - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
+                {{- if .GKEMTCEnabled}}
+                - --cloud_pathways_sidecar_shm_directory=/tmp/sidecar
+                {{- end}}
                 {{- range .WorkerArgsList }}
                 - {{.}}
                 {{- end }}
@@ -241,25 +346,36 @@ spec:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
-{{.ResourcesString}}
+              - name: ABSL_FLAGS
+                value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- range $.PathwaysWorkerEnv }}
+              - name: {{ .Name }}
+                value: {{ printf "%q" .Value }}
+              {{- end }}
+{{(StructuralData .ResourcesString)}}
               volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
+                - name: shared-tmp
+                  mountPath: /tmp
+{{- if .VolumeMountsYAML }}
+{{(StructuralData .VolumeMountsYAML)}}
+{{- end }}
             volumes:
-            - name: shared-tmp
-              hostPath:
-                path: /tmp
-                type: DirectoryOrCreate
-{{.VolumesYAML}}
+              - name: shared-tmp
+                hostPath:
+                  path: /tmp
+                  type: DirectoryOrCreate
+{{- if .VolumesYAML }}
+{{(StructuralData .VolumesYAML)}}
+{{- end }}
 {{- if .NodeSelector }}
             nodeSelector:
-{{.NodeSelector}}
+{{(StructuralData .NodeSelector)}}
 {{- end }}
 {{- if .Affinity }}
             affinity:
-{{.Affinity}}
+{{(StructuralData .Affinity)}}
 {{- end }}
 {{- if .Tolerations }}
             tolerations:
-{{.Tolerations}}
+{{(StructuralData .Tolerations)}}
 {{- end }}

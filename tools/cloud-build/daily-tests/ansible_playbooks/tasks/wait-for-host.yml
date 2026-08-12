@@ -13,29 +13,35 @@
 # limitations under the License.
 ---
 
+- name: Set backward compatibility facts
+  ansible.builtin.set_fact:
+    _host_to_wait: "{{ host_to_wait | default(host_ip | default('')) }}"
+    _is_private: "{{ is_private | default(false) | bool }}"
+
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - host_ip is defined
+    - _host_to_wait != ""
 
 - name: Wait for firewall to allow port 22 connection
   ansible.builtin.wait_for:
-    host: "{{ host_ip }}"
+    host: "{{ hostvars[_host_to_wait]['ansible_host'] | default(_host_to_wait) if _host_to_wait in hostvars else _host_to_wait }}"
     port: 22
     delay: 60
     timeout: 300
   delegate_to: localhost
   ignore_errors: true
   register: port_out
+  when: not _is_private
 
 - name: Check connection to remote host
   ansible.builtin.wait_for_connection:
     delay: 10
-  delegate_to: "{{ host_ip }}"
+  delegate_to: "{{ _host_to_wait }}"
   ignore_unreachable: true
   register: connect_out
 
 - name: Fail on bad connections
   ansible.builtin.fail:
-    msg: "Failed to connect to remote host {{ host_ip }}"
-  when: port_out is failed or connect_out is failed
+    msg: "Failed to connect to remote host {{ _host_to_wait }}"
+  when: (not _is_private and port_out is failed) or connect_out is failed

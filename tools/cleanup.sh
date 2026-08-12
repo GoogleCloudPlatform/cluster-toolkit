@@ -713,17 +713,32 @@ process_addresses() {
 	local global_addresses
 	if ! global_addresses=$(gcloud compute addresses list --project="$PROJECT_ID" \
 		--filter="creationTimestamp < '$CUTOFF_TIME' AND NOT region:*" \
-		--format="value(name, status, labels.map())" | sort); then
+		--format="value(name, status, network.basename(), purpose, labels.map())" | sort); then
 		log "ERROR" "Failed to list Global Addresses."
 		((ERROR_COUNT++)) || true
 	else
-		while IFS=$'\t' read -r name status labels_str; do
+		while IFS=$'\t' read -r name status network_name purpose labels_str; do
 			[[ -z "$name" ]] && continue
 			if ! is_excluded "$name" "${labels_str:-}"; then
 				if [[ "$status" == "IN_USE" ]]; then
 					log "SKIP" "Skipping IN_USE Global Address $name."
 					continue
 				fi
+
+				# If it is a VPC peering address, try to clean up the peering first
+				if [[ "$purpose" == "VPC_PEERING" && -n "$network_name" ]]; then
+					# If the network does NOT exist, the peering is dangling and we must delete it.
+					# (If the network exists, it will be cleaned up in Phase 4 which also deletes its peering).
+					if ! gcloud compute networks describe "$network_name" --project="$PROJECT_ID" >/dev/null 2>&1; then
+						log "INFO" "Detected dangling PSA address $name for deleted network $network_name. Cleaning up peering..."
+						gcloud services vpc-peerings delete \
+							--service=servicenetworking.googleapis.com \
+							--network="$network_name" \
+							--project="$PROJECT_ID" \
+							--quiet >/dev/null 2>&1 || true
+					fi
+				fi
+
 				execute_delete "Global Address" "$name" "(Global)" \
 					gcloud compute addresses delete "$name" --project="$PROJECT_ID" --global --quiet
 			fi
@@ -1155,6 +1170,18 @@ process_networks() {
 	local count=0
 	while IFS=$'\t' read -r name self_link; do
 		[[ -z "$name" || "$name" == "default" || $(is_excluded "$name") ]] && continue
+
+		# Delete Service Networking connections (Private Service Access vpc peerings)
+		# We check if a peering exists first to avoid false-alarm error counts.
+		if gcloud compute networks describe "$name" --project="$PROJECT_ID" --format="value(peerings[].name)" 2>/dev/null | grep -q "servicenetworking-googleapis-com"; then
+			execute_delete "Service Networking Connection" "servicenetworking.googleapis.com" "on network $name" \
+				gcloud services vpc-peerings delete \
+				--service=servicenetworking.googleapis.com \
+				--network="$name" \
+				--project="$PROJECT_ID" \
+				--quiet
+		fi
+
 		gcloud compute routes list --project="$PROJECT_ID" --filter="network=\"$self_link\"" --format="value(name)" 2>/dev/null | while IFS= read -r r; do
 			if [[ -n "$r" ]] && ! is_excluded "$r"; then
 				execute_delete "Dependent Route" "$r" "" \

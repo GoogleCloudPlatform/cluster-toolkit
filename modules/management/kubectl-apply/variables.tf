@@ -26,8 +26,8 @@ locals {
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
   jobset_supported_versions    = ["0.10.1", "0.10.0", "0.9.1", "0.9.0"]
-  gib_supported_versions_x86   = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
-  gib_supported_versions_arm64 = ["v1.1.1", "v1.1.0", "v1.0.7"]
+  gib_supported_versions_x86   = ["v1.1.2", "v1.1.0", "v1.0.6", "v1.0.5", "v1.0.3", "v1.0.2"]
+  gib_supported_versions_arm64 = ["v1.1.2", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
     local.gib_supported_versions_arm64
     ) : (
@@ -66,6 +66,14 @@ resource "terraform_data" "kueue_validations" {
     precondition {
       condition     = !var.kueue.enable_dynamic_slicing_for_tpus || coalesce(var.kueue.config_path, "") != "" || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
       error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
+    }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
+      error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
+    }
+    precondition {
+      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
+      error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
     }
   }
 }
@@ -151,6 +159,10 @@ variable "kueue" {
     controller_cpu                  = optional(string, null)
     controller_memory               = optional(string, null)
     controller_replicas             = optional(number, null)
+    slice_controller_cpu_request    = optional(string, "8000m")
+    slice_controller_memory_request = optional(string, "16Gi")
+    slice_controller_cpu_limit      = optional(string, "12000m")
+    slice_controller_memory_limit   = optional(string, "32Gi")
   })
   default = {}
 }

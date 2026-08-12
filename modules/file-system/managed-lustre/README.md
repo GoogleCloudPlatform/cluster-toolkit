@@ -150,6 +150,66 @@ to 6988.
 >
 > 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
 > compatibility must be built into the Slurm image.
+>
+> 3. **Static IP Constraint & GKE CSI Support:** Managed Lustre instances do not guarantee static IP allocations. If the Lustre instance is recreated (due to scaling, location moves, etc.), its IP will change. Because GKE CSI PersistentVolume configurations are immutable, an IP change will cause GKE mount failures. You must manually delete and recreate GKE PersistentVolume configurations in such events.
+
+### Example - Dynamic Tier
+
+To deploy a Managed Lustre instance with Dynamic Tier enabled, you must use a **pre-existing VPC**. This is because the `DynamicTierCapacity` quota is scoped to a specific VPC network name, and you must request this quota before running the deployment.
+
+For the Dynamic Tier, the minimum capacity is **472,000 GiB**.
+
+```yaml
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: <existing_network_name>
+      subnetwork_name: <existing_subnetwork_name>
+
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 22
+
+  - id: lustre
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 472000 # Minimum size for Dynamic Tier
+      enable_dynamic_tier: true
+```
+
+> [!NOTE]
+> If your pre-existing VPC already has Private Service Access (PSA) configured, you can omit the `private-service-access` module from the blueprint and instead define the peering connection name manually in the `lustre` module settings:
+>
+> ```yaml
+>       private_vpc_connection_peering: <peering_connection_name> # e.g. "servicenetworking.googleapis.com"
+> ```
+
+<p>
+
+> [!IMPORTANT]
+> **Dynamic Tier Prerequisites & Constraints:**
+>
+> 1. **VPC-Scoped Quota:** The Dynamic Tier requires requesting `DynamicTierCapacity` quota. This quota is scoped to a specific project, zone, and VPC name. Because of this, dynamically created VPCs are not recommended as you cannot request quota before the VPC is created.
+>    * Refer to the official guide on how to [Request Additional Storage Capacity Quota](https://cloud.google.com/managed-lustre/docs/quotas#request_additional_storage_capacity_quota).
+>    * You can request a quota increase using the following `gcloud` command:
+>
+>      ```bash
+>      gcloud beta quotas preferences create \
+>          --service=lustre.googleapis.com \
+>          --project=YOUR_PROJECT_ID \
+>          --quota-id=DynamicTierCapacity \
+>          --preferred-value=PREFERRED_VALUE_IN_GIB \
+>          --dimensions=zone=ZONE,network_name=VPC_NETWORK_NAME \
+>          --justification="Requesting Dynamic Tier capacity for Cluster Toolkit deployment"
+>      ```
+>
+> 2. **Minimum Size:** The minimum capacity is **472,000 GiB** (and must be in multiples of 472,000 GiB).
 
 ### Example - CMEK
 
@@ -269,14 +329,14 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.27.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.27.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.27.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.27.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -298,6 +358,7 @@ No modules.
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the Lustre instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
+| <a name="input_enable_dynamic_tier"></a> [enable\_dynamic\_tier](#input\_enable\_dynamic\_tier) | Set to true to enable Dynamic Tier for the Lustre instance. | `bool` | `false` | no |
 | <a name="input_gke_support_enabled"></a> [gke\_support\_enabled](#input\_gke\_support\_enabled) | Set to true to create Managed Lustre instance with GKE compatibility.<br/>Note: This does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | `bool` | `false` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to managed lustre. Data will<br/>be imported to the local\_mount directory. Changing this value will not<br/>trigger a redeployment, to prevent data deletion. | `string` | `null` | no |
 | <a name="input_kms_key"></a> [kms\_key](#input\_kms\_key) | The resource ID of a Customer-Managed Encryption Key (CMEK) to use for the Lustre instance. In the format: projects/<project\_id>/locations/<location>/keyRings/<key\_ring>/cryptoKeys/<key\_name> | `string` | `null` | no |
@@ -307,7 +368,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | Name of the Lustre instance | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
-| <a name="input_per_unit_storage_throughput"></a> [per\_unit\_storage\_throughput](#input\_per\_unit\_storage\_throughput) | Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. | `number` | `500` | no |
+| <a name="input_per_unit_storage_throughput"></a> [per\_unit\_storage\_throughput](#input\_per\_unit\_storage\_throughput) | Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000. If enable\_dynamic\_tier is false, this defaults to 500. | `number` | `null` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Lustre instance will be created. | `string` | n/a | yes |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote mount point of the Managed Lustre instance | `string` | n/a | yes |

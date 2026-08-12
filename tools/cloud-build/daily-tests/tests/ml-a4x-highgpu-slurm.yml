@@ -44,6 +44,6 @@ cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
-  a4x_reservation_name: "nvidia-gb200-uyrez5en64cu7"
+  a4x_reservation_name: "nvidia-gb200-jlr31fm12d525"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   a4x_cluster_size: 2

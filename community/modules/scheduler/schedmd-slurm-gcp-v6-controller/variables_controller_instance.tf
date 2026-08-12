@@ -315,7 +315,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-12-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-12-hpc-rocky-linux-9"
     project = "schedmd-slurm-public"
   }
 
@@ -467,4 +467,57 @@ variable "slurm_key_mount" {
     mount_options = string
   })
   default = null
+}
+
+variable "health_check" {
+  description = "Health check and autohealing configuration for controller HA instance groups."
+  type = object({
+    type                 = optional(string, "tcp")
+    port                 = optional(number, 6818)
+    initial_delay_sec    = optional(number, 900)
+    check_interval_sec   = optional(number, 60)
+    timeout_sec          = optional(number, 10)
+    healthy_threshold    = optional(number, 2)
+    unhealthy_threshold  = optional(number, 5)
+    enable_logging       = optional(bool, true)
+    request_path         = optional(string, "/healthz")
+    create_firewall_rule = optional(bool, true)
+    port_name            = optional(string, "slurmctld")
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["tcp", "http"], var.health_check.type)
+    error_message = "The health_check.type must be either 'tcp' or 'http'."
+  }
+
+  validation {
+    condition     = var.health_check.timeout_sec <= var.health_check.check_interval_sec
+    error_message = "The health_check.timeout_sec must be less than or equal to health_check.check_interval_sec."
+  }
+}
+
+variable "named_ports" {
+  description = "Named ports for the controller instance group."
+  type = list(object({
+    name = string
+    port = number
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : p.port > 0 && p.port <= 65535])
+    error_message = "All named port numbers must be between 1 and 65535."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.named_ports : can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", p.name)) && length(p.name) <= 63])
+    error_message = "All named port names must be valid RFC 1035 labels (1-63 characters, lowercase letters, numbers, or hyphens, starting with a letter and ending with a letter or number)."
+  }
+
+  validation {
+    condition     = length(var.named_ports) == length(distinct([for p in var.named_ports : p.name]))
+    error_message = "All named port names must be unique."
+  }
 }

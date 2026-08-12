@@ -23,9 +23,10 @@ import (
 )
 
 var (
-	clusterName string
-	location    string
-	projectID   string
+	clusterName  string
+	location     string
+	projectID    string
+	gkeNamespace string
 )
 
 var gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
@@ -41,6 +42,10 @@ var JobCmd = &cobra.Command{
 	Long:  `[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. This is the alpha version of the feature and is under active development. The feature is not yet supported for production use.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
+
+		if cmd.Name() == "gke-template-extract" {
+			return nil
+		}
 
 		ctx := loadContext()
 		if clusterName == "" {
@@ -59,9 +64,16 @@ var JobCmd = &cobra.Command{
 		if location == "" {
 			return fmt.Errorf("location is required; please specify it using the --location flag or set a default value using 'gcluster job config set location <value>'")
 		}
+
 		if projectID == "" {
 			return fmt.Errorf("project ID is required; please specify it using the --project flag or set a default value using 'gcluster job config set project <value>'")
 		}
+
+		resolvedLoc, err := orc.Initialize(clusterName, location, projectID)
+		if err != nil {
+			return err
+		}
+		location = resolvedLoc
 
 		return nil
 	},
@@ -71,10 +83,12 @@ func init() {
 	JobCmd.PersistentFlags().StringVarP(&clusterName, "cluster", "c", "", "Name of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&location, "location", "l", "", "Location (region or zone) of the GKE cluster.")
 	JobCmd.PersistentFlags().StringVarP(&projectID, "project", "p", "", "Google Cloud Project ID.")
+	JobCmd.PersistentFlags().StringVar(&gkeNamespace, "gke-namespace", "", "Target GKE namespace for the operation. If omitted, automatic detection is used.")
 
 	JobCmd.AddCommand(SubmitCmd)
 	JobCmd.AddCommand(CancelJobCmd)
 	JobCmd.AddCommand(ListWorkloadsCmd)
 	JobCmd.AddCommand(LogsCmd)
 	JobCmd.AddCommand(ConfigCmd)
+	JobCmd.AddCommand(InspectCmd)
 }

@@ -20,7 +20,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"strings"
-	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,7 +44,7 @@ func (g *GKEOrchestrator) GenerateGKEManifest(opts ManifestOptions, profile JobP
 
 	cmdSlice := []string{"/bin/bash", "-c", opts.CommandToRun}
 
-	tmpl, err := template.ParseFS(templatesFS, "templates/jobset.tmpl")
+	tmpl, err := g.parseGKETemplate("jobset.tmpl")
 	if err != nil {
 		return "", fmt.Errorf("failed to parse jobset template: %w", err)
 	}
@@ -121,9 +120,23 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		IsStaticSlicing:    isStaticSlicing,
 	}
 
-	parts := strings.Split(originalAccelType, "-")
-	instanceType := parts[0]
-	pathwaysInstanceType := fmt.Sprintf("%s:%s", instanceType, schedOpts.Topology)
+	// Reuse GCluster's existing GKE accelerator label mapping and algorithmically
+	// derive the Pathways short platform key to avoid duplicating mapping tables.
+	gkeLabel := g.GenerateGKENodeSelectorLabel(originalAccelType)
+	// Normalize GKE node selector labels to match JAX/Pathways platform keys:
+	// 1. Map GKE "v5-lite" (TPU v5e) to JAX standard "v5e" (deriving tpuv5e)
+	// 2. Map GKE "v5p" (TPU v5p) to JAX standard "v5" (deriving tpuv5)
+	normalizedLabel := gkeLabel
+	if strings.Contains(gkeLabel, "v5-lite") {
+		normalizedLabel = strings.ReplaceAll(gkeLabel, "v5-lite", "v5e")
+	} else if strings.Contains(gkeLabel, "v5p") {
+		normalizedLabel = strings.ReplaceAll(gkeLabel, "v5p", "v5")
+	}
+	pathwaysPlatform := strings.ReplaceAll(normalizedLabel, "-podslice", "")
+	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-slice", "")
+	pathwaysPlatform = strings.ReplaceAll(pathwaysPlatform, "-", "")
+
+	pathwaysInstanceType := fmt.Sprintf("%s:%s", pathwaysPlatform, schedOpts.Topology)
 
 	opts := ManifestOptions{
 		IsDynamicSlicing:              isDynamicSlicing,
@@ -149,6 +162,11 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		PriorityClassName:             job.PriorityClassName,
 		Topology:                      schedOpts.Topology,
 		Verbose:                       job.Verbose,
+		Env:                           job.Env,
+		IsPathwaysJob:                 job.IsPathwaysJob,
+		Pathways:                      job.Pathways,
+		GKEMTCEnabled:                 job.GKEMTCEnabled,
+		GKEMTCRamdiskDirectory:        job.GKEMTCRamdiskDirectory,
 	}
 
 	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {
@@ -210,11 +228,12 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 
 func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservationName string) []corev1.Toleration {
 	var tolerations []corev1.Toleration
+	res := parseReservationURI(reservationName)
 	// Always add the standard GKE reservation toleration to support NAP where the node pool may not exist yet
 	tolerations = append(tolerations, corev1.Toleration{
 		Key:      "cloud.google.com/reservation-name",
 		Operator: corev1.TolerationOpEqual,
-		Value:    extractShortReservationName(reservationName),
+		Value:    res.Name,
 		Effect:   corev1.TaintEffectNoSchedule,
 	})
 
@@ -222,14 +241,15 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		"cloud.google.com/reservation-name": true,
 	}
 
-	shortResName := extractShortReservationName(reservationName)
+	shortResName := res.Name
 	for _, np := range g.clusterDesc.NodePools {
 		lblVal := np.Config.Labels["cloud.google.com/reservation-name"]
 		if lblVal == "" {
 			continue
 		}
-		if strings.EqualFold(np.Config.MachineType, machineType) && strings.EqualFold(extractShortReservationName(lblVal), shortResName) {
-			tolerations[0].Value = extractShortReservationName(lblVal)
+		parsedLbl := parseReservationURI(lblVal)
+		if strings.EqualFold(np.Config.MachineType, machineType) && parsedLbl.Name == shortResName {
+			tolerations[0].Value = parsedLbl.Name
 			for _, t := range np.Config.Taints {
 				// Avoid duplicate tolerations
 				if seenTaints[t.Key] {

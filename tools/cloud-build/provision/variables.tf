@@ -37,3 +37,55 @@ variable "repo_uri" {
   type        = string
   default     = "https://github.com/GoogleCloudPlatform/cluster-toolkit"
 }
+
+variable "daily_tests_project_id" {
+  description = "The GCP project for daily tests"
+  type        = string
+  default     = "hpc-toolkit-dev-2"
+}
+
+variable "kueue_migrated_tests" {
+  description = "List of tests migrated to Kueue"
+  type        = list(string)
+  default = [
+    "slurm-gcp-v6-rocky8",
+    "batch-mpi",
+    "htcondor",
+    "packer",
+    "monitoring",
+    "chrome-remote-desktop",
+    "chrome-remote-desktop-ubuntu",
+    "ansible-vm",
+    "e2e",
+    "hcls",
+    "slurm-gke",
+    "slurm-flex",
+    "ml-slurm",
+    "htc-slurm",
+    "hpc-build-slurm-image",
+    "hpc-enterprise-slurm",
+    "spack-gromacs",
+    "gcluster-dockerfile",
+    "gke",
+    "gke-inactive-reservation",
+    "ml-gke",
+    "ml-gke-e2e",
+    "gke-storage",
+    "gke-managed-hyperdisk",
+    "slurm-rapid-storage",
+    "gke-managed-lustre",
+    "pfs-managed-lustre-slurm",
+    "pfs-managed-lustre-vm",
+    "netapp-volumes",
+    "slurm-gcp-v6-reconfig-size",
+    "slurm-gcp-v6-simple-job-completion",
+    "slurm-gcp-v6-startup-scripts",
+    "slurm-gcp-v6-topology"
+  ]
+}
+
+variable "daily_tests_service_account" {
+  description = "The service account to run daily tests under. If null, the default Cloud Build service account is used. For projects enforcing BYOSA (like hpc-toolkit-dev-2), you must set this via environment variable, e.g. export TF_VAR_daily_tests_service_account=\"projects/...\""
+  type        = string
+  default     = null
+}

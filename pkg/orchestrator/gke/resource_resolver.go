@@ -20,6 +20,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -48,6 +50,32 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
 
+// getZonesForMachineType finds all candidate zones hosting the specified machineType in the cluster's node pools.
+func (g *GKEOrchestrator) getZonesForMachineType(machineType string) []string {
+	seen := make(map[string]struct{})
+	for _, np := range g.clusterDesc.NodePools {
+		// Filter node pools that match the target machine type.
+		if np.Config.MachineType != machineType {
+			continue
+		}
+		// If the node pool doesn't define custom locations, it inherits cluster-wide locations.
+		locs := np.Locations
+		if len(locs) == 0 {
+			locs = g.clusterZones
+		}
+		for _, loc := range locs {
+			seen[loc] = struct{}{}
+		}
+	}
+
+	// Return a deduplicated slice of all matched zones.
+	var zones []string
+	for loc := range seen {
+		zones = append(zones, loc)
+	}
+	return zones
+}
+
 func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
 
 	cacheKey := machineType + ":" + zone
@@ -60,8 +88,18 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 	isRegion := len(strings.Split(zone, "-")) < 3
 	zonesToTry := []string{zone}
 
-	if isRegion && len(g.clusterZones) > 0 {
-		zonesToTry = g.clusterZones
+	if isRegion {
+		npZones := g.getZonesForMachineType(machineType)
+		if len(npZones) > 0 {
+			zonesToTry = npZones
+		} else {
+			if !g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning {
+				return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: no node pool matching machine type found and GKE Node Auto-Provisioning is disabled", machineType)
+			}
+			if len(g.clusterZones) > 0 {
+				zonesToTry = g.clusterZones
+			}
+		}
 	}
 
 	var lastErr error
@@ -134,7 +172,7 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 	}
 
 	isTPU7x := strings.Contains(strings.ToLower(requestedMachineName), "tpu7x")
-	if !isTPU7x || !g.hasKueueTopologies() || !g.hasSliceAdmissionCheck() {
+	if !isTPU7x || !g.hasSlicingTopologies() || !g.hasSliceAdmissionCheck() {
 		g.dynamicSlicingCache[cacheKey] = false
 		return false, nil
 	}
@@ -162,13 +200,13 @@ func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinit
 		return val, nil
 	}
 
-	if !g.hasKueueTopologies() {
+	if !g.hasSlicingTopologies() {
 		g.staticSlicingCache[cacheKey] = false
 		return false, nil
 	}
 
 	accelLabel := g.GenerateGKENodeSelectorLabel(job.MachineType)
-	output, err := g.queryDiscoveredTopologies(accelLabel)
+	output, err := g.queryDiscoveredTopologies(accelLabel, job.MachineType)
 	if err != nil {
 		return false, fmt.Errorf("failed to discover topologies for static sub-slicing check: %w", err)
 	}
@@ -191,14 +229,30 @@ func (g *GKEOrchestrator) verifyStaticSlicingActive(job *orchestrator.JobDefinit
 }
 
 func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName string, opts ManifestOptions, isTPU7x bool) (bool, error) {
+	if !isTPU7x {
+		return false, nil
+	}
+
+	projID := opts.ProjectID
+	if projID == "" {
+		projID = g.projectID
+	}
+
 	for _, np := range g.clusterDesc.NodePools {
-		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) {
+		if !strings.EqualFold(np.Config.MachineType, requestedMachineName) || np.PlacementPolicy == nil {
 			continue
 		}
 
-		isProvisionOnly := isTPU7x && np.PlacementPolicy != nil && np.PlacementPolicy.AcceleratorTopologyMode == "PROVISION_ONLY"
+		mode := np.PlacementPolicy.AcceleratorTopologyMode
+		if mode == "" && np.PlacementPolicy.PolicyName != "" {
+			var err error
+			mode, err = g.getComputeResourcePolicyModeCached(np.PlacementPolicy.PolicyName, opts.ClusterLocation, projID)
+			if err != nil {
+				return false, fmt.Errorf("failed to fetch compute resource policy %q for node pool %q: %w", np.PlacementPolicy.PolicyName, np.Name, err)
+			}
+		}
 
-		if isProvisionOnly {
+		if strings.EqualFold(mode, "PROVISION_ONLY") {
 			if err := validateTPU7xTopology(opts.Topology, requestedMachineName); err != nil {
 				return true, err
 			}
@@ -209,6 +263,46 @@ func (g *GKEOrchestrator) checkNodePoolsDynamicSlicing(requestedMachineName stri
 
 	logging.Info("Node pool does not have dynamic topology subset requirement. Dynamic-slicing not active.")
 	return false, nil
+}
+
+// getComputeResourcePolicyModeCached retrieves the AcceleratorTopologyMode for a given resource policy,
+// utilizing a local cache to avoid redundant gcloud calls.
+func (g *GKEOrchestrator) getComputeResourcePolicyModeCached(policyName, location, projectID string) (string, error) {
+	if g.policyCache == nil {
+		g.policyCache = make(map[string]string)
+	}
+
+	// GKE cluster metadata may return policyName as a full GCP resource path
+	// (e.g. projects/123456789/regions/us-central1/resourcePolicies/my-policy).
+	// Extract the short policy name using path.Base to ensure consistent cache keys.
+	shortPolicyName := path.Base(policyName)
+	if mode, found := g.policyCache[shortPolicyName]; found {
+		return mode, nil
+	}
+
+	mode, err := g.fetchComputeResourcePolicyTopologyMode(shortPolicyName, location, projectID)
+	if err != nil {
+		return "", err
+	}
+
+	g.policyCache[shortPolicyName] = mode
+	return mode, nil
+}
+
+func (g *GKEOrchestrator) fetchComputeResourcePolicyTopologyMode(shortPolicyName, location, projectID string) (string, error) {
+	region := shell.ExtractRegion(location)
+
+	res := g.executor.ExecuteCommand("gcloud", "compute", "resource-policies", "describe", shortPolicyName, "--region="+region, "--project="+projectID, "--format=value(workloadPolicy.acceleratorTopologyMode)")
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("gcloud compute resource-policies describe failed: %s\n"+
+			"To resolve this issue:\n"+
+			"  1. Check IAM: Ensure your GCP credentials have 'compute.resourcePolicies.get' permission (e.g., 'roles/compute.viewer').\n"+
+			"  2. Verify Policy: Test manual access by running:\n"+
+			"     gcloud compute resource-policies describe %s --region=%s --project=%s",
+			res.Stderr, shortPolicyName, region, projectID)
+	}
+
+	return strings.TrimSpace(res.Stdout), nil
 }
 
 func validateTPU7xTopology(topology string, machineType string) error {
@@ -251,7 +345,15 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 	return false
 }
 
-func (g *GKEOrchestrator) hasKueueTopologies() bool {
+func (g *GKEOrchestrator) hasSlicingTopologies() bool {
+	if g.slicingTopologiesChecked {
+		return g.slicingTopologiesDetected
+	}
+
+	defer func() {
+		g.slicingTopologiesChecked = true
+	}()
+
 	tResult := g.executor.ExecuteCommand("kubectl", "get", "topologies.kueue.x-k8s.io", "-o", "json")
 	if tResult.ExitCode != 0 {
 		logging.Warn("Failed to query Kueue topologies. Assuming dynamic-slicing not active.")
@@ -259,7 +361,13 @@ func (g *GKEOrchestrator) hasKueueTopologies() bool {
 	}
 
 	var tList struct {
-		Items []interface{} `json:"items"`
+		Items []struct {
+			Spec struct {
+				Levels []struct {
+					NodeLabel string `json:"nodeLabel"`
+				} `json:"levels"`
+			} `json:"spec"`
+		} `json:"items"`
 	}
 
 	if err := json.Unmarshal([]byte(tResult.Stdout), &tList); err != nil {
@@ -272,7 +380,17 @@ func (g *GKEOrchestrator) hasKueueTopologies() bool {
 		return false
 	}
 
-	return true
+	for _, t := range tList.Items {
+		for _, l := range t.Spec.Levels {
+			if (strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-slice-") || strings.HasPrefix(l.NodeLabel, "cloud.google.com/gke-tpu-partition-")) && strings.HasSuffix(l.NodeLabel, "-id") {
+				g.slicingTopologiesDetected = true
+				return true
+			}
+		}
+	}
+
+	logging.Info("Kueue topologies found but they do not contain slice/partition labels. Assuming dynamic-slicing not active.")
+	return false
 }
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
