@@ -2291,7 +2291,7 @@ func TestGetErrorType(t *testing.T) {
 			err:      errors.New("A c2-standard-60 VM instance is currently unavailable"),
 			expected: ErrTypeExtraStockout,
 		},
-	{
+		{
 			name:     "Text Match APIDisabled",
 			err:      errors.New("Cloud Filestore API has not been used in project 12345 before or it is disabled."),
 			expected: ErrTypeAPIDisabled,
@@ -2320,6 +2320,26 @@ func TestGetErrorType(t *testing.T) {
 			name:     "Extra Multi Substring Match",
 			err:      errors.New("failed with error: mkdir: cannot create directory /run/enroot : Permission denied"),
 			expected: ErrTypeEnrootPermissionDenied,
+		},
+		{
+			name:     "Rate Limit Match",
+			err:      errors.New("Quota exceeded for quota metric 'Requests to public APIs' and limit 'Requests to public APIs per minute per user' of service 'file.googleapis.com'"),
+			expected: ErrTypeFilestoreApiRateLimit,
+		},
+		{
+			name:     "Spot Instance Not Found",
+			err:      errors.New("gcloud.compute.instances.update) HTTPError 404: The resource being requested"),
+			expected: ErrTypeGkeSpotInstanceNotFound,
+		},
+		{
+			name:     "Cluster Already Has Operation",
+			err:      errors.New("Cluster is running incompatible operation while executing"),
+			expected: ErrTypeClusterAlreadyHasOperation,
+		},
+		{
+			name:     "Validator Failed Match",
+			err:      errors.New("validator \"test_reservation_exists\" failed because it was not found in any zone of project"),
+			expected: ErrTypeValidatorReservationNotFound,
 		},
 	}
 

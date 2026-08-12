@@ -475,7 +475,7 @@ var extraSubstringErrMatchers = []struct {
 	{"Could not download module", ErrTypeSlurmDownloadModule},
 	{"OSError: [Errno 99] Cannot assign requested address", ErrTypeParamikoConnectFailure},
 	{"Error: deployment_name input error, cause: value was not of type string", ErrTypeDeploymentNameNotString},
-	{"CalledProcessError: Command \\'gcloud compute instances describe topologyte-nodeset-0", ErrTypeTopologyGcloudCmdFailure},
+	{"CalledProcessError: Command 'gcloud compute instances describe topologyte-nodeset-0", ErrTypeTopologyGcloudCmdFailure},
 	{"googleapiclient.errors.HttpError: <HttpError 503 when requesting", ErrTypeSdkHttp503},
 	{"Error: Error creating instance: googleapi: Error 503: Internal error. Please try again or contact Google Support.", ErrTypeComputeVmFailed},
 	{"Error: Failed to install provider", ErrTypeFailedToInstallProvider},
@@ -635,7 +635,7 @@ var extraRegexErrMatchers = []struct {
 	{regexp.MustCompile("Version '\\d+\\.\\d+\\.\\d+' for 'terraform' was not found"), ErrTypeTerraformVersionUnavailable},
 	{regexp.MustCompile("nodes set down ([a-zA-Z0-9-]+) with reason=Preempted instance"), ErrTypeSpotNodePrempted},
 	{regexp.MustCompile("container \"my-job-container\" in pod \"my-job-[a-z0-9-]+\" is waiting to start: trying and failing to pull image"), ErrTypeServerError},
-	{regexp.MustCompile("validator [\"\\']?test_module_not_used[\"\\']? failed"), ErrTypeValidatorFailed},
+	{regexp.MustCompile("validator [\"']?test_module_not_used[\"']? failed"), ErrTypeValidatorFailed},
 }
 
 var extraMultiSubstringErrMatchers = []struct {
@@ -668,7 +668,7 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"Check for host topologyAssignment in workloads (1 retries left).", "fatal"}, ErrTypeTopologyassignmentCheckFail},
 	{[]string{"failed to destroy group", "Error waiting for Deleting Instance Template"}, ErrTypeFailedToDestroyBlockingMig},
 	{[]string{"waiting for instance to create: Internal error", "on modules/embedded/modules/compute/vm-instance/main.tf line 176"}, ErrTypeResourceCreationFailure},
-	{[]string{"Error: \\\"name\\\"", "doesn\\'t match regexp"}, ErrTypeNameRegexpError},
+	{[]string{"Error: \\\"name\\\"", "doesn't match regexp"}, ErrTypeNameRegexpError},
 	{[]string{"Error: Invalid value for variable", "var.instance_image is null"}, ErrTypeVarInstanceImageNull},
 	{[]string{"Error: Error waiting for instance to create: Internal error. Please try again or contact Google Support.", "resource \"google_compute_instance\" \"compute_vm\""}, ErrTypeH4DVmCreateFailed},
 	{[]string{"Error: kube-system/nccl-rdma-installer failed to run apply: error when creating", "DaemonSet.apps \"nccl-rdma-installer\" is invalid: spec.template.spec.containers: Required value"}, ErrTypeA4NcclInstallerFailed},
@@ -678,8 +678,8 @@ var extraMultiSubstringErrMatchers = []struct {
 	{[]string{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 3, message: The request was invalid: Server subnetwork IP range [\"172.17.167.0/26\"] overlaps with restricted IP range [\"172.17.0.0/16\"]. Please choose a range explicitly that does not overlap", "google_parallelstore_instance"}, ErrTypeParallelstoreServerSubnetworkIpOwerlapped},
 	{[]string{"nvidia-container-cli: container error: file lookup failed", "permission denied"}, ErrTypeSlurmstepdError},
 	{[]string{"Insufficient", "INSTANCE_GROUP_MANAGERS"}, ErrTypeReachInstanceGroupManagerLimitation},
-	{[]string{"Error: Error waiting for instance to create: Quota \\'SSD_TOTAL_GB\\' exceeded.", "Quota \\'IN_USE_ADDRESSES\\' exceeded."}, ErrTypeReachSsdTotalGbLimitation},
-	{[]string{"Error: Error waiting for instance to create: couldn\\'t find resource", "resource \"google_compute_instance\" \"compute_vm\""}, ErrTypeComputeVmCreateFail},
+	{[]string{"Error: Error waiting for instance to create: Quota 'SSD_TOTAL_GB' exceeded.", "Quota 'IN_USE_ADDRESSES' exceeded."}, ErrTypeReachSsdTotalGbLimitation},
+	{[]string{"Error: Error waiting for instance to create: couldn't find resource", "resource \"google_compute_instance\" \"compute_vm\""}, ErrTypeComputeVmCreateFail},
 	{[]string{"Error: Invalid function argument", "on modules/embedded/modules/management/kubectl-apply/main.tf line 33, in locals"}, ErrTypeInvalidArgument},
 	{[]string{"(gcloud.compute.os-login.ssh-keys.add) Users instance", "is the subject of a conflict: Multiple concurrent mutations were attempted. Please retry the request"}, ErrTypeSshKeyConflict},
 	{[]string{"Error waiting to create Instance: Error waiting for Creating Instance: Error code 0, message", "on modules/embedded/modules/file-system/managed-lustre/main.tf line 61, in resource \"google_lustre_instance\" \"lustre_instance\""}, ErrTypeLustreInstanceCreateFailed},
