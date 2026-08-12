@@ -103,20 +103,20 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
   name               = "${local.slurm_cluster_name}-${each.value.nodeset_name}-mig"
   base_instance_name = each.value.nodeset_name
   region             = coalesce(each.value.region, var.region)
-  target_size        = each.value.node_count_static
+  target_size        = 0
 
   version {
     instance_template = module.slurm_nodeset_template[each.value.nodeset_name].self_link
   }
 
-  distribution_policy_zones        = length(coalesce(each.value.zone_policy_allow, [])) > 0 ? each.value.zone_policy_allow : (var.zone != null ? [var.zone] : null)
+  distribution_policy_zones        = length(try(each.value.zone_policy_allow, [])) > 0 ? each.value.zone_policy_allow : (var.zone != null ? [var.zone] : null)
   distribution_policy_target_shape = "ANY_SINGLE_ZONE"
 
   update_policy {
     type                         = "OPPORTUNISTIC"
     minimal_action               = "REPLACE"
     instance_redistribution_type = "NONE"
-    max_surge_fixed              = length(coalesce(each.value.zone_policy_allow, (var.zone != null ? [var.zone] : data.google_compute_zones.available.names)))
+    max_surge_fixed              = length(try(each.value.zone_policy_allow, [])) > 0 ? length(each.value.zone_policy_allow) : (var.zone != null ? 1 : length(data.google_compute_zones.available.names))
     max_unavailable_fixed        = 0
   }
 
