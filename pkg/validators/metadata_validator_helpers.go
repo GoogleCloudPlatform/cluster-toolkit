@@ -27,28 +27,45 @@ import (
 // getNestedValue retrieves a cty.Value from a Dict using a dot-separated path.
 func getNestedValue(d config.Dict, path string) (cty.Value, bool) {
 	parts := strings.Split(path, ".")
-	currentVal := d.AsObject()
-
-	for i, part := range parts {
-		if !currentVal.Type().IsObjectType() && !currentVal.Type().IsMapType() {
-			return cty.NilVal, false
-		}
-
-		if !currentVal.Type().HasAttribute(part) {
-			return cty.NilVal, false
-		}
-
-		val := currentVal.GetAttr(part)
-		if i == len(parts)-1 {
-			return val, true
-		}
-		currentVal = val
+	vals := getValuesFromPath(d.AsObject(), parts)
+	if len(vals) == 0 {
+		return cty.NilVal, false
 	}
-	return cty.NilVal, false
+	if len(vals) == 1 {
+		return vals[0], true
+	}
+	return cty.TupleVal(vals), true
+}
+
+// getValuesFromPath extracts values from a cty.Value tree using dot-separated path parts.
+func getValuesFromPath(val cty.Value, parts []string) []cty.Value {
+	if len(parts) == 0 {
+		return []cty.Value{val}
+	}
+	if val.IsNull() || !val.IsKnown() {
+		return nil
+	}
+
+	ty := val.Type()
+	if ty.IsListType() || ty.IsTupleType() || ty.IsSetType() {
+		var res []cty.Value
+		for it := val.ElementIterator(); it.Next(); {
+			_, elem := it.Element()
+			res = append(res, getValuesFromPath(elem, parts)...)
+		}
+		return res
+	}
+
+	part := parts[0]
+	if (ty.IsObjectType() || ty.IsMapType()) && ty.HasAttribute(part) {
+		attrVal := val.GetAttr(part)
+		return getValuesFromPath(attrVal, parts[1:])
+	}
+
+	return nil
 }
 
 // evaluateAndFlatten converts a cty.Value into a slice of cty.Value elements.
-// If it's a list/tuple, returns elements; otherwise returns single-item slice.
 func evaluateAndFlatten(val cty.Value) []cty.Value {
 	var values []cty.Value
 	if val.Type().IsListType() || val.Type().IsTupleType() {
@@ -62,23 +79,14 @@ func evaluateAndFlatten(val cty.Value) []cty.Value {
 	return values
 }
 
-// getModuleSettingValues retrieves a cty.Value from module settings using a dot-separated path,
-// evaluates expressions via bp.Eval and returns flattened slice + path for errors.
+// getModuleSettingValues retrieves a setting's values and returns the flattened slice and error path.
 func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int, mod config.Module, settingName string) ([]cty.Value, config.Path, error) {
 	var nilPath config.Path
 
-	// Determine canonical path for this module.setting in the blueprint.
 	groupIndex := bp.GroupIndex(group.Name)
 	path := config.Root.Groups.At(groupIndex).Modules.At(modIdx).Settings.Dot(settingName)
 
-	// If the setting is omitted from the settings block, check if it's implicitly bound
-	// to a global variable with the exact same name declared in the vars block.
-	isExplicitSetting := false
-	if bp.YamlCtx != nil {
-		_, isExplicitSetting = bp.YamlCtx.Pos(path)
-	} else {
-		_, isExplicitSetting = getNestedValue(mod.Settings, settingName)
-	}
+	_, isExplicitSetting := getNestedValue(mod.Settings, settingName)
 
 	if !isExplicitSetting && bp.Vars.Has(settingName) {
 		val := bp.Vars.Get(settingName)
@@ -90,7 +98,6 @@ func getModuleSettingValues(bp config.Blueprint, group config.Group, modIdx int,
 		return values, varPath, nil
 	}
 
-	// Fallback to explicit settings extraction
 	if bp.YamlCtx != nil {
 		if !isExplicitSetting {
 			return nil, nilPath, fmt.Errorf("setting %q not present in blueprint YAML for module %q", settingName, mod.ID)

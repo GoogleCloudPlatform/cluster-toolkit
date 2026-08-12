@@ -13,6 +13,7 @@ package validators
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -21,6 +22,52 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 )
+
+// CIDRValidator implements the RuleValidator interface for 'cidr' type.
+type CIDRValidator struct{}
+
+// Validate checks if the variables specified in the rule are valid CIDR addresses.
+func (c *CIDRValidator) Validate(
+	bp config.Blueprint,
+	mod config.Module,
+	rule modulereader.ValidationRule,
+	group config.Group,
+	modIdx int) error {
+
+	allowNull, err := parseBoolInput(rule.Inputs, "allow_null", false)
+	if err != nil {
+		modPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Source
+		return config.BpError{Err: fmt.Errorf("validation rule for module %q: %v", mod.ID, err), Path: modPath}
+	}
+
+	return IterateRuleTargets(bp, mod, rule, group, modIdx, func(t Target) error {
+		for _, val := range t.Values {
+			if val.IsNull() {
+				if allowNull {
+					continue
+				}
+				msg := rule.ErrorMessage
+				if msg == "" {
+					msg = "CIDR block cannot be null or empty"
+				}
+				return config.BpError{Err: fmt.Errorf("%s", msg), Path: t.Path}
+			}
+			if !val.IsKnown() || val.Type() != cty.String {
+				continue
+			}
+			// Extract each extracted CIDR string (e.g. "1.2.3.4/32") and validate with Go's net.ParseCIDR
+			str := val.AsString()
+			if _, _, err := net.ParseCIDR(str); err != nil {
+				msg := rule.ErrorMessage
+				if msg == "" {
+					msg = fmt.Sprintf("invalid CIDR address: %s", str)
+				}
+				return config.BpError{Err: fmt.Errorf("%s", msg), Path: t.Path}
+			}
+		}
+		return nil
+	})
+}
 
 // RegexValidator implements the Validator interface for 'regex' type.
 type RegexValidator struct{}
