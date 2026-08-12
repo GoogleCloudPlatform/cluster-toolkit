@@ -293,6 +293,9 @@ def get_node_action(nodename: str) -> NodeAction:
 
     # split below is workaround for VMs whose hostname is FQDN
     inst = lkp.instance(nodename.split(".")[0])
+    if inst and getattr(inst, "current_action", None) == "REPAIRING":
+        return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
+
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())

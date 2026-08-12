@@ -174,3 +174,23 @@ def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[in
     lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=unittest.mock.Mock(family="n1")))
 
     assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected
+
+
+@unittest.mock.patch("resume.execute_with_futures")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes(mock_compute_prop, mock_execute):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      provisioning_engine="MIG",
+      nodeset={
+          "n": TstNodeset(nodeset_name="n", instance_template="projects/p/global/instanceTemplates/t1"),
+      }
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+
+  resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=101, lkp=lkp)
+
+  assert mock_compute.regionInstanceGroupManagers().setInstanceTemplate.called
+  assert mock_compute.regionInstanceGroupManagers().createInstances.called

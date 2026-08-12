@@ -56,6 +56,17 @@ EOD
   default     = null
 }
 
+variable "provisioning_engine" {
+  type        = string
+  default     = "BULK_INSERT"
+  description = "Compute node provisioning engine: 'MIG' or 'BULK_INSERT'"
+
+  validation {
+    condition     = contains(["MIG", "BULK_INSERT"], var.provisioning_engine)
+    error_message = "Variable 'provisioning_engine' must be either 'MIG' or 'BULK_INSERT'."
+  }
+}
+
 ##########
 # BUCKET #
 ##########

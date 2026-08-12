@@ -425,6 +425,7 @@ limitations under the License.
 | [google_compute_region_backend_service.slurm_controller_backend](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_backend_service) | resource |
 | [google_compute_region_health_check.slurm_health_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_health_check) | resource |
 | [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
+| [google_compute_region_instance_group_manager.nodeset_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
 | [google_compute_region_per_instance_config.controller_regional_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_per_instance_config) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.cloudsql_secret_accessor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
@@ -433,6 +434,7 @@ limitations under the License.
 | [google_storage_bucket_iam_member.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_object.partition_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_compute_subnetwork.controller_subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
+| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 | [google_project.controller_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
@@ -522,6 +524,7 @@ limitations under the License.
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br/>whenever it is asked to run a job step from a new job allocation.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_provisioning_engine"></a> [provisioning\_engine](#input\_provisioning\_engine) | Compute node provisioning engine: 'MIG' or 'BULK\_INSERT' | `string` | `"BULK_INSERT"` | no |
 | <a name="input_region"></a> [region](#input\_region) | The default region to place resources in. | `string` | n/a | yes |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
