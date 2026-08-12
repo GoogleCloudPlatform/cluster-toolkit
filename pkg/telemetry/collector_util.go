@@ -1125,3 +1125,32 @@ func isCPUFallback(mType string) bool {
 	}
 	return false
 }
+
+func getExtendedErrorType(errMsgExact string) string {
+	for _, m := range extraMultiSubstringErrMatchers {
+		allMatch := true
+		for _, sub := range m.substrings {
+			if !strings.Contains(errMsgExact, sub) {
+				allMatch = false
+				break
+			}
+		}
+		if allMatch {
+			return m.category
+		}
+	}
+
+	for _, m := range extraRegexErrMatchers {
+		if m.pattern.MatchString(errMsgExact) {
+			return m.category
+		}
+	}
+
+	for _, m := range extraSubstringErrMatchers {
+		if strings.Contains(errMsgExact, m.substring) {
+			return m.category
+		}
+	}
+
+	return ""
+}
