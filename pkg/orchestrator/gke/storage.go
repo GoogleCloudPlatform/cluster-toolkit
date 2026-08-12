@@ -287,13 +287,16 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 		}
 	}
 
-	if opts.GKEMTCEnabled {
-		ramdiskDir := opts.GKEMTCRamdiskDirectory
+	if opts.RamdiskDirectory != "" {
+		driver := phase1CheckpointCSIDriver
+		if opts.GKEMTCEnabled {
+			driver = multitierCheckpointCSIDriver
+		}
 		mountSpecs = append(mountSpecs,
-			map[string]interface{}{"name": "cache", "mountPath": ramdiskDir},
+			map[string]interface{}{"name": "cache", "mountPath": opts.RamdiskDirectory},
 		)
 		volSpecs = append(volSpecs,
-			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": "multitier-checkpoint.csi.storage.gke.io"}},
+			map[string]interface{}{"name": "cache", "csi": map[string]interface{}{"driver": driver}},
 		)
 	}
 

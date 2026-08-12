@@ -533,9 +533,9 @@ func TestGeneratePathwaysManifest_MTC(t *testing.T) {
 			GCSLocation:                 "gs://my-bucket",
 			HeadNodePool:                "pathways-np",
 		},
-		IsPathwaysJob:          true,
-		GKEMTCEnabled:          true,
-		GKEMTCRamdiskDirectory: "/tmp/mtc_checkpoints",
+		IsPathwaysJob:    true,
+		GKEMTCEnabled:    true,
+		RamdiskDirectory: "/tmp/mtc_checkpoints",
 	}
 
 	mockResponses := map[string][]shell.CommandResult{
@@ -3255,4 +3255,60 @@ users: []
 			}
 		})
 	}
+}
+
+func TestValidateMTCConfig(t *testing.T) {
+	orch := &GKEOrchestrator{
+		clusterDesc: gkeCluster{
+			AddonsConfig: &gkeAddonsConfig{
+				HighScaleCheckpointingConfig: &gkeHighScaleCheckpointingConfig{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	t.Run("MTC Disabled - Pass", func(t *testing.T) {
+		job := &orchestrator.JobDefinition{GKEMTCEnabled: false}
+		if err := orch.validateMTCConfig(job); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("MTC Enabled without RamdiskDirectory - Fail", func(t *testing.T) {
+		job := &orchestrator.JobDefinition{GKEMTCEnabled: true, RamdiskDirectory: ""}
+		err := orch.validateMTCConfig(job)
+		if err == nil || !strings.Contains(err.Error(), "--ramdisk-dir must be provided") {
+			t.Errorf("expected --ramdisk-dir error, got: %v", err)
+		}
+	})
+
+	t.Run("RamdiskDirectory without MTC and without HighScaleCheckpointing Addon - Fail", func(t *testing.T) {
+		emptyOrch := &GKEOrchestrator{clusterDesc: gkeCluster{}}
+		job := &orchestrator.JobDefinition{GKEMTCEnabled: false, RamdiskDirectory: "/tmp/ramdisk"}
+		err := emptyOrch.validateMTCConfig(job)
+		if err == nil || !strings.Contains(err.Error(), "HighScaleCheckpointing addon") {
+			t.Errorf("expected addon error for ramdisk-dir, got: %v", err)
+		}
+	})
+
+	t.Run("MTC Enabled without HighScaleCheckpointing Addon - Fail", func(t *testing.T) {
+		emptyOrch := &GKEOrchestrator{clusterDesc: gkeCluster{}}
+		job := &orchestrator.JobDefinition{GKEMTCEnabled: true, RamdiskDirectory: "/tmp/ramdisk"}
+		err := emptyOrch.validateMTCConfig(job)
+		if err == nil || !strings.Contains(err.Error(), "HighScaleCheckpointing addon") {
+			t.Errorf("expected addon error, got: %v", err)
+		}
+	})
+
+	t.Run("MTC Enabled with DryRunManifest - Pass without k8s client", func(t *testing.T) {
+		job := &orchestrator.JobDefinition{
+			GKEMTCEnabled:    true,
+			RamdiskDirectory: "/tmp/ramdisk",
+			DryRunManifest:   "jobset.yaml",
+		}
+		if err := orch.validateMTCConfig(job); err != nil {
+			t.Errorf("unexpected error for dry run: %v", err)
+		}
+	})
 }

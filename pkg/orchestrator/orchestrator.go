@@ -96,8 +96,8 @@ type JobDefinition struct {
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
 
 	// Multi-Tier Checkpointing (MTC)
-	GKEMTCEnabled          bool
-	GKEMTCRamdiskDirectory string
+	GKEMTCEnabled    bool
+	RamdiskDirectory string
 
 	GkeCustomTemplatesPath string
 

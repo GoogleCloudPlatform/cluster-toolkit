@@ -25,6 +25,7 @@ import (
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -33,7 +34,19 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+
+	// phase1CheckpointCSIDriver is the CSI driver for local phase-1 checkpointing RAM disk.
+	phase1CheckpointCSIDriver = "phase1-checkpoint.csi.storage.gke.io"
+	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
+	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )
+
+// checkpointConfigurationGVR defines the GroupVersionResource for GKE CheckpointConfiguration resources.
+var checkpointConfigurationGVR = schema.GroupVersionResource{
+	Group:    "checkpointing.gke.io",
+	Version:  "v1alpha1",
+	Resource: "checkpointconfigurations",
+}
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
@@ -183,7 +196,7 @@ type ManifestOptions struct {
 	Pathways                      orchestrator.PathwaysJobDefinition
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
-	GKEMTCRamdiskDirectory        string
+	RamdiskDirectory              string
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -379,7 +392,7 @@ type jobSetTemplateData struct {
 	IsTPU                         bool
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
-	GKEMTCRamdiskDirectory        string
+	RamdiskDirectory              string
 }
 
 // Types for parsing kubectl get nodes -o json

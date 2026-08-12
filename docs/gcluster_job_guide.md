@@ -31,9 +31,9 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
-If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster.
+If you plan to use Multi-Tier Checkpointing (`--gke-mtc-enabled` flag), ensure that the Multi-Tier Checkpointing feature is enabled on your GKE cluster, and provide the `--ramdisk-dir` flag specifying the local mount path for checkpoints.
 
-To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters simply pass `--gke-mtc-enabled` to their jobs. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing).
+To use this feature, the cluster administrator must also ensure that the required `CheckpointConfiguration` Custom Resource is deployed to the cluster in the target namespace, specifying the target cloud storage bucket for checkpoints. Once the cluster is configured, job submitters pass `--gke-mtc-enabled` and `--ramdisk-dir` to their jobs. For more details on cluster configuration, see the [GKE Multi-Tier Checkpointing documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-tier-checkpointing).
 
 ## 2. Prepare Sample Application Code
 
@@ -1181,6 +1181,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;options=<options>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. |
+| `--ramdisk-dir` | `string` | Directory path to mount a local high-speed ramdisk/in-memory storage for checkpointing and fast temporary I/O. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads. Can be specified multiple times. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
@@ -1225,8 +1226,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
 | `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
 | `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
-| `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
-| `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (defaults to `/tmp/mtc_checkpoints`). |
+| `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload (requires `--ramdisk-dir`). |
 | `--gke-ttl-after-finished` | `string` | Time duration to retain the JobSet resources after completion (Default: `1h`). |
 | `--placement-policy` | `string` | Specifies a GCE Placement Policy name (e.g., `compact-placement`) to minimize latency. |
 | `--restart-on-exit-codes` | `string` | Comma-separated list of retriable exit codes that bypass the main restart budget. |

@@ -166,7 +166,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		IsPathwaysJob:                 job.IsPathwaysJob,
 		Pathways:                      job.Pathways,
 		GKEMTCEnabled:                 job.GKEMTCEnabled,
-		GKEMTCRamdiskDirectory:        job.GKEMTCRamdiskDirectory,
+		RamdiskDirectory:              job.RamdiskDirectory,
 	}
 
 	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {
